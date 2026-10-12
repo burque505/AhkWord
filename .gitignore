@@ -1,0 +1,18 @@
+# Machine-specific notes (paths on this computer)
+CLAUDE.local.md
+
+# Old iterations, kept locally only
+backup/
+
+# Test documents (exports, imports and their picture folders)
+documents/
+
+# Macros recorded with Tools > Record macro (personal; the example macros are kept)
+rte_macros/Recorded macro *.ahk
+
+# Windows and editor clutter
+Thumbs.db
+desktop.ini
+*.tmp
+*.log
+.vscode/
