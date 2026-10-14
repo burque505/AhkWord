@@ -9,7 +9,7 @@ These are not included in this repository. Csharp-in-AHK downloads them from nug
 | Package | Used for | License | Text |
 |---|---|---|---|
 | [EllipticBit.RichEditorNET](https://ellipticbit.com/) | The editor control (RichEdit for .NET) | Boost Software License 1.0 | [RichEditorNET-BSL-1.0.txt](licenses/RichEditorNET-BSL-1.0.txt) |
-| [WindowsRibbon](https://github.com/harborsiem/WindowsRibbon) | The ribbon (a .NET wrapper of the Windows Ribbon framework) | MS-PL or MIT, at your choice (used here under MS-PL) | [WindowsRibbon-MS-PL.txt](licenses/WindowsRibbon-MS-PL.txt) |
+| [WindowsRibbon](https://github.com/harborsiem/WindowsRibbon) | The ribbon (a .NET wrapper of the Windows Ribbon framework) | MS-PL or MIT, at your choice (used here under MIT) | [WindowsRibbon-MIT.txt](licenses/WindowsRibbon-MIT.txt) |
 | [DocumentFormat.OpenXml](https://github.com/dotnet/Open-XML-SDK), DocumentFormat.OpenXml.Framework | Reading and writing Word files (built-in converter) | MIT | [Open-XML-SDK-MIT.txt](licenses/Open-XML-SDK-MIT.txt) |
 | [HtmlToOpenXml.dll](https://github.com/onizet/html2openxml) | Writing Word files (built-in converter) | MIT | [HtmlToOpenXml-MIT.txt](licenses/HtmlToOpenXml-MIT.txt) |
 | [AngleSharp](https://github.com/AngleSharp/AngleSharp) | HTML parsing for HtmlToOpenXml | MIT | [AngleSharp-MIT.txt](licenses/AngleSharp-MIT.txt) |
