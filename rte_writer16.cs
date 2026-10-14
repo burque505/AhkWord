@@ -1,4 +1,5 @@
 #:package EllipticBit.RichEditorNET
+#:package WindowsRibbon@2.16.2
 #load "rte_markdown5.cs"
 #load "rte_htmllists2.cs"
 #load "rte_tables.cs"
@@ -7,7 +8,15 @@
 #load "rte_pagebreaks.cs"
 #load "rte_headerfooter.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer15.ahk. Iteration 15 adds to iteration 14:
+// Run it with rte_writer16.ahk. Iteration 16 adds to iteration 15:
+//   - A ribbon instead of the menu bar and toolbar: the Windows Ribbon (UIRibbon, drawn by Windows: DPI-aware, KeyTips
+//     with Alt, screen readers), through the WindowsRibbon NuGet package. Its markup is ribbon\RteRibbon.xml, compiled by
+//     ribbon\build_ribbon.ahk into ribbon\RteRibbon.ribbon (a resource-only DLL, loaded from the file). The ribbon's
+//     buttons run the same commands the menus and toolbar did (Run(action, macro), so macro recording is unchanged);
+//     the keyboard shortcuts the menus had are in a table of their own (Shortcuts, checked in ProcessCmdKey). The font
+//     group is the ribbon's own font control; Table Tools appears while the caret is in a table; recent documents are
+//     in the File menu, macros in a gallery on the Tools tab.
+// Iteration 15 added to iteration 14:
 //   - Pictures' alt text can be seen and changed: resting the mouse on a picture shows it (or "no alt text"); right-click
 //     a picture > Alt text... changes it (RichEditorNET can't change it, so the picture is replaced by the same picture
 //     with the new alt text, in one undo step); Insert > Image asks for it (the file name was used without asking).
@@ -116,6 +125,10 @@ using System.Windows.Forms;
 using EllipticBit.RichEditorNET;
 using EllipticBit.RichEditorNET.Formatting;
 using EllipticBit.RichEditorNET.TextObjectModel2;
+using RibbonLib;
+using RibbonLib.Controls;
+using RibbonLib.Controls.Events;
+using RibbonLib.Interop;
 
 // Runs on AutoHotkey's (STA) thread. ShowDialog runs the WinForms message loop until the window is closed;
 // AHK hotkeys and timers keep running meanwhile and can call the editor (see RteClient.ahk).
@@ -126,6 +139,33 @@ using var form = new WriterForm(
 	args.Length > 2 && args[2] != "" ? args[2] : null);
 form.ShowDialog();
 AHK.Return(form.FileName ?? "");
+
+// The command Ids of ribbon\RteRibbon.xml.
+enum RibbonCommand : uint
+{
+	TabHome = 100, TabInsert = 101, TabLayout = 102, TabReview = 103, TabView = 104, TabTools = 105,
+	TableTools = 106, TabTableLayout = 107, GroupClipboard = 110, GroupFont = 111, GroupText = 112, GroupParagraph = 113,
+	GroupStyles = 114, GroupEditing = 115, GroupPages = 116, GroupTables = 117, GroupIllustrations = 118, GroupLinks = 119,
+	GroupInsertText = 120, GroupPage = 121, GroupProofing = 122, GroupDocument = 123, GroupShow = 124, GroupZoom = 125,
+	GroupSource = 126, GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupRowsColumns = 130, GroupDelete = 131,
+	AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144, PrintMenu = 145,
+	New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204, PrintPreview = 205,
+	PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210, Undo = 220,
+	Redo = 221, Paste = 222, Cut = 223, Copy = 224, SelectAll = 225, Find = 226,
+	Replace = 227, Font = 230, FontDialog = 231, ChangeCase = 232, CaseUpper = 233, CaseLower = 234,
+	CaseTitle = 235, UnderlineStyle = 236, UnderlineSingle = 237, UnderlineDouble = 238, UnderlineDotted = 239, UnderlineDashed = 240,
+	UnderlineWavy = 241, Bullets = 250, Numbering = 251, Legal = 252, Outdent = 253, Indent = 254,
+	AlignLeft = 255, AlignCenter = 256, AlignRight = 257, Justify = 258, ListOptions = 259, ListStyle = 260,
+	ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264, ListLowerRoman = 265, ListUpperRoman = 266,
+	ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272,
+	OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, PageBreak = 280, Table = 281, Picture = 282,
+	Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296,
+	SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, ShowBands = 303, Outline = 304,
+	ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, HtmlSource = 308, MarkdownSource = 309, Macros = 310,
+	RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316,
+	InsertAbove = 320, InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325,
+	DeleteTable = 326,
+}
 
 class WriterForm : Form
 {
@@ -140,14 +180,20 @@ class WriterForm : Form
 	readonly ToolStripStatusLabel statusText = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
 	readonly ToolStripStatusLabel positionLabel = new(), wordsLabel = new(), modeLabel = new(), automationLabel = new();
 	readonly System.Windows.Forms.Timer wordCountTimer = new() { Interval = 400 };
-	readonly Dictionary<string, ToolStripButton> toggles = new();
-	readonly Dictionary<ParagraphAlignment, ToolStripButton> alignButtons = new();
-	ToolStripComboBox blockCombo = null!, fontCombo = null!, sizeCombo = null!;
-	ToolStripSplitButton fontColorButton = null!, highlightButton = null!;
-	ToolStripButton bulletButton = null!, numberButton = null!;
-	ToolStripMenuItem structuredItem = null!, freeFormItem = null!, wordWrapItem = null!, spellCheckItem = null!, autoLevelItem = null!, bandsItem = null!;
-	ToolStripMenuItem macrosMenu = null!;
-	Color fontColor = Color.FromArgb(0xC0, 0, 0), highlightColor = Color.Yellow;
+
+	// Iteration 16: the ribbon (built in BuildRibbon; UpdateUi makes it follow the selection) and the keyboard shortcuts
+	// that were the menus' (ProcessCmdKey).
+	readonly Ribbon ribbon = new();
+	readonly Dictionary<Keys, (string Name, Action Action)> shortcuts = new();
+	readonly Dictionary<RibbonCommand, RibbonToggleButton> toggleButtons = new();
+	readonly Dictionary<RibbonCommand, RibbonCheckBox> checkBoxes = new();
+	RibbonFontControl fontControl = null!;
+	RibbonComboBox blockCombo = null!;
+	RibbonDropDownGallery macrosGallery = null!;
+	RibbonRecentItems recentItems = null!;
+	RibbonTabGroup tableTools = null!;
+	RibbonButton undoButton = null!, redoButton = null!, cutButton = null!, copyButton = null!;
+	List<string> galleryMacros = new();
 	FindReplaceForm? findForm;
 	bool updatingUi, discardOnClose, lastModified;
 
@@ -163,22 +209,18 @@ class WriterForm : Form
 	// Iteration 6: macro recording and hotkeys
 	readonly MacroRecorder recorder = new();
 	readonly ToolStripStatusLabel recordingLabel = new() { ForeColor = Color.Firebrick, Visible = false, IsLink = false, ToolTipText = "Recording a macro - click to stop" };
-	ToolStripMenuItem recordItem = null!;
 	readonly SplitContainer outlineSplit = new() { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1 };
 	readonly TreeView outlineTree = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, HideSelection = false, FullRowSelect = true, ShowLines = false, ShowPlusMinus = true };
 	readonly Label outlineHint = new() { Dock = DockStyle.Fill, ForeColor = SystemColors.GrayText, Padding = new Padding(6), Visible = false,
-		Text = "No headings yet.\n\nGive paragraphs a heading style (Paragraph > Block style, Ctrl+1 to Ctrl+6) and they appear here." };
+		Text = "No headings yet.\n\nGive paragraphs a heading style (Home > Styles, Ctrl+1 to Ctrl+6) and they appear here." };
 	readonly System.Windows.Forms.Timer outlineTimer = new() { Interval = 400 };
 	List<(int Level, int Start, string Text)> outline = new();
-	ToolStripMenuItem outlineItem = null!;
 	bool updatingOutline, outlineBuilt;
-	ToolStripMenuItem recentMenu = null!;
 	FileDropTarget? dropTarget;
 	readonly System.Windows.Forms.Timer textEventTimer = new() { Interval = 200 }, selectionEventTimer = new() { Interval = 120 };
 	readonly Queue<string[]> postedCalls = new();
 
 	// Iteration 10: legal numbering
-	ToolStripButton legalButton = null!;
 	readonly System.Windows.Forms.Timer legalTimer = new() { Interval = 300 };
 	bool skipLegalCheck, guardingCaret, guardPending;
 	int lastCaret = -1;
@@ -219,13 +261,11 @@ class WriterForm : Form
 		status.Items.AddRange(new ToolStripItem[] { recordingLabel, statusText, positionLabel, wordsLabel, modeLabel, automationLabel });
 		recordingLabel.Font = new Font(status.Font, FontStyle.Bold);
 		recordingLabel.Click += (s, e) => Run(ToggleRecording);
-		var toolbar = BuildToolbar();
-		var menu = BuildMenu();
+		BuildRibbon();
 		Controls.Add(outlineSplit);    // docking order: the last control added is docked first
-		Controls.Add(toolbar);
-		Controls.Add(menu);
+		Controls.Add(ribbon);
 		Controls.Add(status);
-		MainMenuStrip = menu;
+		Activated += (s, e) => FillMacrosGallery();    // macros may have been added or removed meanwhile
 
 		// Automation: in-process (AppContext) and cross-process (hidden window) entry points.
 		AppContext.SetData("rte.dispatch", (Func<string[], string>)DispatchFromAutomation);
@@ -287,7 +327,8 @@ class WriterForm : Form
 			UpdateUi();
 			UpdateTitle();
 			UpdateWordCount();
-			SetStatus(startFile != null ? "" : "New document. Tools > Macros runs AHK scripts; Help > Automation API lists what they can call.");
+			UpdateRecentItems();
+			SetStatus(startFile != null ? "" : "New document. Press Alt for the ribbon's KeyTips. The Tools tab runs AHK macros; Tools > Automation API lists what they can call.");
 		};
 		FormClosing += OnFormClosing;
 		FormClosed += (s, e) => {
@@ -298,206 +339,206 @@ class WriterForm : Form
 		};
 	}
 
-	// ---------------------------------------------------------------- Menus
+	// ---------------------------------------------------------------- Iteration 16: the ribbon
 
-	MenuStrip BuildMenu() {
-		var menu = new MenuStrip();
-		menu.Items.Add(Menu("&File",
-			Item("&New", () => { if (ConfirmDiscard()) api.New(); }, Keys.Control | Keys.N),
-			Item("&Open...", OpenDialog, Keys.Control | Keys.O),
-			RecentMenu(),
-			Item("&Save", () => SaveCommand(), Keys.Control | Keys.S),
-			Item("Save &As...", () => SaveAsDialog(), Keys.Control | Keys.Shift | Keys.S),
-			new ToolStripSeparator(),
-			Item("Page Set&up...", PageSetupCommand),
-			Item("&Header and Footer...", HeaderFooterCommand),
-			Item("Print Pre&view...", PrintPreviewCommand),
-			Item("&Print...", PrintCommand, Keys.Control | Keys.P),
-			Item("&Export as PDF...", ExportPdfDialog),
-			Item("Export as &Word (.docx)...", () => ExportOfficeDialog("docx")),
-			Item("Export as Open&Document (.odt)...", () => ExportOfficeDialog("odt")),
-			new ToolStripSeparator(),
-			Item("E&xit", Close)));
+	string RibbonFile => Path.Combine(appDir, "ribbon", "RteRibbon.ribbon");
 
-		menu.Items.Add(Menu("&Edit",
-			Item("&Undo", () => { skipLegalCheck = true; Editor.Undo(); }, Keys.Control | Keys.Z, M("Undo")),
-			Item("&Redo", () => { skipLegalCheck = true; Editor.Redo(); }, Keys.Control | Keys.Y, M("Redo")),
-			new ToolStripSeparator(),
-			Item("Cu&t", Editor.Cut, Keys.Control | Keys.X, M("Cut")),
-			Item("&Copy", Editor.Copy, Keys.Control | Keys.C, M("Copy")),
-			Item("&Paste", Editor.Paste, Keys.Control | Keys.V, M("Paste")),
-			new ToolStripSeparator(),
-			Item("Select &All", Editor.SelectAll, Keys.Control | Keys.A, M("SelectAll")),
-			new ToolStripSeparator(),
-			Item("&Find...", () => ShowFind(false), Keys.Control | Keys.F),
-			Item("Find &Next", () => FindNext(), Keys.F3),
-			Item("&Replace...", () => ShowFind(true), Keys.Control | Keys.H)));
+	// Connects the commands of ribbon\RteRibbon.xml to what they do. Each runs through Run (so it is recorded in a macro
+	// as the menus' and toolbar's were); keys are the shortcuts the menus had, handled in ProcessCmdKey.
+	void BuildRibbon() {
+		if (!File.Exists(RibbonFile))
+			throw new FileNotFoundException($"The ribbon is missing: {RibbonFile}. Build it with ribbon\\build_ribbon.ahk (it needs the Windows SDK and the Visual Studio C++ tools).");
+		ribbon.ResourceName = "file://" + RibbonFile;
 
-		var underline = Menu("Underline st&yle");
-		foreach (var style in Enum.GetValues<UnderlineStyle>())
-			underline.DropDownItems.Add(Item(style.ToString(), () => Editor.ToggleUnderline(style), Keys.None, M("ToggleUnderline", style)));
-		menu.Items.Add(Menu("F&ormat",
-			Item("&Bold", Editor.ToggleBold, Keys.Control | Keys.B, M("ToggleBold")),
-			Item("&Italic", Editor.ToggleItalic, Keys.Control | Keys.I, M("ToggleItalic")),
-			Item("&Underline", () => Editor.ToggleUnderline(), Keys.Control | Keys.U, M("ToggleUnderline")),
-			underline,
-			Item("&Strikethrough", Editor.ToggleStrikeThrough, Keys.None, M("ToggleStrikeThrough")),
-			Item("Su&perscript", api.ToggleSuperscript, Keys.Control | Keys.Shift | Keys.Oemplus, M("ToggleSuperscript")),
-			Item("Subs&cript", api.ToggleSubscript, Keys.Control | Keys.Oemplus, M("ToggleSubscript")),
-			new ToolStripSeparator(),
-			Item("&Font...", FontDialogCommand),
-			Item("Font c&olor...", () => { if (ChooseColor(fontColor) is Color c) SetFontColor(c); }),
-			Item("&Highlight color...", () => { if (ChooseColor(highlightColor) is Color c) SetHighlight(c); }),
-			Item("Increase font size", () => { if (FreeFormForSizes()) api.IncreaseFontSize(); }, Keys.Control | Keys.OemCloseBrackets, M("IncreaseFontSize")),
-			Item("Decrease font size", () => { if (FreeFormForSizes()) api.DecreaseFontSize(); }, Keys.Control | Keys.OemOpenBrackets, M("DecreaseFontSize")),
-			new ToolStripSeparator(),
-			Item("UPPER CASE", () => api.ChangeCase("upper"), Keys.None, M("ChangeCase", "upper")),
-			Item("lower case", () => api.ChangeCase("lower"), Keys.None, M("ChangeCase", "lower")),
-			Item("Title Case", () => api.ChangeCase("title"), Keys.None, M("ChangeCase", "title"))));
+		// File menu
+		Button(RibbonCommand.New, () => { if (ConfirmDiscard()) api.New(); }, Keys.Control | Keys.N);
+		Button(RibbonCommand.Open, OpenDialog, Keys.Control | Keys.O);
+		Button(RibbonCommand.Save, () => SaveCommand(), Keys.Control | Keys.S);
+		Button(RibbonCommand.SaveAs, () => SaveAsDialog(), Keys.Control | Keys.Shift | Keys.S);
+		Button(RibbonCommand.Print, PrintCommand, Keys.Control | Keys.P);
+		Button(RibbonCommand.PrintPreview, PrintPreviewCommand);
+		Button(RibbonCommand.PageSetup, PageSetupCommand);
+		Button(RibbonCommand.ExportPdf, ExportPdfDialog);
+		Button(RibbonCommand.ExportWord, () => ExportOfficeDialog("docx"));
+		Button(RibbonCommand.ExportOdt, () => ExportOfficeDialog("odt"));
+		Button(RibbonCommand.Exit, Close);
+		Button(RibbonCommand.Help, ShowAbout);
+		recentItems = new RibbonRecentItems(ribbon, (uint)RibbonCommand.Recent);
+		recentItems.ExecuteEvent += (s, e) => {
+			if (RecentItemsEventArgs.Create(recentItems, e).SelectedItem is { } item && item.SelectedItemIndex >= 0 && item.SelectedItemIndex < Settings.RecentFiles.Count) {
+				string path = Settings.RecentFiles[item.SelectedItemIndex];
+				BeginInvoke(() => Run(() => OpenRecent(path)));
+			}
+		};
 
-		var block = Menu("&Block style");
+		// Home: clipboard and editing
+		undoButton = Button(RibbonCommand.Undo, () => { skipLegalCheck = true; Editor.Undo(); }, Keys.Control | Keys.Z, M("Undo"));
+		redoButton = Button(RibbonCommand.Redo, () => { skipLegalCheck = true; Editor.Redo(); }, Keys.Control | Keys.Y, M("Redo"));
+		cutButton = Button(RibbonCommand.Cut, Editor.Cut, Keys.Control | Keys.X, M("Cut"));
+		copyButton = Button(RibbonCommand.Copy, Editor.Copy, Keys.Control | Keys.C, M("Copy"));
+		Button(RibbonCommand.Paste, Editor.Paste, Keys.Control | Keys.V, M("Paste"));
+		Button(RibbonCommand.SelectAll, Editor.SelectAll, Keys.Control | Keys.A, M("SelectAll"));
+		Button(RibbonCommand.Find, () => ShowFind(false), Keys.Control | Keys.F);
+		Button(RibbonCommand.Replace, () => ShowFind(true), Keys.Control | Keys.H);
+		Shortcut(Keys.F3, "Find Next", () => FindNext());
+
+		// Home: font. The font control's B, I, U ... buttons toggle, as the toolbar's did.
+		fontControl = new RibbonFontControl(ribbon, (uint)RibbonCommand.Font);
+		fontControl.ExecuteEvent += (s, e) => {
+			var changes = FontControlEventArgs.Create(fontControl, e).ChangedFontValues;
+			BeginInvoke(() => { ApplyFontChanges(changes); Editor.Focus(); });
+		};
+		Shortcut(Keys.Control | Keys.B, "Bold", Editor.ToggleBold, M("ToggleBold"));
+		Shortcut(Keys.Control | Keys.I, "Italic", Editor.ToggleItalic, M("ToggleItalic"));
+		Shortcut(Keys.Control | Keys.U, "Underline", () => Editor.ToggleUnderline(), M("ToggleUnderline"));
+		Shortcut(Keys.Control | Keys.Shift | Keys.Oemplus, "Superscript", api.ToggleSuperscript, M("ToggleSuperscript"));
+		Shortcut(Keys.Control | Keys.Oemplus, "Subscript", api.ToggleSubscript, M("ToggleSubscript"));
+		Shortcut(Keys.Control | Keys.OemCloseBrackets, "Increase font size", () => { if (FreeFormForSizes()) api.IncreaseFontSize(); }, M("IncreaseFontSize"));
+		Shortcut(Keys.Control | Keys.OemOpenBrackets, "Decrease font size", () => { if (FreeFormForSizes()) api.DecreaseFontSize(); }, M("DecreaseFontSize"));
+		Button(RibbonCommand.FontDialog, FontDialogCommand);
+		foreach (var (id, mode) in new[] { (RibbonCommand.CaseUpper, "upper"), (RibbonCommand.CaseLower, "lower"), (RibbonCommand.CaseTitle, "title") })
+			Button(id, () => api.ChangeCase(mode), Keys.None, M("ChangeCase", mode));
+		foreach (var (id, style) in new[] { (RibbonCommand.UnderlineSingle, UnderlineStyle.Single), (RibbonCommand.UnderlineDouble, UnderlineStyle.Double),
+			(RibbonCommand.UnderlineDotted, UnderlineStyle.Dotted), (RibbonCommand.UnderlineDashed, UnderlineStyle.Dashed), (RibbonCommand.UnderlineWavy, UnderlineStyle.Wavy) })
+			Button(id, () => Editor.ToggleUnderline(style), Keys.None, M("ToggleUnderline", style));
+
+		// Home: paragraph
+		Toggle(RibbonCommand.Bullets, () => api.ToggleList(ListStyle.Bullet), Keys.Control | Keys.Shift | Keys.L, M("ToggleList", ListStyle.Bullet));
+		Toggle(RibbonCommand.Numbering, () => api.NumberedList(), Keys.Control | Keys.Shift | Keys.N, M("NumberedList"));
+		Toggle(RibbonCommand.Legal, () => api.LegalNumbering(), Keys.Control | Keys.Shift | Keys.G, M("LegalNumbering"));
+		Button(RibbonCommand.Outdent, () => { if (api.InList()) { api.Nest(-1); Record(M("Nest", -1)); } else { Editor.Outdent(); Record(M("Outdent")); } });
+		Button(RibbonCommand.Indent, () => { if (api.InList()) { api.Nest(1); Record(M("Nest", 1)); } else { Editor.Indent(); Record(M("Indent")); } });
+		foreach (var (id, alignment, key) in new[] { (RibbonCommand.AlignLeft, ParagraphAlignment.Left, Keys.L), (RibbonCommand.AlignCenter, ParagraphAlignment.Center, Keys.E),
+			(RibbonCommand.AlignRight, ParagraphAlignment.Right, Keys.R), (RibbonCommand.Justify, ParagraphAlignment.Justify, Keys.J) })
+			Toggle(id, () => Editor.SetAlignment(alignment), Keys.Control | key, M("SetAlignment", alignment));
+		foreach (var (id, style) in new[] { (RibbonCommand.ListBullet, ListStyle.Bullet), (RibbonCommand.ListDecimal, ListStyle.Decimal), (RibbonCommand.ListLowerAlpha, ListStyle.LowerAlpha),
+			(RibbonCommand.ListUpperAlpha, ListStyle.UpperAlpha), (RibbonCommand.ListLowerRoman, ListStyle.LowerRoman), (RibbonCommand.ListUpperRoman, ListStyle.UpperRoman) })
+			Button(id, () => api.ToggleList(style), Keys.None, M("ToggleList", style));
+		Button(RibbonCommand.ListLevels, ListLevelsCommand);
+		Toggle(RibbonCommand.AutoLevel, () => AutoLevelStyles = !AutoLevelStyles);
+		Button(RibbonCommand.RestartNumbering, RestartNumberingCommand);
+		Button(RibbonCommand.ContinueNumbering, () => api.ContinueNumbering(), Keys.None, M("ContinueNumbering"));
+		Button(RibbonCommand.ConvertTyped, () => {
+			int count = api.ConvertTypedNumbers();
+			SetStatus(count == 0 ? "No typed list numbers found (paragraphs that start with \"1.\", \"a)\", \"(i)\", \"•\" ... and a tab or space, two or more in a row)."
+				: $"{count} paragraph{(count == 1 ? "" : "s")} became list items.");
+		}, Keys.None, M("ConvertTypedNumbers"));
+		Button(RibbonCommand.IndentParagraph, () => Editor.Indent(), Keys.Control | Keys.M, M("Indent"));
+		Button(RibbonCommand.OutdentParagraph, () => Editor.Outdent(), Keys.Control | Keys.Shift | Keys.M, M("Outdent"));
+
+		// Home: block styles (structured documents)
+		blockCombo = new RibbonComboBox(ribbon, (uint)RibbonCommand.BlockStyle);
+		// The ribbon sizes a combo box by this string, not by its items: the widest style name, and a letter to spare.
+		blockCombo.RepresentativeString = Enum.GetValues<BlockStyle>().Select(BlockName)
+			.MaxBy(name => TextRenderer.MeasureText(name, SystemFonts.MessageBoxFont).Width) + "W";
+		blockCombo.ItemsSourceReady += (s, e) => {
+			var items = blockCombo.ItemsSource;
+			items.Clear();
+			foreach (var style in Enum.GetValues<BlockStyle>())
+				items.Add(new GalleryItemPropertySet { Label = BlockName(style), CategoryID = Constants.UI_Collection_InvalidIndex });
+		};
+		blockCombo.ExecuteEvent += (s, e) => {
+			if (updatingUi || GalleryItemEventArgs.Create(blockCombo, e).SelectedItem is not { SelectedItemIndex: >= 0 and <= (int)BlockStyle.Preformatted } item) return;
+			var style = (BlockStyle)item.SelectedItemIndex;
+			BeginInvoke(() => { Run(() => api.SetBlockStyle(style), M("SetBlockStyle", style)); Editor.Focus(); });
+		};
 		foreach (var style in Enum.GetValues<BlockStyle>()) {
 			Keys keys = style switch {
 				BlockStyle.Paragraph => Keys.Control | Keys.D0,
 				BlockStyle.Preformatted => Keys.Control | Keys.D7,
 				_ => Keys.Control | (Keys.D0 + (int)style)
 			};
-			block.DropDownItems.Add(Item(BlockName(style), () => api.SetBlockStyle(style), keys, M("SetBlockStyle", style)));
+			Shortcut(keys, BlockName(style), () => api.SetBlockStyle(style), M("SetBlockStyle", style));
 		}
-		var align = Menu("&Alignment");
-		foreach (var (alignment, keys) in new[] { (ParagraphAlignment.Left, Keys.L), (ParagraphAlignment.Center, Keys.E), (ParagraphAlignment.Right, Keys.R), (ParagraphAlignment.Justify, Keys.J) })
-			align.DropDownItems.Add(Item(alignment.ToString(), () => Editor.SetAlignment(alignment), Keys.Control | keys, M("SetAlignment", alignment)));
-		var listStyles = Menu("List st&yle");
-		foreach (var style in Enum.GetValues<ListStyle>())
-			listStyles.DropDownItems.Add(Item(style.ToString(), () => api.ToggleList(style), Keys.None, M("ToggleList", style)));
-		autoLevelItem = new ToolStripMenuItem("Automatic numbering style per level (Paragraph > List levels)") { CheckOnClick = true, Checked = AutoLevelStyles };
-		autoLevelItem.CheckedChanged += (s, e) => AutoLevelStyles = autoLevelItem.Checked;
-		var increase = Item("Increase list level", () => api.Nest(1), Keys.None, M("Nest", 1));
-		increase.ShortcutKeyDisplayString = "Tab";
-		var decrease = Item("Decrease list level", () => api.Nest(-1), Keys.None, M("Nest", -1));
-		decrease.ShortcutKeyDisplayString = "Shift+Tab";
-		menu.Items.Add(Menu("&Paragraph",
-			block,
-			align,
-			new ToolStripSeparator(),
-			Item("&Bulleted list", () => api.ToggleList(ListStyle.Bullet), Keys.Control | Keys.Shift | Keys.L, M("ToggleList", ListStyle.Bullet)),
-			Item("&Numbered list", () => api.NumberedList(), Keys.Control | Keys.Shift | Keys.N, M("NumberedList")),
-			listStyles,
-			increase,
-			decrease,
-			autoLevelItem,
-			Item("List le&vels...", ListLevelsCommand),
-			Item("Le&gal numbering (1.1.1)", () => api.LegalNumbering(), Keys.Control | Keys.Shift | Keys.G, M("LegalNumbering")),
-			Item("Convert &typed numbers to lists", () => {
-				int count = api.ConvertTypedNumbers();
-				SetStatus(count == 0 ? "No typed list numbers found (paragraphs that start with \"1.\", \"a)\", \"(i)\", \"•\" ... and a tab or space, two or more in a row)."
-					: $"{count} paragraph{(count == 1 ? "" : "s")} became list items.");
-			}, Keys.None, M("ConvertTypedNumbers")),
-			Item("&Restart numbering...", RestartNumberingCommand),
-			Item("&Continue numbering", () => api.ContinueNumbering(), Keys.None, M("ContinueNumbering")),
-			new ToolStripSeparator(),
-			Item("&Indent paragraph", () => Editor.Indent(), Keys.Control | Keys.M, M("Indent")),
-			Item("&Outdent paragraph", () => Editor.Outdent(), Keys.Control | Keys.Shift | Keys.M, M("Outdent"))));
 
-		menu.Items.Add(Menu("&Insert",
-			Item("&Hyperlink...", InsertHyperlinkDialog, Keys.Control | Keys.K),
-			Item("&Image...", InsertImageDialog),
-			Item("&Linked thumbnail...", InsertThumbnailDialog),
-			new ToolStripSeparator(),
-			PageBreakItem(Item("Page &break", () => api.InsertPageBreak(), Keys.None, M("InsertPageBreak"))),
-			new ToolStripSeparator(),
-			Item("&Date and time", () => { string now = DateTime.Now.ToString("f"); api.InsertText(now); Record(M("InsertText", now)); })));
+		// Insert
+		Button(RibbonCommand.PageBreak, () => api.InsertPageBreak(), Keys.None, M("InsertPageBreak"));    // Ctrl+Enter: ProcessCmdKey
+		Button(RibbonCommand.Table, InsertTableDialog);
+		Button(RibbonCommand.Picture, InsertImageDialog);
+		Button(RibbonCommand.Thumbnail, InsertThumbnailDialog);
+		Button(RibbonCommand.Link, InsertHyperlinkDialog, Keys.Control | Keys.K);
+		Button(RibbonCommand.DateTime, () => { string now = DateTime.Now.ToString("f"); api.InsertText(now); Record(M("InsertText", now)); });
 
-		var tableCommands = new[] {
-			Item("Insert row &above", () => api.InsertRow(false), Keys.None, M("InsertRow", false)),
-			Item("Insert row &below", () => api.InsertRow(true), Keys.None, M("InsertRow", true)),
-			Item("Insert column &left", () => api.InsertColumn(false), Keys.None, M("InsertColumn", false)),
-			Item("Insert column &right", () => api.InsertColumn(true), Keys.None, M("InsertColumn", true)),
-			Item("&Delete row", () => api.DeleteRow(), Keys.None, M("DeleteRow")),
-			Item("Delete colu&mn", () => api.DeleteColumn(), Keys.None, M("DeleteColumn")),
-			Item("Delete &table", () => api.DeleteTable(), Keys.None, M("DeleteTable")),
+		// Layout, Review
+		Button(RibbonCommand.HeaderFooter, HeaderFooterCommand);
+		Button(RibbonCommand.NextSpelling, NextSpellingErrorCommand, Keys.F7);
+		Button(RibbonCommand.AddToDictionary, () => {
+			string word = Editor.SelectedText.Trim();
+			if (word == "" || word.Any(char.IsWhiteSpace)) throw new InvalidOperationException("Select a single word first.");
+			api.AddToDictionary(word);
+			SetStatus($"\"{word}\" was added to the Windows dictionary.");
+		});
+		Check(RibbonCommand.SpellCheck, () => Editor.EnableSpellCheck = !Editor.EnableSpellCheck);
+
+		// View
+		Toggle(RibbonCommand.Structured, () => SetStructured(true));
+		Toggle(RibbonCommand.FreeForm, () => SetStructured(false));
+		Check(RibbonCommand.WordWrap, () => Editor.WordWrap = !Editor.WordWrap);
+		Check(RibbonCommand.ShowBands, () => api.HeaderFooterVisible = !Settings.ShowBands);
+		Check(RibbonCommand.Outline, () => api.OutlineVisible = outlineSplit.Panel1Collapsed, Keys.Control | Keys.Shift | Keys.O);
+		Button(RibbonCommand.ZoomIn, () => Editor.ZoomFactor = Math.Min(5f, Editor.ZoomFactor + 0.1f));
+		Button(RibbonCommand.ZoomOut, () => Editor.ZoomFactor = Math.Max(0.5f, Editor.ZoomFactor - 0.1f));
+		Button(RibbonCommand.Zoom100, () => Editor.ZoomFactor = 1f);
+		Button(RibbonCommand.HtmlSource, () => ShowText("HTML source", api.GetHtml()));
+		Button(RibbonCommand.MarkdownSource, () => ShowText("Markdown source (images shown as image1.png ...)", api.GetMarkdown(false)));
+
+		// Tools
+		macrosGallery = new RibbonDropDownGallery(ribbon, (uint)RibbonCommand.Macros);
+		macrosGallery.ItemsSourceReady += (s, e) => FillMacrosGallery(true);
+		macrosGallery.ExecuteEvent += (s, e) => {
+			if (GalleryItemEventArgs.Create(macrosGallery, e).SelectedItem is { } item && item.SelectedItemIndex >= 0 && item.SelectedItemIndex < galleryMacros.Count) {
+				string file = galleryMacros[item.SelectedItemIndex];
+				BeginInvoke(() => Run(() => RunMacroFromUi(file)));
+			}
 		};
-		tableCommands[1].ShortcutKeyDisplayString = "Ctrl+Shift+Ins";    // handled in ProcessCmdKey, only in tables
-		tableCommands[4].ShortcutKeyDisplayString = "Ctrl+Shift+Del";
-		var tableMenu = Menu("T&able", Item("&Insert table...", InsertTableDialog), new ToolStripSeparator());
-		tableMenu.DropDownItems.AddRange(tableCommands[..4]);
-		tableMenu.DropDownItems.Add(new ToolStripSeparator());
-		tableMenu.DropDownItems.AddRange(tableCommands[4..]);
-		tableMenu.DropDownOpening += (s, e) => {
-			bool inTable = api.InTable();
-			foreach (var item in tableCommands) item.Enabled = inTable;
-		};
-		menu.Items.Add(tableMenu);
+		Toggle(RibbonCommand.RecordMacro, ToggleRecording, Keys.Control | Keys.Shift | Keys.R);
+		Button(RibbonCommand.MacroHotkeys, MacroHotkeysCommand);
+		Button(RibbonCommand.RunScript, RunScriptDialog);
+		Button(RibbonCommand.MacrosFolder, OpenMacrosFolder);
+		Button(RibbonCommand.AutomationApi, () => ShowText("Automation API (RteClient2.ahk: Rte.<Name>(...))", api.Help()));
+		Button(RibbonCommand.About, ShowAbout);
 
-		structuredItem = Item("&Structured document (headings, block styles)", () => SetStructured(true));
-		freeFormItem = Item("&Free-form fonts (any font size)", () => SetStructured(false));
-		wordWrapItem = Item("&Word wrap", () => Editor.WordWrap = !Editor.WordWrap);
-		spellCheckItem = Item("S&pell check", () => Editor.EnableSpellCheck = !Editor.EnableSpellCheck);
-		menu.Items.Add(Menu("&View",
-			structuredItem,
-			freeFormItem,
-			new ToolStripSeparator(),
-			wordWrapItem,
-			spellCheckItem,
-			new ToolStripSeparator(),
-			Item("Zoom &in", () => Editor.ZoomFactor = Math.Min(5f, Editor.ZoomFactor + 0.1f)),
-			Item("Zoom &out", () => Editor.ZoomFactor = Math.Max(0.5f, Editor.ZoomFactor - 0.1f)),
-			Item("Zoom &100%", () => Editor.ZoomFactor = 1f),
-			new ToolStripSeparator(),
-			bandsItem = Item("Header and &footer", () => api.HeaderFooterVisible = !Settings.ShowBands),
-			new ToolStripSeparator(),
-			Item("&HTML source", () => ShowText("HTML source", api.GetHtml())),
-			Item("&Markdown source", () => ShowText("Markdown source (images shown as image1.png ...)", api.GetMarkdown(false))),
-			new ToolStripSeparator(),
-			outlineItem = Item("Out&line", () => api.OutlineVisible = outlineSplit.Panel1Collapsed, Keys.Control | Keys.Shift | Keys.O)));
-
-		macrosMenu = Menu("&Macros");
-		macrosMenu.DropDownItems.Add(new ToolStripMenuItem("(none)"));    // filled when opened
-		macrosMenu.DropDownOpening += (s, e) => FillMacrosMenu();
-		recordItem = Item("&Record macro", ToggleRecording, Keys.Control | Keys.Shift | Keys.R);
-		menu.Items.Add(Menu("&Tools",
-			macrosMenu,
-			recordItem,
-			Item("Macro &hotkeys...", MacroHotkeysCommand),
-			new ToolStripSeparator(),
-			Item("Next &spelling error", NextSpellingErrorCommand, Keys.F7),
-			Item("&Add selected word to dictionary", () => {
-				string word = Editor.SelectedText.Trim();
-				if (word == "" || word.Any(char.IsWhiteSpace)) throw new InvalidOperationException("Select a single word first.");
-				api.AddToDictionary(word);
-				SetStatus($"\"{word}\" was added to the Windows dictionary.");
-			}),
-			new ToolStripSeparator(),
-			Item("&Run AHK script...", RunScriptDialog),
-			Item("&Open macros folder", OpenMacrosFolder)));
-
-		menu.Items.Add(Menu("&Help",
-			Item("&Automation API", () => ShowText("Automation API (RteClient2.ahk: Rte.<Name>(...))", api.Help())),
-			Item("A&bout", () => MessageBox.Show(this, $"{AppName} (iteration 15: pictures' alt text)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
-				AppName, MessageBoxButtons.OK, MessageBoxIcon.Information))));
-
-		menu.MenuActivate += (s, e) => {
-			structuredItem.Checked = Editor.EnableHtmlFontSizing;
-			freeFormItem.Checked = !Editor.EnableHtmlFontSizing;
-			wordWrapItem.Checked = Editor.WordWrap;
-			bandsItem.Checked = Settings.ShowBands;
-			spellCheckItem.Checked = Editor.EnableSpellCheck;
-			outlineItem.Checked = !outlineSplit.Panel1Collapsed;
-		};
-		return menu;
+		// Table Tools (shown while the caret is in a table)
+		tableTools = new RibbonTabGroup(ribbon, (uint)RibbonCommand.TableTools);
+		Button(RibbonCommand.InsertAbove, () => api.InsertRow(false), Keys.None, M("InsertRow", false));
+		Button(RibbonCommand.InsertBelow, () => api.InsertRow(true), Keys.None, M("InsertRow", true));    // Ctrl+Shift+Insert: ProcessCmdKey
+		Button(RibbonCommand.InsertLeft, () => api.InsertColumn(false), Keys.None, M("InsertColumn", false));
+		Button(RibbonCommand.InsertRight, () => api.InsertColumn(true), Keys.None, M("InsertColumn", true));
+		Button(RibbonCommand.DeleteRow, () => api.DeleteRow(), Keys.None, M("DeleteRow"));    // Ctrl+Shift+Delete: ProcessCmdKey
+		Button(RibbonCommand.DeleteColumn, () => api.DeleteColumn(), Keys.None, M("DeleteColumn"));
+		Button(RibbonCommand.DeleteTable, () => api.DeleteTable(), Keys.None, M("DeleteTable"));
 	}
+
+	// Ribbon commands run after the ribbon's callback has returned (BeginInvoke): dialogs opened from inside it would run
+	// while the ribbon is still handling the click.
+	RibbonButton Button(RibbonCommand id, Action action, Keys keys = Keys.None, string? macro = null) {
+		var button = new RibbonButton(ribbon, (uint)id);
+		button.ExecuteEvent += (s, e) => BeginInvoke(() => Run(action, macro));
+		if (keys != Keys.None) Shortcut(keys, CommandName(id), action, macro);
+		return button;
+	}
+
+	void Toggle(RibbonCommand id, Action action, Keys keys = Keys.None, string? macro = null) {
+		var button = new RibbonToggleButton(ribbon, (uint)id);
+		button.ExecuteEvent += (s, e) => BeginInvoke(() => Run(action, macro));
+		if (keys != Keys.None) Shortcut(keys, CommandName(id), action, macro);
+		toggleButtons[id] = button;
+	}
+
+	void Check(RibbonCommand id, Action action, Keys keys = Keys.None) {
+		var box = new RibbonCheckBox(ribbon, (uint)id);
+		box.ExecuteEvent += (s, e) => BeginInvoke(() => Run(action));
+		if (keys != Keys.None) Shortcut(keys, CommandName(id), action);
+		checkBoxes[id] = box;
+	}
+
+	void Shortcut(Keys keys, string name, Action action, string? macro = null) => shortcuts[keys] = (name, () => Run(action, macro));
+
+	// "SaveAs" -> "Save As": the command's name for the macro hotkey warnings.
+	static string CommandName(RibbonCommand id) => Regex.Replace(id.ToString(), "(?<=[a-z])(?=[A-Z0-9])", " ");
 
 	// macro: the call recorded while a macro is being recorded (made with M), or null for commands that are not recorded.
-	ToolStripMenuItem Item(string text, Action action, Keys keys = Keys.None, string? macro = null) =>
-		new(text, null, (s, e) => Run(action, macro)) { ShortcutKeys = keys };
-
 	static string M(string member, params object?[] args) => MacroRecorder.Call(member, args);
-
-	static ToolStripMenuItem Menu(string text, params ToolStripItem[] items) {
-		var item = new ToolStripMenuItem(text);
-		item.DropDownItems.AddRange(items);
-		return item;
-	}
 
 	static string BlockName(BlockStyle style) => style switch {
 		BlockStyle.Paragraph => "Normal text",
@@ -505,203 +546,111 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	// ---------------------------------------------------------------- Toolbar
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 16: the ribbon)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-	ToolStrip BuildToolbar() {
-		int icon = LogicalToDeviceUnits(16);
-		var bar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, ImageScalingSize = new Size(icon, icon), Padding = new Padding(4, 2, 4, 2) };
-		bar.Items.Add(TextButton("New", "New (Ctrl+N)", () => { if (ConfirmDiscard()) api.New(); }));
-		bar.Items.Add(TextButton("Open", "Open (Ctrl+O)", OpenDialog));
-		bar.Items.Add(TextButton("Save", "Save (Ctrl+S)", () => SaveCommand()));
-		bar.Items.Add(TextButton("Print", "Print (Ctrl+P)", PrintCommand));
-		bar.Items.Add(TextButton("PDF", "Export as PDF", ExportPdfDialog));
-		bar.Items.Add(new ToolStripSeparator());
-
-		blockCombo = new ToolStripComboBox { DropDownStyle = ComboBoxStyle.DropDownList, AutoSize = false, Width = LogicalToDeviceUnits(120), ToolTipText = "Block style (Ctrl+0 to Ctrl+7)" };
-		foreach (var style in Enum.GetValues<BlockStyle>()) blockCombo.Items.Add(BlockName(style));
-		blockCombo.SelectedIndexChanged += (s, e) => {
-			if (updatingUi || blockCombo.SelectedIndex < 0) return;
-			Run(() => api.SetBlockStyle((BlockStyle)blockCombo.SelectedIndex), M("SetBlockStyle", (BlockStyle)blockCombo.SelectedIndex));
-			Editor.Focus();
-		};
-		fontCombo = new ToolStripComboBox { AutoSize = false, Width = LogicalToDeviceUnits(150), ToolTipText = "Font",
-			AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems };
-		using (var fonts = new InstalledFontCollection())
-			fontCombo.Items.AddRange(fonts.Families.Select(f => (object)f.Name).ToArray());
-		fontCombo.SelectedIndexChanged += (s, e) => { if (!updatingUi && fontCombo.SelectedIndex >= 0) ApplyFontName(); };
-		fontCombo.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; ApplyFontName(); } };
-		sizeCombo = new ToolStripComboBox { AutoSize = false, Width = LogicalToDeviceUnits(52), ToolTipText = "Font size (free-form mode)" };
-		foreach (var size in new[] { 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72 }) sizeCombo.Items.Add(size.ToString());
-		sizeCombo.SelectedIndexChanged += (s, e) => { if (!updatingUi && sizeCombo.SelectedIndex >= 0) ApplyFontSize(); };
-		sizeCombo.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; ApplyFontSize(); } };
-		bar.Items.AddRange(new ToolStripItem[] { blockCombo, fontCombo, sizeCombo, new ToolStripSeparator() });
-
-		var baseFont = bar.Font;
-		Toggle(bar, "bold", "B", new Font(baseFont, FontStyle.Bold), "Bold (Ctrl+B)", Editor.ToggleBold, M("ToggleBold"));
-		Toggle(bar, "italic", "I", new Font(baseFont, FontStyle.Italic), "Italic (Ctrl+I)", Editor.ToggleItalic, M("ToggleItalic"));
-		Toggle(bar, "underline", "U", new Font(baseFont, FontStyle.Underline), "Underline (Ctrl+U)", () => Editor.ToggleUnderline(), M("ToggleUnderline"));
-		Toggle(bar, "strike", "S", new Font(baseFont, FontStyle.Strikeout), "Strikethrough", Editor.ToggleStrikeThrough, M("ToggleStrikeThrough"));
-		Toggle(bar, "super", "x²", baseFont, "Superscript (Ctrl+Shift+=)", api.ToggleSuperscript, M("ToggleSuperscript"));
-		Toggle(bar, "sub", "x₂", baseFont, "Subscript (Ctrl+=)", api.ToggleSubscript, M("ToggleSubscript"));
-		bar.Items.Add(new ToolStripSeparator());
-
-		fontColorButton = ColorButton("A", "Font color", fontColor, c => SetFontColor(c), api.ClearFontColor,
-			("Dark red", Color.FromArgb(0xC0, 0, 0)), ("Red", Color.Red), ("Orange", Color.FromArgb(0xE0, 0x70, 0)), ("Green", Color.FromArgb(0, 0x80, 0)),
-			("Blue", Color.FromArgb(0, 0x50, 0xC0)), ("Purple", Color.FromArgb(0x70, 0x30, 0xA0)), ("Gray", Color.Gray), ("Black", Color.Black));
-		highlightButton = ColorButton("ab", "Highlight", highlightColor, c => SetHighlight(c), api.ClearHighlight,
-			("Yellow", Color.Yellow), ("Bright green", Color.Lime), ("Turquoise", Color.Cyan), ("Pink", Color.Pink),
-			("Light orange", Color.FromArgb(0xFF, 0xD0, 0x90)), ("Light gray", Color.LightGray));
-		bar.Items.AddRange(new ToolStripItem[] { fontColorButton, highlightButton, new ToolStripSeparator() });
-
-		foreach (var alignment in Enum.GetValues<ParagraphAlignment>()) {
-			var button = IconButton(AlignIcon(alignment), $"Align {alignment.ToString().ToLowerInvariant()}", () => Editor.SetAlignment(alignment), M("SetAlignment", alignment));
-			alignButtons[alignment] = button;
-			bar.Items.Add(button);
+	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
+	// "Automatic" text color and "No Color" highlight are not RGB values (the color itself then reads as black).
+	void ApplyFontChanges(Dictionary<FontPropertiesEnum, object>? changes) {
+		if (changes == null || changes.Count == 0) return;
+		// WindowsRibbon boxes some values as other enum types, so they are read by number.
+		uint Number(FontPropertiesEnum key) => Convert.ToUInt32(changes[key]);
+		bool Has(FontPropertiesEnum key) => changes.ContainsKey(key);
+		var font = api.SelectionRange().Font;
+		if (Has(FontPropertiesEnum.Family) && changes[FontPropertiesEnum.Family] is string name && name.Trim() != "")
+			Run(() => Editor.SetFontName(name.Trim()), M("SetFontName", name.Trim()));
+		if (Has(FontPropertiesEnum.Size) && changes[FontPropertiesEnum.Size] is decimal size && size > 0) {
+			if (FreeFormForSizes()) Run(() => api.SetFontSize((float)size), M("SetFontSize", (float)size));
+		} else if (Has(FontPropertiesEnum.DeltaSize) && FreeFormForSizes()) {
+			if ((FontDeltaSize)Number(FontPropertiesEnum.DeltaSize) == FontDeltaSize.Grow) Run(() => api.IncreaseFontSize(), M("IncreaseFontSize"));
+			else Run(() => api.DecreaseFontSize(), M("DecreaseFontSize"));
 		}
-		bar.Items.Add(new ToolStripSeparator());
-		bulletButton = IconButton(ListIcon(false), "Bulleted list (Ctrl+Shift+L)", () => api.ToggleList(ListStyle.Bullet), M("ToggleList", ListStyle.Bullet));
-		numberButton = IconButton(ListIcon(true), "Numbered list (Ctrl+Shift+N)", () => api.NumberedList(), M("NumberedList"));
-		legalButton = TextButton("1.1", "Legal numbering, 1.1.1 (Ctrl+Shift+G)", () => api.LegalNumbering(), M("LegalNumbering"));
-		bar.Items.Add(bulletButton);
-		bar.Items.Add(numberButton);
-		bar.Items.Add(legalButton);
-		bar.Items.Add(IconButton(IndentIcon(false), "Decrease indent / list level (Shift+Tab in a list)", () => { if (api.InList()) { api.Nest(-1); Record(M("Nest", -1)); } else { Editor.Outdent(); Record(M("Outdent")); } }));
-		bar.Items.Add(IconButton(IndentIcon(true), "Increase indent / list level (Tab in a list)", () => { if (api.InList()) { api.Nest(1); Record(M("Nest", 1)); } else { Editor.Indent(); Record(M("Indent")); } }));
-		bar.Items.Add(new ToolStripSeparator());
-		bar.Items.Add(TextButton("Link", "Insert hyperlink (Ctrl+K)", InsertHyperlinkDialog));
-		bar.Items.Add(TextButton("Image", "Insert image", InsertImageDialog));
-		bar.Items.Add(TextButton("Table", "Insert table", InsertTableDialog));
-		return bar;
-	}
-
-	ToolStripButton TextButton(string text, string tip, Action action, string? macro = null) =>
-		new(text, null, (s, e) => Run(action, macro)) { DisplayStyle = ToolStripItemDisplayStyle.Text, ToolTipText = tip };
-
-	ToolStripButton IconButton(Image image, string tip, Action action, string? macro = null) =>
-		new(null, image, (s, e) => Run(action, macro)) { DisplayStyle = ToolStripItemDisplayStyle.Image, ToolTipText = tip };
-
-	void Toggle(ToolStrip bar, string key, string text, Font font, string tip, Action action, string? macro = null) {
-		var button = new ToolStripButton(text, null, (s, e) => Run(action, macro)) {
-			DisplayStyle = ToolStripItemDisplayStyle.Text, Font = font, ToolTipText = tip, AutoSize = false,
-			Width = LogicalToDeviceUnits(26), Height = LogicalToDeviceUnits(24)
-		};
-		toggles[key] = button;
-		bar.Items.Add(button);
-	}
-
-	ToolStripSplitButton ColorButton(string letter, string tip, Color initial, Action<Color> apply, Action clear, params (string Name, Color Color)[] palette) {
-		var button = new ToolStripSplitButton { DisplayStyle = ToolStripItemDisplayStyle.Image, Image = ColorIcon(letter, initial), ToolTipText = tip };
-		button.ButtonClick += (s, e) => Run(() => apply(button == fontColorButton ? fontColor : highlightColor));
-		foreach (var (name, color) in palette)
-			button.DropDownItems.Add(new ToolStripMenuItem(name, Swatch(color), (s, e) => Run(() => apply(color))));
-		button.DropDownItems.Add(new ToolStripSeparator());
-		button.DropDownItems.Add(new ToolStripMenuItem(letter == "A" ? "Automatic" : "No highlight", null, (s, e) => Run(clear, M(letter == "A" ? "ClearFontColor" : "ClearHighlight"))));
-		button.DropDownItems.Add(new ToolStripMenuItem("More colors...", null, (s, e) => {
-			if (ChooseColor(button == fontColorButton ? fontColor : highlightColor) is Color c) Run(() => apply(c));
-		}));
-		return button;
+		if (Has(FontPropertiesEnum.Bold)) Run(Editor.ToggleBold, M("ToggleBold"));
+		if (Has(FontPropertiesEnum.Italic)) Run(Editor.ToggleItalic, M("ToggleItalic"));
+		if (Has(FontPropertiesEnum.Underline)) Run(() => Editor.ToggleUnderline(), M("ToggleUnderline"));
+		if (Has(FontPropertiesEnum.Strikethrough)) Run(Editor.ToggleStrikeThrough, M("ToggleStrikeThrough"));
+		if (Has(FontPropertiesEnum.VerticalPositioning)) {
+			var position = (FontVerticalPosition)Number(FontPropertiesEnum.VerticalPositioning);
+			bool super = font.Superscript == tomConstants.tomTrue, sub = font.Subscript == tomConstants.tomTrue;
+			if (position == FontVerticalPosition.SuperScript != super) Run(api.ToggleSuperscript, M("ToggleSuperscript"));
+			if (position == FontVerticalPosition.SubScript != sub) Run(api.ToggleSubscript, M("ToggleSubscript"));
+		}
+		if (Has(FontPropertiesEnum.ForegroundColorType) || Has(FontPropertiesEnum.ForegroundColor)) {
+			if (Has(FontPropertiesEnum.ForegroundColorType) && (SwatchColorType)Number(FontPropertiesEnum.ForegroundColorType) != SwatchColorType.RGB)
+				Run(api.ClearFontColor, M("ClearFontColor"));
+			else if (changes.GetValueOrDefault(FontPropertiesEnum.ForegroundColor) is Color color)
+				Run(() => SetFontColor(color));
+		}
+		if (Has(FontPropertiesEnum.BackgroundColorType) || Has(FontPropertiesEnum.BackgroundColor)) {
+			if (Has(FontPropertiesEnum.BackgroundColorType) && (SwatchColorType)Number(FontPropertiesEnum.BackgroundColorType) != SwatchColorType.RGB)
+				Run(api.ClearHighlight, M("ClearHighlight"));
+			else if (changes.GetValueOrDefault(FontPropertiesEnum.BackgroundColor) is Color color)
+				Run(() => SetHighlight(color));
+		}
 	}
 
 	void SetFontColor(Color c) {
 		Editor.SetFontColor(c);
 		Record(M("SetFontColor", c));
-		fontColor = c;
-		fontColorButton.Image = ColorIcon("A", c);
 	}
 
 	void SetHighlight(Color c) {
 		Editor.SetBackgroundColor(c);
 		Record(M("SetBackgroundColor", c));
-		highlightColor = c;
-		highlightButton.Image = ColorIcon("ab", c);
-	}
-
-	void ApplyFontName() {
-		string name = fontCombo.Text.Trim();
-		if (name == "") return;
-		Run(() => Editor.SetFontName(name), M("SetFontName", name));
-		Editor.Focus();
-	}
-
-	void ApplyFontSize() {
-		if (!float.TryParse(sizeCombo.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out float size)) return;
-		if (FreeFormForSizes()) Run(() => api.SetFontSize(size), M("SetFontSize", size));
-		Editor.Focus();
 	}
 
 	// Font sizes need free-form mode (structured documents have block styles instead): asks to switch to it.
 	bool FreeFormForSizes() {
 		if (Editor.EnableFontSize) return true;
-		var answer = MessageBox.Show(this, "Font sizes can be changed in free-form mode only; structured documents (headings, block styles) set sizes by block style.\n\nSwitch to free-form fonts (View > Free-form fonts)?",
+		var answer = MessageBox.Show(this, "Font sizes can be changed in free-form mode only; structured documents (headings, block styles) set sizes by block style.\n\nSwitch to free-form fonts (View > Free-form)?",
 			AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
 		if (answer != DialogResult.Yes) { UpdateUi(); return false; }
 		SetStructured(false);
 		return true;
 	}
 
-	// ---------------------------------------------------------------- Icons (drawn on a 16x16 grid, scaled for DPI)
-
-	Bitmap Icon(Action<Graphics> draw) {
-		int size = LogicalToDeviceUnits(16);
-		var bitmap = new Bitmap(size, size);
-		using var g = Graphics.FromImage(bitmap);
-		g.SmoothingMode = SmoothingMode.AntiAlias;
-		g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-		g.ScaleTransform(size / 16f, size / 16f);
-		draw(g);
-		return bitmap;
+	// The recent documents in the File menu (Settings.RecentFiles, newest first).
+	void UpdateRecentItems() {
+		if (recentItems == null) return;
+		recentItems.RecentItems = Settings.RecentFiles.Select(path => new RecentItemsPropertySet { Label = Path.GetFileName(path), LabelDescription = path, Pinned = false }).ToList();
 	}
 
-	static readonly Color IconColor = Color.FromArgb(50, 50, 50);
+	// The macros in rte_macros, with their hotkeys, in the Tools tab's gallery. Refilled when something changed.
+	void FillMacrosGallery(bool force = false) {
+		if (macrosGallery == null || !ribbon.Initialized || macrosGallery.ItemsSource is not { } items) return;
+		var files = Directory.Exists(MacrosDir) ? Directory.GetFiles(MacrosDir, "*.ahk").OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList() : new List<string>();
+		var labels = files.Select(f => Path.GetFileNameWithoutExtension(f) + (HotkeyOf(Path.GetFileName(f)) is Keys keys ? $"    ({HotkeyBox.Describe(keys)})" : "")).ToList();
+		if (!force && files.SequenceEqual(galleryMacros) && labels.SequenceEqual(galleryLabels)) return;
+		(galleryMacros, galleryLabels) = (files, labels);
+		items.Clear();
+		foreach (var label in labels) items.Add(new GalleryItemPropertySet { Label = label, CategoryID = Constants.UI_Collection_InvalidIndex });
+		if (labels.Count == 0) items.Add(new GalleryItemPropertySet { Label = "(no .ahk files in rte_macros)", CategoryID = Constants.UI_Collection_InvalidIndex });
+	}
 
-	Bitmap AlignIcon(ParagraphAlignment alignment) => Icon(g => {
-		using var pen = new Pen(IconColor, 1.5f);
-		float[] widths = alignment == ParagraphAlignment.Justify ? new[] { 14f, 14f, 14f, 14f } : new[] { 14f, 9f, 14f, 9f };
-		for (int i = 0; i < 4; i++) {
-			float w = widths[i], y = 2.5f + i * 3.6f;
-			float x = alignment switch { ParagraphAlignment.Center => (16 - w) / 2, ParagraphAlignment.Right => 15 - w, _ => 1 };
-			g.DrawLine(pen, x, y, x + w, y);
-		}
-	});
+	List<string> galleryLabels = new();
 
-	Bitmap ListIcon(bool numbered) => Icon(g => {
-		using var pen = new Pen(IconColor, 1.5f);
-		using var brush = new SolidBrush(IconColor);
-		using var font = new Font("Segoe UI", 5.5f, FontStyle.Bold, GraphicsUnit.Pixel);
-		for (int i = 0; i < 3; i++) {
-			float y = 3f + i * 5f;
-			if (numbered) g.DrawString((i + 1).ToString(), font, brush, -0.5f, y - 3.8f);
-			else g.FillEllipse(brush, 1.2f, y - 1.4f, 2.8f, 2.8f);
-			g.DrawLine(pen, 6, y, 15, y);
-		}
-	});
+	// A cheap test for the Table Tools tab, made on every selection change: RichEdit marks paragraphs in table rows
+	// (api.InTable() reads the whole document).
+	bool CaretInTable() {
+		var pf = new PARAFORMAT2 { cbSize = Marshal.SizeOf<PARAFORMAT2>(), rgxTabs = new int[32] };
+		SendMessage(Editor.Handle, EM_GETPARAFORMAT, 0, ref pf);
+		return (pf.wEffects & PFE_TABLE) != 0;
+	}
 
-	Bitmap IndentIcon(bool increase) => Icon(g => {
-		using var pen = new Pen(IconColor, 1.5f);
-		using var brush = new SolidBrush(Color.FromArgb(0, 0x60, 0xC0));
-		g.DrawLine(pen, 1, 2.5f, 15, 2.5f);
-		g.DrawLine(pen, 7, 6.2f, 15, 6.2f);
-		g.DrawLine(pen, 7, 9.8f, 15, 9.8f);
-		g.DrawLine(pen, 1, 13.5f, 15, 13.5f);
-		g.FillPolygon(brush, increase
-			? new[] { new PointF(1, 5), new PointF(1, 11), new PointF(5, 8) }
-			: new[] { new PointF(5, 5), new PointF(5, 11), new PointF(1, 8) });
-	});
+	const int EM_GETPARAFORMAT = 0x43D;
+	const ushort PFE_TABLE = 0x4000;
 
-	Bitmap ColorIcon(string letter, Color color) => Icon(g => {
-		using var font = new Font("Segoe UI", letter.Length > 1 ? 8.5f : 10.5f, FontStyle.Bold, GraphicsUnit.Pixel);
-		using var text = new SolidBrush(IconColor);
-		var size = g.MeasureString(letter, font);
-		g.DrawString(letter, font, text, (16 - size.Width) / 2, -1.5f);
-		using var bar = new SolidBrush(color);
-		g.FillRectangle(bar, 1, 12, 14, 3.5f);
-	});
+	[StructLayout(LayoutKind.Sequential)]
+	struct PARAFORMAT2
+	{
+		public int cbSize; public uint dwMask; public ushort wNumbering, wEffects; public int dxStartIndent, dxRightIndent, dxOffset;
+		public ushort wAlignment; public short cTabCount;
+		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public int[] rgxTabs;
+		public int dySpaceBefore, dySpaceAfter, dyLineSpacing; public short sStyle; public byte bLineSpacingRule, bOutlineLevel;
+		public ushort wShadingWeight, wShadingStyle, wNumberingStart, wNumberingStyle, wNumberingTab, wBorderSpace, wBorderWidth, wBorders;
+	}
 
-	Bitmap Swatch(Color color) => Icon(g => {
-		using var brush = new SolidBrush(color);
-		g.FillRectangle(brush, 1.5f, 1.5f, 13, 13);
-		g.DrawRectangle(Pens.Gray, 1.5f, 1.5f, 13, 13);
-	});
+	[DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, ref PARAFORMAT2 lParam);
 
 	// ---------------------------------------------------------------- Commands
 
@@ -866,27 +815,9 @@ class WriterForm : Form
 		if (Settings.RecentFiles.Count > Settings.MaxRecentFiles) Settings.RecentFiles.RemoveRange(Settings.MaxRecentFiles, Settings.RecentFiles.Count - Settings.MaxRecentFiles);
 		Settings.LastFolder = Path.GetDirectoryName(path);
 		Settings.Save();
+		UpdateRecentItems();
 	}
 
-	ToolStripMenuItem RecentMenu() {
-		recentMenu = new ToolStripMenuItem("Open &Recent");
-		recentMenu.DropDownItems.Add(new ToolStripMenuItem("(none)"));    // filled when opened
-		recentMenu.DropDownOpening += (s, e) => FillRecentMenu();
-		return recentMenu;
-	}
-
-	void FillRecentMenu() {
-		recentMenu.DropDownItems.Clear();
-		int number = 0;
-		foreach (var path in Settings.RecentFiles.ToList()) {
-			number++;
-			string label = $"{(number < 10 ? "&" + number : "1&0")}  {Path.GetFileName(path)}";
-			recentMenu.DropDownItems.Add(new ToolStripMenuItem(label, null, (s, e) => Run(() => OpenRecent(path))) { ToolTipText = path });
-		}
-		if (number == 0) recentMenu.DropDownItems.Add(new ToolStripMenuItem("(no recent files)") { Enabled = false });
-		recentMenu.DropDownItems.Add(new ToolStripSeparator());
-		recentMenu.DropDownItems.Add(new ToolStripMenuItem("&Clear list", null, (s, e) => { Settings.RecentFiles.Clear(); Settings.Save(); }) { Enabled = number > 0 });
-	}
 
 	void OpenRecent(string path) {
 		if (!File.Exists(path)) {
@@ -1383,12 +1314,7 @@ class WriterForm : Form
 			api.SetFontSize(dlg.Font.SizeInPoints);
 			Record(M("SetFontSize", dlg.Font.SizeInPoints));
 		}
-		else SetStatus("Font name applied. Font sizes need free-form mode (View > Free-form fonts).");
-	}
-
-	Color? ChooseColor(Color initial) {
-		using var dlg = new ColorDialog { FullOpen = true, Color = initial };
-		return dlg.ShowDialog(this) == DialogResult.OK ? dlg.Color : null;
+		else SetStatus("Font name applied. Font sizes need free-form mode (View > Free-form).");
 	}
 
 	void InsertHyperlinkDialog() {
@@ -1457,11 +1383,6 @@ class WriterForm : Form
 		SetStatus($"{count} replacement{(count == 1 ? "" : "s")} made.");
 	}
 
-	static ToolStripMenuItem PageBreakItem(ToolStripMenuItem item) {
-		item.ShortcutKeyDisplayString = "Ctrl+Enter";    // handled in ProcessCmdKey (a menu shortcut can't be Ctrl+Enter)
-		return item;
-	}
-
 	// ---------------------------------------------------------------- Keyboard: Tab / Shift+Tab in lists
 
 	protected override bool ProcessCmdKey(ref Message msg, Keys keyData) {
@@ -1490,9 +1411,14 @@ class WriterForm : Form
 			Run(() => api.Nest(delta), M("Nest", delta));
 			return true;
 		}
-		// Macro hotkeys (Tools > Macro hotkeys) come before the menu shortcuts.
+		// Macro hotkeys (Tools > Macro Hotkeys) come before the other shortcuts.
 		if (MacroForKeys(keyData) is { } macro) {
 			Run(() => RunMacroFromUi(macro));
+			return true;
+		}
+		// The menus' shortcuts (Shortcut in BuildRibbon), except while typing in the ribbon (its font name and size boxes).
+		if (shortcuts.TryGetValue(keyData, out var shortcut) && !ribbon.ContainsFocus) {
+			shortcut.Action();
 			return true;
 		}
 		return base.ProcessCmdKey(ref msg, keyData);
@@ -1501,20 +1427,6 @@ class WriterForm : Form
 	// ---------------------------------------------------------------- Macros (AHK scripts run as separate processes)
 
 	string MacrosDir => Path.Combine(appDir, "rte_macros");
-
-	void FillMacrosMenu() {
-		macrosMenu.DropDownItems.Clear();
-		var files = Directory.Exists(MacrosDir) ? Directory.GetFiles(MacrosDir, "*.ahk").OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToArray() : Array.Empty<string>();
-		foreach (var file in files)
-			macrosMenu.DropDownItems.Add(new ToolStripMenuItem(Path.GetFileNameWithoutExtension(file), null, (s, e) => Run(() => RunMacroFromUi(file))) {
-				ToolTipText = file, ShortcutKeyDisplayString = HotkeyOf(Path.GetFileName(file)) is Keys keys ? HotkeyBox.Describe(keys) : null
-			});
-		if (files.Length == 0)
-			macrosMenu.DropDownItems.Add(new ToolStripMenuItem("(no .ahk files in rte_macros)") { Enabled = false });
-		macrosMenu.DropDownItems.Add(new ToolStripSeparator());
-		macrosMenu.DropDownItems.Add(new ToolStripMenuItem(recorder.Recording ? "Stop recording" : "Record macro...", null, (s, e) => Run(ToggleRecording)) { ShortcutKeyDisplayString = "Ctrl+Shift+R" });
-		macrosMenu.DropDownItems.Add(new ToolStripMenuItem("Macro hotkeys...", null, (s, e) => Run(MacroHotkeysCommand)));
-	}
 
 	void RunScriptDialog() {
 		using var dlg = new OpenFileDialog { Title = "Run AHK script", Filter = "AutoHotkey scripts (*.ahk)|*.ahk", InitialDirectory = Directory.Exists(MacrosDir) ? MacrosDir : appDir };
@@ -1583,7 +1495,7 @@ class WriterForm : Form
 	void UpdateRecordingLabel() {
 		recordingLabel.Visible = recorder.Recording;
 		recordingLabel.Text = $"● Recording ({recorder.Steps} step{(recorder.Steps == 1 ? "" : "s")})";
-		recordItem.Text = recorder.Recording ? "Stop &recording" : "&Record macro";
+		if (toggleButtons.TryGetValue(RibbonCommand.RecordMacro, out var record) && ribbon.Initialized) record.BooleanValue = recorder.Recording;
 	}
 
 	internal void StartRecording() {
@@ -1621,12 +1533,13 @@ class WriterForm : Form
 		}
 		File.WriteAllText(path, dlg.Script.Replace("\r\n", "\n").Replace("\n", "\r\n"), new UTF8Encoding(false));
 		SetMacroHotkey(Path.GetFileName(path), dlg.Hotkey);
+		FillMacrosGallery();
 		SetStatus($"Saved macro \"{dlg.MacroName}\"" + (dlg.Hotkey != Keys.None ? $" ({HotkeyBox.Describe(dlg.Hotkey)})" : "") + ". It is in Tools > Macros.");
 	}
 
 	static string MacroScript(List<string> lines) =>
 		"#Requires AutoHotkey v2.0\r\n#Include \"..\\RteClient2.ahk\"\r\n"
-		+ $"; Recorded in RTE Writer on {DateTime.Now:g}. Each line is an RTE Writer call (Help > Automation API lists them).\r\n"
+		+ $"; Recorded in RTE Writer on {DateTime.Now:g}. Each line is an RTE Writer call (Tools > Automation API lists them).\r\n"
 		+ string.Join("\r\n", lines) + "\r\n";
 
 	string UniqueMacroName() {
@@ -1665,20 +1578,13 @@ class WriterForm : Form
 	internal List<string> MacroFiles() =>
 		Directory.Exists(MacrosDir) ? Directory.GetFiles(MacrosDir, "*.ahk").Select(Path.GetFileName).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList()! : new List<string>();
 
-	// The shortcut keys of all menu items, to warn about hotkeys that would hide them.
+	// The editor's keyboard shortcuts, to warn about hotkeys that would hide them.
 	internal Dictionary<Keys, string> MenuShortcuts() {
-		var shortcuts = new Dictionary<Keys, string>();
-		void Collect(ToolStripItemCollection items, string path) {
-			foreach (var item in items.OfType<ToolStripMenuItem>()) {
-				string name = path + item.Text.Replace("&", "");
-				if (item.ShortcutKeys != Keys.None) shortcuts.TryAdd(item.ShortcutKeys, name);
-				Collect(item.DropDownItems, name + " > ");
-			}
-		}
-		if (MainMenuStrip != null) Collect(MainMenuStrip.Items, "");
-		shortcuts.TryAdd(Keys.Tab, "Tab");
-		shortcuts.TryAdd(Keys.Shift | Keys.Tab, "Shift+Tab");
-		return shortcuts;
+		var names = shortcuts.ToDictionary(p => p.Key, p => p.Value.Name);
+		names.TryAdd(Keys.Control | Keys.Enter, "Page Break");
+		names.TryAdd(Keys.Tab, "Tab");
+		names.TryAdd(Keys.Shift | Keys.Tab, "Shift+Tab");
+		return names;
 	}
 
 	void MacroHotkeysCommand() {
@@ -1689,6 +1595,7 @@ class WriterForm : Form
 		Settings.MacroHotkeys.Clear();
 		foreach (var (file, keys) in dlg.Hotkeys) if (keys != Keys.None) Settings.MacroHotkeys[file] = HotkeyBox.Describe(keys);
 		Settings.Save();
+		FillMacrosGallery();
 		SetStatus($"{Settings.MacroHotkeys.Count} macro hotkey{(Settings.MacroHotkeys.Count == 1 ? "" : "s")} set. They work while the editor is active.");
 	}
 
@@ -1747,30 +1654,7 @@ class WriterForm : Form
 		updatingUi = true;
 		try {
 			var range = api.SelectionRange();
-			var font = range.Font;
-			toggles["bold"].Checked = font.Bold == tomConstants.tomTrue;
-			toggles["italic"].Checked = font.Italic == tomConstants.tomTrue;
-			toggles["underline"].Checked = font.Underline > 0;
-			toggles["strike"].Checked = font.StrikeThrough == tomConstants.tomTrue;
-			toggles["super"].Checked = font.Superscript == tomConstants.tomTrue;
-			toggles["sub"].Checked = font.Subscript == tomConstants.tomTrue;
-			string name = font.Name ?? "";
-			if (!fontCombo.Focused) fontCombo.Text = name;
-			if (!sizeCombo.Focused) {
-				// the entry shown is the one chosen (none for a mixed selection): otherwise picking the entry chosen
-				// before would be no change, and do nothing
-				string shown = font.Size > 0 ? font.Size.ToString("0.#", CultureInfo.CurrentCulture) : "";
-				sizeCombo.SelectedIndex = sizeCombo.Items.IndexOf(shown);
-				sizeCombo.Text = shown;
-			}
-			var para = range.Para;
-			foreach (var (alignment, button) in alignButtons) button.Checked = para.Alignment == (int)alignment;
-			int listType = para.ListType & 0xFFFF;
-			bulletButton.Checked = listType == (int)ListStyle.Bullet;
-			numberButton.Checked = listType != tomConstants.tomListNone && listType != (int)ListStyle.Bullet;
-			blockCombo.Enabled = Editor.EnableHtmlFontSizing;
-			sizeCombo.ToolTipText = Editor.EnableFontSize ? "Font size" : "Font size (needs free-form mode: View > Free-form fonts)";
-			blockCombo.SelectedIndex = Editor.EnableHtmlFontSizing && api.GetBlockStyle() is BlockStyle style ? (int)style : -1;
+			if (ribbon.Initialized) UpdateRibbon(range);
 
 			int line = Editor.GetLineFromCharIndex(Editor.SelectionStart);
 			int column = Editor.SelectionStart - Editor.GetFirstCharIndexFromLine(line);
@@ -1781,6 +1665,52 @@ class WriterForm : Form
 		} finally {
 			updatingUi = false;
 		}
+	}
+
+	// The ribbon shows the selection's format (properties that differ within it are blank, as in Word) and the view's
+	// settings; Table Tools appears while the caret is in a table.
+	void UpdateRibbon(ITextRange2 range) {
+		var font = range.Font;
+		FontProperties State(int value) => value == tomConstants.tomTrue ? FontProperties.Set : value == tomConstants.tomFalse ? FontProperties.NotSet : FontProperties.NotAvailable;
+		fontControl.Family = font.Name ?? "";
+		fontControl.Size = font.Size > 0 ? (decimal)Math.Round(font.Size, 1) : 0;
+		fontControl.Bold = State(font.Bold);
+		fontControl.Italic = State(font.Italic);
+		fontControl.Underline = font.Underline == tomConstants.tomUndefined ? FontUnderline.NotAvailable : font.Underline > 0 ? FontUnderline.Set : FontUnderline.NotSet;
+		fontControl.Strikethrough = State(font.StrikeThrough);
+		fontControl.VerticalPositioning = font.Superscript == tomConstants.tomTrue ? FontVerticalPosition.SuperScript
+			: font.Subscript == tomConstants.tomTrue ? FontVerticalPosition.SubScript
+			: font.Superscript == tomConstants.tomUndefined || font.Subscript == tomConstants.tomUndefined ? FontVerticalPosition.NotAvailable : FontVerticalPosition.NotSet;
+		if (font.ForeColor >= 0) fontControl.ForegroundColor = ColorTranslator.FromWin32(font.ForeColor);
+
+		var para = range.Para;
+		int listType = para.ListType;
+		bool legal = listType > 0 && (listType & 0x40000) != 0;
+		int style = listType > 0 ? listType & 0xFFFF : listType;
+		toggleButtons[RibbonCommand.Bullets].BooleanValue = style == (int)ListStyle.Bullet;
+		toggleButtons[RibbonCommand.Numbering].BooleanValue = style > 0 && style != (int)ListStyle.Bullet && !legal;
+		toggleButtons[RibbonCommand.Legal].BooleanValue = legal;
+		toggleButtons[RibbonCommand.AlignLeft].BooleanValue = para.Alignment == (int)ParagraphAlignment.Left;
+		toggleButtons[RibbonCommand.AlignCenter].BooleanValue = para.Alignment == (int)ParagraphAlignment.Center;
+		toggleButtons[RibbonCommand.AlignRight].BooleanValue = para.Alignment == (int)ParagraphAlignment.Right;
+		toggleButtons[RibbonCommand.Justify].BooleanValue = para.Alignment == (int)ParagraphAlignment.Justify;
+		toggleButtons[RibbonCommand.AutoLevel].BooleanValue = AutoLevelStyles;
+
+		blockCombo.Enabled = Editor.EnableHtmlFontSizing;
+		blockCombo.SelectedItem = Editor.EnableHtmlFontSizing && api.GetBlockStyle() is BlockStyle block ? (uint)block : Constants.UI_Collection_InvalidIndex;
+		toggleButtons[RibbonCommand.Structured].BooleanValue = Editor.EnableHtmlFontSizing;
+		toggleButtons[RibbonCommand.FreeForm].BooleanValue = !Editor.EnableHtmlFontSizing;
+		toggleButtons[RibbonCommand.RecordMacro].BooleanValue = recorder.Recording;
+		checkBoxes[RibbonCommand.WordWrap].BooleanValue = Editor.WordWrap;
+		checkBoxes[RibbonCommand.ShowBands].BooleanValue = Settings.ShowBands;
+		checkBoxes[RibbonCommand.Outline].BooleanValue = !outlineSplit.Panel1Collapsed;
+		checkBoxes[RibbonCommand.SpellCheck].BooleanValue = Editor.EnableSpellCheck;
+
+		undoButton.Enabled = Editor.CanUndo;
+		redoButton.Enabled = Editor.CanRedo;
+		cutButton.Enabled = copyButton.Enabled = Editor.SelectionLength > 0;
+		var tools = CaretInTable() ? ContextAvailability.Available : ContextAvailability.NotAvailable;
+		if (tableTools.ContextAvailable != tools) tableTools.ContextAvailable = tools;
 	}
 
 	// ---------------------------------------------------------------- Small dialogs
@@ -2218,7 +2148,7 @@ public class EditorApi
 					bool continued = true;
 					try { ContinueNumbering(); } catch (InvalidOperationException) { continued = false; }
 					if (continued) hint = "Page break inserted. The numbering after it goes on from the list before it, but stays as it is: if you add or remove items "
-						+ "before the break, put the caret in the first item after it and use Paragraph > Continue numbering.";
+						+ "before the break, put the caret in the first item after it and use Home > List options > Continue numbering.";
 				} else {
 					hint = "Page break inserted. The sub-list after it is numbered from the start again (a break before or after the list keeps its numbering).";
 				}
@@ -2290,7 +2220,7 @@ public class EditorApi
 	public void DecreaseFontSize(float points = 1) => ChangeFontSize(size => size - points);
 
 	void ChangeFontSize(Func<float, float> change) {
-		if (!ed.EnableFontSize) throw new InvalidOperationException("Font sizes need free-form mode (View > Free-form fonts). Structured documents use block styles.");
+		if (!ed.EnableFontSize) throw new InvalidOperationException("Font sizes need free-form mode (View > Free-form). Structured documents use block styles.");
 		var doc = ed.TextDocument;
 		var selection = doc.Selection2;
 		int start = selection.Start, end = selection.End;
@@ -2567,14 +2497,14 @@ public class EditorApi
 		if (InLegalList()) {    // a legal list becomes a list of this style (its numbers go)
 			LegalLists.Remove(ed, SelectionRange().Start, SelectionRange().End);
 		}
-		ed.ToggleList(style);
+		ToggleFromTopLevel(() => ed.ToggleList(style));
 		var para = SelectionRange().Para;
 		if (style != ListStyle.Bullet && (para.ListType & 0xFFFF) == (int)style && para.ListStart == 0) para.ListStart = 1;
 	}
 
 	/// Sets the block style of the selected paragraphs (needs the structured mode, EnableHtmlFontSizing = 1).
 	public void SetBlockStyle(BlockStyle style) {
-		if (!ed.EnableHtmlFontSizing) throw new InvalidOperationException("Block styles need a structured document (View > Structured document, or EnableHtmlFontSizing = 1).");
+		if (!ed.EnableHtmlFontSizing) throw new InvalidOperationException("Block styles need a structured document (View > Structured, or EnableHtmlFontSizing = 1).");
 		ed.SetBlockStyle(style);
 		// RichEditorNET formats only the paragraph's text, so on an empty paragraph the style would be lost: apply it to
 		// the paragraph mark and the caret too, so that what is typed next gets it.
@@ -2778,8 +2708,21 @@ public class EditorApi
 			ed.ToggleList((ListStyle)type);    // the same style again ends the list
 			return;
 		}
-		ed.ToggleList(ListStyle.Decimal);
+		ToggleFromTopLevel(() => ed.ToggleList(ListStyle.Decimal));
 		ForEachSelectedParagraph(para => ApplyLevel(para, para.ListLevelIndex));
+	}
+
+	// Runs a list toggle so that paragraphs that were not list items start at the top level. RichEdit keeps the level of
+	// a list item that Enter ended (on an empty item), so a list started there later took that level's numbering style,
+	// without its indent.
+	void ToggleFromTopLevel(Action toggle) {
+		var notInList = new List<bool>();
+		ForEachSelectedParagraph(para => notInList.Add((para.ListType & 0xFFFF) == tomConstants.tomListNone));
+		toggle();
+		int i = 0;
+		ForEachSelectedParagraph(para => {
+			if (i < notInList.Count && notInList[i++] && (para.ListType & 0xFFFF) != tomConstants.tomListNone && para.ListLevelIndex != 0) para.ListLevelIndex = 0;
+		});
 	}
 
 	/// Applies List levels to the whole list the caret is in: each item gets the numbering of its level.
@@ -2854,7 +2797,7 @@ public class EditorApi
 		if (PreviousAtLevel(items, first, level) is int inSameList) {
 			// the item just before belongs to the same block of list paragraphs: take its start value, and the two runs join
 			var previous = ParaAt(inSameList);
-			if (previous.ListType != para.ListType) throw new InvalidOperationException("The list before has another numbering style; Paragraph > List levels can make them the same.");
+			if (previous.ListType != para.ListType) throw new InvalidOperationException("The list before has another numbering style; List options > List levels can make them the same.");
 			foreach (int item in ItemsOfRun(items, first, level)) ParaAt(item).ListStart = previous.ListStart;
 			return;
 		}
@@ -2879,7 +2822,7 @@ public class EditorApi
 		if (found is not int previousItem || (ParaAt(previousItem).ListType & 0xFFFF) != type)
 			throw new InvalidOperationException("There is no earlier numbered list of the same kind to continue.");
 		var last = ParaAt(previousItem);
-		if (last.ListType != para.ListType) throw new InvalidOperationException("The list before has another numbering style; Paragraph > List levels can make them the same.");
+		if (last.ListType != para.ListType) throw new InvalidOperationException("The list before has another numbering style; List options > List levels can make them the same.");
 		if (onlyEmpty) {
 			// only empty paragraphs between: remove them, so that the two become one list
 			var lastRange = doc.Range2(previousItem, previousItem);
@@ -3177,7 +3120,8 @@ public class EditorApi
 		var doc = ed.TextDocument;
 		ForEachParagraph((start, text) => {
 			text = text.Trim();
-			if (text == "") return;
+			// table cells are not headings, though a header row's bold text has a heading's font (cells end in U+0007)
+			if (text == "" || text.IndexOfAny(new[] { '\u0007', '￹', '￻' }) >= 0) return;
 			var font = doc.Range2(start, start + 1).Font;
 			if (BlockStyleOf(font.Size, font.Bold == tomConstants.tomTrue, font.Name) is BlockStyle style
 				&& style >= BlockStyle.Heading1 && style <= BlockStyle.Heading6)
@@ -4363,12 +4307,12 @@ sealed class ListLevelsDialog : Form
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
 		layout.Controls.Add(top);
 		layout.Controls.Add(new Label { AutoSize = true, Margin = new Padding(3, 8, 3, 3), MaximumSize = new Size(LogicalToDeviceUnits(520), 0),
-			Text = "New numbered lists use level 1; Tab and Shift+Tab give items the numbering of their new level (with Paragraph > Automatic numbering style per level)." });
+			Text = "New numbered lists use level 1; Tab and Shift+Tab give items the numbering of their new level (with List options > Automatic numbering style per level)." });
 		var legalRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 0) };
 		legalFormat.Items.AddRange(LegalFormats.Select(f => (object)f.Label).ToArray());
 		legalFormat.SelectedIndex = Math.Max(0, Array.FindIndex(LegalFormats, f => f.Format == legal));
 		legalFormat.Width = LogicalToDeviceUnits(150);
-		legalRow.Controls.Add(new Label { Text = "Legal numbering (Paragraph > Legal numbering):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 3, 3) });
+		legalRow.Controls.Add(new Label { Text = "Legal numbering (Home > Paragraph > 1.1):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 3, 3) });
 		legalRow.Controls.Add(legalFormat);
 		layout.Controls.Add(legalRow);
 		layout.Controls.Add(apply);

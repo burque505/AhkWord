@@ -1,8 +1,13 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
-; RTE Writer, iteration 15: a word processor built on RichEditorNET (rte_writer15.cs), hosted in this AHK process.
-; Adds to iteration 14:
+; RTE Writer, iteration 16: a word processor built on RichEditorNET (rte_writer16.cs), hosted in this AHK process.
+; Adds to iteration 15:
+;   - A ribbon (the Windows Ribbon, through the WindowsRibbon NuGet package) instead of the menu bar and toolbar: a File
+;     menu with recent documents, a quick access toolbar, Home / Insert / Layout / Review / View / Tools tabs, and Table
+;     Tools while the caret is in a table. Press Alt for KeyTips; the keyboard shortcuts are unchanged. The ribbon is
+;     ribbon\RteRibbon.ribbon, built from ribbon\RteRibbon.xml by ribbon\build_ribbon.ahk.
+; Iteration 15 added to iteration 14:
 ;   - Pictures' alt text: shown when the mouse rests on a picture; right-click a picture > Alt text... to change it;
 ;     Insert > Image asks for it.
 ; Iteration 14 added to iteration 13:
@@ -30,10 +35,10 @@
 ; Earlier iterations added events, recent files, settings, drag and drop, printing, PDF export, headers and footers,
 ; spelling suggestions, the outline, macro recording and hotkeys, and real Markdown. Settings are kept in
 ; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile); set RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
-; Optionally pass a document to open:  rte_writer15.ahk "C:\path\document.md"
+; Optionally pass a document to open:  rte_writer16.ahk "C:\path\document.md"
 ;
 ; AHK automation: other scripts #Include "RteClient2.ahk" and call Rte.<Name>(...), react to events with
-; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Help > Automation API lists everything that can be called,
+; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Tools > Automation API lists everything that can be called,
 ; e.g. Rte.InsertPageBreak(), Rte.LegalNumbering(), Rte.LegalFormat := "All", Rte.InsertTable(3, 4), Rte.ExportDocx("C:\path\copy.docx").
 ;
 ; Hotkeys defined here keep working while the editor is open, and call it directly (in-process):
@@ -52,7 +57,7 @@ SubscribeToSaved() {
 }
 
 StartFile := A_Args.Length ? A_Args[1] : ""
-RunCSharpFile(A_ScriptDir "\rte_writer15.cs", A_AhkPath, A_ScriptDir, StartFile)
+RunCSharpFile(A_ScriptDir "\rte_writer16.cs", A_AhkPath, A_ScriptDir, StartFile)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
     MsgBox("RTE Writer stopped because of an error (" CSExitCode "):`n`n" CSOutput, "RTE Writer", "Iconx")
 ExitApp

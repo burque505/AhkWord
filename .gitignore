@@ -16,3 +16,15 @@ desktop.ini
 *.tmp
 *.log
 .vscode/
+
+# Ribbon prototype build intermediates (icons, .bml, .rc, .res, logs); RibbonMarkup.ribbon itself is kept
+ribbon_prototype/build/
+
+# Ribbon build intermediates (icons, .bml, .rc, .res, logs); RteRibbon.ribbon itself is kept
+ribbon/build/
+
+# The ribbon prototype (superseded by iteration 16), kept locally only
+ribbon_prototype/
+
+# Word lock files
+~$*

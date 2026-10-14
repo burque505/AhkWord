@@ -1,0 +1,1638 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer16.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer16.cs. Images: build\icons, made by make_icons.cs. -->
+<Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
+  <Application.Commands>
+    <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
+    <Command Name="cmdTabInsert" Id="101" LabelTitle="Insert" Keytip="N" />
+    <Command Name="cmdTabLayout" Id="102" LabelTitle="Layout" Keytip="P" />
+    <Command Name="cmdTabReview" Id="103" LabelTitle="Review" Keytip="R" />
+    <Command Name="cmdTabView" Id="104" LabelTitle="View" Keytip="W" />
+    <Command Name="cmdTabTools" Id="105" LabelTitle="Tools" Keytip="L" />
+    <Command Name="cmdTableTools" Id="106" LabelTitle="Table Tools" />
+    <Command Name="cmdTabTableLayout" Id="107" LabelTitle="Layout" Keytip="JL" />
+    <Command Name="cmdGroupClipboard" Id="110" LabelTitle="Clipboard" Keytip="ZC">
+      <Command.LargeImages>
+        <Image Source="icons/paste_32.bmp" MinDPI="96" />
+        <Image Source="icons/paste_40.bmp" MinDPI="120" />
+        <Image Source="icons/paste_48.bmp" MinDPI="144" />
+        <Image Source="icons/paste_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/paste_16.bmp" MinDPI="96" />
+        <Image Source="icons/paste_20.bmp" MinDPI="120" />
+        <Image Source="icons/paste_24.bmp" MinDPI="144" />
+        <Image Source="icons/paste_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupFont" Id="111" LabelTitle="Font" Keytip="ZF">
+      <Command.LargeImages>
+        <Image Source="icons/font_32.bmp" MinDPI="96" />
+        <Image Source="icons/font_40.bmp" MinDPI="120" />
+        <Image Source="icons/font_48.bmp" MinDPI="144" />
+        <Image Source="icons/font_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/font_16.bmp" MinDPI="96" />
+        <Image Source="icons/font_20.bmp" MinDPI="120" />
+        <Image Source="icons/font_24.bmp" MinDPI="144" />
+        <Image Source="icons/font_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupText" Id="112" LabelTitle="Text" Keytip="ZT">
+      <Command.LargeImages>
+        <Image Source="icons/changecase_32.bmp" MinDPI="96" />
+        <Image Source="icons/changecase_40.bmp" MinDPI="120" />
+        <Image Source="icons/changecase_48.bmp" MinDPI="144" />
+        <Image Source="icons/changecase_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/changecase_16.bmp" MinDPI="96" />
+        <Image Source="icons/changecase_20.bmp" MinDPI="120" />
+        <Image Source="icons/changecase_24.bmp" MinDPI="144" />
+        <Image Source="icons/changecase_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupParagraph" Id="113" LabelTitle="Paragraph" Keytip="ZP">
+      <Command.LargeImages>
+        <Image Source="icons/bullets_32.bmp" MinDPI="96" />
+        <Image Source="icons/bullets_40.bmp" MinDPI="120" />
+        <Image Source="icons/bullets_48.bmp" MinDPI="144" />
+        <Image Source="icons/bullets_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/bullets_16.bmp" MinDPI="96" />
+        <Image Source="icons/bullets_20.bmp" MinDPI="120" />
+        <Image Source="icons/bullets_24.bmp" MinDPI="144" />
+        <Image Source="icons/bullets_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupStyles" Id="114" LabelTitle="Styles" Keytip="ZS">
+      <Command.LargeImages>
+        <Image Source="icons/structured_32.bmp" MinDPI="96" />
+        <Image Source="icons/structured_40.bmp" MinDPI="120" />
+        <Image Source="icons/structured_48.bmp" MinDPI="144" />
+        <Image Source="icons/structured_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/structured_16.bmp" MinDPI="96" />
+        <Image Source="icons/structured_20.bmp" MinDPI="120" />
+        <Image Source="icons/structured_24.bmp" MinDPI="144" />
+        <Image Source="icons/structured_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupEditing" Id="115" LabelTitle="Editing" Keytip="ZE">
+      <Command.LargeImages>
+        <Image Source="icons/find_32.bmp" MinDPI="96" />
+        <Image Source="icons/find_40.bmp" MinDPI="120" />
+        <Image Source="icons/find_48.bmp" MinDPI="144" />
+        <Image Source="icons/find_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/find_16.bmp" MinDPI="96" />
+        <Image Source="icons/find_20.bmp" MinDPI="120" />
+        <Image Source="icons/find_24.bmp" MinDPI="144" />
+        <Image Source="icons/find_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupPages" Id="116" LabelTitle="Pages">
+      <Command.LargeImages>
+        <Image Source="icons/pagebreak_32.bmp" MinDPI="96" />
+        <Image Source="icons/pagebreak_40.bmp" MinDPI="120" />
+        <Image Source="icons/pagebreak_48.bmp" MinDPI="144" />
+        <Image Source="icons/pagebreak_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/pagebreak_16.bmp" MinDPI="96" />
+        <Image Source="icons/pagebreak_20.bmp" MinDPI="120" />
+        <Image Source="icons/pagebreak_24.bmp" MinDPI="144" />
+        <Image Source="icons/pagebreak_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupTables" Id="117" LabelTitle="Tables">
+      <Command.LargeImages>
+        <Image Source="icons/table_32.bmp" MinDPI="96" />
+        <Image Source="icons/table_40.bmp" MinDPI="120" />
+        <Image Source="icons/table_48.bmp" MinDPI="144" />
+        <Image Source="icons/table_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/table_16.bmp" MinDPI="96" />
+        <Image Source="icons/table_20.bmp" MinDPI="120" />
+        <Image Source="icons/table_24.bmp" MinDPI="144" />
+        <Image Source="icons/table_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupIllustrations" Id="118" LabelTitle="Illustrations">
+      <Command.LargeImages>
+        <Image Source="icons/picture_32.bmp" MinDPI="96" />
+        <Image Source="icons/picture_40.bmp" MinDPI="120" />
+        <Image Source="icons/picture_48.bmp" MinDPI="144" />
+        <Image Source="icons/picture_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/picture_16.bmp" MinDPI="96" />
+        <Image Source="icons/picture_20.bmp" MinDPI="120" />
+        <Image Source="icons/picture_24.bmp" MinDPI="144" />
+        <Image Source="icons/picture_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupLinks" Id="119" LabelTitle="Links">
+      <Command.LargeImages>
+        <Image Source="icons/link_32.bmp" MinDPI="96" />
+        <Image Source="icons/link_40.bmp" MinDPI="120" />
+        <Image Source="icons/link_48.bmp" MinDPI="144" />
+        <Image Source="icons/link_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/link_16.bmp" MinDPI="96" />
+        <Image Source="icons/link_20.bmp" MinDPI="120" />
+        <Image Source="icons/link_24.bmp" MinDPI="144" />
+        <Image Source="icons/link_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupInsertText" Id="120" LabelTitle="Text">
+      <Command.LargeImages>
+        <Image Source="icons/datetime_32.bmp" MinDPI="96" />
+        <Image Source="icons/datetime_40.bmp" MinDPI="120" />
+        <Image Source="icons/datetime_48.bmp" MinDPI="144" />
+        <Image Source="icons/datetime_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/datetime_16.bmp" MinDPI="96" />
+        <Image Source="icons/datetime_20.bmp" MinDPI="120" />
+        <Image Source="icons/datetime_24.bmp" MinDPI="144" />
+        <Image Source="icons/datetime_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupPage" Id="121" LabelTitle="Page">
+      <Command.LargeImages>
+        <Image Source="icons/pagesetup_32.bmp" MinDPI="96" />
+        <Image Source="icons/pagesetup_40.bmp" MinDPI="120" />
+        <Image Source="icons/pagesetup_48.bmp" MinDPI="144" />
+        <Image Source="icons/pagesetup_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/pagesetup_16.bmp" MinDPI="96" />
+        <Image Source="icons/pagesetup_20.bmp" MinDPI="120" />
+        <Image Source="icons/pagesetup_24.bmp" MinDPI="144" />
+        <Image Source="icons/pagesetup_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupProofing" Id="122" LabelTitle="Proofing">
+      <Command.LargeImages>
+        <Image Source="icons/nextspelling_32.bmp" MinDPI="96" />
+        <Image Source="icons/nextspelling_40.bmp" MinDPI="120" />
+        <Image Source="icons/nextspelling_48.bmp" MinDPI="144" />
+        <Image Source="icons/nextspelling_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/nextspelling_16.bmp" MinDPI="96" />
+        <Image Source="icons/nextspelling_20.bmp" MinDPI="120" />
+        <Image Source="icons/nextspelling_24.bmp" MinDPI="144" />
+        <Image Source="icons/nextspelling_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupDocument" Id="123" LabelTitle="Document">
+      <Command.LargeImages>
+        <Image Source="icons/structured_32.bmp" MinDPI="96" />
+        <Image Source="icons/structured_40.bmp" MinDPI="120" />
+        <Image Source="icons/structured_48.bmp" MinDPI="144" />
+        <Image Source="icons/structured_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/structured_16.bmp" MinDPI="96" />
+        <Image Source="icons/structured_20.bmp" MinDPI="120" />
+        <Image Source="icons/structured_24.bmp" MinDPI="144" />
+        <Image Source="icons/structured_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupShow" Id="124" LabelTitle="Show">
+      <Command.LargeImages>
+        <Image Source="icons/headerfooter_32.bmp" MinDPI="96" />
+        <Image Source="icons/headerfooter_40.bmp" MinDPI="120" />
+        <Image Source="icons/headerfooter_48.bmp" MinDPI="144" />
+        <Image Source="icons/headerfooter_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/headerfooter_16.bmp" MinDPI="96" />
+        <Image Source="icons/headerfooter_20.bmp" MinDPI="120" />
+        <Image Source="icons/headerfooter_24.bmp" MinDPI="144" />
+        <Image Source="icons/headerfooter_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupZoom" Id="125" LabelTitle="Zoom">
+      <Command.LargeImages>
+        <Image Source="icons/zoomin_32.bmp" MinDPI="96" />
+        <Image Source="icons/zoomin_40.bmp" MinDPI="120" />
+        <Image Source="icons/zoomin_48.bmp" MinDPI="144" />
+        <Image Source="icons/zoomin_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/zoomin_16.bmp" MinDPI="96" />
+        <Image Source="icons/zoomin_20.bmp" MinDPI="120" />
+        <Image Source="icons/zoomin_24.bmp" MinDPI="144" />
+        <Image Source="icons/zoomin_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupSource" Id="126" LabelTitle="Source">
+      <Command.LargeImages>
+        <Image Source="icons/html_32.bmp" MinDPI="96" />
+        <Image Source="icons/html_40.bmp" MinDPI="120" />
+        <Image Source="icons/html_48.bmp" MinDPI="144" />
+        <Image Source="icons/html_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/html_16.bmp" MinDPI="96" />
+        <Image Source="icons/html_20.bmp" MinDPI="120" />
+        <Image Source="icons/html_24.bmp" MinDPI="144" />
+        <Image Source="icons/html_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupMacros" Id="127" LabelTitle="Macros">
+      <Command.LargeImages>
+        <Image Source="icons/macros_32.bmp" MinDPI="96" />
+        <Image Source="icons/macros_40.bmp" MinDPI="120" />
+        <Image Source="icons/macros_48.bmp" MinDPI="144" />
+        <Image Source="icons/macros_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/macros_16.bmp" MinDPI="96" />
+        <Image Source="icons/macros_20.bmp" MinDPI="120" />
+        <Image Source="icons/macros_24.bmp" MinDPI="144" />
+        <Image Source="icons/macros_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupScripts" Id="128" LabelTitle="Scripts">
+      <Command.LargeImages>
+        <Image Source="icons/runscript_32.bmp" MinDPI="96" />
+        <Image Source="icons/runscript_40.bmp" MinDPI="120" />
+        <Image Source="icons/runscript_48.bmp" MinDPI="144" />
+        <Image Source="icons/runscript_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/runscript_16.bmp" MinDPI="96" />
+        <Image Source="icons/runscript_20.bmp" MinDPI="120" />
+        <Image Source="icons/runscript_24.bmp" MinDPI="144" />
+        <Image Source="icons/runscript_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupAutomation" Id="129" LabelTitle="Automation">
+      <Command.LargeImages>
+        <Image Source="icons/api_32.bmp" MinDPI="96" />
+        <Image Source="icons/api_40.bmp" MinDPI="120" />
+        <Image Source="icons/api_48.bmp" MinDPI="144" />
+        <Image Source="icons/api_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/api_16.bmp" MinDPI="96" />
+        <Image Source="icons/api_20.bmp" MinDPI="120" />
+        <Image Source="icons/api_24.bmp" MinDPI="144" />
+        <Image Source="icons/api_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupRowsColumns" Id="130" LabelTitle="Rows &amp; Columns">
+      <Command.LargeImages>
+        <Image Source="icons/insertbelow_32.bmp" MinDPI="96" />
+        <Image Source="icons/insertbelow_40.bmp" MinDPI="120" />
+        <Image Source="icons/insertbelow_48.bmp" MinDPI="144" />
+        <Image Source="icons/insertbelow_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/insertbelow_16.bmp" MinDPI="96" />
+        <Image Source="icons/insertbelow_20.bmp" MinDPI="120" />
+        <Image Source="icons/insertbelow_24.bmp" MinDPI="144" />
+        <Image Source="icons/insertbelow_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupDelete" Id="131" LabelTitle="Delete">
+      <Command.LargeImages>
+        <Image Source="icons/deleterow_32.bmp" MinDPI="96" />
+        <Image Source="icons/deleterow_40.bmp" MinDPI="120" />
+        <Image Source="icons/deleterow_48.bmp" MinDPI="144" />
+        <Image Source="icons/deleterow_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/deleterow_16.bmp" MinDPI="96" />
+        <Image Source="icons/deleterow_20.bmp" MinDPI="120" />
+        <Image Source="icons/deleterow_24.bmp" MinDPI="144" />
+        <Image Source="icons/deleterow_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdAppMenu" Id="140" LabelTitle="File" Keytip="F" />
+    <Command Name="cmdQat" Id="141" />
+    <Command Name="cmdRecent" Id="142" LabelTitle="Recent documents" />
+    <Command Name="cmdHelp" Id="143" LabelTitle="Help" TooltipTitle="About RTE Writer" />
+    <Command Name="cmdExportMenu" Id="144" LabelTitle="&amp;Export" Keytip="E" TooltipTitle="Export" TooltipDescription="Export a copy as PDF, Word or OpenDocument; the document itself stays as it is.">
+      <Command.LargeImages>
+        <Image Source="icons/export_32.bmp" MinDPI="96" />
+        <Image Source="icons/export_40.bmp" MinDPI="120" />
+        <Image Source="icons/export_48.bmp" MinDPI="144" />
+        <Image Source="icons/export_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/export_16.bmp" MinDPI="96" />
+        <Image Source="icons/export_20.bmp" MinDPI="120" />
+        <Image Source="icons/export_24.bmp" MinDPI="144" />
+        <Image Source="icons/export_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdPrintMenu" Id="145" LabelTitle="&amp;Print" Keytip="P" TooltipTitle="Print" TooltipDescription="Print, preview and set up the page.">
+      <Command.LargeImages>
+        <Image Source="icons/print_32.bmp" MinDPI="96" />
+        <Image Source="icons/print_40.bmp" MinDPI="120" />
+        <Image Source="icons/print_48.bmp" MinDPI="144" />
+        <Image Source="icons/print_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/print_16.bmp" MinDPI="96" />
+        <Image Source="icons/print_20.bmp" MinDPI="120" />
+        <Image Source="icons/print_24.bmp" MinDPI="144" />
+        <Image Source="icons/print_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdNew" Id="200" LabelTitle="&amp;New" Keytip="N" TooltipTitle="New (Ctrl+N)" TooltipDescription="Start a new, empty document.">
+      <Command.LargeImages>
+        <Image Source="icons/new_32.bmp" MinDPI="96" />
+        <Image Source="icons/new_40.bmp" MinDPI="120" />
+        <Image Source="icons/new_48.bmp" MinDPI="144" />
+        <Image Source="icons/new_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/new_16.bmp" MinDPI="96" />
+        <Image Source="icons/new_20.bmp" MinDPI="120" />
+        <Image Source="icons/new_24.bmp" MinDPI="144" />
+        <Image Source="icons/new_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdOpen" Id="201" LabelTitle="&amp;Open..." Keytip="O" TooltipTitle="Open (Ctrl+O)" TooltipDescription="Open a document: HTML, Markdown, RTF, Word, OpenDocument or text.">
+      <Command.LargeImages>
+        <Image Source="icons/open_32.bmp" MinDPI="96" />
+        <Image Source="icons/open_40.bmp" MinDPI="120" />
+        <Image Source="icons/open_48.bmp" MinDPI="144" />
+        <Image Source="icons/open_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/open_16.bmp" MinDPI="96" />
+        <Image Source="icons/open_20.bmp" MinDPI="120" />
+        <Image Source="icons/open_24.bmp" MinDPI="144" />
+        <Image Source="icons/open_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSave" Id="202" LabelTitle="&amp;Save" Keytip="S" TooltipTitle="Save (Ctrl+S)" TooltipDescription="Save the document.">
+      <Command.LargeImages>
+        <Image Source="icons/save_32.bmp" MinDPI="96" />
+        <Image Source="icons/save_40.bmp" MinDPI="120" />
+        <Image Source="icons/save_48.bmp" MinDPI="144" />
+        <Image Source="icons/save_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/save_16.bmp" MinDPI="96" />
+        <Image Source="icons/save_20.bmp" MinDPI="120" />
+        <Image Source="icons/save_24.bmp" MinDPI="144" />
+        <Image Source="icons/save_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSaveAs" Id="203" LabelTitle="Save &amp;As..." Keytip="A" TooltipTitle="Save As (Ctrl+Shift+S)" TooltipDescription="Save the document under a new name or in another format.">
+      <Command.LargeImages>
+        <Image Source="icons/saveas_32.bmp" MinDPI="96" />
+        <Image Source="icons/saveas_40.bmp" MinDPI="120" />
+        <Image Source="icons/saveas_48.bmp" MinDPI="144" />
+        <Image Source="icons/saveas_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/saveas_16.bmp" MinDPI="96" />
+        <Image Source="icons/saveas_20.bmp" MinDPI="120" />
+        <Image Source="icons/saveas_24.bmp" MinDPI="144" />
+        <Image Source="icons/saveas_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdPrint" Id="204" LabelTitle="&amp;Print..." Keytip="P" TooltipTitle="Print (Ctrl+P)" TooltipDescription="Print the document.">
+      <Command.LargeImages>
+        <Image Source="icons/print_32.bmp" MinDPI="96" />
+        <Image Source="icons/print_40.bmp" MinDPI="120" />
+        <Image Source="icons/print_48.bmp" MinDPI="144" />
+        <Image Source="icons/print_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/print_16.bmp" MinDPI="96" />
+        <Image Source="icons/print_20.bmp" MinDPI="120" />
+        <Image Source="icons/print_24.bmp" MinDPI="144" />
+        <Image Source="icons/print_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdPrintPreview" Id="205" LabelTitle="Print Pre&amp;view" Keytip="V" TooltipTitle="Print Preview" TooltipDescription="See the pages as they will be printed.">
+      <Command.LargeImages>
+        <Image Source="icons/printpreview_32.bmp" MinDPI="96" />
+        <Image Source="icons/printpreview_40.bmp" MinDPI="120" />
+        <Image Source="icons/printpreview_48.bmp" MinDPI="144" />
+        <Image Source="icons/printpreview_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/printpreview_16.bmp" MinDPI="96" />
+        <Image Source="icons/printpreview_20.bmp" MinDPI="120" />
+        <Image Source="icons/printpreview_24.bmp" MinDPI="144" />
+        <Image Source="icons/printpreview_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdPageSetup" Id="206" LabelTitle="Page Set&amp;up..." Keytip="U" TooltipTitle="Page Setup" TooltipDescription="Paper size, orientation and margins.">
+      <Command.LargeImages>
+        <Image Source="icons/pagesetup_32.bmp" MinDPI="96" />
+        <Image Source="icons/pagesetup_40.bmp" MinDPI="120" />
+        <Image Source="icons/pagesetup_48.bmp" MinDPI="144" />
+        <Image Source="icons/pagesetup_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/pagesetup_16.bmp" MinDPI="96" />
+        <Image Source="icons/pagesetup_20.bmp" MinDPI="120" />
+        <Image Source="icons/pagesetup_24.bmp" MinDPI="144" />
+        <Image Source="icons/pagesetup_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdExportPdf" Id="207" LabelTitle="&amp;PDF..." Keytip="F" TooltipTitle="Export as PDF" TooltipDescription="Save a copy as PDF (through Microsoft Print to PDF).">
+      <Command.LargeImages>
+        <Image Source="icons/exportpdf_32.bmp" MinDPI="96" />
+        <Image Source="icons/exportpdf_40.bmp" MinDPI="120" />
+        <Image Source="icons/exportpdf_48.bmp" MinDPI="144" />
+        <Image Source="icons/exportpdf_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/exportpdf_16.bmp" MinDPI="96" />
+        <Image Source="icons/exportpdf_20.bmp" MinDPI="120" />
+        <Image Source="icons/exportpdf_24.bmp" MinDPI="144" />
+        <Image Source="icons/exportpdf_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdExportWord" Id="208" LabelTitle="&amp;Word (.docx)..." Keytip="W" TooltipTitle="Export as Word" TooltipDescription="Save a copy as a Word document.">
+      <Command.LargeImages>
+        <Image Source="icons/exportword_32.bmp" MinDPI="96" />
+        <Image Source="icons/exportword_40.bmp" MinDPI="120" />
+        <Image Source="icons/exportword_48.bmp" MinDPI="144" />
+        <Image Source="icons/exportword_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/exportword_16.bmp" MinDPI="96" />
+        <Image Source="icons/exportword_20.bmp" MinDPI="120" />
+        <Image Source="icons/exportword_24.bmp" MinDPI="144" />
+        <Image Source="icons/exportword_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdExportOdt" Id="209" LabelTitle="Open&amp;Document (.odt)..." Keytip="D" TooltipTitle="Export as OpenDocument" TooltipDescription="Save a copy as an OpenDocument text file.">
+      <Command.LargeImages>
+        <Image Source="icons/exportodt_32.bmp" MinDPI="96" />
+        <Image Source="icons/exportodt_40.bmp" MinDPI="120" />
+        <Image Source="icons/exportodt_48.bmp" MinDPI="144" />
+        <Image Source="icons/exportodt_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/exportodt_16.bmp" MinDPI="96" />
+        <Image Source="icons/exportodt_20.bmp" MinDPI="120" />
+        <Image Source="icons/exportodt_24.bmp" MinDPI="144" />
+        <Image Source="icons/exportodt_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdExit" Id="210" LabelTitle="E&amp;xit" Keytip="X" TooltipTitle="Exit" TooltipDescription="Close RTE Writer.">
+      <Command.LargeImages>
+        <Image Source="icons/exit_32.bmp" MinDPI="96" />
+        <Image Source="icons/exit_40.bmp" MinDPI="120" />
+        <Image Source="icons/exit_48.bmp" MinDPI="144" />
+        <Image Source="icons/exit_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/exit_16.bmp" MinDPI="96" />
+        <Image Source="icons/exit_20.bmp" MinDPI="120" />
+        <Image Source="icons/exit_24.bmp" MinDPI="144" />
+        <Image Source="icons/exit_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdUndo" Id="220" LabelTitle="Undo" Keytip="Z" TooltipTitle="Undo (Ctrl+Z)">
+      <Command.LargeImages>
+        <Image Source="icons/undo_32.bmp" MinDPI="96" />
+        <Image Source="icons/undo_40.bmp" MinDPI="120" />
+        <Image Source="icons/undo_48.bmp" MinDPI="144" />
+        <Image Source="icons/undo_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/undo_16.bmp" MinDPI="96" />
+        <Image Source="icons/undo_20.bmp" MinDPI="120" />
+        <Image Source="icons/undo_24.bmp" MinDPI="144" />
+        <Image Source="icons/undo_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdRedo" Id="221" LabelTitle="Redo" Keytip="Y" TooltipTitle="Redo (Ctrl+Y)">
+      <Command.LargeImages>
+        <Image Source="icons/redo_32.bmp" MinDPI="96" />
+        <Image Source="icons/redo_40.bmp" MinDPI="120" />
+        <Image Source="icons/redo_48.bmp" MinDPI="144" />
+        <Image Source="icons/redo_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/redo_16.bmp" MinDPI="96" />
+        <Image Source="icons/redo_20.bmp" MinDPI="120" />
+        <Image Source="icons/redo_24.bmp" MinDPI="144" />
+        <Image Source="icons/redo_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdPaste" Id="222" LabelTitle="Paste" Keytip="V" TooltipTitle="Paste (Ctrl+V)" TooltipDescription="Paste the contents of the clipboard.">
+      <Command.LargeImages>
+        <Image Source="icons/paste_32.bmp" MinDPI="96" />
+        <Image Source="icons/paste_40.bmp" MinDPI="120" />
+        <Image Source="icons/paste_48.bmp" MinDPI="144" />
+        <Image Source="icons/paste_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/paste_16.bmp" MinDPI="96" />
+        <Image Source="icons/paste_20.bmp" MinDPI="120" />
+        <Image Source="icons/paste_24.bmp" MinDPI="144" />
+        <Image Source="icons/paste_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdCut" Id="223" LabelTitle="Cut" Keytip="X" TooltipTitle="Cut (Ctrl+X)" TooltipDescription="Cut the selection to the clipboard.">
+      <Command.LargeImages>
+        <Image Source="icons/cut_32.bmp" MinDPI="96" />
+        <Image Source="icons/cut_40.bmp" MinDPI="120" />
+        <Image Source="icons/cut_48.bmp" MinDPI="144" />
+        <Image Source="icons/cut_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/cut_16.bmp" MinDPI="96" />
+        <Image Source="icons/cut_20.bmp" MinDPI="120" />
+        <Image Source="icons/cut_24.bmp" MinDPI="144" />
+        <Image Source="icons/cut_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdCopy" Id="224" LabelTitle="Copy" Keytip="C" TooltipTitle="Copy (Ctrl+C)" TooltipDescription="Copy the selection to the clipboard.">
+      <Command.LargeImages>
+        <Image Source="icons/copy_32.bmp" MinDPI="96" />
+        <Image Source="icons/copy_40.bmp" MinDPI="120" />
+        <Image Source="icons/copy_48.bmp" MinDPI="144" />
+        <Image Source="icons/copy_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/copy_16.bmp" MinDPI="96" />
+        <Image Source="icons/copy_20.bmp" MinDPI="120" />
+        <Image Source="icons/copy_24.bmp" MinDPI="144" />
+        <Image Source="icons/copy_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSelectAll" Id="225" LabelTitle="Select All" Keytip="SA" TooltipTitle="Select All (Ctrl+A)">
+      <Command.LargeImages>
+        <Image Source="icons/selectall_32.bmp" MinDPI="96" />
+        <Image Source="icons/selectall_40.bmp" MinDPI="120" />
+        <Image Source="icons/selectall_48.bmp" MinDPI="144" />
+        <Image Source="icons/selectall_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/selectall_16.bmp" MinDPI="96" />
+        <Image Source="icons/selectall_20.bmp" MinDPI="120" />
+        <Image Source="icons/selectall_24.bmp" MinDPI="144" />
+        <Image Source="icons/selectall_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFind" Id="226" LabelTitle="Find" Keytip="FD" TooltipTitle="Find (Ctrl+F)" TooltipDescription="Find text. F3 finds the next match.">
+      <Command.LargeImages>
+        <Image Source="icons/find_32.bmp" MinDPI="96" />
+        <Image Source="icons/find_40.bmp" MinDPI="120" />
+        <Image Source="icons/find_48.bmp" MinDPI="144" />
+        <Image Source="icons/find_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/find_16.bmp" MinDPI="96" />
+        <Image Source="icons/find_20.bmp" MinDPI="120" />
+        <Image Source="icons/find_24.bmp" MinDPI="144" />
+        <Image Source="icons/find_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdReplace" Id="227" LabelTitle="Replace" Keytip="R" TooltipTitle="Replace (Ctrl+H)" TooltipDescription="Find text and replace it.">
+      <Command.LargeImages>
+        <Image Source="icons/replace_32.bmp" MinDPI="96" />
+        <Image Source="icons/replace_40.bmp" MinDPI="120" />
+        <Image Source="icons/replace_48.bmp" MinDPI="144" />
+        <Image Source="icons/replace_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/replace_16.bmp" MinDPI="96" />
+        <Image Source="icons/replace_20.bmp" MinDPI="120" />
+        <Image Source="icons/replace_24.bmp" MinDPI="144" />
+        <Image Source="icons/replace_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFont" Id="230" Keytip="F" />
+    <Command Name="cmdFontDialog" Id="231" LabelTitle="Font..." Keytip="FN" TooltipTitle="Font" TooltipDescription="More font options.">
+      <Command.LargeImages>
+        <Image Source="icons/font_32.bmp" MinDPI="96" />
+        <Image Source="icons/font_40.bmp" MinDPI="120" />
+        <Image Source="icons/font_48.bmp" MinDPI="144" />
+        <Image Source="icons/font_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/font_16.bmp" MinDPI="96" />
+        <Image Source="icons/font_20.bmp" MinDPI="120" />
+        <Image Source="icons/font_24.bmp" MinDPI="144" />
+        <Image Source="icons/font_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdChangeCase" Id="232" LabelTitle="Change Case" Keytip="7" TooltipTitle="Change Case" TooltipDescription="UPPER CASE, lower case or Title Case.">
+      <Command.LargeImages>
+        <Image Source="icons/changecase_32.bmp" MinDPI="96" />
+        <Image Source="icons/changecase_40.bmp" MinDPI="120" />
+        <Image Source="icons/changecase_48.bmp" MinDPI="144" />
+        <Image Source="icons/changecase_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/changecase_16.bmp" MinDPI="96" />
+        <Image Source="icons/changecase_20.bmp" MinDPI="120" />
+        <Image Source="icons/changecase_24.bmp" MinDPI="144" />
+        <Image Source="icons/changecase_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdCaseUpper" Id="233" LabelTitle="UPPER CASE" Keytip="U" />
+    <Command Name="cmdCaseLower" Id="234" LabelTitle="lower case" Keytip="L" />
+    <Command Name="cmdCaseTitle" Id="235" LabelTitle="Title Case" Keytip="T" />
+    <Command Name="cmdUnderlineStyle" Id="236" LabelTitle="Underline Style" Keytip="UL" TooltipTitle="Underline Style" TooltipDescription="Single, double, dotted, dashed or wavy underline.">
+      <Command.LargeImages>
+        <Image Source="icons/underline_32.bmp" MinDPI="96" />
+        <Image Source="icons/underline_40.bmp" MinDPI="120" />
+        <Image Source="icons/underline_48.bmp" MinDPI="144" />
+        <Image Source="icons/underline_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/underline_16.bmp" MinDPI="96" />
+        <Image Source="icons/underline_20.bmp" MinDPI="120" />
+        <Image Source="icons/underline_24.bmp" MinDPI="144" />
+        <Image Source="icons/underline_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdUnderlineSingle" Id="237" LabelTitle="Single" Keytip="S" />
+    <Command Name="cmdUnderlineDouble" Id="238" LabelTitle="Double" Keytip="D" />
+    <Command Name="cmdUnderlineDotted" Id="239" LabelTitle="Dotted" Keytip="O" />
+    <Command Name="cmdUnderlineDashed" Id="240" LabelTitle="Dashed" Keytip="A" />
+    <Command Name="cmdUnderlineWavy" Id="241" LabelTitle="Wavy" Keytip="W" />
+    <Command Name="cmdBullets" Id="250" LabelTitle="Bullets" Keytip="U" TooltipTitle="Bulleted list (Ctrl+Shift+L)" TooltipDescription="Start or end a bulleted list.">
+      <Command.LargeImages>
+        <Image Source="icons/bullets_32.bmp" MinDPI="96" />
+        <Image Source="icons/bullets_40.bmp" MinDPI="120" />
+        <Image Source="icons/bullets_48.bmp" MinDPI="144" />
+        <Image Source="icons/bullets_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/bullets_16.bmp" MinDPI="96" />
+        <Image Source="icons/bullets_20.bmp" MinDPI="120" />
+        <Image Source="icons/bullets_24.bmp" MinDPI="144" />
+        <Image Source="icons/bullets_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdNumbering" Id="251" LabelTitle="Numbering" Keytip="N" TooltipTitle="Numbered list (Ctrl+Shift+N)" TooltipDescription="Start or end a numbered list. Tab and Shift+Tab change the level.">
+      <Command.LargeImages>
+        <Image Source="icons/numbering_32.bmp" MinDPI="96" />
+        <Image Source="icons/numbering_40.bmp" MinDPI="120" />
+        <Image Source="icons/numbering_48.bmp" MinDPI="144" />
+        <Image Source="icons/numbering_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/numbering_16.bmp" MinDPI="96" />
+        <Image Source="icons/numbering_20.bmp" MinDPI="120" />
+        <Image Source="icons/numbering_24.bmp" MinDPI="144" />
+        <Image Source="icons/numbering_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdLegal" Id="252" LabelTitle="Legal numbering" Keytip="G" TooltipTitle="Legal numbering, 1.1.1 (Ctrl+Shift+G)" TooltipDescription="Number list items 1., 1.1, 1.1.1 by level.">
+      <Command.LargeImages>
+        <Image Source="icons/legal_32.bmp" MinDPI="96" />
+        <Image Source="icons/legal_40.bmp" MinDPI="120" />
+        <Image Source="icons/legal_48.bmp" MinDPI="144" />
+        <Image Source="icons/legal_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/legal_16.bmp" MinDPI="96" />
+        <Image Source="icons/legal_20.bmp" MinDPI="120" />
+        <Image Source="icons/legal_24.bmp" MinDPI="144" />
+        <Image Source="icons/legal_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdOutdent" Id="253" LabelTitle="Decrease indent" Keytip="AO" TooltipTitle="Decrease indent / list level" TooltipDescription="Shift+Tab in a list.">
+      <Command.LargeImages>
+        <Image Source="icons/outdent_32.bmp" MinDPI="96" />
+        <Image Source="icons/outdent_40.bmp" MinDPI="120" />
+        <Image Source="icons/outdent_48.bmp" MinDPI="144" />
+        <Image Source="icons/outdent_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/outdent_16.bmp" MinDPI="96" />
+        <Image Source="icons/outdent_20.bmp" MinDPI="120" />
+        <Image Source="icons/outdent_24.bmp" MinDPI="144" />
+        <Image Source="icons/outdent_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdIndent" Id="254" LabelTitle="Increase indent" Keytip="AI" TooltipTitle="Increase indent / list level" TooltipDescription="Tab in a list.">
+      <Command.LargeImages>
+        <Image Source="icons/indent_32.bmp" MinDPI="96" />
+        <Image Source="icons/indent_40.bmp" MinDPI="120" />
+        <Image Source="icons/indent_48.bmp" MinDPI="144" />
+        <Image Source="icons/indent_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/indent_16.bmp" MinDPI="96" />
+        <Image Source="icons/indent_20.bmp" MinDPI="120" />
+        <Image Source="icons/indent_24.bmp" MinDPI="144" />
+        <Image Source="icons/indent_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdAlignLeft" Id="255" LabelTitle="Align left" Keytip="AL" TooltipTitle="Align left (Ctrl+L)">
+      <Command.LargeImages>
+        <Image Source="icons/alignleft_32.bmp" MinDPI="96" />
+        <Image Source="icons/alignleft_40.bmp" MinDPI="120" />
+        <Image Source="icons/alignleft_48.bmp" MinDPI="144" />
+        <Image Source="icons/alignleft_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/alignleft_16.bmp" MinDPI="96" />
+        <Image Source="icons/alignleft_20.bmp" MinDPI="120" />
+        <Image Source="icons/alignleft_24.bmp" MinDPI="144" />
+        <Image Source="icons/alignleft_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdAlignCenter" Id="256" LabelTitle="Center" Keytip="AC" TooltipTitle="Center (Ctrl+E)">
+      <Command.LargeImages>
+        <Image Source="icons/aligncenter_32.bmp" MinDPI="96" />
+        <Image Source="icons/aligncenter_40.bmp" MinDPI="120" />
+        <Image Source="icons/aligncenter_48.bmp" MinDPI="144" />
+        <Image Source="icons/aligncenter_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/aligncenter_16.bmp" MinDPI="96" />
+        <Image Source="icons/aligncenter_20.bmp" MinDPI="120" />
+        <Image Source="icons/aligncenter_24.bmp" MinDPI="144" />
+        <Image Source="icons/aligncenter_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdAlignRight" Id="257" LabelTitle="Align right" Keytip="AR" TooltipTitle="Align right (Ctrl+R)">
+      <Command.LargeImages>
+        <Image Source="icons/alignright_32.bmp" MinDPI="96" />
+        <Image Source="icons/alignright_40.bmp" MinDPI="120" />
+        <Image Source="icons/alignright_48.bmp" MinDPI="144" />
+        <Image Source="icons/alignright_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/alignright_16.bmp" MinDPI="96" />
+        <Image Source="icons/alignright_20.bmp" MinDPI="120" />
+        <Image Source="icons/alignright_24.bmp" MinDPI="144" />
+        <Image Source="icons/alignright_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdJustify" Id="258" LabelTitle="Justify" Keytip="AJ" TooltipTitle="Justify (Ctrl+J)">
+      <Command.LargeImages>
+        <Image Source="icons/justify_32.bmp" MinDPI="96" />
+        <Image Source="icons/justify_40.bmp" MinDPI="120" />
+        <Image Source="icons/justify_48.bmp" MinDPI="144" />
+        <Image Source="icons/justify_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/justify_16.bmp" MinDPI="96" />
+        <Image Source="icons/justify_20.bmp" MinDPI="120" />
+        <Image Source="icons/justify_24.bmp" MinDPI="144" />
+        <Image Source="icons/justify_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdListOptions" Id="259" LabelTitle="List Options" Keytip="LO" TooltipTitle="List options" TooltipDescription="List styles, list levels (the numbering style of each level), restarting and continuing numbering.">
+      <Command.LargeImages>
+        <Image Source="icons/listoptions_32.bmp" MinDPI="96" />
+        <Image Source="icons/listoptions_40.bmp" MinDPI="120" />
+        <Image Source="icons/listoptions_48.bmp" MinDPI="144" />
+        <Image Source="icons/listoptions_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/listoptions_16.bmp" MinDPI="96" />
+        <Image Source="icons/listoptions_20.bmp" MinDPI="120" />
+        <Image Source="icons/listoptions_24.bmp" MinDPI="144" />
+        <Image Source="icons/listoptions_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdListStyle" Id="260" LabelTitle="List &amp;style" Keytip="S" />
+    <Command Name="cmdListBullet" Id="261" LabelTitle="Bullet" Keytip="B" />
+    <Command Name="cmdListDecimal" Id="262" LabelTitle="1, 2, 3" Keytip="D" />
+    <Command Name="cmdListLowerAlpha" Id="263" LabelTitle="a, b, c" Keytip="A" />
+    <Command Name="cmdListUpperAlpha" Id="264" LabelTitle="A, B, C" Keytip="U" />
+    <Command Name="cmdListLowerRoman" Id="265" LabelTitle="i, ii, iii" Keytip="R" />
+    <Command Name="cmdListUpperRoman" Id="266" LabelTitle="I, II, III" Keytip="O" />
+    <Command Name="cmdListLevels" Id="267" LabelTitle="List &amp;Levels..." Keytip="L" TooltipTitle="List levels" TooltipDescription="The numbering style, punctuation and start number of each level (Tab and Shift+Tab change an item's level)." />
+    <Command Name="cmdAutoLevel" Id="268" LabelTitle="&amp;Automatic numbering style per level" Keytip="A" />
+    <Command Name="cmdRestartNumbering" Id="269" LabelTitle="&amp;Restart numbering..." Keytip="R" />
+    <Command Name="cmdContinueNumbering" Id="270" LabelTitle="&amp;Continue numbering" Keytip="C" />
+    <Command Name="cmdConvertTyped" Id="271" LabelTitle="Convert &amp;typed numbers to lists" Keytip="T" TooltipDescription="Paragraphs that start with typed numbers such as &quot;1.&quot;, &quot;a)&quot; or &quot;(iv)&quot; become list items." />
+    <Command Name="cmdIndentParagraph" Id="272" LabelTitle="&amp;Indent paragraph" Keytip="I" TooltipTitle="Indent paragraph (Ctrl+M)" />
+    <Command Name="cmdOutdentParagraph" Id="273" LabelTitle="&amp;Outdent paragraph" Keytip="O" TooltipTitle="Outdent paragraph (Ctrl+Shift+M)" />
+    <Command Name="cmdNumberingMenu" Id="274" LabelTitle="Numbering" Keytip="N" TooltipTitle="Numbered list (Ctrl+Shift+N)" TooltipDescription="Start or end a numbered list. The arrow: numbering styles and list levels.">
+      <Command.LargeImages>
+        <Image Source="icons/numbering_32.bmp" MinDPI="96" />
+        <Image Source="icons/numbering_40.bmp" MinDPI="120" />
+        <Image Source="icons/numbering_48.bmp" MinDPI="144" />
+        <Image Source="icons/numbering_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/numbering_16.bmp" MinDPI="96" />
+        <Image Source="icons/numbering_20.bmp" MinDPI="120" />
+        <Image Source="icons/numbering_24.bmp" MinDPI="144" />
+        <Image Source="icons/numbering_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdBlockStyle" Id="275" LabelTitle="Style" Keytip="Y" TooltipTitle="Block style (Ctrl+0 to Ctrl+7)" TooltipDescription="Normal text, headings and preformatted text. Structured documents only (View &gt; Structured)." />
+    <Command Name="cmdPageBreak" Id="280" LabelTitle="Page Break" Keytip="B" TooltipTitle="Page break (Ctrl+Enter)" TooltipDescription="Start a new page here.">
+      <Command.LargeImages>
+        <Image Source="icons/pagebreak_32.bmp" MinDPI="96" />
+        <Image Source="icons/pagebreak_40.bmp" MinDPI="120" />
+        <Image Source="icons/pagebreak_48.bmp" MinDPI="144" />
+        <Image Source="icons/pagebreak_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/pagebreak_16.bmp" MinDPI="96" />
+        <Image Source="icons/pagebreak_20.bmp" MinDPI="120" />
+        <Image Source="icons/pagebreak_24.bmp" MinDPI="144" />
+        <Image Source="icons/pagebreak_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdTable" Id="281" LabelTitle="Table" Keytip="T" TooltipTitle="Insert table" TooltipDescription="Insert a table.">
+      <Command.LargeImages>
+        <Image Source="icons/table_32.bmp" MinDPI="96" />
+        <Image Source="icons/table_40.bmp" MinDPI="120" />
+        <Image Source="icons/table_48.bmp" MinDPI="144" />
+        <Image Source="icons/table_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/table_16.bmp" MinDPI="96" />
+        <Image Source="icons/table_20.bmp" MinDPI="120" />
+        <Image Source="icons/table_24.bmp" MinDPI="144" />
+        <Image Source="icons/table_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdPicture" Id="282" LabelTitle="Picture" Keytip="P" TooltipTitle="Insert picture" TooltipDescription="Insert a picture from a file.">
+      <Command.LargeImages>
+        <Image Source="icons/picture_32.bmp" MinDPI="96" />
+        <Image Source="icons/picture_40.bmp" MinDPI="120" />
+        <Image Source="icons/picture_48.bmp" MinDPI="144" />
+        <Image Source="icons/picture_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/picture_16.bmp" MinDPI="96" />
+        <Image Source="icons/picture_20.bmp" MinDPI="120" />
+        <Image Source="icons/picture_24.bmp" MinDPI="144" />
+        <Image Source="icons/picture_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdThumbnail" Id="283" LabelTitle="Linked Thumbnail" Keytip="TH" TooltipTitle="Insert linked thumbnail" TooltipDescription="A small picture that links to the full-size picture.">
+      <Command.LargeImages>
+        <Image Source="icons/thumbnail_32.bmp" MinDPI="96" />
+        <Image Source="icons/thumbnail_40.bmp" MinDPI="120" />
+        <Image Source="icons/thumbnail_48.bmp" MinDPI="144" />
+        <Image Source="icons/thumbnail_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/thumbnail_16.bmp" MinDPI="96" />
+        <Image Source="icons/thumbnail_20.bmp" MinDPI="120" />
+        <Image Source="icons/thumbnail_24.bmp" MinDPI="144" />
+        <Image Source="icons/thumbnail_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdLink" Id="284" LabelTitle="Link" Keytip="I" TooltipTitle="Insert hyperlink (Ctrl+K)" TooltipDescription="Insert a link to a web page or file.">
+      <Command.LargeImages>
+        <Image Source="icons/link_32.bmp" MinDPI="96" />
+        <Image Source="icons/link_40.bmp" MinDPI="120" />
+        <Image Source="icons/link_48.bmp" MinDPI="144" />
+        <Image Source="icons/link_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/link_16.bmp" MinDPI="96" />
+        <Image Source="icons/link_20.bmp" MinDPI="120" />
+        <Image Source="icons/link_24.bmp" MinDPI="144" />
+        <Image Source="icons/link_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdDateTime" Id="285" LabelTitle="Date &amp; Time" Keytip="D" TooltipTitle="Insert date and time">
+      <Command.LargeImages>
+        <Image Source="icons/datetime_32.bmp" MinDPI="96" />
+        <Image Source="icons/datetime_40.bmp" MinDPI="120" />
+        <Image Source="icons/datetime_48.bmp" MinDPI="144" />
+        <Image Source="icons/datetime_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/datetime_16.bmp" MinDPI="96" />
+        <Image Source="icons/datetime_20.bmp" MinDPI="120" />
+        <Image Source="icons/datetime_24.bmp" MinDPI="144" />
+        <Image Source="icons/datetime_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdHeaderFooter" Id="290" LabelTitle="Header &amp; Footer" Keytip="H" TooltipTitle="Header and footer" TooltipDescription="The document's header and footer, with page numbers and dates.">
+      <Command.LargeImages>
+        <Image Source="icons/headerfooter_32.bmp" MinDPI="96" />
+        <Image Source="icons/headerfooter_40.bmp" MinDPI="120" />
+        <Image Source="icons/headerfooter_48.bmp" MinDPI="144" />
+        <Image Source="icons/headerfooter_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/headerfooter_16.bmp" MinDPI="96" />
+        <Image Source="icons/headerfooter_20.bmp" MinDPI="120" />
+        <Image Source="icons/headerfooter_24.bmp" MinDPI="144" />
+        <Image Source="icons/headerfooter_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdNextSpelling" Id="295" LabelTitle="Next Spelling Error" Keytip="S" TooltipTitle="Next spelling error (F7)" TooltipDescription="Go to the next misspelled word. Right-click it for suggestions.">
+      <Command.LargeImages>
+        <Image Source="icons/nextspelling_32.bmp" MinDPI="96" />
+        <Image Source="icons/nextspelling_40.bmp" MinDPI="120" />
+        <Image Source="icons/nextspelling_48.bmp" MinDPI="144" />
+        <Image Source="icons/nextspelling_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/nextspelling_16.bmp" MinDPI="96" />
+        <Image Source="icons/nextspelling_20.bmp" MinDPI="120" />
+        <Image Source="icons/nextspelling_24.bmp" MinDPI="144" />
+        <Image Source="icons/nextspelling_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdAddToDictionary" Id="296" LabelTitle="Add to Dictionary" Keytip="D" TooltipTitle="Add to dictionary" TooltipDescription="Add the selected word to the Windows dictionary.">
+      <Command.LargeImages>
+        <Image Source="icons/dictionary_32.bmp" MinDPI="96" />
+        <Image Source="icons/dictionary_40.bmp" MinDPI="120" />
+        <Image Source="icons/dictionary_48.bmp" MinDPI="144" />
+        <Image Source="icons/dictionary_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/dictionary_16.bmp" MinDPI="96" />
+        <Image Source="icons/dictionary_20.bmp" MinDPI="120" />
+        <Image Source="icons/dictionary_24.bmp" MinDPI="144" />
+        <Image Source="icons/dictionary_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSpellCheck" Id="297" LabelTitle="Check spelling as you type" Keytip="C" />
+    <Command Name="cmdStructured" Id="300" LabelTitle="Structured" Keytip="S" TooltipTitle="Structured document" TooltipDescription="Headings and block styles (Ctrl+0 to Ctrl+7) instead of font sizes.">
+      <Command.LargeImages>
+        <Image Source="icons/structured_32.bmp" MinDPI="96" />
+        <Image Source="icons/structured_40.bmp" MinDPI="120" />
+        <Image Source="icons/structured_48.bmp" MinDPI="144" />
+        <Image Source="icons/structured_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/structured_16.bmp" MinDPI="96" />
+        <Image Source="icons/structured_20.bmp" MinDPI="120" />
+        <Image Source="icons/structured_24.bmp" MinDPI="144" />
+        <Image Source="icons/structured_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFreeForm" Id="301" LabelTitle="Free-form" Keytip="F" TooltipTitle="Free-form fonts" TooltipDescription="Any font size; block styles are off.">
+      <Command.LargeImages>
+        <Image Source="icons/freeform_32.bmp" MinDPI="96" />
+        <Image Source="icons/freeform_40.bmp" MinDPI="120" />
+        <Image Source="icons/freeform_48.bmp" MinDPI="144" />
+        <Image Source="icons/freeform_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/freeform_16.bmp" MinDPI="96" />
+        <Image Source="icons/freeform_20.bmp" MinDPI="120" />
+        <Image Source="icons/freeform_24.bmp" MinDPI="144" />
+        <Image Source="icons/freeform_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdWordWrap" Id="302" LabelTitle="Word wrap" Keytip="W" />
+    <Command Name="cmdShowBands" Id="303" LabelTitle="Header and footer" Keytip="H" />
+    <Command Name="cmdOutline" Id="304" LabelTitle="Outline" Keytip="O" TooltipTitle="Outline (Ctrl+Shift+O)" />
+    <Command Name="cmdZoomIn" Id="305" LabelTitle="Zoom In" Keytip="I" TooltipTitle="Zoom in">
+      <Command.LargeImages>
+        <Image Source="icons/zoomin_32.bmp" MinDPI="96" />
+        <Image Source="icons/zoomin_40.bmp" MinDPI="120" />
+        <Image Source="icons/zoomin_48.bmp" MinDPI="144" />
+        <Image Source="icons/zoomin_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/zoomin_16.bmp" MinDPI="96" />
+        <Image Source="icons/zoomin_20.bmp" MinDPI="120" />
+        <Image Source="icons/zoomin_24.bmp" MinDPI="144" />
+        <Image Source="icons/zoomin_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdZoomOut" Id="306" LabelTitle="Zoom Out" Keytip="O" TooltipTitle="Zoom out">
+      <Command.LargeImages>
+        <Image Source="icons/zoomout_32.bmp" MinDPI="96" />
+        <Image Source="icons/zoomout_40.bmp" MinDPI="120" />
+        <Image Source="icons/zoomout_48.bmp" MinDPI="144" />
+        <Image Source="icons/zoomout_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/zoomout_16.bmp" MinDPI="96" />
+        <Image Source="icons/zoomout_20.bmp" MinDPI="120" />
+        <Image Source="icons/zoomout_24.bmp" MinDPI="144" />
+        <Image Source="icons/zoomout_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdZoom100" Id="307" LabelTitle="100%" Keytip="J" TooltipTitle="Zoom to 100%">
+      <Command.LargeImages>
+        <Image Source="icons/zoom100_32.bmp" MinDPI="96" />
+        <Image Source="icons/zoom100_40.bmp" MinDPI="120" />
+        <Image Source="icons/zoom100_48.bmp" MinDPI="144" />
+        <Image Source="icons/zoom100_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/zoom100_16.bmp" MinDPI="96" />
+        <Image Source="icons/zoom100_20.bmp" MinDPI="120" />
+        <Image Source="icons/zoom100_24.bmp" MinDPI="144" />
+        <Image Source="icons/zoom100_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdHtmlSource" Id="308" LabelTitle="HTML" Keytip="T" TooltipTitle="HTML source" TooltipDescription="Show the document as HTML.">
+      <Command.LargeImages>
+        <Image Source="icons/html_32.bmp" MinDPI="96" />
+        <Image Source="icons/html_40.bmp" MinDPI="120" />
+        <Image Source="icons/html_48.bmp" MinDPI="144" />
+        <Image Source="icons/html_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/html_16.bmp" MinDPI="96" />
+        <Image Source="icons/html_20.bmp" MinDPI="120" />
+        <Image Source="icons/html_24.bmp" MinDPI="144" />
+        <Image Source="icons/html_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdMarkdownSource" Id="309" LabelTitle="Markdown" Keytip="M" TooltipTitle="Markdown source" TooltipDescription="Show the document as Markdown.">
+      <Command.LargeImages>
+        <Image Source="icons/markdown_32.bmp" MinDPI="96" />
+        <Image Source="icons/markdown_40.bmp" MinDPI="120" />
+        <Image Source="icons/markdown_48.bmp" MinDPI="144" />
+        <Image Source="icons/markdown_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/markdown_16.bmp" MinDPI="96" />
+        <Image Source="icons/markdown_20.bmp" MinDPI="120" />
+        <Image Source="icons/markdown_24.bmp" MinDPI="144" />
+        <Image Source="icons/markdown_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdMacros" Id="310" LabelTitle="Macros" Keytip="M" TooltipTitle="Macros" TooltipDescription="Run an AHK script from the rte_macros folder.">
+      <Command.LargeImages>
+        <Image Source="icons/macros_32.bmp" MinDPI="96" />
+        <Image Source="icons/macros_40.bmp" MinDPI="120" />
+        <Image Source="icons/macros_48.bmp" MinDPI="144" />
+        <Image Source="icons/macros_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/macros_16.bmp" MinDPI="96" />
+        <Image Source="icons/macros_20.bmp" MinDPI="120" />
+        <Image Source="icons/macros_24.bmp" MinDPI="144" />
+        <Image Source="icons/macros_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdRecordMacro" Id="311" LabelTitle="Record Macro" Keytip="R" TooltipTitle="Record macro (Ctrl+Shift+R)" TooltipDescription="Record typing and commands as an AHK script. Mouse clicks are not recorded.">
+      <Command.LargeImages>
+        <Image Source="icons/record_32.bmp" MinDPI="96" />
+        <Image Source="icons/record_40.bmp" MinDPI="120" />
+        <Image Source="icons/record_48.bmp" MinDPI="144" />
+        <Image Source="icons/record_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/record_16.bmp" MinDPI="96" />
+        <Image Source="icons/record_20.bmp" MinDPI="120" />
+        <Image Source="icons/record_24.bmp" MinDPI="144" />
+        <Image Source="icons/record_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdMacroHotkeys" Id="312" LabelTitle="Macro Hotkeys" Keytip="H" TooltipTitle="Macro hotkeys" TooltipDescription="Give macros hotkeys that work while the editor is active.">
+      <Command.LargeImages>
+        <Image Source="icons/hotkeys_32.bmp" MinDPI="96" />
+        <Image Source="icons/hotkeys_40.bmp" MinDPI="120" />
+        <Image Source="icons/hotkeys_48.bmp" MinDPI="144" />
+        <Image Source="icons/hotkeys_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/hotkeys_16.bmp" MinDPI="96" />
+        <Image Source="icons/hotkeys_20.bmp" MinDPI="120" />
+        <Image Source="icons/hotkeys_24.bmp" MinDPI="144" />
+        <Image Source="icons/hotkeys_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdRunScript" Id="313" LabelTitle="Run Script..." Keytip="S" TooltipTitle="Run AHK script" TooltipDescription="Run any AHK script against this editor.">
+      <Command.LargeImages>
+        <Image Source="icons/runscript_32.bmp" MinDPI="96" />
+        <Image Source="icons/runscript_40.bmp" MinDPI="120" />
+        <Image Source="icons/runscript_48.bmp" MinDPI="144" />
+        <Image Source="icons/runscript_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/runscript_16.bmp" MinDPI="96" />
+        <Image Source="icons/runscript_20.bmp" MinDPI="120" />
+        <Image Source="icons/runscript_24.bmp" MinDPI="144" />
+        <Image Source="icons/runscript_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdMacrosFolder" Id="314" LabelTitle="Macros Folder" Keytip="F" TooltipTitle="Open macros folder">
+      <Command.LargeImages>
+        <Image Source="icons/macrosfolder_32.bmp" MinDPI="96" />
+        <Image Source="icons/macrosfolder_40.bmp" MinDPI="120" />
+        <Image Source="icons/macrosfolder_48.bmp" MinDPI="144" />
+        <Image Source="icons/macrosfolder_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/macrosfolder_16.bmp" MinDPI="96" />
+        <Image Source="icons/macrosfolder_20.bmp" MinDPI="120" />
+        <Image Source="icons/macrosfolder_24.bmp" MinDPI="144" />
+        <Image Source="icons/macrosfolder_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdAutomationApi" Id="315" LabelTitle="Automation API" Keytip="A" TooltipTitle="Automation API" TooltipDescription="What AHK scripts can call (RteClient2.ahk: Rte.&lt;Name&gt;(...)).">
+      <Command.LargeImages>
+        <Image Source="icons/api_32.bmp" MinDPI="96" />
+        <Image Source="icons/api_40.bmp" MinDPI="120" />
+        <Image Source="icons/api_48.bmp" MinDPI="144" />
+        <Image Source="icons/api_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/api_16.bmp" MinDPI="96" />
+        <Image Source="icons/api_20.bmp" MinDPI="120" />
+        <Image Source="icons/api_24.bmp" MinDPI="144" />
+        <Image Source="icons/api_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdAbout" Id="316" LabelTitle="About" Keytip="B" TooltipTitle="About RTE Writer">
+      <Command.LargeImages>
+        <Image Source="icons/about_32.bmp" MinDPI="96" />
+        <Image Source="icons/about_40.bmp" MinDPI="120" />
+        <Image Source="icons/about_48.bmp" MinDPI="144" />
+        <Image Source="icons/about_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/about_16.bmp" MinDPI="96" />
+        <Image Source="icons/about_20.bmp" MinDPI="120" />
+        <Image Source="icons/about_24.bmp" MinDPI="144" />
+        <Image Source="icons/about_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdInsertAbove" Id="320" LabelTitle="Insert Above" Keytip="A" TooltipTitle="Insert row above">
+      <Command.LargeImages>
+        <Image Source="icons/insertabove_32.bmp" MinDPI="96" />
+        <Image Source="icons/insertabove_40.bmp" MinDPI="120" />
+        <Image Source="icons/insertabove_48.bmp" MinDPI="144" />
+        <Image Source="icons/insertabove_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/insertabove_16.bmp" MinDPI="96" />
+        <Image Source="icons/insertabove_20.bmp" MinDPI="120" />
+        <Image Source="icons/insertabove_24.bmp" MinDPI="144" />
+        <Image Source="icons/insertabove_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdInsertBelow" Id="321" LabelTitle="Insert Below" Keytip="B" TooltipTitle="Insert row below (Ctrl+Shift+Insert)">
+      <Command.LargeImages>
+        <Image Source="icons/insertbelow_32.bmp" MinDPI="96" />
+        <Image Source="icons/insertbelow_40.bmp" MinDPI="120" />
+        <Image Source="icons/insertbelow_48.bmp" MinDPI="144" />
+        <Image Source="icons/insertbelow_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/insertbelow_16.bmp" MinDPI="96" />
+        <Image Source="icons/insertbelow_20.bmp" MinDPI="120" />
+        <Image Source="icons/insertbelow_24.bmp" MinDPI="144" />
+        <Image Source="icons/insertbelow_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdInsertLeft" Id="322" LabelTitle="Insert Left" Keytip="L" TooltipTitle="Insert column left">
+      <Command.LargeImages>
+        <Image Source="icons/insertleft_32.bmp" MinDPI="96" />
+        <Image Source="icons/insertleft_40.bmp" MinDPI="120" />
+        <Image Source="icons/insertleft_48.bmp" MinDPI="144" />
+        <Image Source="icons/insertleft_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/insertleft_16.bmp" MinDPI="96" />
+        <Image Source="icons/insertleft_20.bmp" MinDPI="120" />
+        <Image Source="icons/insertleft_24.bmp" MinDPI="144" />
+        <Image Source="icons/insertleft_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdInsertRight" Id="323" LabelTitle="Insert Right" Keytip="R" TooltipTitle="Insert column right">
+      <Command.LargeImages>
+        <Image Source="icons/insertright_32.bmp" MinDPI="96" />
+        <Image Source="icons/insertright_40.bmp" MinDPI="120" />
+        <Image Source="icons/insertright_48.bmp" MinDPI="144" />
+        <Image Source="icons/insertright_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/insertright_16.bmp" MinDPI="96" />
+        <Image Source="icons/insertright_20.bmp" MinDPI="120" />
+        <Image Source="icons/insertright_24.bmp" MinDPI="144" />
+        <Image Source="icons/insertright_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdDeleteRow" Id="324" LabelTitle="Delete Row" Keytip="D" TooltipTitle="Delete row (Ctrl+Shift+Delete)">
+      <Command.LargeImages>
+        <Image Source="icons/deleterow_32.bmp" MinDPI="96" />
+        <Image Source="icons/deleterow_40.bmp" MinDPI="120" />
+        <Image Source="icons/deleterow_48.bmp" MinDPI="144" />
+        <Image Source="icons/deleterow_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/deleterow_16.bmp" MinDPI="96" />
+        <Image Source="icons/deleterow_20.bmp" MinDPI="120" />
+        <Image Source="icons/deleterow_24.bmp" MinDPI="144" />
+        <Image Source="icons/deleterow_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdDeleteColumn" Id="325" LabelTitle="Delete Column" Keytip="C" TooltipTitle="Delete column">
+      <Command.LargeImages>
+        <Image Source="icons/deletecolumn_32.bmp" MinDPI="96" />
+        <Image Source="icons/deletecolumn_40.bmp" MinDPI="120" />
+        <Image Source="icons/deletecolumn_48.bmp" MinDPI="144" />
+        <Image Source="icons/deletecolumn_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/deletecolumn_16.bmp" MinDPI="96" />
+        <Image Source="icons/deletecolumn_20.bmp" MinDPI="120" />
+        <Image Source="icons/deletecolumn_24.bmp" MinDPI="144" />
+        <Image Source="icons/deletecolumn_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdDeleteTable" Id="326" LabelTitle="Delete Table" Keytip="T" TooltipTitle="Delete table">
+      <Command.LargeImages>
+        <Image Source="icons/deletetable_32.bmp" MinDPI="96" />
+        <Image Source="icons/deletetable_40.bmp" MinDPI="120" />
+        <Image Source="icons/deletetable_48.bmp" MinDPI="144" />
+        <Image Source="icons/deletetable_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/deletetable_16.bmp" MinDPI="96" />
+        <Image Source="icons/deletetable_20.bmp" MinDPI="120" />
+        <Image Source="icons/deletetable_24.bmp" MinDPI="144" />
+        <Image Source="icons/deletetable_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+  </Application.Commands>
+  <Application.Views>
+    <Ribbon>
+      <Ribbon.ApplicationMenu>
+        <ApplicationMenu CommandName="cmdAppMenu">
+          <ApplicationMenu.RecentItems>
+            <RecentItems CommandName="cmdRecent" EnablePinning="false" MaxCount="10" />
+          </ApplicationMenu.RecentItems>
+          <MenuGroup Class="MajorItems">
+            <Button CommandName="cmdNew" />
+            <Button CommandName="cmdOpen" />
+            <Button CommandName="cmdSave" />
+            <Button CommandName="cmdSaveAs" />
+            <SplitButton CommandName="cmdPrintMenu">
+              <SplitButton.ButtonItem>
+                <Button CommandName="cmdPrint" />
+              </SplitButton.ButtonItem>
+              <SplitButton.MenuGroups>
+                <MenuGroup Class="MajorItems">
+                  <Button CommandName="cmdPrint" />
+                  <Button CommandName="cmdPrintPreview" />
+                  <Button CommandName="cmdPageSetup" />
+                </MenuGroup>
+              </SplitButton.MenuGroups>
+            </SplitButton>
+            <DropDownButton CommandName="cmdExportMenu">
+              <MenuGroup Class="MajorItems">
+                <Button CommandName="cmdExportPdf" />
+                <Button CommandName="cmdExportWord" />
+                <Button CommandName="cmdExportOdt" />
+              </MenuGroup>
+            </DropDownButton>
+          </MenuGroup>
+          <MenuGroup>
+            <Button CommandName="cmdExit" />
+          </MenuGroup>
+        </ApplicationMenu>
+      </Ribbon.ApplicationMenu>
+      <Ribbon.HelpButton>
+        <HelpButton CommandName="cmdHelp" />
+      </Ribbon.HelpButton>
+      <Ribbon.QuickAccessToolbar>
+        <QuickAccessToolbar CommandName="cmdQat">
+          <QuickAccessToolbar.ApplicationDefaults>
+            <Button CommandName="cmdSave" />
+            <Button CommandName="cmdUndo" />
+            <Button CommandName="cmdRedo" />
+            <Button CommandName="cmdNew" ApplicationDefaults.IsChecked="false" />
+            <Button CommandName="cmdOpen" ApplicationDefaults.IsChecked="false" />
+            <Button CommandName="cmdPrint" ApplicationDefaults.IsChecked="false" />
+            <Button CommandName="cmdPrintPreview" ApplicationDefaults.IsChecked="false" />
+          </QuickAccessToolbar.ApplicationDefaults>
+        </QuickAccessToolbar>
+      </Ribbon.QuickAccessToolbar>
+      <Ribbon.ContextualTabs>
+        <TabGroup CommandName="cmdTableTools">
+          <Tab CommandName="cmdTabTableLayout">
+            <Group CommandName="cmdGroupRowsColumns" SizeDefinition="FourButtons">
+              <Button CommandName="cmdInsertAbove" />
+              <Button CommandName="cmdInsertBelow" />
+              <Button CommandName="cmdInsertLeft" />
+              <Button CommandName="cmdInsertRight" />
+            </Group>
+            <Group CommandName="cmdGroupDelete" SizeDefinition="ThreeButtons">
+              <Button CommandName="cmdDeleteRow" />
+              <Button CommandName="cmdDeleteColumn" />
+              <Button CommandName="cmdDeleteTable" />
+            </Group>
+          </Tab>
+        </TabGroup>
+      </Ribbon.ContextualTabs>
+      <Ribbon.Tabs>
+        <Tab CommandName="cmdTabHome">
+          <Group CommandName="cmdGroupClipboard" SizeDefinition="BigButtonsAndSmallButtonsOrInputs">
+            <ControlGroup>
+              <Button CommandName="cmdPaste" />
+            </ControlGroup>
+            <ControlGroup>
+              <Button CommandName="cmdCut" />
+              <Button CommandName="cmdCopy" />
+            </ControlGroup>
+          </Group>
+          <Group CommandName="cmdGroupFont" SizeDefinition="OneFontControl">
+            <FontControl CommandName="cmdFont" FontType="RichFont" />
+          </Group>
+          <!-- A column of small buttons: change case, underline style, the font dialog. -->
+          <Group CommandName="cmdGroupText">
+            <SizeDefinition>
+              <ControlNameMap>
+                <ControlNameDefinition Name="case" />
+                <ControlNameDefinition Name="underline" />
+                <ControlNameDefinition Name="font" />
+              </ControlNameMap>
+              <GroupSizeDefinition Size="Large">
+                <ControlSizeDefinition ControlName="case" ImageSize="Small" />
+                <ControlSizeDefinition ControlName="underline" ImageSize="Small" />
+                <ControlSizeDefinition ControlName="font" ImageSize="Small" />
+              </GroupSizeDefinition>
+              <GroupSizeDefinition Size="Medium">
+                <ControlSizeDefinition ControlName="case" ImageSize="Small" />
+                <ControlSizeDefinition ControlName="underline" ImageSize="Small" />
+                <ControlSizeDefinition ControlName="font" ImageSize="Small" />
+              </GroupSizeDefinition>
+              <GroupSizeDefinition Size="Small">
+                <ControlSizeDefinition ControlName="case" ImageSize="Small" IsLabelVisible="false" />
+                <ControlSizeDefinition ControlName="underline" ImageSize="Small" IsLabelVisible="false" />
+                <ControlSizeDefinition ControlName="font" ImageSize="Small" IsLabelVisible="false" />
+              </GroupSizeDefinition>
+            </SizeDefinition>
+            <DropDownButton CommandName="cmdChangeCase">
+              <MenuGroup>
+                <Button CommandName="cmdCaseUpper" />
+                <Button CommandName="cmdCaseLower" />
+                <Button CommandName="cmdCaseTitle" />
+              </MenuGroup>
+            </DropDownButton>
+            <DropDownButton CommandName="cmdUnderlineStyle">
+              <MenuGroup>
+                <Button CommandName="cmdUnderlineSingle" />
+                <Button CommandName="cmdUnderlineDouble" />
+                <Button CommandName="cmdUnderlineDotted" />
+                <Button CommandName="cmdUnderlineDashed" />
+                <Button CommandName="cmdUnderlineWavy" />
+              </MenuGroup>
+            </DropDownButton>
+            <Button CommandName="cmdFontDialog" />
+          </Group>
+          <!-- Two rows of small buttons, as in Word: lists and levels, then alignment and the list options. -->
+          <Group CommandName="cmdGroupParagraph">
+            <SizeDefinition>
+              <ControlNameMap>
+                <ControlNameDefinition Name="bullets" />
+                <ControlNameDefinition Name="numbering" />
+                <ControlNameDefinition Name="legal" />
+                <ControlNameDefinition Name="outdent" />
+                <ControlNameDefinition Name="indent" />
+                <ControlNameDefinition Name="left" />
+                <ControlNameDefinition Name="center" />
+                <ControlNameDefinition Name="right" />
+                <ControlNameDefinition Name="justify" />
+                <ControlNameDefinition Name="options" />
+              </ControlNameMap>
+              <GroupSizeDefinition Size="Large">
+                <Row>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="bullets" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="numbering" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="legal" IsLabelVisible="false" />
+                  </ControlGroup>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="outdent" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="indent" IsLabelVisible="false" />
+                  </ControlGroup>
+                </Row>
+                <Row>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="left" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="center" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="right" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="justify" IsLabelVisible="false" />
+                  </ControlGroup>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="options" />
+                  </ControlGroup>
+                </Row>
+              </GroupSizeDefinition>
+              <GroupSizeDefinition Size="Medium">
+                <Row>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="bullets" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="numbering" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="legal" IsLabelVisible="false" />
+                  </ControlGroup>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="outdent" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="indent" IsLabelVisible="false" />
+                  </ControlGroup>
+                </Row>
+                <Row>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="left" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="center" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="right" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="justify" IsLabelVisible="false" />
+                  </ControlGroup>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="options" />
+                  </ControlGroup>
+                </Row>
+              </GroupSizeDefinition>
+              <GroupSizeDefinition Size="Small">
+                <Row>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="bullets" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="numbering" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="legal" IsLabelVisible="false" />
+                  </ControlGroup>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="outdent" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="indent" IsLabelVisible="false" />
+                  </ControlGroup>
+                </Row>
+                <Row>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="left" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="center" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="right" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="justify" IsLabelVisible="false" />
+                  </ControlGroup>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="options" IsLabelVisible="false" />
+                  </ControlGroup>
+                </Row>
+              </GroupSizeDefinition>
+            </SizeDefinition>
+            <ToggleButton CommandName="cmdBullets" />
+            <SplitButton CommandName="cmdNumberingMenu">
+              <SplitButton.ButtonItem>
+                <ToggleButton CommandName="cmdNumbering" />
+              </SplitButton.ButtonItem>
+              <SplitButton.MenuGroups>
+                <MenuGroup>
+                  <Button CommandName="cmdListDecimal" />
+                  <Button CommandName="cmdListLowerAlpha" />
+                  <Button CommandName="cmdListUpperAlpha" />
+                  <Button CommandName="cmdListLowerRoman" />
+                  <Button CommandName="cmdListUpperRoman" />
+                </MenuGroup>
+                <MenuGroup>
+                  <Button CommandName="cmdListLevels" />
+                  <Button CommandName="cmdRestartNumbering" />
+                  <Button CommandName="cmdContinueNumbering" />
+                </MenuGroup>
+              </SplitButton.MenuGroups>
+            </SplitButton>
+            <ToggleButton CommandName="cmdLegal" />
+            <Button CommandName="cmdOutdent" />
+            <Button CommandName="cmdIndent" />
+            <ToggleButton CommandName="cmdAlignLeft" />
+            <ToggleButton CommandName="cmdAlignCenter" />
+            <ToggleButton CommandName="cmdAlignRight" />
+            <ToggleButton CommandName="cmdJustify" />
+            <DropDownButton CommandName="cmdListOptions">
+              <MenuGroup>
+                <DropDownButton CommandName="cmdListStyle">
+                  <MenuGroup>
+                    <Button CommandName="cmdListBullet" />
+                    <Button CommandName="cmdListDecimal" />
+                    <Button CommandName="cmdListLowerAlpha" />
+                    <Button CommandName="cmdListUpperAlpha" />
+                    <Button CommandName="cmdListLowerRoman" />
+                    <Button CommandName="cmdListUpperRoman" />
+                  </MenuGroup>
+                </DropDownButton>
+                <Button CommandName="cmdListLevels" />
+                <ToggleButton CommandName="cmdAutoLevel" />
+              </MenuGroup>
+              <MenuGroup>
+                <Button CommandName="cmdRestartNumbering" />
+                <Button CommandName="cmdContinueNumbering" />
+                <Button CommandName="cmdConvertTyped" />
+              </MenuGroup>
+              <MenuGroup>
+                <Button CommandName="cmdIndentParagraph" />
+                <Button CommandName="cmdOutdentParagraph" />
+              </MenuGroup>
+            </DropDownButton>
+          </Group>
+          <Group CommandName="cmdGroupStyles">
+            <ComboBox CommandName="cmdBlockStyle" IsEditable="false" IsAutoCompleteEnabled="false" ResizeType="NoResize" />
+          </Group>
+          <!-- A column of small buttons, as in Word. -->
+          <Group CommandName="cmdGroupEditing">
+            <SizeDefinition>
+              <ControlNameMap>
+                <ControlNameDefinition Name="find" />
+                <ControlNameDefinition Name="replace" />
+                <ControlNameDefinition Name="all" />
+              </ControlNameMap>
+              <GroupSizeDefinition Size="Large">
+                <ControlSizeDefinition ControlName="find" ImageSize="Small" />
+                <ControlSizeDefinition ControlName="replace" ImageSize="Small" />
+                <ControlSizeDefinition ControlName="all" ImageSize="Small" />
+              </GroupSizeDefinition>
+              <GroupSizeDefinition Size="Medium">
+                <ControlSizeDefinition ControlName="find" ImageSize="Small" />
+                <ControlSizeDefinition ControlName="replace" ImageSize="Small" />
+                <ControlSizeDefinition ControlName="all" ImageSize="Small" />
+              </GroupSizeDefinition>
+              <GroupSizeDefinition Size="Small">
+                <ControlSizeDefinition ControlName="find" ImageSize="Small" IsLabelVisible="false" />
+                <ControlSizeDefinition ControlName="replace" ImageSize="Small" IsLabelVisible="false" />
+                <ControlSizeDefinition ControlName="all" ImageSize="Small" IsLabelVisible="false" />
+              </GroupSizeDefinition>
+            </SizeDefinition>
+            <Button CommandName="cmdFind" />
+            <Button CommandName="cmdReplace" />
+            <Button CommandName="cmdSelectAll" />
+          </Group>
+        </Tab>
+        <Tab CommandName="cmdTabInsert">
+          <Group CommandName="cmdGroupPages" SizeDefinition="OneButton">
+            <Button CommandName="cmdPageBreak" />
+          </Group>
+          <Group CommandName="cmdGroupTables" SizeDefinition="OneButton">
+            <Button CommandName="cmdTable" />
+          </Group>
+          <Group CommandName="cmdGroupIllustrations" SizeDefinition="TwoButtons">
+            <Button CommandName="cmdPicture" />
+            <Button CommandName="cmdThumbnail" />
+          </Group>
+          <Group CommandName="cmdGroupLinks" SizeDefinition="OneButton">
+            <Button CommandName="cmdLink" />
+          </Group>
+          <Group CommandName="cmdGroupInsertText" SizeDefinition="OneButton">
+            <Button CommandName="cmdDateTime" />
+          </Group>
+        </Tab>
+        <Tab CommandName="cmdTabLayout">
+          <Group CommandName="cmdGroupPage" SizeDefinition="ThreeButtons">
+            <Button CommandName="cmdPageSetup" />
+            <Button CommandName="cmdHeaderFooter" />
+            <Button CommandName="cmdPrintPreview" />
+          </Group>
+        </Tab>
+        <Tab CommandName="cmdTabReview">
+          <Group CommandName="cmdGroupProofing">
+            <Button CommandName="cmdNextSpelling" />
+            <Button CommandName="cmdAddToDictionary" />
+            <CheckBox CommandName="cmdSpellCheck" />
+          </Group>
+        </Tab>
+        <Tab CommandName="cmdTabView">
+          <Group CommandName="cmdGroupDocument" SizeDefinition="TwoButtons">
+            <ToggleButton CommandName="cmdStructured" />
+            <ToggleButton CommandName="cmdFreeForm" />
+          </Group>
+          <Group CommandName="cmdGroupShow">
+            <CheckBox CommandName="cmdWordWrap" />
+            <CheckBox CommandName="cmdShowBands" />
+            <CheckBox CommandName="cmdOutline" />
+          </Group>
+          <Group CommandName="cmdGroupZoom" SizeDefinition="ThreeButtons">
+            <Button CommandName="cmdZoomIn" />
+            <Button CommandName="cmdZoomOut" />
+            <Button CommandName="cmdZoom100" />
+          </Group>
+          <Group CommandName="cmdGroupSource" SizeDefinition="TwoButtons">
+            <Button CommandName="cmdHtmlSource" />
+            <Button CommandName="cmdMarkdownSource" />
+          </Group>
+        </Tab>
+        <Tab CommandName="cmdTabTools">
+          <Group CommandName="cmdGroupMacros">
+            <DropDownGallery CommandName="cmdMacros" Type="Items" TextPosition="Right" HasLargeItems="false">
+              <DropDownGallery.MenuLayout>
+                <VerticalMenuLayout Rows="20" Gripper="Vertical" />
+              </DropDownGallery.MenuLayout>
+            </DropDownGallery>
+            <ToggleButton CommandName="cmdRecordMacro" />
+            <Button CommandName="cmdMacroHotkeys" />
+          </Group>
+          <Group CommandName="cmdGroupScripts" SizeDefinition="TwoButtons">
+            <Button CommandName="cmdRunScript" />
+            <Button CommandName="cmdMacrosFolder" />
+          </Group>
+          <Group CommandName="cmdGroupAutomation" SizeDefinition="TwoButtons">
+            <Button CommandName="cmdAutomationApi" />
+            <Button CommandName="cmdAbout" />
+          </Group>
+        </Tab>
+      </Ribbon.Tabs>
+    </Ribbon>
+  </Application.Views>
+</Application>
