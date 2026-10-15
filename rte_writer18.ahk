@@ -1,8 +1,14 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
-; RTE Writer, iteration 17: a word processor built on RichEditorNET (rte_writer17.cs), hosted in this AHK process.
-; Adds to iteration 16:
+; RTE Writer, iteration 18: a word processor built on RichEditorNET (rte_writer18.cs), hosted in this AHK process.
+; Adds to iteration 17:
+;   - Table properties: Table Tools > Properties (or right-click a table) sets column widths, the table's alignment, cell
+;     padding, row height, and the borders, shading and vertical alignment of the selected cells or the whole table;
+;     Borders and Shading are on Table Tools too. Kept in RTF, Word and OpenDocument files and in HTML; Markdown tables
+;     can't keep them. Word's cell background colors now show. Scripts: Rte.SetColumnWidths("2in, 3in"),
+;     Rte.SetCellBorders("outside", 1, "#C00000"), Rte.SetCellShading("LightYellow"), Rte.SetTableAlignment("center") ...
+; Iteration 17 added to iteration 16:
 ;   - Markdown and HTML views (View > Document View): the document as Markdown or HTML in a plain-text editor, alone or
 ;     side by side with the formatted text, which follows as you type. A .md (or .html) file edited in its source view
 ;     is saved exactly as typed. Rte.View := "Markdown", Rte.SideBySide := 1 and Rte.SourceText work from scripts too.
@@ -47,7 +53,7 @@
 ; Earlier iterations added events, recent files, settings, drag and drop, printing, PDF export, headers and footers,
 ; spelling suggestions, the outline, macro recording and hotkeys, and real Markdown. Settings are kept in
 ; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile); set RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
-; Optionally pass a document to open:  rte_writer17.ahk "C:\path\document.md"
+; Optionally pass a document to open:  rte_writer18.ahk "C:\path\document.md"
 ;
 ; AHK automation: other scripts #Include "RteClient2.ahk" and call Rte.<Name>(...), react to events with
 ; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Tools > Automation API lists everything that can be called,
@@ -69,7 +75,7 @@ SubscribeToSaved() {
 }
 
 StartFile := A_Args.Length ? A_Args[1] : ""
-RunCSharpFile(A_ScriptDir "\rte_writer17.cs", A_AhkPath, A_ScriptDir, StartFile)
+RunCSharpFile(A_ScriptDir "\rte_writer18.cs", A_AhkPath, A_ScriptDir, StartFile)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
     MsgBox("RTE Writer stopped because of an error (" CSExitCode "):`n`n" CSOutput, "RTE Writer", "Iconx")
 ExitApp

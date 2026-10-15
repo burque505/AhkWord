@@ -8,14 +8,14 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
 
 *[`examples/Showcase.rtf`](examples/Showcase.rtf), made entirely with the editor's own commands.*
 
-> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer17.*`). Renaming them to AhkWord is planned.
+> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer18.*`). Renaming them to AhkWord is planned.
 
 ## Features
 
 - **Documents:** HTML, Markdown (GitHub flavor, with tables and images), plain text and RTF. Word (`.docx`, `.doc`) and OpenDocument (`.odt`) files are opened and saved through a converter (see [Optional converters](#optional-converters)). Export as PDF through "Microsoft Print to PDF".
 - **Formatting:** fonts, colors, highlight, alignment, change case and underline styles. Structured documents use block styles (normal text, headings, preformatted); free-form documents take any font size.
 - **Lists:** numbered and bulleted lists nested with Tab and Shift+Tab, a numbering style per level, restart and continue numbering, and legal numbering (1., 1.1, 1.1.1). Typed numbers in documents from elsewhere can be turned into real lists.
-- **Tables:** insert tables, add and delete rows and columns, move between cells with Tab and Shift+Tab (Tab in the last cell adds a row, as in Word), also in tables from Word and other programs.
+- **Tables:** insert tables, add and delete rows and columns, set column widths, borders (none, all, outside, inside ..., with line width and color), shading, row height, vertical alignment, cell padding and the table's alignment on the page, move between cells with Tab and Shift+Tab (Tab in the last cell adds a row, as in Word), also in tables from Word and other programs.
 - **Pages:** manual page breaks (Ctrl+Enter), headers and footers with page-number and date fields, Page Setup, Print Preview and printing. Headers and footers are shown in the editor and saved in the document.
 - **Pictures:** insert from a file or by drag and drop, resize, and give them alt text (shown when the mouse rests on a picture).
 - **Markdown and HTML views:** edit the document as Markdown or HTML, alone or side by side with the formatted text (see [Markdown and HTML views](#markdown-and-html-views)).
@@ -35,7 +35,7 @@ The commands are on a ribbon, the one built into Windows (as in Paint and WordPa
 | **Review** | Next Spelling Error, Add to Dictionary, Check spelling as you type |
 | **View** | Document View (Rich Text, Markdown, HTML, Side by Side), Structured or Free-form, Word wrap, Header and footer, Outline, Zoom |
 | **Tools** | Macros, Record Macro, Macro Hotkeys, Run Script, Macros Folder, Automation API, About |
-| **Table Tools** | Appears while the caret is in a table: insert rows and columns, delete rows, columns or the table |
+| **Table Tools** | Appears while the caret is in a table: insert rows and columns; Properties (column widths, alignment, padding, row height, borders, shading, vertical alignment), Borders and Shading for the selected cells; delete rows, columns or the table |
 
 - **Keyboard:** press **Alt** to see the KeyTips (H Home, N Insert, P Layout, R Review, W View, L Tools, F File). The usual shortcuts work too: Ctrl+B, Ctrl+Shift+N (numbered list), Ctrl+Shift+G (legal numbering), Ctrl+0 to Ctrl+7 (block styles), Ctrl+Enter (page break), F7 (spelling) and more; each button's tooltip shows its shortcut.
 - **Numbering:** the arrow next to the Numbering button chooses the numbering style and opens List Levels, where each level's style, punctuation and start number are set. List Options has the rest.
@@ -45,10 +45,13 @@ The commands are on a ribbon, the one built into Windows (as in Paint and WordPa
 
 **View > Document View** shows the document as **Markdown** or **HTML** in a plain-text editor, alone or **Side by Side** with the formatted text, which follows a moment after you stop typing. Edits in the formatted text show in the source too.
 
+![The showcase document side by side: its Markdown source on the left and the formatted text on the right](images/sidebyside.png)
+
 - **A Markdown editor:** a `.md` file edited in the Markdown view is saved exactly as you typed it: your spacing, list markers and line endings stay. (Edits made in the formatted view are saved as RTE Writer writes Markdown.)
 - **Formatting keys and buttons insert markup:** in the source view, Ctrl+B gives `**bold**` (or `<strong>` in HTML), Ctrl+1 to Ctrl+6 headings, the list buttons `- ` and `1. ` (renumbered as you indent with Ctrl+M), the alignment keys `<div align>`, and the font control `<span style>`; Table, Link, Picture, Page Break and Date & Time insert theirs. Commands with no Markdown or HTML form say so in the status bar.
 - **Line breaks** (Shift+Enter) are `<br>` in HTML, and `\` at the line end (or `<br>` in headings and table cells) in Markdown, as other editors write them; both are read back as line breaks.
 - **Tables are lined up:** Markdown tables are written with their columns aligned. In the Markdown view, **Tab** and **Shift+Tab** in a table line it up again and move to the next or previous cell (Tab in the last cell adds a row), and the **Table** button tidies the table the caret is in. Keep a table's rows together: a blank line, or a line without `|`, ends a Markdown table, and what follows shows as typed.
+- **Table formatting stays in the formatted view.** Markdown tables have no column widths, borders or shading, so a `.md` file loses them (they are kept in RTF, Word, OpenDocument and HTML).
 - **Tables with long cells are best edited in the formatted view.** A Markdown table row is always a single line, so a table whose cells hold whole paragraphs, such as a two-column block with a signature on one side and a list of names and addresses on the other, becomes very long lines joined with `<br>`. Such tables are written compactly (no padding, `| --- |`) rather than lined up; Tab still moves between their cells, but they are much easier to read and change in the formatted view.
 - **HTML is laid out readably:** one paragraph or heading per line, lists and tables indented. Line breaks between blocks don't change how a browser shows a page, so the files look the same.
 - **Scripts** can use it too: `Rte.View := "Markdown"`, `Rte.SideBySide := 1`, `Rte.SourceText`.
@@ -72,7 +75,7 @@ Rte.On("Saved", (e) => TrayTip(Rte.FileName, "Saved"))
 - **Calls** wait for the editor and return its result. `Rte.Post(...)` queues a call and returns at once. **Tools > Automation API** in the editor lists everything that can be called.
 - **Events** (`TextChanged`, `SelectionChanged`, `ModifiedChanged`, `Saved`, `Opened`, `Closed`, `AsyncError`) are delivered to callbacks registered with `Rte.On`.
 - **Macros:** the **Macros** button on the Tools tab runs the scripts in [`rte_macros`](rte_macros), and **Macro Hotkeys** gives any of them a hotkey. **Record Macro** (Ctrl+Shift+R) records typing and ribbon commands as a new macro script.
-- **Hotkeys in the host script:** `rte_writer17.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
+- **Hotkeys in the host script:** `rte_writer18.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
 
 The example macros include an auto-save, a word goal tracker, an event monitor, document statistics and Title Case for the selection.
 
@@ -95,7 +98,7 @@ Word and OpenDocument files are converted by the first of these that is availabl
 
 1. **Microsoft Word**, run invisibly, and only when Word isn't already open.
 2. **LibreOffice**, run headless with its own profile.
-3. **The built-in Open XML converter** (`.docx` only, no extra software needed).
+3. **The built-in Open XML converter** (`.docx` only, no extra software needed; tables keep their widths, borders, shading and alignment).
 4. **pandoc**.
 
 HTML, Markdown, RTF and plain text need none of them.
@@ -113,7 +116,7 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 1. Install the requirements above.
 2. Clone this repository.
-3. Run `rte_writer17.ahk`. To open a document at start, pass its path: `rte_writer17.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
+3. Run `rte_writer18.ahk`. To open a document at start, pass its path: `rte_writer18.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
 
 Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment variable `RTE_WRITER_SETTINGS` to a file path to keep them elsewhere.
 
@@ -121,12 +124,12 @@ Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment v
 
 | File | Purpose |
 |---|---|
-| `rte_writer17.ahk` | Starts the editor and holds its in-process hotkeys |
-| `rte_writer17.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
+| `rte_writer18.ahk` | Starts the editor and holds its in-process hotkeys |
+| `rte_writer18.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
 | `rte_markdown6.cs` | Markdown reading and writing |
 | `rte_linebreaks.cs` | Line breaks (Shift+Enter) in HTML |
 | `rte_htmllists2.cs` | HTML list numbering (start numbers, restarts, styles) |
-| `rte_tables.cs` | Tables |
+| `rte_tables2.cs` | Tables and their properties (widths, borders, shading ...) |
 | `rte_legal.cs` | Legal numbering |
 | `rte_pagebreaks.cs` | Page breaks |
 | `rte_headerfooter.cs` | Headers and footers |
@@ -138,6 +141,13 @@ Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment v
 | `rte_macros\` | Example macros |
 | `examples\Showcase.rtf` | The showcase document in the picture above |
 | `Csharp-in-AHK.ahk` | A copy of [Csharp-in-AHK](https://github.com/burque505/Csharp-in-AHK), matching its commit `85aea2e` |
+
+## Known limitations
+
+- **Table borders are single lines.** Double, dotted and other border styles from Word documents show and are saved as single lines of the same width and color; RichEdit draws only single lines.
+- **Merged cells can't be made.** Tables from Word with merged cells open, but RTE Writer can't merge or split cells.
+- **Markdown tables have no formatting.** Column widths, borders and shading are kept in RTF, Word, OpenDocument and HTML files, not in Markdown (see [Markdown and HTML views](#markdown-and-html-views)).
+- **Markdown table rows are single lines,** so tables whose cells hold paragraphs are best edited in the formatted view.
 
 ## License
 

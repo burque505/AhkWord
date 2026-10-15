@@ -2,14 +2,22 @@
 #:package WindowsRibbon@2.16.2
 #load "rte_markdown6.cs"
 #load "rte_htmllists2.cs"
-#load "rte_tables.cs"
+#load "rte_tables2.cs"
 #load "rte_office6.cs"
 #load "rte_legal.cs"
 #load "rte_pagebreaks.cs"
 #load "rte_headerfooter.cs"
 #load "rte_linebreaks.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer17.ahk. Iteration 17 adds to iteration 16:
+// Run it with rte_writer18.ahk. Iteration 18 adds to iteration 17:
+//   - Table properties (rte_tables2.cs): Table Tools > Properties (and the table's right-click menu) sets the column
+//     widths, the table's alignment on the page, cell padding, row height, the borders (none, all, outside, inside ...,
+//     line width and color), shading and vertical alignment of the selected cells or the whole table; Borders and
+//     Shading are on the ribbon too. They are kept in RTF (and so Word and OpenDocument files) and in HTML (as CSS, also
+//     read back); Markdown tables have no room for them. Word's cell backgrounds now show (RichEdit ignored them).
+//     Scripts: Rte.SetColumnWidths("2in, 3in"), SetCellBorders, SetCellShading, SetTableAlignment, SetRowHeight,
+//     SetCellPadding, SetCellVerticalAlignment.
+// Iteration 17 added to iteration 16:
 //   - Markdown and HTML views (View > Document View): a plain-text source editor (SourceBox) beside or instead of the
 //     formatted text, in a SplitContainer inside the window, so the ribbon, shortcuts and automation keep working.
 //     The formatted document stays the one the commands work on: entering a source view fills it from the document
@@ -164,23 +172,24 @@ enum RibbonCommand : uint
 	GroupStyles = 114, GroupEditing = 115, GroupPages = 116, GroupTables = 117, GroupIllustrations = 118, GroupLinks = 119,
 	GroupInsertText = 120, GroupPage = 121, GroupProofing = 122, GroupDocument = 123, GroupShow = 124, GroupZoom = 125,
 	GroupDocumentView = 126, GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupRowsColumns = 130, GroupDelete = 131,
-	AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144, PrintMenu = 145,
-	New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204, PrintPreview = 205,
-	PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210, Undo = 220,
-	Redo = 221, Paste = 222, Cut = 223, Copy = 224, SelectAll = 225, Find = 226,
-	Replace = 227, Font = 230, FontDialog = 231, ChangeCase = 232, CaseUpper = 233, CaseLower = 234,
-	CaseTitle = 235, UnderlineStyle = 236, UnderlineSingle = 237, UnderlineDouble = 238, UnderlineDotted = 239, UnderlineDashed = 240,
-	UnderlineWavy = 241, Bullets = 250, Numbering = 251, Legal = 252, Outdent = 253, Indent = 254,
-	AlignLeft = 255, AlignCenter = 256, AlignRight = 257, Justify = 258, ListOptions = 259, ListStyle = 260,
-	ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264, ListLowerRoman = 265, ListUpperRoman = 266,
-	ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272,
-	OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, PageBreak = 280, Table = 281, Picture = 282,
-	Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296,
-	SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, ShowBands = 303, Outline = 304,
-	ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332,
-	SideBySide = 333, SourceWordWrap = 334, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313,
-	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
-	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326,
+	GroupTableFormat = 132, AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144,
+	PrintMenu = 145, New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204,
+	PrintPreview = 205, PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210,
+	Undo = 220, Redo = 221, Paste = 222, Cut = 223, Copy = 224, SelectAll = 225,
+	Find = 226, Replace = 227, Font = 230, FontDialog = 231, ChangeCase = 232, CaseUpper = 233,
+	CaseLower = 234, CaseTitle = 235, UnderlineStyle = 236, UnderlineSingle = 237, UnderlineDouble = 238, UnderlineDotted = 239,
+	UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250, Numbering = 251, Legal = 252, Outdent = 253,
+	Indent = 254, AlignLeft = 255, AlignCenter = 256, AlignRight = 257, Justify = 258, ListOptions = 259,
+	ListStyle = 260, ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264, ListLowerRoman = 265,
+	ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270, ConvertTyped = 271,
+	IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, PageBreak = 280, Table = 281,
+	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295,
+	AddToDictionary = 296, SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, ShowBands = 303,
+	Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331,
+	ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, Macros = 310, RecordMacro = 311, MacroHotkeys = 312,
+	RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321,
+	InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340,
+	TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -291,6 +300,7 @@ class WriterForm : Form
 	RibbonDropDownGallery macrosGallery = null!;
 	RibbonRecentItems recentItems = null!;
 	RibbonTabGroup tableTools = null!;
+	RibbonDropDownColorPicker shadingPicker = null!;
 	RibbonButton undoButton = null!, redoButton = null!, cutButton = null!, copyButton = null!;
 	List<string> galleryMacros = new();
 
@@ -659,6 +669,15 @@ class WriterForm : Form
 		Button(RibbonCommand.DeleteRow, () => api.DeleteRow(), Keys.None, M("DeleteRow"));    // Ctrl+Shift+Delete: ProcessCmdKey
 		Button(RibbonCommand.DeleteColumn, () => api.DeleteColumn(), Keys.None, M("DeleteColumn"));
 		Button(RibbonCommand.DeleteTable, () => api.DeleteTable(), Keys.None, M("DeleteTable"));
+		Button(RibbonCommand.TableProperties, TablePropertiesCommand);
+		foreach (var (id, preset) in new[] { (RibbonCommand.BordersAll, "all"), (RibbonCommand.BordersOutside, "outside"), (RibbonCommand.BordersInside, "inside"), (RibbonCommand.BordersNone, "none") })
+			Button(id, () => api.SetCellBorders(preset), Keys.None, M("SetCellBorders", preset));
+		shadingPicker = new RibbonDropDownColorPicker(ribbon, (uint)RibbonCommand.TableShading);
+		shadingPicker.ExecuteEvent += (s, e) => {
+			var picked = ColorPickerEventArgs.Create(shadingPicker, e);
+			string color = picked.ColorType == SwatchColorType.RGB && picked.RGBColor is Color c ? $"#{c.R:X2}{c.G:X2}{c.B:X2}" : "none";
+			BeginInvoke(() => Command(RibbonCommand.TableShading, () => api.SetCellShading(color), M("SetCellShading", color)));
+		};
 	}
 
 	// Ribbon commands run after the ribbon's callback has returned (BeginInvoke): dialogs opened from inside it would run
@@ -712,7 +731,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 17: Markdown and HTML views)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 18: table properties)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1245,6 +1264,16 @@ class WriterForm : Form
 		Run(() => api.InsertTable(dlg.Rows, dlg.Columns, dlg.Header), M("InsertTable", dlg.Rows, dlg.Columns, dlg.Header));
 	}
 
+	// Table Tools > Properties: the dialog, its changes made in one step (one undo step), and recorded as the calls they are.
+	void TablePropertiesCommand() {
+		var (rows, selected) = api.TableFormats();
+		using var dlg = new TablePropertiesDialog(rows, selected.Count, api.PageTextWidth());
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		var changes = dlg.Changes;
+		api.ApplyTableChanges(changes);
+		foreach (string call in changes.Calls()) Record(call);
+	}
+
 	// ---------------------------------------------------------------- Iteration 5: spelling
 
 	// The right-click menu: spelling suggestions on a misspelled word, and the table commands in a table (which then act
@@ -1298,6 +1327,8 @@ class WriterForm : Form
 		else Add("&Delete row", () => api.DeleteRow(), M("DeleteRow"), "Ctrl+Shift+Del");
 		Add("Delete colu&mn", () => api.DeleteColumn(), M("DeleteColumn"));
 		Add("Delete &table", () => api.DeleteTable(), M("DeleteTable"));
+		menu.Items.Add(new ToolStripSeparator());
+		menu.Items.Add(new ToolStripMenuItem("Table &properties...", null, (s, e) => Run(TablePropertiesCommand)));
 		menu.Closed += (s, e) => BeginInvoke(menu.Dispose);
 		menu.Show(screenPoint);
 		return true;
@@ -2602,6 +2633,8 @@ public class EditorApi
 				LegalLists.ConvertTypedLists(ed, 0, ed.TextDocument.Range2(0, 0).StoryLength, requireTab: true,
 					converter == OfficeConverters.OpenXml || kind == "html" ? OfficeConverters.TypedIndents : null);    // numbers a converter left as text
 				LastConverter = converter;
+				// tables' borders, shading, padding ... from the file itself, where the converter went through HTML
+				if (extension == ".docx" && converter is OfficeConverters.OpenXml or OfficeConverters.Pandoc) RtfTables.TablesFromDocx(ed, full);
 				break;
 			}
 			default: {
@@ -2745,6 +2778,7 @@ public class EditorApi
 			value = OfficeConverters.SimplePictures(value);    // (Word's picture wrappers, which RichEdit can drop)
 			value = PageBreaks.FromPageBreakBefore(value);       // (LibreOffice's and Word's "page break before" paragraphs)
 			value = HeaderFooter.StripFromRtf(value);             // (the header and footer are the document's Bands)
+			value = RtfTables.WordShading(value);                 // (Word's cell backgrounds, which RichEdit ignores)
 			((RichTextBox)ed).Rtf = OfficeConverters.WithoutAltTexts(value);    // (RichEdit would put their accents into the text)
 			PageBreaks.Normalize(ed);    // (Word's \page can be in the middle of a paragraph)
 			RestorePictures(value);       // (with the alt texts, from the RTF as it was)
@@ -2836,6 +2870,9 @@ public class EditorApi
 			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase)) HeaderFooter.AddToDocx(full, form.Bands, form.PageLayout(), Path.GetFileName(full), full, parts: true);
 			else HeaderFooter.AddToOdt(full, form.Bands, Path.GetFileName(full), full);
 			OfficeConverters.AltTextsToFile(full, AltTexts());    // (pictures' alt texts that the converter left out)
+			// tables' borders, shading, padding ... in Word's own terms, where the converter went through HTML
+			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) && LastConverter is OfficeConverters.OpenXml or OfficeConverters.Pandoc)
+				RtfTables.TablesToDocx(full, RtfTables.Find(ed.TextDocument).Select(t => RtfTables.Formats(ed, t)).ToList());
 		} catch (Exception ex) {
 			form.SetStatus("⚠ The header and footer could not be added to " + Path.GetFileName(full) + ": " + ex.Message);
 		}
@@ -2979,6 +3016,124 @@ public class EditorApi
 
 	/// The number of tables in the document.
 	public int TableCount => RtfTables.Find(ed.TextDocument).Count;
+
+	// ---- Iteration 18: table properties (rte_tables2.cs)
+
+	RtfTables.Table CurrentTable() => RtfTables.At(ed, ed.SelectionStart)?.Table ?? throw new InvalidOperationException("Put the caret in a table first.");
+
+	// Changes the formats of the caret's table's rows, in one undo step.
+	void FormatTable(Action<RtfTables.Table, List<RtfTables.RowFormat>> change) {
+		var table = CurrentTable();
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try {
+			RtfTables.Format(ed, table.Start, formats => change(table, formats));
+		} finally {
+			doc.EndEditCollection();
+		}
+		Redraw();
+	}
+
+	/// The formats of the caret's table's rows, and the cells (row, column) the selection is in.
+	internal (List<RtfTables.RowFormat> Rows, List<(int Row, int Cell)> Selected) TableFormats() {
+		var table = CurrentTable();
+		return (RtfTables.Formats(ed, table), RtfTables.SelectedCells(ed, table));
+	}
+
+	/// The width the text has on the page, in twips (new tables are as wide).
+	internal int PageTextWidth() => TableWidth();
+
+	// The cells a change is for: those the selection is in, or all of the table.
+	List<(int Row, int Cell)> CellsFor(RtfTables.Table table, List<RtfTables.RowFormat> rows, bool wholeTable) =>
+		wholeTable ? rows.SelectMany((row, r) => row.Cells.Select((cell, c) => (r, c))).ToList() : RtfTables.SelectedCells(ed, table);
+
+	/// Puts the caret's table at the "left", "center" or "right" of the page.
+	public void SetTableAlignment(string alignment) {
+		int value = alignment.Trim().ToLowerInvariant() switch { "left" => 0, "center" or "centre" => 1, "right" => 2, _ => throw new ArgumentException("The alignment is \"left\", \"center\" or \"right\".") };
+		FormatTable((table, rows) => rows.ForEach(row => row.Alignment = value));
+	}
+
+	/// Sets the space left and right of the text in the cells of the caret's table, in points.
+	public void SetCellPadding(float points) {
+		if (points is < 0 or > 72) throw new ArgumentException("Cell padding is 0 to 72 points.");
+		FormatTable((table, rows) => rows.ForEach(row => row.Padding = (int)Math.Round(points * 20)));
+	}
+
+	/// Sets the height of the rows the selection is in (all rows with wholeTable = 1), in points: 0 is automatic (as high
+	/// as their text), otherwise at least that high, or exactly that high (exact = 1).
+	public void SetRowHeight(float points, bool exact = false, bool wholeTable = false) {
+		if (points is < 0 or > 1440) throw new ArgumentException("A row height is 0 (automatic) to 1440 points.");
+		int height = (int)Math.Round(points * 20) * (exact ? -1 : 1);
+		FormatTable((table, rows) => { foreach (int r in CellsFor(table, rows, wholeTable).Select(c => c.Row).Distinct()) rows[r].Height = height; });
+	}
+
+	/// Sets the widths of the columns of the caret's table, left to right: a list such as "2in, 1.5in, 3cm" (pt, in, cm,
+	/// mm; points without a unit). Rows with another number of cells keep theirs.
+	public void SetColumnWidths(string widths) {
+		var list = widths.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+			.Select(w => RtfTables.CssLength(Regex.IsMatch(w, @"^[\d.]+$") ? w + "pt" : w.Replace(" ", "")) is int t && t >= 144 ? t
+				: throw new ArgumentException($"\"{w}\" is not a column width (at least 0.1in; units pt, in, cm, mm).")).ToList();
+		FormatTable((table, rows) => {
+			foreach (var row in rows)
+				if (row.Cells.Count == list.Count)
+					for (int c = 0; c < list.Count; c++) row.Cells[c].Width = list[c];
+		});
+	}
+
+	/// Sets the borders of the selected cells (the whole table with wholeTable = 1): "all", "outside", "inside", "none",
+	/// "top", "bottom", "left" or "right", a line width in points and a color (a name such as "black", or "#RRGGBB").
+	public void SetCellBorders(string borders = "all", float width = 0.5f, string color = "", bool wholeTable = false) {
+		if (width is <= 0 or > 6) throw new ArgumentException("A border is 0.25 to 6 points wide.");
+		var border = new RtfTables.Border(Math.Max(5, (int)Math.Round(width * 20)), ParseColor(color));
+		FormatTable((table, rows) => RtfTables.SetBorders(rows, CellsFor(table, rows, wholeTable), borders, border));
+	}
+
+	/// Sets the background color of the selected cells (the whole table with wholeTable = 1); "" or "none" removes it.
+	public void SetCellShading(string color = "", bool wholeTable = false) {
+		Color? shading = color.Trim() is "" || color.Trim().Equals("none", StringComparison.OrdinalIgnoreCase) ? null : ParseColor(color);
+		FormatTable((table, rows) => { foreach (var (r, c) in CellsFor(table, rows, wholeTable)) rows[r].Cells[c].Shading = shading; });
+	}
+
+	/// Sets where the text sits in the selected cells (the whole table with wholeTable = 1): "top", "center" or "bottom".
+	public void SetCellVerticalAlignment(string alignment = "top", bool wholeTable = false) {
+		int value = alignment.Trim().ToLowerInvariant() switch { "top" => 0, "center" or "middle" => 1, "bottom" => 2, _ => throw new ArgumentException("The alignment is \"top\", \"center\" or \"bottom\".") };
+		FormatTable((table, rows) => { foreach (var (r, c) in CellsFor(table, rows, wholeTable)) rows[r].Cells[c].VerticalAlign = value; });
+	}
+
+	/// The caret's table's format, one line per row: alignment, height and padding, then each cell's width, borders,
+	/// shading and vertical alignment (lengths in points).
+	public string TableFormat() {
+		var (rows, _) = TableFormats();
+		static string Pt(int twips) => (twips / 20.0).ToString("0.##", CultureInfo.InvariantCulture);
+		static string Col(Color? c) => c is Color k ? $"#{k.R:X2}{k.G:X2}{k.B:X2}" : "auto";
+		return string.Join("\n", rows.Select((row, r) => $"row {r + 1}: align={new[] { "left", "center", "right" }[row.Alignment]} height={(row.Height == 0 ? "auto" : (row.Height < 0 ? "exactly " : "at least ") + Pt(Math.Abs(row.Height)))} padding={Pt(row.Padding)}; "
+			+ string.Join("; ", row.Cells.Select((cell, c) => $"cell {c + 1}: width={Pt(cell.Width)} borders={string.Join(",", cell.Borders.Select(b => b.Width == 0 ? "none" : Pt(b.Width) + " " + Col(b.Color)))} shading={(cell.Shading is Color ? Col(cell.Shading) : "none")} valign={new[] { "top", "center", "bottom" }[cell.VerticalAlign]}"))));
+	}
+
+	// A color from a name ("black", "LightBlue") or #RRGGBB; null for "" or "auto" (the automatic color).
+	static Color? ParseColor(string color) {
+		color = color.Trim();
+		if (color == "" || color.Equals("auto", StringComparison.OrdinalIgnoreCase) || color.Equals("automatic", StringComparison.OrdinalIgnoreCase)) return null;
+		if (RtfTables.CssColor(color) is Color css) return css;
+		var named = Color.FromName(color);
+		if (named.IsKnownColor) return Color.FromArgb(named.R, named.G, named.B);
+		throw new ArgumentException($"\"{color}\" is not a color: use a name such as \"black\" or \"#RRGGBB\".");
+	}
+
+	// The Table Properties dialog's changes, in one step.
+	internal void ApplyTableChanges(TableChanges changes) =>
+		FormatTable((table, rows) => {
+			var cells = CellsFor(table, rows, changes.WholeTable);
+			if (changes.Alignment is int alignment) rows.ForEach(row => row.Alignment = alignment);
+			if (changes.Padding is int padding) rows.ForEach(row => row.Padding = padding);
+			if (changes.Height is int height) foreach (int r in cells.Select(c => c.Row).Distinct()) rows[r].Height = height;
+			if (changes.Widths is { } widths)
+				foreach (var row in rows.Where(row => row.Cells.Count == widths.Count))
+					for (int c = 0; c < widths.Count; c++) row.Cells[c].Width = widths[c];
+			if (changes.Borders is { } borders) RtfTables.SetBorders(rows, cells, borders, changes.Border);
+			if (changes.SetShading) foreach (var (r, c) in cells) rows[r].Cells[c].Shading = changes.Shading;
+			if (changes.VerticalAlign is int valign) foreach (var (r, c) in cells) rows[r].Cells[c].VerticalAlign = valign;
+		});
 
 	// Selects the next (delta 1) or previous (-1) cell, as Tab and Shift+Tab do; Tab in the last cell adds a row, as in Word.
 	internal void NextCell(int delta) {
@@ -5199,6 +5354,193 @@ sealed class ListLevelsDialog : Form
 }
 
 // Table > Insert table: rows, columns and a bold header row.
+// Iteration 18: what the Table Properties dialog changes (null: unchanged). Lengths in twips; Height 0 is automatic,
+// negative exactly that high.
+sealed class TableChanges
+{
+	public int? Alignment, Padding, Height, VerticalAlign;
+	public List<int>? Widths;
+	public string? Borders;
+	public RtfTables.Border Border = new(RtfTables.DefaultBorder, null);
+	public bool SetShading, WholeTable;
+	public Color? Shading;
+
+	static string Pt(int twips) => (twips / 20.0).ToString("0.##", CultureInfo.InvariantCulture);
+	static string Hex(Color? c) => c is Color k ? $"#{k.R:X2}{k.G:X2}{k.B:X2}" : "";
+
+	// The automation calls that make the same changes (for macro recording).
+	public IEnumerable<string> Calls() {
+		if (Widths != null) yield return MacroRecorder.Call("SetColumnWidths", string.Join(", ", Widths.Select(w => Pt(w) + "pt")));
+		if (Alignment is int a) yield return MacroRecorder.Call("SetTableAlignment", new[] { "left", "center", "right" }[a]);
+		if (Padding is int p) yield return MacroRecorder.Call("SetCellPadding", (float)(p / 20.0));
+		if (Height is int h) yield return MacroRecorder.Call("SetRowHeight", (float)(Math.Abs(h) / 20.0), h < 0, WholeTable);
+		if (Borders != null) yield return MacroRecorder.Call("SetCellBorders", Borders, (float)(Border.Width / 20.0), Hex(Border.Color), WholeTable);
+		if (SetShading) yield return MacroRecorder.Call("SetCellShading", Shading is null ? "none" : Hex(Shading), WholeTable);
+		if (VerticalAlign is int v) yield return MacroRecorder.Call("SetCellVerticalAlignment", new[] { "top", "center", "bottom" }[v], WholeTable);
+	}
+}
+
+// Iteration 18: Table Tools > Properties. Column widths, the table's alignment and cell padding are for the whole table;
+// row height, borders, shading and vertical alignment for the selected cells or the whole table.
+sealed class TablePropertiesDialog : Form
+{
+	readonly ComboBox scope = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+	readonly ComboBox alignment = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+	readonly NumericUpDown padding = new() { DecimalPlaces = 1, Increment = 0.5m, Maximum = 72, Width = 70 };
+	readonly ComboBox heightKind = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+	readonly NumericUpDown height = new() { DecimalPlaces = 1, Increment = 1, Maximum = 1440, Width = 70 };
+	readonly List<NumericUpDown> widths = new();
+	readonly Label total = new() { AutoSize = true };
+	readonly ComboBox borders = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+	readonly ComboBox borderWidth = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 80 };
+	readonly Button borderColor = new() { Text = "Color...", AutoSize = true };
+	readonly ComboBox shading = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+	readonly Button shadingColor = new() { Text = "Color...", AutoSize = true };
+	readonly ComboBox verticalAlign = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+	readonly List<RtfTables.RowFormat> rows;
+	readonly int pageWidth;
+	readonly bool metric = RegionInfo.CurrentRegion.IsMetric;
+	Color? lineColor;
+	Color fillColor = Color.FromArgb(0xDD, 0xEB, 0xF7);
+	readonly int initialAlignment, initialPadding, initialHeight;
+	readonly List<int> initialWidths;
+
+	static readonly float[] BorderWidths = { 0.25f, 0.5f, 0.75f, 1f, 1.5f, 2.25f, 3f };
+
+	double Unit => metric ? 1440 / 2.54 : 1440;    // twips per cm or inch
+
+	public TablePropertiesDialog(List<RtfTables.RowFormat> rows, int selectedCells, int pageWidth) {
+		this.rows = rows;
+		this.pageWidth = pageWidth;
+		Text = "Table Properties";
+		FormBorderStyle = FormBorderStyle.FixedDialog;
+		MinimizeBox = MaximizeBox = false;
+		ShowInTaskbar = false;
+		StartPosition = FormStartPosition.CenterParent;
+		AutoSize = true;
+		AutoSizeMode = AutoSizeMode.GrowAndShrink;
+		Font = SystemFonts.MessageBoxFont;
+		Padding = new Padding(10);
+		var first = rows[0];
+		initialAlignment = first.Alignment;
+		initialPadding = first.Padding;
+		initialHeight = first.Height;
+		initialWidths = first.Cells.Select(c => c.Width).ToList();
+
+		var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, Dock = DockStyle.Fill };
+		Controls.Add(layout);
+
+		// the whole table
+		alignment.Items.AddRange(new object[] { "Left", "Center", "Right" });
+		alignment.SelectedIndex = first.Alignment;
+		padding.Value = (decimal)Math.Min(72, first.Padding / 20.0);
+		layout.Controls.Add(Group("Table", Row(Label("&Alignment on the page:"), alignment), Row(Label("Cell &padding (left and right, pt):"), padding)));
+
+		var columns = new FlowLayoutPanel { AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(520), 0), WrapContents = true };
+		for (int c = 0; c < first.Cells.Count; c++) {
+			var box = new NumericUpDown { DecimalPlaces = 2, Increment = metric ? 0.25m : 0.1m, Minimum = metric ? 0.25m : 0.1m, Maximum = 50, Width = 70,
+				Value = (decimal)Math.Clamp(first.Cells[c].Width / Unit, metric ? 0.25 : 0.1, 50) };
+			box.ValueChanged += (s, e) => ShowTotal();
+			widths.Add(box);
+			columns.Controls.Add(Row(Label($"{c + 1}:"), box));
+		}
+		var equal = new Button { Text = "&Equal widths", AutoSize = true };
+		equal.Click += (s, e) => SetWidths(Enumerable.Repeat(widths.Sum(w => (double)w.Value) / widths.Count, widths.Count).ToList());
+		var fit = new Button { Text = "&Fit to page width", AutoSize = true };
+		fit.Click += (s, e) => { double sum = widths.Sum(w => (double)w.Value); SetWidths(widths.Select(w => (double)w.Value * pageWidth / Unit / sum).ToList()); };
+		bool sameCells = rows.All(r => r.Cells.Count == first.Cells.Count);
+		layout.Controls.Add(Group($"Column widths ({(metric ? "cm" : "inches")})" + (sameCells ? "" : ", for the rows with this many cells"),
+			columns, Row(equal, fit, total)));
+		ShowTotal();
+
+		// the selected cells or the whole table
+		scope.Items.AddRange(new object[] { $"The selected cell{(selectedCells == 1 ? "" : "s")} ({selectedCells})", "The whole table" });
+		scope.SelectedIndex = selectedCells >= rows.Sum(r => r.Cells.Count) ? 1 : 0;
+		scope.Width = LogicalToDeviceUnits(200);
+		heightKind.Items.AddRange(new object[] { "Automatic", "At least", "Exactly" });
+		heightKind.SelectedIndex = first.Height == 0 ? 0 : first.Height > 0 ? 1 : 2;
+		height.Value = (decimal)Math.Min(1440, Math.Abs(first.Height) / 20.0);
+		height.Enabled = heightKind.SelectedIndex != 0;
+		heightKind.SelectedIndexChanged += (s, e) => { height.Enabled = heightKind.SelectedIndex != 0; if (height.Enabled && height.Value == 0) height.Value = 18; };
+		borders.Items.AddRange(new object[] { "(no change)", "All", "Outside", "Inside", "None", "Top", "Bottom", "Left", "Right" });
+		borders.SelectedIndex = 0;
+		foreach (float w in BorderWidths) borderWidth.Items.Add(w.ToString("0.##", CultureInfo.CurrentCulture) + " pt");
+		borderWidth.SelectedIndex = 1;
+		borderColor.Click += (s, e) => { if (Pick(lineColor ?? Color.Black) is Color c) { lineColor = c; ShowColors(); if (borders.SelectedIndex == 0) borders.SelectedIndex = 1; } };
+		shading.Items.AddRange(new object[] { "(no change)", "None", "Color" });
+		shading.SelectedIndex = 0;
+		shadingColor.Click += (s, e) => { if (Pick(fillColor) is Color c) { fillColor = c; shading.SelectedIndex = 2; ShowColors(); } };
+		verticalAlign.Items.AddRange(new object[] { "(no change)", "Top", "Center", "Bottom" });
+		verticalAlign.SelectedIndex = 0;
+		ShowColors();
+		layout.Controls.Add(Group("Cells", Row(Label("Apply &to:"), scope), Row(Label("Row &height:"), heightKind, height, Label("pt")),
+			Row(Label("&Borders:"), borders, borderWidth, borderColor), Row(Label("&Shading:"), shading, shadingColor),
+			Row(Label("&Vertical alignment:"), verticalAlign)));
+
+		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
+		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var buttons = Row(ok, cancel);
+		buttons.Anchor = AnchorStyles.Right;
+		layout.Controls.Add(buttons);
+		AcceptButton = ok;
+		CancelButton = cancel;
+	}
+
+	static Label Label(string text) => new() { Text = text, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 3, 3) };
+
+	static FlowLayoutPanel Row(params Control[] controls) {
+		var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+		row.Controls.AddRange(controls);
+		return row;
+	}
+
+	static GroupBox Group(string title, params Control[] rows) {
+		var group = new GroupBox { Text = title, AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(8) };
+		var inner = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, Dock = DockStyle.Fill };
+		foreach (var r in rows) inner.Controls.Add(r);
+		group.Controls.Add(inner);
+		return group;
+	}
+
+	void SetWidths(List<double> values) {
+		for (int i = 0; i < widths.Count; i++) widths[i].Value = (decimal)Math.Clamp(Math.Round(values[i], 2), (double)widths[i].Minimum, (double)widths[i].Maximum);
+	}
+
+	void ShowTotal() => total.Text = $"Total {widths.Sum(w => w.Value):0.##} of {pageWidth / Unit:0.##} {(metric ? "cm" : "in")}";
+
+	void ShowColors() {
+		borderColor.BackColor = lineColor ?? SystemColors.Control;
+		borderColor.ForeColor = lineColor is Color l && l.GetBrightness() < 0.5f ? Color.White : SystemColors.ControlText;
+		shadingColor.BackColor = fillColor;
+	}
+
+	Color? Pick(Color initial) {
+		using var dlg = new ColorDialog { Color = initial, FullOpen = true };
+		return dlg.ShowDialog(this) == DialogResult.OK ? dlg.Color : null;
+	}
+
+	/// What the dialog changes (only what differs from the table as it was, or was chosen).
+	public TableChanges Changes {
+		get {
+			var changes = new TableChanges { WholeTable = scope.SelectedIndex == 1 };
+			if (alignment.SelectedIndex != initialAlignment) changes.Alignment = alignment.SelectedIndex;
+			int pad = (int)Math.Round(padding.Value * 20);
+			if (pad != initialPadding) changes.Padding = pad;
+			int h = heightKind.SelectedIndex == 0 ? 0 : (int)Math.Round(height.Value * 20) * (heightKind.SelectedIndex == 2 ? -1 : 1);
+			if (h != initialHeight) changes.Height = h;
+			var w = widths.Select(box => (int)Math.Round((double)box.Value * Unit)).ToList();
+			if (w.Where((value, i) => Math.Abs(value - initialWidths[i]) > 10).Any()) changes.Widths = w;
+			if (borders.SelectedIndex > 0) {
+				changes.Borders = borders.SelectedItem!.ToString()!.ToLowerInvariant();
+				changes.Border = new RtfTables.Border((int)Math.Round(BorderWidths[borderWidth.SelectedIndex] * 20), lineColor);
+			}
+			if (shading.SelectedIndex > 0) { changes.SetShading = true; changes.Shading = shading.SelectedIndex == 2 ? fillColor : null; }
+			if (verticalAlign.SelectedIndex > 0) changes.VerticalAlign = verticalAlign.SelectedIndex - 1;
+			return changes;
+		}
+	}
+}
+
 sealed class InsertTableDialog : Form
 {
 	readonly NumericUpDown rows, columns;

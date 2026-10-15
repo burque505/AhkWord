@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer17.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer17.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer18.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer18.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -317,6 +317,20 @@
         <Image Source="icons/deleterow_20.bmp" MinDPI="120" />
         <Image Source="icons/deleterow_24.bmp" MinDPI="144" />
         <Image Source="icons/deleterow_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupTableFormat" Id="132" LabelTitle="Format">
+      <Command.LargeImages>
+        <Image Source="icons/tablesettings_32.bmp" MinDPI="96" />
+        <Image Source="icons/tablesettings_40.bmp" MinDPI="120" />
+        <Image Source="icons/tablesettings_48.bmp" MinDPI="144" />
+        <Image Source="icons/tablesettings_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/tablesettings_16.bmp" MinDPI="96" />
+        <Image Source="icons/tablesettings_20.bmp" MinDPI="120" />
+        <Image Source="icons/tablesettings_24.bmp" MinDPI="144" />
+        <Image Source="icons/tablesettings_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
     <Command Name="cmdAppMenu" Id="140" LabelTitle="File" Keytip="F" />
@@ -1290,6 +1304,104 @@
         <Image Source="icons/deletetable_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdTableProperties" Id="340" LabelTitle="Properties" Keytip="PR" TooltipTitle="Table properties" TooltipDescription="Column widths, borders, shading, row height, alignment and cell padding.">
+      <Command.LargeImages>
+        <Image Source="icons/tablesettings_32.bmp" MinDPI="96" />
+        <Image Source="icons/tablesettings_40.bmp" MinDPI="120" />
+        <Image Source="icons/tablesettings_48.bmp" MinDPI="144" />
+        <Image Source="icons/tablesettings_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/tablesettings_16.bmp" MinDPI="96" />
+        <Image Source="icons/tablesettings_20.bmp" MinDPI="120" />
+        <Image Source="icons/tablesettings_24.bmp" MinDPI="144" />
+        <Image Source="icons/tablesettings_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdTableBorders" Id="341" LabelTitle="Borders" Keytip="BO" TooltipTitle="Borders" TooltipDescription="Lines around and between the selected cells (or the whole table, if it is selected).">
+      <Command.LargeImages>
+        <Image Source="icons/borderall_32.bmp" MinDPI="96" />
+        <Image Source="icons/borderall_40.bmp" MinDPI="120" />
+        <Image Source="icons/borderall_48.bmp" MinDPI="144" />
+        <Image Source="icons/borderall_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/borderall_16.bmp" MinDPI="96" />
+        <Image Source="icons/borderall_20.bmp" MinDPI="120" />
+        <Image Source="icons/borderall_24.bmp" MinDPI="144" />
+        <Image Source="icons/borderall_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdBordersAll" Id="342" LabelTitle="All Borders" Keytip="A">
+      <Command.LargeImages>
+        <Image Source="icons/borderall_32.bmp" MinDPI="96" />
+        <Image Source="icons/borderall_40.bmp" MinDPI="120" />
+        <Image Source="icons/borderall_48.bmp" MinDPI="144" />
+        <Image Source="icons/borderall_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/borderall_16.bmp" MinDPI="96" />
+        <Image Source="icons/borderall_20.bmp" MinDPI="120" />
+        <Image Source="icons/borderall_24.bmp" MinDPI="144" />
+        <Image Source="icons/borderall_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdBordersOutside" Id="343" LabelTitle="Outside Borders" Keytip="O">
+      <Command.LargeImages>
+        <Image Source="icons/borderoutside_32.bmp" MinDPI="96" />
+        <Image Source="icons/borderoutside_40.bmp" MinDPI="120" />
+        <Image Source="icons/borderoutside_48.bmp" MinDPI="144" />
+        <Image Source="icons/borderoutside_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/borderoutside_16.bmp" MinDPI="96" />
+        <Image Source="icons/borderoutside_20.bmp" MinDPI="120" />
+        <Image Source="icons/borderoutside_24.bmp" MinDPI="144" />
+        <Image Source="icons/borderoutside_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdBordersInside" Id="344" LabelTitle="Inside Borders" Keytip="I">
+      <Command.LargeImages>
+        <Image Source="icons/borderinside_32.bmp" MinDPI="96" />
+        <Image Source="icons/borderinside_40.bmp" MinDPI="120" />
+        <Image Source="icons/borderinside_48.bmp" MinDPI="144" />
+        <Image Source="icons/borderinside_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/borderinside_16.bmp" MinDPI="96" />
+        <Image Source="icons/borderinside_20.bmp" MinDPI="120" />
+        <Image Source="icons/borderinside_24.bmp" MinDPI="144" />
+        <Image Source="icons/borderinside_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdBordersNone" Id="345" LabelTitle="No Border" Keytip="N">
+      <Command.LargeImages>
+        <Image Source="icons/bordernone_32.bmp" MinDPI="96" />
+        <Image Source="icons/bordernone_40.bmp" MinDPI="120" />
+        <Image Source="icons/bordernone_48.bmp" MinDPI="144" />
+        <Image Source="icons/bordernone_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/bordernone_16.bmp" MinDPI="96" />
+        <Image Source="icons/bordernone_20.bmp" MinDPI="120" />
+        <Image Source="icons/bordernone_24.bmp" MinDPI="144" />
+        <Image Source="icons/bordernone_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdTableShading" Id="346" LabelTitle="Shading" Keytip="H" TooltipTitle="Shading" TooltipDescription="The background color of the selected cells.">
+      <Command.LargeImages>
+        <Image Source="icons/paintbucket_32.bmp" MinDPI="96" />
+        <Image Source="icons/paintbucket_40.bmp" MinDPI="120" />
+        <Image Source="icons/paintbucket_48.bmp" MinDPI="144" />
+        <Image Source="icons/paintbucket_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/paintbucket_16.bmp" MinDPI="96" />
+        <Image Source="icons/paintbucket_20.bmp" MinDPI="120" />
+        <Image Source="icons/paintbucket_24.bmp" MinDPI="144" />
+        <Image Source="icons/paintbucket_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
   </Application.Commands>
   <Application.Views>
     <Ribbon>
@@ -1352,6 +1464,18 @@
               <Button CommandName="cmdInsertBelow" />
               <Button CommandName="cmdInsertLeft" />
               <Button CommandName="cmdInsertRight" />
+            </Group>
+            <Group CommandName="cmdGroupTableFormat">
+              <Button CommandName="cmdTableProperties" />
+              <DropDownButton CommandName="cmdTableBorders">
+                <MenuGroup>
+                  <Button CommandName="cmdBordersAll" />
+                  <Button CommandName="cmdBordersOutside" />
+                  <Button CommandName="cmdBordersInside" />
+                  <Button CommandName="cmdBordersNone" />
+                </MenuGroup>
+              </DropDownButton>
+              <DropDownColorPicker CommandName="cmdTableShading" ColorTemplate="StandardColors" IsNoColorButtonVisible="true" IsAutomaticColorButtonVisible="false" />
             </Group>
             <Group CommandName="cmdGroupDelete" SizeDefinition="ThreeButtons">
               <Button CommandName="cmdDeleteRow" />
