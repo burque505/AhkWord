@@ -8,9 +8,16 @@
 #load "rte_pagebreaks.cs"
 #load "rte_headerfooter.cs"
 #load "rte_linebreaks.cs"
-#load "rte_linenumbers.cs"
+#load "rte_linenumbers2.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer19.ahk. Iteration 19 adds to iteration 18:
+// Run it with rte_writer20.ahk. Iteration 20 adds to iteration 19:
+//   - Line numbers are printed (Print, Print Preview, Export as PDF), numbering the printed lines: rte_linenumbers2.cs
+//     lays the document out as the printer does (PrintedLineNumbers: a hidden RichEdit with the printer as its target
+//     device gives the lines, EM_FORMATRANGE measuring gives each line's top) and DocumentPrinter draws them left of the
+//     text. Scripts: Rte.PrintedLineAt(position) gives "page:line" as printed, for citing a page and line.
+//   - Export as PDF leaves the default printer alone: while Windows manages the default printer, printing to "Microsoft
+//     Print to PDF" made it the default (DefaultPrinterGuard).
+// Iteration 19 added to iteration 18:
 //   - Line numbers (rte_linenumbers.cs), as in Word: Layout > Line Numbers numbers the lines in the left margin,
 //     continuously or restarting on each page (where the printer's layout starts them), with a first number, a count-by
 //     (every 5th ...) and a distance from the text (Line Numbering Options). Lines in tables and page breaks don't count,
@@ -376,6 +383,7 @@ class WriterForm : Form
 	public WriterForm(string ahkPath, string appDir, string? startFile) {
 		this.ahkPath = ahkPath;
 		this.appDir = appDir;
+		DefaultPrinterGuard.Restore(Settings);    // (if a PDF export was interrupted)
 		Bands = DefaultBands();
 		Text = AppName;
 		StartPosition = FormStartPosition.CenterScreen;
@@ -757,7 +765,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 19: line numbers)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 20: printed line numbers)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1090,7 +1098,7 @@ class WriterForm : Form
 
 	// ---------------------------------------------------------------- Iteration 3: printing and PDF
 
-	internal DocumentPrinter CreatePrinter(string? printerName = null) => new(Editor, DocumentName, FileName ?? "", Settings, Bands, printerName);
+	internal DocumentPrinter CreatePrinter(string? printerName = null) => new(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName);
 
 	/// The document's header and footer.
 	internal PageBands Bands = new();
@@ -3011,6 +3019,15 @@ public class EditorApi
 	/// 0 if the line has none (line numbers off, or a line in a table, a page break or a suppressed paragraph).
 	public int LineNumberAt(int position = -1) => form.LineGutter.NumberOf(form.LineGutter.LineOf(position < 0 ? ed.SelectionStart : position));
 
+	/// Where the character at position (-1: the caret) is printed, as "page:line", e.g. "3:12": its page, and its line's
+	/// printed number (0 if the line has none, or line numbers are off). Laid out for the printer, as Print does (the
+	/// editor's own lines can wrap elsewhere).
+	public string PrintedLineAt(int position = -1) {
+		using var printer = form.CreatePrinter();
+		var (page, line) = printer.PrintedLineAt(position < 0 ? ed.SelectionStart : position);
+		return $"{page}:{line}";
+	}
+
 	// ---- Tables
 
 	/// Inserts a table at the caret (headerRow = 1 makes the first row bold) and puts the caret in its first cell.
@@ -3801,6 +3818,7 @@ public class EditorApi
 			throw new InvalidOperationException($"The \"{pdfPrinter}\" printer is not installed (Windows Features: Microsoft Print to PDF).");
 		string full = Path.GetFullPath(path);
 		if (File.Exists(full)) File.Delete(full);
+		using var guard = new DefaultPrinterGuard(form.Settings);    // (the PDF printer doesn't become the default)
 		using (var printer = form.CreatePrinter(pdfPrinter)) {
 			var document = printer.Document;
 			document.PrinterSettings.PrintToFile = true;
@@ -4611,6 +4629,7 @@ public sealed class Settings
 	public string LegalFormat { get; set; } = "Top";    // legal numbering: Top (1. 1.1), All (1. 1.1.) or None (1 1.1)
 	public Dictionary<string, string> MacroHotkeys { get; set; } = new(StringComparer.OrdinalIgnoreCase);    // macro file name -> keys, e.g. "Ctrl+Alt+1"
 	public int OutlineWidth { get; set; } = 220;    // at 96 dpi
+	public int? PrinterModeToRestore { get; set; }    // Windows' LegacyDefaultPrinterMode while a PDF export changed it (-1: none)
 	public string[] Footer { get; set; } = DefaultFooter;
 	public static string[] DefaultHeader => new[] { "{title}", "", "{date}" };
 	public static string[] DefaultFooter => new[] { "", "Page {page} of {pages}", "" };
@@ -4638,6 +4657,52 @@ public sealed class Settings
 	}
 }
 
+// Keeps the default printer as it is while RTE Writer prints to a printer the user didn't choose (PDF export). While
+// Windows manages the default printer ("Let Windows manage my default printer", on by default), printing makes the
+// printer used the default, also in Windows' record for the network the computer is on; and Windows applies it again
+// when the process ends, so putting the default back afterwards doesn't last. Instead, Windows is told that the user
+// manages the default (LegacyDefaultPrinterMode = 1) for the print job, and its own setting is put back as soon as the
+// job is done (checked: the default and Windows' record stay as they were, also after the process ends). The setting to
+// put back is kept in the settings file meanwhile, and put back at the next start if RTE Writer ended in between.
+sealed class DefaultPrinterGuard : IDisposable
+{
+	const string Key = @"Software\Microsoft\Windows NT\CurrentVersion\Windows", Value = "LegacyDefaultPrinterMode";
+	readonly Settings settings;
+	readonly bool active;
+
+	public DefaultPrinterGuard(Settings settings) {
+		this.settings = settings;
+		try {
+			using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(Key, true);
+			if (key == null) return;
+			object? mode = key.GetValue(Value);
+			if (mode is int user && user == 1) return;    // the user manages the default: printing doesn't change it
+			settings.PrinterModeToRestore = mode is int m ? m : -1;
+			settings.Save();
+			key.SetValue(Value, 1, Microsoft.Win32.RegistryValueKind.DWord);
+			active = true;
+		} catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
+	}
+
+	public void Dispose() {
+		if (active) Restore(settings);
+	}
+
+	/// Puts back Windows' setting as a guard found it (after its job, or at the next start if RTE Writer ended meanwhile).
+	public static void Restore(Settings settings) {
+		if (settings.PrinterModeToRestore is not int mode) return;
+		try {
+			using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(Key, true);
+			if (key != null) {
+				if (mode < 0) key.DeleteValue(Value, false);
+				else key.SetValue(Value, mode, Microsoft.Win32.RegistryValueKind.DWord);
+			}
+		} catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return; }
+		settings.PrinterModeToRestore = null;
+		settings.Save();
+	}
+}
+
 // Prints the editor's content: RichEdit lays out each page itself (EM_FORMATRANGE), and a footer shows the page number.
 sealed class DocumentPrinter : IDisposable
 {
@@ -4646,6 +4711,8 @@ sealed class DocumentPrinter : IDisposable
 	readonly string title, path;
 	readonly Settings settings;
 	readonly PageBands bands;
+	readonly LineNumbering numbering;
+	List<List<PrintedLineNumbers.Mark>>? numberMarks;    // each page's line numbers (worked out with the page count)
 	int nextChar, page, pageCount;
 
 	const int EM_FORMATRANGE = 0x0400 + 57;
@@ -4657,7 +4724,8 @@ sealed class DocumentPrinter : IDisposable
 	[DllImport("user32")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref FORMATRANGE lParam);
 	[DllImport("user32")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
-	public DocumentPrinter(RichEditBox editor, string title, string path, Settings settings, PageBands bands, string? printerName) {
+	public DocumentPrinter(RichEditBox editor, string title, string path, Settings settings, PageBands bands, LineNumbering numbering, string? printerName) {
+		this.numbering = numbering.Copy();
 		this.editor = editor;
 		this.bands = bands;
 		this.title = title;
@@ -4667,7 +4735,7 @@ sealed class DocumentPrinter : IDisposable
 		if (!string.IsNullOrEmpty(printerName)) Document.PrinterSettings.PrinterName = printerName;    // before the page settings
 		Document.DefaultPageSettings.Landscape = settings.Landscape;
 		if (settings.Margins is { Length: 4 } m) Document.DefaultPageSettings.Margins = new Margins(m[0], m[1], m[2], m[3]);
-		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; };
+		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; };
 		Document.PrintPage += PrintPage;
 		Document.EndPrint += (s, e) => SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // frees RichEdit's cache
 	}
@@ -4686,7 +4754,11 @@ sealed class DocumentPrinter : IDisposable
 				rc = Twips(margins, hardX, hardY), rcPage = Twips(e.PageBounds, hardX, hardY),
 				chrg = new CHARRANGE { cpMin = nextChar, cpMax = -1 }
 			};
-			if (pageCount == 0) pageCount = CountPages(range, end);    // for {pages}
+			if (pageCount == 0) {
+				var starts = new List<int>();
+				pageCount = CountPages(range, end, starts);    // for {pages}
+				numberMarks = Marks(starts, range, e.PageSettings);
+			}
 			range.chrg.cpMin = nextChar;
 			if (Document.PrintController?.IsPreview == true) nextChar = PreviewPage(range, e.PageBounds, out preview);
 			else nextChar = (int)SendMessage(editor.Handle, EM_FORMATRANGE, (IntPtr)1, ref range);
@@ -4701,7 +4773,9 @@ sealed class DocumentPrinter : IDisposable
 			}
 			preview = null;
 		}
-		// The header sits just above the text area and the footer just below it, in the margins.
+		// The line numbers left of the text; the header just above the text area and the footer just below it, in the margins.
+		if (numberMarks != null && page <= numberMarks.Count)
+			PrintedLineNumbers.Draw(g, numberMarks[page - 1], numbering, editor.Font, margins.Left - hardX);
 		if (bands.ShowHeader)
 			DrawBand(g, bands.Header, new RectangleF(margins.Left - hardX, Math.Max(5, margins.Top - BandGap - BandHeight) - hardY, margins.Width, BandHeight));
 		if (bands.ShowFooter)
@@ -4745,6 +4819,24 @@ sealed class DocumentPrinter : IDisposable
 
 	/// Where each page the document prints on starts (character positions, the first 0), laid out for the printer.
 	public List<int> PageStarts() {
+		var starts = new List<int>();
+		Measuring(range => CountPages(range, editor.TextDocument.Range2(0, 0).StoryLength - 1, starts));
+		return starts;
+	}
+
+	/// Where a character is printed: its page (from 1) and its line's printed number (0: none, or line numbers are off).
+	public (int Page, int Line) PrintedLineAt(int position) {
+		var starts = PageStarts();
+		int page = Math.Max(0, starts.FindLastIndex(start => start <= position));
+		if (!numbering.On) return (page + 1, 0);
+		List<List<PrintedLineNumbers.Mark>>? marks = null;
+		Measuring(range => marks = Marks(starts, range, Document.DefaultPageSettings, everyLine: true));
+		var mark = marks?[page].FirstOrDefault(m => position >= m.Start && position < m.End);
+		return (page + 1, mark?.Number ?? 0);
+	}
+
+	// Lays the pages out (without printing) with the printer's information context and the page settings' text area.
+	void Measuring(Action<FORMATRANGE> measure) {
 		var settings = Document.DefaultPageSettings;
 		using var g = Document.PrinterSettings.CreateMeasurementGraphics(settings);
 		float hardX = settings.HardMarginX, hardY = settings.HardMarginY;
@@ -4753,12 +4845,23 @@ sealed class DocumentPrinter : IDisposable
 			pageBounds.Width - settings.Margins.Left - settings.Margins.Right, pageBounds.Height - settings.Margins.Top - settings.Margins.Bottom);
 		IntPtr hdc = g.GetHdc();
 		try {
-			var range = new FORMATRANGE { hdc = hdc, hdcTarget = hdc, rc = Twips(margins, hardX, hardY), rcPage = Twips(pageBounds, hardX, hardY), chrg = new CHARRANGE { cpMax = -1 } };
-			var starts = new List<int>();
-			CountPages(range, editor.TextDocument.Range2(0, 0).StoryLength - 1, starts);
-			return starts;
+			measure(new FORMATRANGE { hdc = hdc, hdcTarget = hdc, rc = Twips(margins, hardX, hardY), rcPage = Twips(pageBounds, hardX, hardY), chrg = new CHARRANGE { cpMax = -1 } });
 		} finally {
 			g.ReleaseHdc(hdc);
+		}
+	}
+
+	// Each page's line numbers (null: off), for the text area and page of range, with the printer's information context
+	// (it outlives the layout; a page's own device context may be a preview's metafile).
+	List<List<PrintedLineNumbers.Mark>>? Marks(List<int> starts, FORMATRANGE range, PageSettings settings, bool everyLine = false) {
+		if (!numbering.On) return null;
+		using var g = Document.PrinterSettings.CreateMeasurementGraphics(settings);
+		IntPtr ic = g.GetHdc();
+		try {
+			static Rectangle Rect(RECT r) => Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
+			return PrintedLineNumbers.Compute(editor, numbering, ic, Rect(range.rc), Rect(range.rcPage), starts, everyLine);
+		} finally {
+			g.ReleaseHdc(ic);
 		}
 	}
 

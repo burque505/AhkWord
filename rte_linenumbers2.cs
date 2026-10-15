@@ -1,4 +1,5 @@
-// Line numbers for RTE Writer (rte_writer19.cs, through #load; uses the Open XML SDK packages that rte_office6.cs lists).
+// Line numbers for RTE Writer (rte_writer20.cs, through #load; uses the Open XML SDK packages that rte_office6.cs lists).
+// Iteration 20: they are printed too (PrintedLineNumbers), in Print, Print Preview and PDF export.
 // A document's line numbering is set as in Word (Layout > Line Numbers): off, continuous, or restarting on each page; the
 // first line's number; which numbers are shown (every line's, or every 5th ...); the distance from the text. Lines in
 // tables, page breaks and paragraphs whose numbers are suppressed have none and are not counted.
@@ -275,16 +276,29 @@ sealed class LineNumberGutter : Control
 
 	// ---- which lines count
 
-	List<(int Start, int End)> Skipped() {
-		if (skipped != null) return skipped;
-		var doc = editor.TextDocument;
+	List<(int Start, int End)> Skipped() => skipped ??= SkippedRanges(editor.TextDocument);
+
+	/// The characters (first and last, sorted) whose lines have no number: tables, page breaks (the break and its
+	/// paragraph mark) and paragraphs with suppressed numbers. (Printing uses them too.)
+	public static List<(int Start, int End)> SkippedRanges(ITextDocument2 doc) {
 		int length = doc.Range2(0, 0).StoryLength;
 		var ranges = new List<(int Start, int End)>();
 		foreach (var table in RtfTables.Find(doc)) ranges.Add((table.Start, Math.Max(table.Start, table.End - 1)));    // (End is the paragraph after it)
-		foreach (int at in PageBreaks.Positions(doc)) ranges.Add((at, Math.Min(length - 1, at + 1)));    // the break and its paragraph mark
+		foreach (int at in PageBreaks.Positions(doc)) ranges.Add((at, Math.Min(length - 1, at + 1)));
 		Suppressed(doc, 0, length, ranges);
 		ranges.Sort();
-		return skipped = ranges;
+		return ranges;
+	}
+
+	/// Character ranges as sorted, merged ranges of lines (lineOf: a character's line).
+	public static List<(int First, int Last)> ToLines(List<(int Start, int End)> ranges, Func<int, int> lineOf) {
+		var lines = new List<(int First, int Last)>();
+		foreach (var (start, end) in ranges) {
+			int first = lineOf(start), last = lineOf(Math.Max(start, end));
+			if (lines.Count > 0 && first <= lines[^1].Last + 1) lines[^1] = (lines[^1].First, Math.Max(lines[^1].Last, last));
+			else lines.Add((first, last));
+		}
+		return lines;
 	}
 
 	// Paragraphs with suppressed numbers between two paragraph boundaries: a range's NoLineNumber is the same for all its
@@ -304,15 +318,7 @@ sealed class LineNumberGutter : Control
 
 	// The editor's lines that have no number, as sorted, merged line ranges (they depend on the wrapping, so they are
 	// worked out from the character ranges each time).
-	List<(int First, int Last)> SkippedLines() {
-		var lines = new List<(int First, int Last)>();
-		foreach (var (start, end) in Skipped()) {
-			int first = Send(EM_EXLINEFROMCHAR, 0, start), last = Send(EM_EXLINEFROMCHAR, 0, Math.Max(start, end));
-			if (lines.Count > 0 && first <= lines[^1].Last + 1) lines[^1] = (lines[^1].First, Math.Max(lines[^1].Last, last));
-			else lines.Add((first, last));
-		}
-		return lines;
-	}
+	List<(int First, int Last)> SkippedLines() => ToLines(Skipped(), at => Send(EM_EXLINEFROMCHAR, 0, at));
 
 	List<int> RestartLines() => numbering.Mode == LineNumbering.Modes.EachPage && pageStarts != null
 		? pageStarts.Where(p => p > 0).Select(p => Send(EM_EXLINEFROMCHAR, 0, p)).Distinct().OrderBy(l => l).ToList() : new List<int>();
@@ -402,6 +408,106 @@ sealed class LineNumberGutter : Control
 	}
 }
 
+// Where the line numbers go on printed pages. A hidden RichEdit holds the document (its RTF) with the printer as its
+// target device and the text area's width, so its lines are the printed lines (EM_FORMATRANGE breaks pages at them).
+// Each numbered line's top is measured exactly: EM_FORMATRANGE without drawing, from the page's start up to the line,
+// reports the bottom of what it laid out. The step from a line's top to its text's baseline comes from the hidden
+// RichEdit, zoomed 8 times (its own line positions drift from the printed ones by up to 0.1 inch over a page; the step
+// is within a few twips). Checked against where the printer draws the text.
+static class PrintedLineNumbers
+{
+	/// A numbered line: its number, its baseline (twips, in EM_FORMATRANGE's coordinates: from the printable area's corner)
+	/// and its characters.
+	public sealed record Mark(int Number, int Baseline, int Start, int End);
+
+	[StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
+	[StructLayout(LayoutKind.Sequential)] struct FORMATRANGE { public IntPtr hdc, hdcTarget; public RECT rc, rcPage; public int cpMin, cpMax; }
+	[DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+	[DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref FORMATRANGE lParam);
+	const int EM_FORMATRANGE = 0x0439, EM_SETTARGETDEVICE = 0x0448, EM_SETZOOM = 0x04E1, EM_GETLINECOUNT = 0x00BA, EM_LINEINDEX = 0x00BB, EM_EXLINEFROMCHAR = 0x0436;
+	const int Zoom = 8;
+
+	/// The numbered lines of each page. hdc: the printer's (or its information context); text, page: the text area and
+	/// the page in twips, as EM_FORMATRANGE takes them; pageStarts: where the printer's pages start. everyLine: also
+	/// the lines whose numbers count-by doesn't show. None if the hidden copy's text differs from the editor's.
+	public static List<List<Mark>> Compute(RichEditBox editor, LineNumbering numbering, IntPtr hdc, Rectangle text, Rectangle page, List<int> pageStarts, bool everyLine = false) {
+		var marks = pageStarts.Select(_ => new List<Mark>()).ToList();
+		if (!numbering.On || pageStarts.Count == 0) return marks;
+		using var hidden = new RichEditBox { WordWrap = true, Width = 600, Height = 400 };
+		IntPtr h = hidden.Handle;
+		((RichTextBox)hidden).Rtf = ((RichTextBox)editor).Rtf;
+		var doc = hidden.TextDocument;
+		int length = doc.Range2(0, 0).StoryLength;
+		if (length != editor.TextDocument.Range2(0, 0).StoryLength) return marks;
+		SendMessage(h, EM_SETTARGETDEVICE, hdc, (IntPtr)text.Width);
+		SendMessage(h, EM_SETZOOM, (IntPtr)Zoom, (IntPtr)1);
+		int Send(int msg, int wParam, int lParam = 0) => (int)SendMessage(h, msg, (IntPtr)wParam, (IntPtr)lParam);
+		var skipped = LineNumberGutter.ToLines(LineNumberGutter.SkippedRanges(doc), at => Send(EM_EXLINEFROMCHAR, 0, at));
+		int count = Send(EM_GETLINECOUNT, 0);
+		float dpi;
+		using (var g = hidden.CreateGraphics()) dpi = g.DpiY;
+		double twipsPerPixel = 1440.0 / (dpi * Zoom);
+		var range = new FORMATRANGE {
+			hdc = hdc, hdcTarget = hdc,
+			rc = new RECT { Left = text.Left, Top = text.Top, Right = text.Right, Bottom = text.Bottom },
+			rcPage = new RECT { Left = page.Left, Top = page.Top, Right = page.Right, Bottom = page.Bottom }
+		};
+		// the bottom of what the page holds from its start up to (not including) a character
+		int Bottom(int from, int to) {
+			var r = range;
+			r.cpMin = from;
+			r.cpMax = to;
+			SendMessage(h, EM_FORMATRANGE, IntPtr.Zero, ref r);
+			return r.rc.Bottom;
+		}
+		try {
+			int number = numbering.Start, skip = 0;
+			for (int p = 0; p < pageStarts.Count; p++) {
+				int start = pageStarts[p], end = p + 1 < pageStarts.Count ? pageStarts[p + 1] : length;
+				if (numbering.Mode == LineNumbering.Modes.EachPage) number = numbering.Start;
+				for (int line = Send(EM_EXLINEFROMCHAR, 0, start); line < count; line++) {
+					int at = Send(EM_LINEINDEX, line);
+					if (at < 0 || at >= end) break;
+					while (skip < skipped.Count && skipped[skip].Last < line) skip++;
+					if (skip < skipped.Count && skipped[skip].First <= line) continue;
+					if (everyLine || number % numbering.CountBy == 0) {
+						int top = at <= start ? text.Top : Bottom(start, at);
+						int next = line + 1 < count ? Send(EM_LINEINDEX, line + 1) : length;
+						marks[p].Add(new Mark(number, top + BaselineStep(hidden, doc, at, twipsPerPixel), at, next < 0 ? length : next));
+					}
+					number++;
+				}
+			}
+		} finally {
+			SendMessage(h, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // frees RichEdit's cache
+		}
+		return marks;
+	}
+
+	// From the top of the line starting at a character to its baseline, in twips (with the space before a paragraph).
+	static int BaselineStep(RichEditBox hidden, ITextDocument2 doc, int at, double twipsPerPixel) {
+		try {
+			int top = hidden.PointToScreen(hidden.GetPositionFromCharIndex(at)).Y;
+			doc.Range2(at, at).GetPoint(0x20 | 24 | 0x200, out _, out int baseline);    // tomStart | TA_BASELINE | tomAllowOffClient (screen)
+			return (int)Math.Round((baseline - top) * twipsPerPixel);
+		} catch (COMException) {
+			return 0;
+		}
+	}
+
+	/// Draws a page's numbers right-aligned left of the text area (distance: the numbering's, or a quarter inch), in the
+	/// editor's font. g: the printer's graphics in 1/100 inch from the printable area's corner; textLeft likewise.
+	public static void Draw(Graphics g, List<Mark> marks, LineNumbering numbering, Font font, float textLeft) {
+		if (marks.Count == 0) return;
+		using var numberFont = new Font(font.FontFamily, font.SizeInPoints, FontStyle.Regular, GraphicsUnit.Point);
+		float ascent = numberFont.SizeInPoints / 72f * 100f * numberFont.FontFamily.GetCellAscent(numberFont.Style) / numberFont.FontFamily.GetEmHeight(numberFont.Style);
+		float right = textLeft - (numbering.Distance > 0 ? numbering.Distance : 360) / 14.4f;
+		using var format = new StringFormat(StringFormat.GenericTypographic) { Alignment = StringAlignment.Far, FormatFlags = StringFormatFlags.NoWrap };
+		foreach (var mark in marks)
+			g.DrawString(mark.Number.ToString(CultureInfo.CurrentCulture), numberFont, Brushes.Black, right, mark.Baseline / 14.4f - ascent, format);
+	}
+}
+
 // Layout > Line Numbers > Line Numbering Options: Word's Line Numbers dialog.
 sealed class LineNumbersDialog : Form
 {
@@ -447,7 +553,7 @@ sealed class LineNumbersDialog : Form
 		layout.Controls.Add(new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(360), 0), ForeColor = SystemColors.GrayText, Margin = new Padding(3, 8, 3, 3),
 			Text = "From text: Auto, or e.g. 0.3 in or 0.8 cm (for Word and LibreOffice). Count by 5 shows 5, 10, 15 ... "
-				+ "Lines in tables don't count. Saved with the document; RTE Writer doesn't print line numbers yet (Word and LibreOffice do)."
+				+ "Lines in tables don't count. Saved with the document, and printed (also in Print Preview and PDF), numbered as the printed lines."
 		});
 		void Enable() => options.Enabled = on.Checked;
 		on.CheckedChanged += (s, e) => Enable();
