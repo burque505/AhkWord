@@ -40,6 +40,7 @@ var fluent = new Dictionary<string, string> {
 };
 var drawn = new Dictionary<string, Action<Graphics, float>> {
 	["legal"] = Icons.Legal,
+	["linenumbers"] = Icons.LineNumbers,
 	["exportword"] = (g, s) => Icons.WithLetter(g, s, "W", Color.FromArgb(0x18, 0x5A, 0xBD)),
 	["exportodt"] = (g, s) => Icons.WithLetter(g, s, "O", Color.FromArgb(0x10, 0x7C, 0x41)),
 };
@@ -169,5 +170,18 @@ static class Icons
 		using var pen = new Pen(Ink, Math.Max(1f, s / 16f));
 		g.DrawLine(pen, s * 0.1f, s * 0.66f, s * 0.9f, s * 0.66f);
 		g.DrawLine(pen, s * 0.3f, s * 0.86f, s * 0.9f, s * 0.86f);
+	}
+
+	// Lines of text with their numbers in the margin, left of a thin rule: line numbers (Fluent's numbered list is the
+	// Numbering button's).
+	public static void LineNumbers(Graphics g, float s) {
+		using var pen = new Pen(Ink, Math.Max(1f, s / 16f));
+		using var rule = new Pen(Color.FromArgb(0xA0, 0xA0, 0xA0), Math.Max(1f, s / 32f));
+		g.DrawLine(rule, s * 0.36f, s * 0.08f, s * 0.36f, s * 0.92f);
+		for (int i = 0; i < 3; i++) {
+			float y = s * (0.2f + i * 0.3f);
+			Text(g, (i + 1).ToString(), s * 0.34f, Accent, new RectangleF(0, y - s * 0.17f, s * 0.34f, s * 0.34f));
+			g.DrawLine(pen, s * 0.48f, y, s * (i == 2 ? 0.74f : 0.94f), y);
+		}
 	}
 }

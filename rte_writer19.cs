@@ -8,8 +8,18 @@
 #load "rte_pagebreaks.cs"
 #load "rte_headerfooter.cs"
 #load "rte_linebreaks.cs"
+#load "rte_linenumbers.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer18.ahk. Iteration 18 adds to iteration 17:
+// Run it with rte_writer19.ahk. Iteration 19 adds to iteration 18:
+//   - Line numbers (rte_linenumbers.cs), as in Word: Layout > Line Numbers numbers the lines in the left margin,
+//     continuously or restarting on each page (where the printer's layout starts them), with a first number, a count-by
+//     (every 5th ...) and a distance from the text (Line Numbering Options). Lines in tables and page breaks don't count,
+//     nor paragraphs whose numbers are suppressed (Suppress for Current Paragraph: TOM's NoLineNumber, RTF's \noline).
+//     The numbers follow the editor's lines (LineNumberGutter, a strip left of the text, drawn after the editor paints).
+//     Kept in RTF (\linemod ...), Word (w:lnNumType) and OpenDocument files, and in HTML and Markdown as a comment-like
+//     setting. Not printed by RTE Writer yet. Scripts: Rte.LineNumbers := "continuous", Rte.SetLineNumbers("page", 1, 5),
+//     Rte.SuppressLineNumbers(1), Rte.LineNumberAt(position).
+// Iteration 18 added to iteration 17:
 //   - Table properties (rte_tables2.cs): Table Tools > Properties (and the table's right-click menu) sets the column
 //     widths, the table's alignment on the page, cell padding, row height, the borders (none, all, outside, inside ...,
 //     line width and color), shading and vertical alignment of the selected cells or the whole table; Borders and
@@ -190,6 +200,7 @@ enum RibbonCommand : uint
 	RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321,
 	InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340,
 	TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346,
+	LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -353,6 +364,12 @@ class WriterForm : Form
 
 	// Iteration 10: legal numbering
 	readonly System.Windows.Forms.Timer legalTimer = new() { Interval = 300 };
+
+	// Iteration 19: line numbers, in a strip left of the text (in the page, between its padding and the editor)
+	readonly LineNumberGutter lineGutter;
+	readonly Panel pagePanel;
+	List<int>? pageStarts;          // where printed pages start, for numbering that restarts on each page
+	bool pageStartsStale = true;    // the text or the page changed since they were worked out
 	bool skipLegalCheck, guardingCaret, guardPending;
 	int lastCaret = -1;
 
@@ -370,14 +387,18 @@ class WriterForm : Form
 		ApplyWindowSettings();
 
 		api = new EditorApi(this);
-		var page = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window,
-			Padding = new Padding(LogicalToDeviceUnits(28), LogicalToDeviceUnits(14), LogicalToDeviceUnits(16), 0) };
+		lineGutter = new LineNumberGutter(Editor);
+		var page = pagePanel = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
+		FitPagePadding();
 		page.Controls.Add(Editor);
+		page.Controls.Add(lineGutter);     // (docked before the editor, after the header and footer)
 		page.Controls.Add(headerStrip);    // (added after the editor, so docked before it)
 		page.Controls.Add(footerStrip);
+		Editor.Painted += lineGutter.EditorPainted;
+		lineGutter.SizeChanged += (s, e) => FitPagePadding();    // (wider numbers: the text stays where it was, as far as it can)
 		headerStrip.Click += (s, e) => Run(HeaderFooterCommand);
 		footerStrip.Click += (s, e) => Run(HeaderFooterCommand);
-		Editor.TextChanged += (s, e) => { bandPagesStale = true; lastEdit = DateTime.Now; };
+		Editor.TextChanged += (s, e) => { bandPagesStale = pageStartsStale = true; lastEdit = DateTime.Now; };
 		bandTimer.Tick += (s, e) => UpdateBands();
 		bandTimer.Start();
 		var outlineTitle = new Label { Text = "Outline", Dock = DockStyle.Top, Height = LogicalToDeviceUnits(26), Padding = new Padding(6, 6, 0, 0),
@@ -618,6 +639,11 @@ class WriterForm : Form
 
 		// Layout, Review
 		Button(RibbonCommand.HeaderFooter, HeaderFooterCommand);
+		foreach (var (id, mode) in new[] { (RibbonCommand.LineNumbersNone, LineNumbering.Modes.None), (RibbonCommand.LineNumbersContinuous, LineNumbering.Modes.Continuous),
+			(RibbonCommand.LineNumbersEachPage, LineNumbering.Modes.EachPage) })
+			Toggle(id, () => api.LineNumbers = LineNumbering.ModeName(mode), Keys.None, M("LineNumbers", LineNumbering.ModeName(mode)));
+		Toggle(RibbonCommand.SuppressLineNumbers, () => { bool suppress = !api.LineNumbersSuppressed(); api.SuppressLineNumbers(suppress); Record(M("SuppressLineNumbers", suppress)); });
+		Button(RibbonCommand.LineNumberOptions, LineNumbersCommand);
 		Button(RibbonCommand.NextSpelling, NextSpellingErrorCommand, Keys.F7);
 		Button(RibbonCommand.AddToDictionary, () => {
 			string word = Editor.SelectedText.Trim();
@@ -731,7 +757,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 18: table properties)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 19: line numbers)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -855,6 +881,7 @@ class WriterForm : Form
 			inCommand = false;
 		}
 		RefreshSource();    // and what the command changed shows in the source
+		lineGutter.DocumentChanged();
 		UpdateUi();
 		UpdateTitle();
 		Restart(outlineTimer);
@@ -1089,6 +1116,12 @@ class WriterForm : Form
 			try { using var printer = CreatePrinter(); bandPages = printer.PageCount(); }
 			catch (Exception) { bandPages = null; }
 		}
+		if (Numbering.Mode == LineNumbering.Modes.EachPage && pageStartsStale && (DateTime.Now - lastEdit).TotalMilliseconds > 1000) {
+			pageStartsStale = false;
+			try { using var printer = CreatePrinter(); pageStarts = printer.PageStarts(); }
+			catch (Exception) { pageStarts = null; }
+			lineGutter.PageStarts = pageStarts;
+		}
 		string Fill(string text) => Regex.Replace(text, @"\{(title|file|page|pages|date|time)\}", m => m.Groups[1].Value.ToLowerInvariant() switch {
 			"title" => DocumentName,
 			"file" => FileName ?? DocumentName,
@@ -1146,12 +1179,50 @@ class WriterForm : Form
 			+ " File > Print Preview shows them; Word and OpenDocument files get them too.");
 	}
 
+	// ---- line numbers (iteration 19)
+
+	/// The document's line numbering (saved with it); SetLineNumbering changes it.
+	internal LineNumbering Numbering { get; private set; } = new();
+
+	internal LineNumberGutter LineGutter => lineGutter;
+
+	/// Sets the document's line numbering; changesDocument: it is a change to the document (not one being opened).
+	internal void SetLineNumbering(LineNumbering numbering, bool changesDocument = true) {
+		var value = numbering.Copy().Normalized();
+		if (changesDocument && !value.SameAs(Numbering)) Editor.Modified = true;
+		Numbering = value;
+		lineGutter.Numbering = value;
+		pageStartsStale = true;
+		if (value.Mode != LineNumbering.Modes.EachPage) lineGutter.PageStarts = null;
+		FitPagePadding();
+		UpdateUi();
+	}
+
+	// The page's padding left of the text: the line numbers take its place (the text moves as little as it can).
+	void FitPagePadding() {
+		int left = LogicalToDeviceUnits(28);
+		if (Numbering.On) left = Math.Max(LogicalToDeviceUnits(4), left - Math.Max(lineGutter.Width, LogicalToDeviceUnits(30)));
+		pagePanel.Padding = new Padding(left, LogicalToDeviceUnits(14), LogicalToDeviceUnits(16), 0);
+	}
+
+	void LineNumbersCommand() {
+		using var dlg = new LineNumbersDialog(Numbering);
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		var numbering = dlg.Result(Numbering);
+		if (numbering.SameAs(Numbering)) return;
+		SetLineNumbering(numbering);
+		Record(numbering.On ? M("SetLineNumbers", LineNumbering.ModeName(numbering.Mode), numbering.Start, numbering.CountBy, (float)(numbering.Distance / 20.0))
+			: M("LineNumbers", "none"));
+		SetStatus(numbering.On ? "Line numbers: " + numbering.Describe() + ". Saved with the document (RTF, Word, OpenDocument, HTML, Markdown)." : "Line numbers are off.");
+	}
+
 	void PageSetupCommand() {
 		using var printer = CreatePrinter();
 		using var dlg = new PageSetupDialog { Document = printer.Document, EnableMetric = true };
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		var page = printer.Document.DefaultPageSettings;
 		Settings.Margins = new[] { page.Margins.Left, page.Margins.Right, page.Margins.Top, page.Margins.Bottom };
+		pageStartsStale = bandPagesStale = true;
 		Settings.Landscape = page.Landscape;
 		Settings.Save();
 	}
@@ -1949,6 +2020,10 @@ class WriterForm : Form
 		toggleButtons[RibbonCommand.AlignRight].BooleanValue = para.Alignment == (int)ParagraphAlignment.Right;
 		toggleButtons[RibbonCommand.Justify].BooleanValue = para.Alignment == (int)ParagraphAlignment.Justify;
 		toggleButtons[RibbonCommand.AutoLevel].BooleanValue = AutoLevelStyles;
+		toggleButtons[RibbonCommand.LineNumbersNone].BooleanValue = !Numbering.On;
+		toggleButtons[RibbonCommand.LineNumbersContinuous].BooleanValue = Numbering.Mode == LineNumbering.Modes.Continuous;
+		toggleButtons[RibbonCommand.LineNumbersEachPage].BooleanValue = Numbering.Mode == LineNumbering.Modes.EachPage;
+		toggleButtons[RibbonCommand.SuppressLineNumbers].BooleanValue = para.NoLineNumber == tomConstants.tomTrue;
 
 		blockCombo.Enabled = Editor.EnableHtmlFontSizing;
 		blockCombo.SelectedItem = Editor.EnableHtmlFontSizing && api.GetBlockStyle() is BlockStyle block ? (uint)block : Constants.UI_Collection_InvalidIndex;
@@ -1990,7 +2065,8 @@ class WriterForm : Form
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
 		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.Structured, RibbonCommand.FreeForm, RibbonCommand.WordWrap,
 		RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
-		RibbonCommand.HeaderFooter, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
+		RibbonCommand.HeaderFooter, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
+		RibbonCommand.LineNumberOptions, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
 		RibbonCommand.SelectAll, RibbonCommand.Find, RibbonCommand.Replace,
 	};
 
@@ -2593,6 +2669,7 @@ public class EditorApi
 	public void New() {
 		ed.Html = "";
 		form.Bands = form.DefaultBands();
+		form.SetLineNumbering(new LineNumbering(), changesDocument: false);
 		ed.Modified = false;
 		FileConverter = "";
 		form.SetFileName(null);
@@ -2609,12 +2686,14 @@ public class EditorApi
 		LastConverter = "";
 		// the header and footer: the document's own; documents that can have them but don't have none, others get the default
 		PageBands? bands = null;
+		LineNumbering? numbering = null;
 		bool canHaveBands = extension is ".rtf" or ".docx" or ".doc" or ".odt";
 		string? sourceText = null;    // a .md / .html file's own text, for the source view (and saving it as it was)
 		switch (extension) {
 			case ".md": case ".markdown": {
 				string markdown = sourceText = File.ReadAllText(full);
 				bands = HeaderFooter.FromMarkdown(markdown);
+				numbering = LineNumberFormats.FromMarkdown(markdown);
 				MarkdownConverter.Load(ed, markdown, Path.GetDirectoryName(full));
 				break;
 			}
@@ -2622,6 +2701,7 @@ public class EditorApi
 			case ".rtf": {
 				string rtf = File.ReadAllText(full, Encoding.Latin1);
 				bands = HeaderFooter.FromRtf(rtf);
+				numbering = LineNumberFormats.FromRtf(rtf);
 				Rtf = rtf;
 				LegalLists.AdoptTypedNumbers(ed);
 				break;
@@ -2629,6 +2709,7 @@ public class EditorApi
 			case ".docx": case ".doc": case ".odt": {
 				var (kind, content, converter) = OfficeConverters.Import(full, via);
 				bands = extension == ".docx" ? HeaderFooter.FromDocx(full) : extension == ".odt" ? HeaderFooter.FromOdt(full) : kind == "rtf" ? HeaderFooter.FromRtf(content) : null;
+				numbering = extension == ".docx" ? LineNumberFormats.FromDocx(full) : extension == ".odt" ? LineNumberFormats.FromOdt(full) : kind == "rtf" ? LineNumberFormats.FromRtf(content) : null;
 				if (kind == "rtf") Rtf = content; else SetHtml(content);
 				LegalLists.ConvertTypedLists(ed, 0, ed.TextDocument.Range2(0, 0).StoryLength, requireTab: true,
 					converter == OfficeConverters.OpenXml || kind == "html" ? OfficeConverters.TypedIndents : null);    // numbers a converter left as text
@@ -2641,11 +2722,13 @@ public class EditorApi
 				string html = File.ReadAllText(full);
 				if (extension is ".html" or ".htm") sourceText = html;
 				bands = HeaderFooter.FromHtml(html);
+				numbering = LineNumberFormats.FromHtml(html);
 				SetHtml(html);
 				break;
 			}
 		}
 		form.Bands = bands ?? (canHaveBands ? new PageBands() : form.DefaultBands());
+		form.SetLineNumbering(numbering ?? new LineNumbering(), changesDocument: false);
 		PageBreaks.Normalize(ed);    // (form feeds in plain text, for one)
 		MarksFollowText();
 		if (LegalLists.AnyLegal(ed.TextDocument)) LegalLists.Renumber(ed);    // (legal items' indents fitted to their numbers' size)
@@ -2689,7 +2772,7 @@ public class EditorApi
 			File.WriteAllText(full, WithBands(OfficeConverters.PngPictures(OfficeConverters.WithAltTexts(OfficeConverters.ListIndentsRtf(RawRtf), AltTexts())), full), Encoding.Latin1);
 		else {
 			string content = extension switch {
-				".md" or ".markdown" => MarkdownConverter.ToMarkdown(ed, ImageFiles(full)) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : ""),
+				".md" or ".markdown" => MarkdownConverter.ToMarkdown(ed, ImageFiles(full)) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering),
 				".txt" => ed.Text.Replace("\n", "\r\n"),
 				_ => picturesInside ? HtmlFile(Path.GetFileNameWithoutExtension(full), pretty: true)
 					: PicturesToFiles(HtmlFile(Path.GetFileNameWithoutExtension(full), pretty: true), full)
@@ -2741,7 +2824,7 @@ public class EditorApi
 	// conversions use it as it comes).
 	string HtmlFile(string title, bool pretty = false) {
 		string body = HtmlBody(out string css);
-		return HtmlDocument(pretty ? PrettyHtml.Format(body) : body, title, css, OwnBands ? HeaderFooter.HtmlMeta(form.Bands) : "");
+		return HtmlDocument(pretty ? PrettyHtml.Format(body) : body, title, css, (OwnBands ? HeaderFooter.HtmlMeta(form.Bands) : "") + LineNumberFormats.HtmlMeta(form.Numbering));
 	}
 
 	/// The "via" for an HTML file that keeps its pictures inside it.
@@ -2762,9 +2845,9 @@ public class EditorApi
 	// document that has the default gets whatever the default is when it is opened).
 	bool OwnBands => !form.Bands.SameAs(form.DefaultBands());
 
-	// RTF with the document's header, footer and page layout, for path.
+	// RTF with the document's header, footer, page layout and line numbering, for path.
 	string WithBands(string rtf, string path) =>
-		HeaderFooter.AddToRtf(rtf, form.Bands, form.PageLayout(), Path.GetFileName(path), path, ed.Font.SizeInPoints);
+		LineNumberFormats.AddToRtf(HeaderFooter.AddToRtf(rtf, form.Bands, form.PageLayout(), Path.GetFileName(path), path, ed.Font.SizeInPoints), form.Numbering);
 
 	// ---- Rich Text Format, Word and OpenDocument
 
@@ -2869,6 +2952,9 @@ public class EditorApi
 		try {
 			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase)) HeaderFooter.AddToDocx(full, form.Bands, form.PageLayout(), Path.GetFileName(full), full, parts: true);
 			else HeaderFooter.AddToOdt(full, form.Bands, Path.GetFileName(full), full);
+			// the line numbering, the same whichever converter made the file (pandoc's and the built-in one's have none)
+			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase)) LineNumberFormats.AddToDocx(full, form.Numbering);
+			else LineNumberFormats.AddToOdt(full, form.Numbering);
 			OfficeConverters.AltTextsToFile(full, AltTexts());    // (pictures' alt texts that the converter left out)
 			// tables' borders, shading, padding ... in Word's own terms, where the converter went through HTML
 			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) && LastConverter is OfficeConverters.OpenXml or OfficeConverters.Pandoc)
@@ -2885,6 +2971,45 @@ public class EditorApi
 
 	/// Which converters for Word and OpenDocument files are available.
 	public string Converters() => OfficeConverters.Describe();
+
+	// ---- Line numbers (iteration 19)
+
+	/// The document's line numbering, as in Word's Layout > Line Numbers: "none", "continuous" (counting through the
+	/// document) or "page" (restarting on each page). Setting it keeps the start, count-by and distance. Saved with the
+	/// document.
+	public string LineNumbers {
+		get => LineNumbering.ModeName(form.Numbering.Mode);
+		set {
+			var numbering = form.Numbering.Copy();
+			numbering.Mode = LineNumbering.ParseMode(value);
+			form.SetLineNumbering(numbering);
+		}
+	}
+
+	/// Sets the line numbering: mode as LineNumbers; start: the first line's number; countBy: show only the numbers that
+	/// are multiples of it (5: 5, 10, 15 ...); distance: from the text in points, for Word and LibreOffice (0 = automatic).
+	public void SetLineNumbers(string mode = "continuous", int start = 1, int countBy = 1, float distance = 0) {
+		if (start < 1 || countBy < 1 || countBy > 100 || distance < 0 || distance > 1584)
+			throw new ArgumentException("SetLineNumbers needs start >= 1, countBy 1 to 100 and distance 0 to 1584 points.");
+		form.SetLineNumbering(new LineNumbering { Mode = LineNumbering.ParseMode(mode), Start = start, CountBy = countBy, Distance = (int)Math.Round(distance * 20) });
+	}
+
+	/// The line numbering's settings: "none", or e.g. "continuous, start 1, count by 1, distance auto".
+	public string LineNumberSettings() => form.Numbering.Describe();
+
+	/// Leaves the selected paragraphs' lines without numbers, and not counted (suppress = 1), or numbers them again (0),
+	/// as Word's Suppress for Current Paragraph. One undo step.
+	public void SuppressLineNumbers(bool suppress = true) {
+		SelectionRange().Para.NoLineNumber = suppress ? tomConstants.tomTrue : tomConstants.tomFalse;
+		form.LineGutter.DocumentChanged();
+	}
+
+	/// Whether the line numbers of the selected paragraphs are suppressed (all of them).
+	public bool LineNumbersSuppressed() => SelectionRange().Para.NoLineNumber == tomConstants.tomTrue;
+
+	/// The number of the line with the character at position (-1: the caret's line), whether or not count-by shows it;
+	/// 0 if the line has none (line numbers off, or a line in a table, a page break or a suppressed paragraph).
+	public int LineNumberAt(int position = -1) => form.LineGutter.NumberOf(form.LineGutter.LineOf(position < 0 ? ed.SelectionStart : position));
 
 	// ---- Tables
 
@@ -3395,16 +3520,18 @@ public class EditorApi
 	// The document as the source view shows it (and a .md / .html file gets it): Markdown with the header and footer
 	// line, or a whole HTML page; pictures as data: URIs.
 	internal string SourceOf(WriterForm.SourceKind kind) => kind == WriterForm.SourceKind.Markdown
-		? MarkdownConverter.ToMarkdown(ed, null) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "")
+		? MarkdownConverter.ToMarkdown(ed, null) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering)
 		: HtmlFile(form.FileName != null ? Path.GetFileNameWithoutExtension(form.FileName) : "Untitled", pretty: true);
 
 	// Replaces the document with Markdown or HTML from the source view, as Open does with a file's.
 	internal void LoadSource(WriterForm.SourceKind kind, string text) {
 		if (kind == WriterForm.SourceKind.Markdown) {
 			form.Bands = HeaderFooter.FromMarkdown(text) ?? form.DefaultBands();
+			form.SetLineNumbering(LineNumberFormats.FromMarkdown(text) ?? new LineNumbering());
 			MarkdownConverter.Load(ed, text, form.FileName != null ? Path.GetDirectoryName(form.FileName) : Environment.CurrentDirectory);
 		} else {
 			form.Bands = HeaderFooter.FromHtml(text) ?? form.DefaultBands();
+			form.SetLineNumbering(LineNumberFormats.FromHtml(text) ?? new LineNumbering());
 			SetHtml(text);
 		}
 		PageBreaks.Normalize(ed);
@@ -4614,7 +4741,10 @@ sealed class DocumentPrinter : IDisposable
 	[DllImport("gdi32")] static extern bool SetWorldTransform(IntPtr hdc, ref XFORM transform);
 
 	/// The number of pages the document prints on now (laid out for the printer, without printing).
-	public int PageCount() {
+	public int PageCount() => PageStarts().Count;
+
+	/// Where each page the document prints on starts (character positions, the first 0), laid out for the printer.
+	public List<int> PageStarts() {
 		var settings = Document.DefaultPageSettings;
 		using var g = Document.PrinterSettings.CreateMeasurementGraphics(settings);
 		float hardX = settings.HardMarginX, hardY = settings.HardMarginY;
@@ -4624,17 +4754,21 @@ sealed class DocumentPrinter : IDisposable
 		IntPtr hdc = g.GetHdc();
 		try {
 			var range = new FORMATRANGE { hdc = hdc, hdcTarget = hdc, rc = Twips(margins, hardX, hardY), rcPage = Twips(pageBounds, hardX, hardY), chrg = new CHARRANGE { cpMax = -1 } };
-			return CountPages(range, editor.TextDocument.Range2(0, 0).StoryLength - 1);
+			var starts = new List<int>();
+			CountPages(range, editor.TextDocument.Range2(0, 0).StoryLength - 1, starts);
+			return starts;
 		} finally {
 			g.ReleaseHdc(hdc);
 		}
 	}
 
-	// Lays out the whole document without drawing (EM_FORMATRANGE with wParam 0) to count the pages.
-	int CountPages(FORMATRANGE range, int end) {
+	// Lays out the whole document without drawing (EM_FORMATRANGE with wParam 0) to count the pages (and list where
+	// they start).
+	int CountPages(FORMATRANGE range, int end, List<int>? starts = null) {
 		int count = 0, position = 0;
 		while (true) {
 			count++;
+			starts?.Add(position);
 			range.chrg.cpMin = position;
 			int next = PageBreaks.AfterBreak(editor.TextDocument, (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range));
 			if (next <= position || next >= end) break;
@@ -5077,6 +5211,9 @@ sealed class WriterEditBox : RichEditBox
 		}
 	}
 
+	/// After the editor painted (and so scrolled, changed or zoomed): the line numbers follow.
+	public Action? Painted;
+
 	protected override void WndProc(ref Message m) {
 		const int WM_CONTEXTMENU = 0x007B, WM_PAINT = 0x000F;
 		if (m.Msg == WM_PAINT) {
@@ -5085,6 +5222,7 @@ sealed class WriterEditBox : RichEditBox
 				using var g = CreateGraphics();
 				DrawPageBreaks(g);
 			}
+			Painted?.Invoke();
 			return;
 		}
 		if (m.Msg == WM_CONTEXTMENU && ContextMenuHook != null) {

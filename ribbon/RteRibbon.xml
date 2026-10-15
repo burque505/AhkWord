@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer18.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer18.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer19.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer19.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -1402,6 +1402,25 @@
         <Image Source="icons/paintbucket_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdLineNumbers" Id="350" LabelTitle="Line Numbers" Keytip="LN" TooltipTitle="Line numbers" TooltipDescription="Number the lines in the left margin, as in Word: continuously or restarting on each page. Lines in tables don't count.">
+      <Command.LargeImages>
+        <Image Source="icons/linenumbers_32.bmp" MinDPI="96" />
+        <Image Source="icons/linenumbers_40.bmp" MinDPI="120" />
+        <Image Source="icons/linenumbers_48.bmp" MinDPI="144" />
+        <Image Source="icons/linenumbers_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/linenumbers_16.bmp" MinDPI="96" />
+        <Image Source="icons/linenumbers_20.bmp" MinDPI="120" />
+        <Image Source="icons/linenumbers_24.bmp" MinDPI="144" />
+        <Image Source="icons/linenumbers_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdLineNumbersNone" Id="351" LabelTitle="&amp;None" Keytip="N" />
+    <Command Name="cmdLineNumbersContinuous" Id="352" LabelTitle="&amp;Continuous" Keytip="C" />
+    <Command Name="cmdLineNumbersEachPage" Id="353" LabelTitle="Restart Each &amp;Page" Keytip="P" />
+    <Command Name="cmdSuppressLineNumbers" Id="354" LabelTitle="&amp;Suppress for Current Paragraph" Keytip="S" TooltipDescription="The selected paragraphs' lines get no numbers and are not counted." />
+    <Command Name="cmdLineNumberOptions" Id="355" LabelTitle="Line Numbering &amp;Options..." Keytip="O" TooltipDescription="The first number, the distance from the text, and which numbers are shown (every line's, or every 5th ...)." />
   </Application.Commands>
   <Application.Views>
     <Ribbon>
@@ -1733,9 +1752,22 @@
           </Group>
         </Tab>
         <Tab CommandName="cmdTabLayout">
-          <Group CommandName="cmdGroupPage" SizeDefinition="ThreeButtons">
+          <Group CommandName="cmdGroupPage" SizeDefinition="FourButtons">
             <Button CommandName="cmdPageSetup" />
             <Button CommandName="cmdHeaderFooter" />
+            <DropDownButton CommandName="cmdLineNumbers">
+              <MenuGroup>
+                <ToggleButton CommandName="cmdLineNumbersNone" />
+                <ToggleButton CommandName="cmdLineNumbersContinuous" />
+                <ToggleButton CommandName="cmdLineNumbersEachPage" />
+              </MenuGroup>
+              <MenuGroup>
+                <ToggleButton CommandName="cmdSuppressLineNumbers" />
+              </MenuGroup>
+              <MenuGroup>
+                <Button CommandName="cmdLineNumberOptions" />
+              </MenuGroup>
+            </DropDownButton>
             <Button CommandName="cmdPrintPreview" />
           </Group>
         </Tab>
