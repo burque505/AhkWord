@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer16.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer16.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer17.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer17.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -235,18 +235,18 @@
         <Image Source="icons/zoomin_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
-    <Command Name="cmdGroupSource" Id="126" LabelTitle="Source">
+    <Command Name="cmdGroupDocumentView" Id="126" LabelTitle="Document View">
       <Command.LargeImages>
-        <Image Source="icons/html_32.bmp" MinDPI="96" />
-        <Image Source="icons/html_40.bmp" MinDPI="120" />
-        <Image Source="icons/html_48.bmp" MinDPI="144" />
-        <Image Source="icons/html_64.bmp" MinDPI="192" />
+        <Image Source="icons/sidebyside_32.bmp" MinDPI="96" />
+        <Image Source="icons/sidebyside_40.bmp" MinDPI="120" />
+        <Image Source="icons/sidebyside_48.bmp" MinDPI="144" />
+        <Image Source="icons/sidebyside_64.bmp" MinDPI="192" />
       </Command.LargeImages>
       <Command.SmallImages>
-        <Image Source="icons/html_16.bmp" MinDPI="96" />
-        <Image Source="icons/html_20.bmp" MinDPI="120" />
-        <Image Source="icons/html_24.bmp" MinDPI="144" />
-        <Image Source="icons/html_32.bmp" MinDPI="192" />
+        <Image Source="icons/sidebyside_16.bmp" MinDPI="96" />
+        <Image Source="icons/sidebyside_20.bmp" MinDPI="120" />
+        <Image Source="icons/sidebyside_24.bmp" MinDPI="144" />
+        <Image Source="icons/sidebyside_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
     <Command Name="cmdGroupMacros" Id="127" LabelTitle="Macros">
@@ -1037,21 +1037,21 @@
         <Image Source="icons/zoom100_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
-    <Command Name="cmdHtmlSource" Id="308" LabelTitle="HTML" Keytip="T" TooltipTitle="HTML source" TooltipDescription="Show the document as HTML.">
+    <Command Name="cmdViewRich" Id="330" LabelTitle="Rich Text" Keytip="VR" TooltipTitle="Rich text view" TooltipDescription="Edit the document as formatted text.">
       <Command.LargeImages>
-        <Image Source="icons/html_32.bmp" MinDPI="96" />
-        <Image Source="icons/html_40.bmp" MinDPI="120" />
-        <Image Source="icons/html_48.bmp" MinDPI="144" />
-        <Image Source="icons/html_64.bmp" MinDPI="192" />
+        <Image Source="icons/viewrich_32.bmp" MinDPI="96" />
+        <Image Source="icons/viewrich_40.bmp" MinDPI="120" />
+        <Image Source="icons/viewrich_48.bmp" MinDPI="144" />
+        <Image Source="icons/viewrich_64.bmp" MinDPI="192" />
       </Command.LargeImages>
       <Command.SmallImages>
-        <Image Source="icons/html_16.bmp" MinDPI="96" />
-        <Image Source="icons/html_20.bmp" MinDPI="120" />
-        <Image Source="icons/html_24.bmp" MinDPI="144" />
-        <Image Source="icons/html_32.bmp" MinDPI="192" />
+        <Image Source="icons/viewrich_16.bmp" MinDPI="96" />
+        <Image Source="icons/viewrich_20.bmp" MinDPI="120" />
+        <Image Source="icons/viewrich_24.bmp" MinDPI="144" />
+        <Image Source="icons/viewrich_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
-    <Command Name="cmdMarkdownSource" Id="309" LabelTitle="Markdown" Keytip="M" TooltipTitle="Markdown source" TooltipDescription="Show the document as Markdown.">
+    <Command Name="cmdViewMarkdown" Id="331" LabelTitle="Markdown" Keytip="VM" TooltipTitle="Markdown view" TooltipDescription="Edit the document as Markdown. Saving a .md file writes your Markdown exactly as typed.">
       <Command.LargeImages>
         <Image Source="icons/markdown_32.bmp" MinDPI="96" />
         <Image Source="icons/markdown_40.bmp" MinDPI="120" />
@@ -1065,6 +1065,35 @@
         <Image Source="icons/markdown_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdViewHtml" Id="332" LabelTitle="HTML" Keytip="VH" TooltipTitle="HTML view" TooltipDescription="Edit the document as HTML. Tags and styles the editor doesn't support are dropped when the formatted view is rebuilt.">
+      <Command.LargeImages>
+        <Image Source="icons/html_32.bmp" MinDPI="96" />
+        <Image Source="icons/html_40.bmp" MinDPI="120" />
+        <Image Source="icons/html_48.bmp" MinDPI="144" />
+        <Image Source="icons/html_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/html_16.bmp" MinDPI="96" />
+        <Image Source="icons/html_20.bmp" MinDPI="120" />
+        <Image Source="icons/html_24.bmp" MinDPI="144" />
+        <Image Source="icons/html_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSideBySide" Id="333" LabelTitle="Side by Side" Keytip="VS" TooltipTitle="Side by side" TooltipDescription="The Markdown or HTML next to the formatted text, which follows as you type.">
+      <Command.LargeImages>
+        <Image Source="icons/sidebyside_32.bmp" MinDPI="96" />
+        <Image Source="icons/sidebyside_40.bmp" MinDPI="120" />
+        <Image Source="icons/sidebyside_48.bmp" MinDPI="144" />
+        <Image Source="icons/sidebyside_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/sidebyside_16.bmp" MinDPI="96" />
+        <Image Source="icons/sidebyside_20.bmp" MinDPI="120" />
+        <Image Source="icons/sidebyside_24.bmp" MinDPI="144" />
+        <Image Source="icons/sidebyside_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSourceWordWrap" Id="334" LabelTitle="Wrap source lines" Keytip="VW" />
     <Command Name="cmdMacros" Id="310" LabelTitle="Macros" Keytip="M" TooltipTitle="Macros" TooltipDescription="Run an AHK script from the rte_macros folder.">
       <Command.LargeImages>
         <Image Source="icons/macros_32.bmp" MinDPI="96" />
@@ -1594,6 +1623,13 @@
           </Group>
         </Tab>
         <Tab CommandName="cmdTabView">
+          <Group CommandName="cmdGroupDocumentView">
+            <ToggleButton CommandName="cmdViewRich" />
+            <ToggleButton CommandName="cmdViewMarkdown" />
+            <ToggleButton CommandName="cmdViewHtml" />
+            <ToggleButton CommandName="cmdSideBySide" />
+            <CheckBox CommandName="cmdSourceWordWrap" />
+          </Group>
           <Group CommandName="cmdGroupDocument" SizeDefinition="TwoButtons">
             <ToggleButton CommandName="cmdStructured" />
             <ToggleButton CommandName="cmdFreeForm" />
@@ -1607,10 +1643,6 @@
             <Button CommandName="cmdZoomIn" />
             <Button CommandName="cmdZoomOut" />
             <Button CommandName="cmdZoom100" />
-          </Group>
-          <Group CommandName="cmdGroupSource" SizeDefinition="TwoButtons">
-            <Button CommandName="cmdHtmlSource" />
-            <Button CommandName="cmdMarkdownSource" />
           </Group>
         </Tab>
         <Tab CommandName="cmdTabTools">

@@ -8,16 +8,17 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
 
 *[`examples/Showcase.rtf`](examples/Showcase.rtf), made entirely with the editor's own commands.*
 
-> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer16.*`). Renaming them to AhkWord is planned.
+> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer17.*`). Renaming them to AhkWord is planned.
 
 ## Features
 
 - **Documents:** HTML, Markdown (GitHub flavor, with tables and images), plain text and RTF. Word (`.docx`, `.doc`) and OpenDocument (`.odt`) files are opened and saved through a converter (see [Optional converters](#optional-converters)). Export as PDF through "Microsoft Print to PDF".
 - **Formatting:** fonts, colors, highlight, alignment, change case and underline styles. Structured documents use block styles (normal text, headings, preformatted); free-form documents take any font size.
 - **Lists:** numbered and bulleted lists nested with Tab and Shift+Tab, a numbering style per level, restart and continue numbering, and legal numbering (1., 1.1, 1.1.1). Typed numbers in documents from elsewhere can be turned into real lists.
-- **Tables:** insert tables, add and delete rows and columns, move between cells with Tab.
+- **Tables:** insert tables, add and delete rows and columns, move between cells with Tab and Shift+Tab (Tab in the last cell adds a row, as in Word), also in tables from Word and other programs.
 - **Pages:** manual page breaks (Ctrl+Enter), headers and footers with page-number and date fields, Page Setup, Print Preview and printing. Headers and footers are shown in the editor and saved in the document.
 - **Pictures:** insert from a file or by drag and drop, resize, and give them alt text (shown when the mouse rests on a picture).
+- **Markdown and HTML views:** edit the document as Markdown or HTML, alone or side by side with the formatted text (see [Markdown and HTML views](#markdown-and-html-views)).
 - **Writing tools:** spelling suggestions from the Windows spell checker (F7 goes to the next error) and an outline panel of the headings.
 - **Comfort:** recent documents and remembered window and page settings. Drop a file on the window to open it.
 
@@ -32,13 +33,27 @@ The commands are on a ribbon, the one built into Windows (as in Paint and WordPa
 | **Insert** | Page Break, Table, Picture, Linked Thumbnail, Link, Date & Time |
 | **Layout** | Page Setup, Header & Footer, Print Preview |
 | **Review** | Next Spelling Error, Add to Dictionary, Check spelling as you type |
-| **View** | Structured or Free-form, Word wrap, Header and footer, Outline, Zoom, HTML and Markdown source |
+| **View** | Document View (Rich Text, Markdown, HTML, Side by Side), Structured or Free-form, Word wrap, Header and footer, Outline, Zoom |
 | **Tools** | Macros, Record Macro, Macro Hotkeys, Run Script, Macros Folder, Automation API, About |
 | **Table Tools** | Appears while the caret is in a table: insert rows and columns, delete rows, columns or the table |
 
 - **Keyboard:** press **Alt** to see the KeyTips (H Home, N Insert, P Layout, R Review, W View, L Tools, F File). The usual shortcuts work too: Ctrl+B, Ctrl+Shift+N (numbered list), Ctrl+Shift+G (legal numbering), Ctrl+0 to Ctrl+7 (block styles), Ctrl+Enter (page break), F7 (spelling) and more; each button's tooltip shows its shortcut.
 - **Numbering:** the arrow next to the Numbering button chooses the numbering style and opens List Levels, where each level's style, punctuation and start number are set. List Options has the rest.
 - **Quick access toolbar:** Save, Undo and Redo; its arrow adds New, Open, Print or Print Preview.
+
+## Markdown and HTML views
+
+**View > Document View** shows the document as **Markdown** or **HTML** in a plain-text editor, alone or **Side by Side** with the formatted text, which follows a moment after you stop typing. Edits in the formatted text show in the source too.
+
+- **A Markdown editor:** a `.md` file edited in the Markdown view is saved exactly as you typed it: your spacing, list markers and line endings stay. (Edits made in the formatted view are saved as RTE Writer writes Markdown.)
+- **Formatting keys and buttons insert markup:** in the source view, Ctrl+B gives `**bold**` (or `<strong>` in HTML), Ctrl+1 to Ctrl+6 headings, the list buttons `- ` and `1. ` (renumbered as you indent with Ctrl+M), the alignment keys `<div align>`, and the font control `<span style>`; Table, Link, Picture, Page Break and Date & Time insert theirs. Commands with no Markdown or HTML form say so in the status bar.
+- **Line breaks** (Shift+Enter) are `<br>` in HTML, and `\` at the line end (or `<br>` in headings and table cells) in Markdown, as other editors write them; both are read back as line breaks.
+- **Tables are lined up:** Markdown tables are written with their columns aligned. In the Markdown view, **Tab** and **Shift+Tab** in a table line it up again and move to the next or previous cell (Tab in the last cell adds a row), and the **Table** button tidies the table the caret is in. Keep a table's rows together: a blank line, or a line without `|`, ends a Markdown table, and what follows shows as typed.
+- **Tables with long cells are best edited in the formatted view.** A Markdown table row is always a single line, so a table whose cells hold whole paragraphs, such as a two-column block with a signature on one side and a list of names and addresses on the other, becomes very long lines joined with `<br>`. Such tables are written compactly (no padding, `| --- |`) rather than lined up; Tab still moves between their cells, but they are much easier to read and change in the formatted view.
+- **HTML is laid out readably:** one paragraph or heading per line, lists and tables indented. Line breaks between blocks don't change how a browser shows a page, so the files look the same.
+- **Scripts** can use it too: `Rte.View := "Markdown"`, `Rte.SideBySide := 1`, `Rte.SourceText`.
+
+**Pictures.** In the source view, pictures appear as short names (`embedded-1.png`, ...) instead of their data, and become pictures again when the formatted text is rebuilt. When an HTML or Markdown file is saved, its pictures are written as files to a folder beside it (`document_images\image1.png`, ...) and the file refers to them, which keeps it small and readable. For HTML you can choose **HTML, pictures inside (one file)** in Save As to keep everything in one file instead; files opened that way are saved that way again. For large pictures in a document meant to be read in a browser, consider **Insert > Linked Thumbnail**: a small picture in the page that links to the full-size picture file.
 
 ## Automation from AutoHotkey
 
@@ -57,7 +72,7 @@ Rte.On("Saved", (e) => TrayTip(Rte.FileName, "Saved"))
 - **Calls** wait for the editor and return its result. `Rte.Post(...)` queues a call and returns at once. **Tools > Automation API** in the editor lists everything that can be called.
 - **Events** (`TextChanged`, `SelectionChanged`, `ModifiedChanged`, `Saved`, `Opened`, `Closed`, `AsyncError`) are delivered to callbacks registered with `Rte.On`.
 - **Macros:** the **Macros** button on the Tools tab runs the scripts in [`rte_macros`](rte_macros), and **Macro Hotkeys** gives any of them a hotkey. **Record Macro** (Ctrl+Shift+R) records typing and ribbon commands as a new macro script.
-- **Hotkeys in the host script:** `rte_writer16.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
+- **Hotkeys in the host script:** `rte_writer17.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
 
 The example macros include an auto-save, a word goal tracker, an event monitor, document statistics and Title Case for the selection.
 
@@ -98,7 +113,7 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 1. Install the requirements above.
 2. Clone this repository.
-3. Run `rte_writer16.ahk`. To open a document at start, pass its path: `rte_writer16.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
+3. Run `rte_writer17.ahk`. To open a document at start, pass its path: `rte_writer17.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
 
 Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment variable `RTE_WRITER_SETTINGS` to a file path to keep them elsewhere.
 
@@ -106,9 +121,10 @@ Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment v
 
 | File | Purpose |
 |---|---|
-| `rte_writer16.ahk` | Starts the editor and holds its in-process hotkeys |
-| `rte_writer16.cs` | The editor window, the ribbon's commands and the automation interface |
-| `rte_markdown5.cs` | Markdown reading and writing |
+| `rte_writer17.ahk` | Starts the editor and holds its in-process hotkeys |
+| `rte_writer17.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
+| `rte_markdown6.cs` | Markdown reading and writing |
+| `rte_linebreaks.cs` | Line breaks (Shift+Enter) in HTML |
 | `rte_htmllists2.cs` | HTML list numbering (start numbers, restarts, styles) |
 | `rte_tables.cs` | Tables |
 | `rte_legal.cs` | Legal numbering |

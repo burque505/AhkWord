@@ -1,4 +1,8 @@
-// Markdown for RichEditBox: a replacement for its Markdown property, used by RTE Writer (rte_writer12.cs, through #load).
+// Markdown for RichEditBox: a replacement for its Markdown property, used by RTE Writer (rte_writer17.cs, through #load).
+// Version 6: line breaks (Shift+Enter) where Markdown has no "\" + newline for them are written as <br>, as GitHub
+// does: in table cells and headings (they were written as spaces); and a list item line that ends in two spaces before
+// another line is read as a line break (it was read as a space). Tables are written with their columns lined up
+// (AlignTable, which the source view also uses to tidy a table being edited).
 // Version 5: page breaks (rte_pagebreaks.cs, also #load-ed) are written as <div style="page-break-after: always;
 // break-after: page"></div> on a line of its own, which Markdown viewers pass on as HTML and browsers obey when
 // printing; read back from that (or any element with a page break style alone on its line), and pandoc's \newpage
@@ -89,6 +93,7 @@ public static class MarkdownConverter
 		public int NumberStyle = tomConstants.tomListNumberAsArabic;    // ordered list: TOM numbering (Arabic, letters, Roman)
 		public int Punctuation = tomConstants.tomListPeriod;            // ordered list: 1. (period) or 1) (0)
 		public bool FirstOfList;     // the first item of a list
+		public bool BreakAfter;      // a list item whose last line so far ends in two spaces: a line break if a line follows
 		public bool Legal;           // an item of a legal list (1.1.1)
 	}
 
@@ -488,7 +493,8 @@ public static class MarkdownConverter
 			if (lists.Count > 0 && item != null && !isListItem) {
 				bool startsBlock = AtxHeading.IsMatch(content) || isRule || Fence.IsMatch(content);
 				if (indent >= lists[^1].ContentColumn || (!afterBlank && !startsBlock)) {
-					item.Raw = JoinLines(new List<string> { item.Raw, content.Trim() });
+					item.Raw = JoinLines(new List<string> { item.Raw + (item.BreakAfter ? "  " : ""), content.TrimStart() });
+					item.BreakAfter = content.EndsWith("  ");
 					afterBlank = false;
 					continue;
 				}
@@ -567,7 +573,7 @@ public static class MarkdownConverter
 					open.Legal = ordered && (type.Success ? type.Groups[1].Value == "legal" : lists.Count > 1 && lists[^2].Legal);
 				}
 				item = new Block { Kind = Kind.ListItem, Level = lists.Count - 1, Ordered = ordered, Start = open.Start, Raw = raw, Quote = quote, FirstOfList = newList,
-					NumberStyle = open.NumberStyle, Punctuation = open.Punctuation, Legal = open.Legal };
+					NumberStyle = open.NumberStyle, Punctuation = open.Punctuation, Legal = open.Legal, BreakAfter = marker2.Groups[6].Value.EndsWith("  ") };
 				Add(item);
 				afterBlank = false;
 				continue;
@@ -644,6 +650,77 @@ public static class MarkdownConverter
 		}
 		cells.Add(cell.ToString().Trim());
 		return cells;
+	}
+
+	/// A GitHub table's lines (header, delimiter row, rows) with their columns lined up: each cell padded to its column's
+	/// width, the delimiter row's dashes as wide (keeping its ":" alignment), right-aligned columns padded on the left;
+	/// a table with a cell over 40 columns wide, or rows over 120, compactly (no padding, "| --- |").
+	/// Cells keep their text as written (escaped "\|" included); a row with fewer cells is filled up.
+	public static List<string> AlignTable(IReadOnlyList<string> lines) {
+		var rows = lines.Select(RawCells).ToList();
+		int delimiter = lines.Count > 1 && TableDelimiter.IsMatch(lines[1]) ? 1 : -1;
+		int count = rows.Max(r => r.Count);
+		foreach (var row in rows) while (row.Count < count) row.Add("");
+		var widths = Enumerable.Range(0, count).Select(c => Math.Max(3, rows.Where((row, i) => i != delimiter).Select(row => DisplayWidth(row[c])).DefaultIfEmpty(0).Max())).ToList();
+		var right = Enumerable.Range(0, count).Select(c => delimiter >= 0 && rows[delimiter][c].EndsWith(':') && !rows[delimiter][c].StartsWith(':')).ToList();
+		var result = new List<string>();
+		// A table with long cells (paragraphs, addresses) can't be lined up readably, since a row is one line: it is
+		// written compactly, without padding, and with a short delimiter row.
+		if (widths.Max() > 40 || widths.Sum() + 3 * count + 1 > 120) {
+			for (int r = 0; r < rows.Count; r++) {
+				var cells = r == delimiter
+					? rows[r].Select(cell => (cell.StartsWith(':') ? ":" : "") + "---" + (cell.EndsWith(':') && cell.Length > 1 ? ":" : ""))
+					: rows[r];
+				result.Add("| " + string.Join(" | ", cells) + " |");
+			}
+			return result;
+		}
+		for (int r = 0; r < rows.Count; r++) {
+			var cells = new List<string>();
+			for (int c = 0; c < count; c++) {
+				string cell = rows[r][c];
+				if (r == delimiter) {
+					bool left = cell.StartsWith(':'), end = cell.EndsWith(':') && cell.Length > 1;
+					cells.Add((left ? ":" : "") + new string('-', widths[c] - (left ? 1 : 0) - (end ? 1 : 0)) + (end ? ":" : ""));
+				} else {
+					string padding = new string(' ', Math.Max(0, widths[c] - DisplayWidth(cell)));
+					cells.Add(right[c] ? padding + cell : cell + padding);
+				}
+			}
+			result.Add("| " + string.Join(" | ", cells) + " |");
+		}
+		return result;
+	}
+
+	/// Whether a line is a GitHub table's delimiter row (| --- | :-: |).
+	public static bool IsTableDelimiter(string line) => TableDelimiter.IsMatch(line);
+
+	// A table row's cells as written: split at "|" that is not escaped ("\|" stays as it is), trimmed.
+	static List<string> RawCells(string row) {
+		row = row.Trim();
+		if (row.StartsWith('|')) row = row[1..];
+		if (row.EndsWith('|') && !row.EndsWith("\\|")) row = row[..^1];
+		var cells = new List<string>();
+		int start = 0;
+		for (int i = 0; i < row.Length; i++) {
+			if (row[i] == '\\') { i++; continue; }
+			if (row[i] == '|') { cells.Add(row[start..i].Trim()); start = i + 1; }
+		}
+		cells.Add(row[start..].Trim());
+		return cells;
+	}
+
+	// How many columns text takes in a monospaced font: East Asian wide characters (and most emoji) take two.
+	public static int DisplayWidth(string text) {
+		int width = 0;
+		var elements = System.Globalization.StringInfo.GetTextElementEnumerator(text);
+		while (elements.MoveNext()) {
+			int c = char.ConvertToUtf32((string)elements.Current, 0);
+			bool wide = c is >= 0x1100 and <= 0x115F or >= 0x2E80 and <= 0xA4CF or >= 0xAC00 and <= 0xD7A3 or >= 0xF900 and <= 0xFAFF
+				or >= 0xFE30 and <= 0xFE4F or >= 0xFF00 and <= 0xFF60 or >= 0xFFE0 and <= 0xFFE6 or >= 0x1F300 and <= 0x1FAFF or >= 0x20000 and <= 0x3FFFD;
+			width += wide ? 2 : 1;
+		}
+		return width;
 	}
 
 	static string NormalizeLabel(string label) => Regex.Replace(label.Trim(), @"\s+", " ");
@@ -1062,13 +1139,15 @@ public static class MarkdownConverter
 				Separate("table", 0);
 				int count = realTable.Rows.Max(r => r.Cells.Count);
 				bool boldHeader = realTable.Rows[0].Cells.All(c => c.End > c.Start && doc.Range2(c.Start, c.End).Font.Bold == tomConstants.tomTrue);
+				var tableLines = new List<string>();
 				for (int r = 0; r < realTable.Rows.Count; r++) {
 					var cells = realTable.Rows[r].Cells.Select(c => Inline(doc, c.Start, c.End, r == 0 && boldHeader, true, context, 0)
 						.Replace("\r", "<br>").Replace("\\\n", "<br>").Trim()).ToList();
 					while (cells.Count < count) cells.Add("");
-					output.Add("| " + string.Join(" | ", cells) + " |");
-					if (r == 0) output.Add("|" + string.Concat(Enumerable.Repeat(" --- |", count)));
+					tableLines.Add("| " + string.Join(" | ", cells) + " |");
+					if (r == 0) tableLines.Add("|" + string.Concat(Enumerable.Repeat(" --- |", count)));
 				}
+				output.AddRange(AlignTable(tableLines));
 				previous = "table";
 				previousQuote = 0;
 				continue;
@@ -1082,12 +1161,14 @@ public static class MarkdownConverter
 					var rows = paragraphs.GetRange(first, p - first + 1);
 					int count = rows.Max(r => r.Text.Count(ch => ch == '\t') + 1);
 					bool boldHeader = CellRanges(rows[0]).All(r => r.End > r.Start && doc.Range2(r.Start, r.End).Font.Bold == tomConstants.tomTrue);
+					var tableLines = new List<string>();
 					for (int r = 0; r < rows.Count; r++) {
 						var cells = CellRanges(rows[r]).Select(c => Inline(doc, c.Start, c.End, r == 0 && boldHeader, true, context, 0).Trim()).ToList();
 						while (cells.Count < count) cells.Add("");
-						output.Add("| " + string.Join(" | ", cells) + " |");
-						if (r == 0) output.Add("|" + string.Concat(Enumerable.Repeat(" --- |", count)));
+						tableLines.Add("| " + string.Join(" | ", cells) + " |");
+						if (r == 0) tableLines.Add("|" + string.Concat(Enumerable.Repeat(" --- |", count)));
 					}
+					output.AddRange(AlignTable(tableLines));
 					previous = "table";
 					previousQuote = 0;
 					continue;
@@ -1162,7 +1243,7 @@ public static class MarkdownConverter
 			Separate(para.Kind, para.Quote);
 			string prefix = Prefix(para.Quote);
 			output.Add(para.Kind == "heading"
-				? prefix + new string('#', para.Level) + " " + inline.Replace("\\\n", " ").Replace("\n", " ")
+				? prefix + new string('#', para.Level) + " " + inline.Replace("\\\n", "<br>").Replace("\n", " ")
 				: prefix + EscapeLineStart(inline).Replace("\n", "\n" + prefix));
 			previous = para.Kind;
 			previousQuote = para.Quote;
@@ -1416,7 +1497,7 @@ public static class MarkdownConverter
 					sb.Append('\\').Append(c);
 					break;
 				case '\v':
-					sb.Append(inTable ? " " : "\\\n");
+					sb.Append(inTable ? "<br>" : "\\\n");
 					break;
 				default:
 					sb.Append(c);

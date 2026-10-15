@@ -31,6 +31,7 @@ var fluent = new Dictionary<string, string> {
 	["nextspelling"] = "text_proofing_tools", ["dictionary"] = "book_add",
 	["structured"] = "text_header_1", ["freeform"] = "text_font_size",
 	["zoomin"] = "zoom_in", ["zoomout"] = "zoom_out", ["zoom100"] = "zoom_fit", ["html"] = "code", ["markdown"] = "markdown",
+	["viewrich"] = "document_text", ["sidebyside"] = "layout_column_two",
 	["macros"] = "play", ["record"] = "record", ["hotkeys"] = "keyboard", ["runscript"] = "script", ["macrosfolder"] = "folder_open", ["api"] = "plug_connected",
 	["insertabove"] = "table_stack_above", ["insertbelow"] = "table_stack_below", ["insertleft"] = "table_stack_left", ["insertright"] = "table_stack_right",
 	["deleterow"] = "table_delete_row", ["deletecolumn"] = "table_delete_column", ["deletetable"] = "table_dismiss",

@@ -1,8 +1,20 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
-; RTE Writer, iteration 16: a word processor built on RichEditorNET (rte_writer16.cs), hosted in this AHK process.
-; Adds to iteration 15:
+; RTE Writer, iteration 17: a word processor built on RichEditorNET (rte_writer17.cs), hosted in this AHK process.
+; Adds to iteration 16:
+;   - Markdown and HTML views (View > Document View): the document as Markdown or HTML in a plain-text editor, alone or
+;     side by side with the formatted text, which follows as you type. A .md (or .html) file edited in its source view
+;     is saved exactly as typed. Rte.View := "Markdown", Rte.SideBySide := 1 and Rte.SourceText work from scripts too.
+;     In the source view, the formatting keys and ribbon buttons insert Markdown or HTML: Ctrl+B **bold** / <strong>,
+;     Ctrl+1 # heading / <h1>, the list buttons - / 1. / <ul>, Tab-like indenting of list items (Ctrl+M), alignment as
+;     <div align>, the font control as <span style>, and Table, Link, Picture, Page break and Date.
+;   - Line breaks (Shift+Enter) stay line breaks in HTML (<br>) and Markdown, in headings, lists and tables too.
+;   - Markdown tables are written lined up; in the Markdown view, Tab / Shift+Tab in a table line it up and move
+;     between cells (Tab in the last cell adds a row), and the Table button tidies the table with the caret. Tables
+;     with long cells are written compactly instead. In the formatted text, Tab / Shift+Tab move between the cells of
+;     any table (also from Word), and Tab in the last cell adds a row.
+; Iteration 16 added to iteration 15:
 ;   - A ribbon (the Windows Ribbon, through the WindowsRibbon NuGet package) instead of the menu bar and toolbar: a File
 ;     menu with recent documents, a quick access toolbar, Home / Insert / Layout / Review / View / Tools tabs, and Table
 ;     Tools while the caret is in a table. Press Alt for KeyTips; the keyboard shortcuts are unchanged. The ribbon is
@@ -35,7 +47,7 @@
 ; Earlier iterations added events, recent files, settings, drag and drop, printing, PDF export, headers and footers,
 ; spelling suggestions, the outline, macro recording and hotkeys, and real Markdown. Settings are kept in
 ; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile); set RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
-; Optionally pass a document to open:  rte_writer16.ahk "C:\path\document.md"
+; Optionally pass a document to open:  rte_writer17.ahk "C:\path\document.md"
 ;
 ; AHK automation: other scripts #Include "RteClient2.ahk" and call Rte.<Name>(...), react to events with
 ; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Tools > Automation API lists everything that can be called,
@@ -57,7 +69,7 @@ SubscribeToSaved() {
 }
 
 StartFile := A_Args.Length ? A_Args[1] : ""
-RunCSharpFile(A_ScriptDir "\rte_writer16.cs", A_AhkPath, A_ScriptDir, StartFile)
+RunCSharpFile(A_ScriptDir "\rte_writer17.cs", A_AhkPath, A_ScriptDir, StartFile)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
     MsgBox("RTE Writer stopped because of an error (" CSExitCode "):`n`n" CSOutput, "RTE Writer", "Iconx")
 ExitApp

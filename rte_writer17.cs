@@ -1,14 +1,30 @@
 #:package EllipticBit.RichEditorNET
 #:package WindowsRibbon@2.16.2
-#load "rte_markdown5.cs"
+#load "rte_markdown6.cs"
 #load "rte_htmllists2.cs"
 #load "rte_tables.cs"
 #load "rte_office6.cs"
 #load "rte_legal.cs"
 #load "rte_pagebreaks.cs"
 #load "rte_headerfooter.cs"
+#load "rte_linebreaks.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer16.ahk. Iteration 16 adds to iteration 15:
+// Run it with rte_writer17.ahk. Iteration 17 adds to iteration 16:
+//   - Markdown and HTML views (View > Document View): a plain-text source editor (SourceBox) beside or instead of the
+//     formatted text, in a SplitContainer inside the window, so the ribbon, shortcuts and automation keep working.
+//     The formatted document stays the one the commands work on: entering a source view fills it from the document
+//     (pictures as embedded-1.png ... instead of their data: URIs, put back when loading); edits there are loaded into
+//     the document after a pause in side-by-side, when leaving the view, and before any command or save. Edits in the
+//     formatted text refresh the source. Saving a .md / .html file whose document came from its source (opened from it,
+//     or edited in that view since) writes the source exactly as typed, not regenerated (VerbatimSource).
+//   - Line breaks (Shift+Enter) are <br> in HTML, as in other editors: in paragraphs, headings, list items and table
+//     cells (rte_linebreaks.cs; RichEditorNET's HTML made each line a paragraph, and a table with one fell apart), and
+//     <br> is read as one. Markdown writes them as <br> in headings and table cells too (rte_markdown6.cs).
+//   - Markdown tables are written with their columns lined up (MarkdownConverter.AlignTable); in the Markdown view,
+//     Tab / Shift+Tab in a table line it up and move between cells, and the Table button tidies it (FormatSourceTable);
+//     tables with long cells are written compactly. In the formatted text, Tab / Shift+Tab in any table go through
+//     NextCell (RichEdit's own Tab doesn't move between the cells of every table from Word), adding a row at the end.
+// Iteration 16 added to iteration 15:
 //   - A ribbon instead of the menu bar and toolbar: the Windows Ribbon (UIRibbon, drawn by Windows: DPI-aware, KeyTips
 //     with Alt, screen readers), through the WindowsRibbon NuGet package. Its markup is ribbon\RteRibbon.xml, compiled by
 //     ribbon\build_ribbon.ahk into ribbon\RteRibbon.ribbon (a resource-only DLL, loaded from the file). The ribbon's
@@ -147,7 +163,7 @@ enum RibbonCommand : uint
 	TableTools = 106, TabTableLayout = 107, GroupClipboard = 110, GroupFont = 111, GroupText = 112, GroupParagraph = 113,
 	GroupStyles = 114, GroupEditing = 115, GroupPages = 116, GroupTables = 117, GroupIllustrations = 118, GroupLinks = 119,
 	GroupInsertText = 120, GroupPage = 121, GroupProofing = 122, GroupDocument = 123, GroupShow = 124, GroupZoom = 125,
-	GroupSource = 126, GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupRowsColumns = 130, GroupDelete = 131,
+	GroupDocumentView = 126, GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupRowsColumns = 130, GroupDelete = 131,
 	AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144, PrintMenu = 145,
 	New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204, PrintPreview = 205,
 	PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210, Undo = 220,
@@ -161,10 +177,93 @@ enum RibbonCommand : uint
 	OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, PageBreak = 280, Table = 281, Picture = 282,
 	Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296,
 	SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, ShowBands = 303, Outline = 304,
-	ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, HtmlSource = 308, MarkdownSource = 309, Macros = 310,
-	RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316,
-	InsertAbove = 320, InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325,
-	DeleteTable = 326,
+	ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332,
+	SideBySide = 333, SourceWordWrap = 334, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313,
+	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
+	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326,
+}
+
+// Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
+// (paragraphs, headings, list items, table rows and cells), and after <br>. Text inside a block stays on its line
+// (a line break there would be a space), and <pre> is left as it is.
+static class PrettyHtml
+{
+	static readonly HashSet<string> Containers = new(StringComparer.OrdinalIgnoreCase) { "ul", "ol", "table", "thead", "tbody", "tfoot", "tr", "blockquote", "div" };
+	static readonly HashSet<string> Leaves = new(StringComparer.OrdinalIgnoreCase) { "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "th", "hr", "caption" };
+	static readonly Regex Tag = new(@"<(/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(/?)>", RegexOptions.Compiled);
+
+	public static string Format(string html) {
+		var output = new StringBuilder();
+		int depth = 0, position = 0;
+		bool lineStart = true;
+		void NewLine() { if (!lineStart) { output.Append("\r\n"); lineStart = true; } }
+		void Indent() { if (lineStart) { output.Append(' ', depth * 2); lineStart = false; } }
+		foreach (Match tag in Tag.Matches(html)) {
+			if (tag.Index < position) continue;    // (inside a <pre>, already copied)
+			string text = html[position..tag.Index];
+			if (text.Trim() != "") { Indent(); output.Append(text); }
+			else if (!lineStart) output.Append(text);
+			position = tag.Index + tag.Length;
+			string name = tag.Groups[2].Value;
+			bool closing = tag.Groups[1].Value == "/", selfClosing = tag.Groups[3].Value == "/";
+			if (name.Equals("pre", StringComparison.OrdinalIgnoreCase) && !closing) {    // as it is, up to </pre>
+				int end = html.IndexOf("</pre>", position, StringComparison.OrdinalIgnoreCase);
+				end = end < 0 ? html.Length : end + "</pre>".Length;
+				NewLine(); Indent();
+				output.Append(html, tag.Index, end - tag.Index);
+				position = end;
+				NewLine();
+				continue;
+			}
+			if (Containers.Contains(name) && !closing && Regex.Match(html[position..], @"^\s*</" + name + @"\s*>", RegexOptions.IgnoreCase) is { Success: true } empty) {
+				NewLine(); Indent(); output.Append(tag.Value).Append(empty.Value.Trim()); NewLine();    // an empty one (a page break) on one line
+				position += empty.Length;
+			} else if (Containers.Contains(name)) {
+				if (closing) { depth = Math.Max(0, depth - 1); NewLine(); Indent(); output.Append(tag.Value); NewLine(); }
+				else { NewLine(); Indent(); output.Append(tag.Value); NewLine(); if (!selfClosing) depth++; }
+			} else if (Leaves.Contains(name)) {
+				if (closing) { Indent(); output.Append(tag.Value); NewLine(); }
+				else { NewLine(); Indent(); output.Append(tag.Value); if (selfClosing || name.Equals("hr", StringComparison.OrdinalIgnoreCase)) NewLine(); }
+			} else {
+				Indent();
+				output.Append(tag.Value);
+				if (name.Equals("br", StringComparison.OrdinalIgnoreCase)) NewLine();
+			}
+		}
+		string rest = html[position..];
+		if (rest.Trim() != "") { Indent(); output.Append(rest); }
+		return output.ToString().TrimEnd();
+	}
+}
+
+// Iteration 17: the Markdown / HTML editor. RichEdit in plain-text mode (pasted formatting is dropped), which keeps
+// RichEdit's multi-level undo; a monospaced font; Tab inserts a tab.
+sealed class SourceBox : RichTextBox
+{
+	// RichEdit's own formatting keys, which do nothing useful in plain text (Ctrl+E would center all of it).
+	public static readonly HashSet<Keys> FormattingKeys = new() {
+		Keys.Control | Keys.L, Keys.Control | Keys.E, Keys.Control | Keys.R, Keys.Control | Keys.J, Keys.Control | Keys.D1,
+		Keys.Control | Keys.D2, Keys.Control | Keys.D5, Keys.Control | Keys.Shift | Keys.A, Keys.Control | Keys.Shift | Keys.L,
+		Keys.Control | Keys.Oemplus, Keys.Control | Keys.Shift | Keys.Oemplus, Keys.Control | Keys.B, Keys.Control | Keys.I, Keys.Control | Keys.U,
+	};
+
+	public SourceBox() {
+		AcceptsTab = true;
+		DetectUrls = false;
+		HideSelection = false;
+		BorderStyle = BorderStyle.None;
+		Font = new Font("Consolas", 10.5f);
+	}
+
+	protected override void OnHandleCreated(EventArgs e) {
+		base.OnHandleCreated(e);
+		SendMessage(Handle, EM_SETTEXTMODE, (IntPtr)(TM_PLAINTEXT | TM_MULTILEVELUNDO | TM_MULTICODEPAGE), IntPtr.Zero);
+		SendMessage(Handle, EM_SETMARGINS, (IntPtr)(EC_LEFTMARGIN | EC_RIGHTMARGIN), (IntPtr)(LogicalToDeviceUnits(6) | LogicalToDeviceUnits(6) << 16));
+	}
+
+	const int EM_SETTEXTMODE = 0x459, EM_SETMARGINS = 0xD3, TM_PLAINTEXT = 1, TM_MULTILEVELUNDO = 8, TM_MULTICODEPAGE = 32,
+		EC_LEFTMARGIN = 1, EC_RIGHTMARGIN = 2;
+	[DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 }
 
 class WriterForm : Form
@@ -194,6 +293,28 @@ class WriterForm : Form
 	RibbonTabGroup tableTools = null!;
 	RibbonButton undoButton = null!, redoButton = null!, cutButton = null!, copyButton = null!;
 	List<string> galleryMacros = new();
+
+	// Iteration 17: the Markdown and HTML views. The source editor is beside (side by side) or instead of the page; the
+	// formatted document stays the one the commands work on, and the source is loaded into it (ApplySource).
+	internal enum SourceKind { None, Markdown, Html }
+	readonly SplitContainer sourceSplit = new() { Dock = DockStyle.Fill, Panel1Collapsed = true, SplitterWidth = 6 };
+	readonly SourceBox sourceBox = new() { Dock = DockStyle.Fill };
+	readonly Label sourceTitle = new() { Dock = DockStyle.Top, AutoEllipsis = true, ForeColor = SystemColors.GrayText, BackColor = SystemColors.Control };
+	readonly System.Windows.Forms.Timer sourceTimer = new() { Interval = 600 }, richToSourceTimer = new() { Interval = 600 };
+	SourceKind view = SourceKind.None, shownKind = SourceKind.None;    // the view; what the source editor holds
+	bool sideBySide, sourceDirty, filling, loadingSource, inCommand, sourceHadFocus;
+	// For each kind, the source text the document corresponds to (opened from it, or loaded from or shown in the source
+	// view), and what the document regenerated as that kind was then: while it still is, the document is unchanged
+	// since, and the text is shown, and saved, as it is (a .md file keeps the user's own Markdown).
+	// Own: the text is the opened file's or typed by the user (saved as it is), not regenerated from the document.
+	readonly Dictionary<SourceKind, (string Text, string Snapshot, bool Own)> sources = new();
+	string sourceNewline = "\n";
+	// Pictures: their data: URIs in the source view are names (embedded-1.png ...), put back when loading.
+	readonly Dictionary<string, string> embeddedData = new(), embeddedName = new();
+	// Formatting in the source editor: Markdown or HTML for ribbon commands, and for keys that are not commands' own.
+	readonly Dictionary<RibbonCommand, Action> sourceCommands = new();
+	readonly Dictionary<Keys, RibbonCommand> keyCommands = new();
+	readonly Dictionary<Keys, Action> sourceKeys = new();
 	FindReplaceForm? findForm;
 	bool updatingUi, discardOnClose, lastModified;
 
@@ -255,7 +376,27 @@ class WriterForm : Form
 		outlineSplit.Panel1.Controls.Add(outlineTree);
 		outlineSplit.Panel1.Controls.Add(outlineHint);
 		outlineSplit.Panel1.Controls.Add(outlineTitle);
-		outlineSplit.Panel2.Controls.Add(page);
+		var sourcePanel = new Panel { Dock = DockStyle.Fill };
+		sourcePanel.Controls.Add(sourceBox);
+		sourcePanel.Controls.Add(sourceTitle);    // (added after the editor, so docked before it)
+		sourceTitle.Height = LogicalToDeviceUnits(24);
+		sourceTitle.Padding = new Padding(LogicalToDeviceUnits(6), LogicalToDeviceUnits(4), 0, 0);
+		sourceBox.WordWrap = Settings.SourceWordWrap;
+		sourceSplit.Panel1.Controls.Add(sourcePanel);
+		sourceSplit.Panel2.Controls.Add(page);
+		outlineSplit.Panel2.Controls.Add(sourceSplit);
+		sourceBox.TextChanged += (s, e) => SourceTextChanged();
+		sourceBox.SelectionChanged += (s, e) => UpdateUi();
+		sourceBox.Enter += (s, e) => { sourceHadFocus = true; UpdateUi(); };
+		Editor.Enter += (s, e) => { sourceHadFocus = false; UpdateUi(); };
+		sourceTimer.Tick += (s, e) => { sourceTimer.Stop(); if (sideBySide) ApplySource(); };
+		richToSourceTimer.Tick += (s, e) => { richToSourceTimer.Stop(); RefreshSource(); };
+		Editor.TextChanged += (s, e) => {
+			// edits in the formatted text (typed, or made by a command or a script) refresh the source after a pause;
+			// changes made while loading the source, or by the editor's own timers, don't
+			if (view != SourceKind.None && !loadingSource && !filling && (Editor.Focused || inCommand)) Restart(richToSourceTimer);
+		};
+		sourceSplit.SplitterMoved += (s, e) => { if (sideBySide && sourceSplit.Width > 0) Settings.SourceSplit = (int)Math.Round(sourceSplit.SplitterDistance * 100.0 / sourceSplit.Width); };
 		outlineSplit.Panel1Collapsed = !Settings.ShowOutline;
 		var status = new StatusStrip();
 		status.Items.AddRange(new ToolStripItem[] { recordingLabel, statusText, positionLabel, wordsLabel, modeLabel, automationLabel });
@@ -328,7 +469,8 @@ class WriterForm : Form
 			UpdateTitle();
 			UpdateWordCount();
 			UpdateRecentItems();
-			SetStatus(startFile != null ? "" : "New document. Press Alt for the ribbon's KeyTips. The Tools tab runs AHK macros; Tools > Automation API lists what they can call.");
+			if (Enum.TryParse<SourceKind>(Settings.SourceView, out var lastView) && lastView != SourceKind.None) SetView(lastView, Settings.SideBySide);
+			SetStatus(startFile != null ? "" : "New document. Press Alt for the ribbon's KeyTips. View > Document View edits it as Markdown or HTML; the Tools tab runs AHK macros.");
 		};
 		FormClosing += OnFormClosing;
 		FormClosed += (s, e) => {
@@ -372,12 +514,13 @@ class WriterForm : Form
 		};
 
 		// Home: clipboard and editing
-		undoButton = Button(RibbonCommand.Undo, () => { skipLegalCheck = true; Editor.Undo(); }, Keys.Control | Keys.Z, M("Undo"));
-		redoButton = Button(RibbonCommand.Redo, () => { skipLegalCheck = true; Editor.Redo(); }, Keys.Control | Keys.Y, M("Redo"));
-		cutButton = Button(RibbonCommand.Cut, Editor.Cut, Keys.Control | Keys.X, M("Cut"));
-		copyButton = Button(RibbonCommand.Copy, Editor.Copy, Keys.Control | Keys.C, M("Copy"));
-		Button(RibbonCommand.Paste, Editor.Paste, Keys.Control | Keys.V, M("Paste"));
-		Button(RibbonCommand.SelectAll, Editor.SelectAll, Keys.Control | Keys.A, M("SelectAll"));
+		// (these act on the source editor while it is the one in use; in it, their keys are its own)
+		undoButton = Button(RibbonCommand.Undo, OnText(() => { skipLegalCheck = true; Editor.Undo(); }, sourceBox.Undo), Keys.Control | Keys.Z, M("Undo"));
+		redoButton = Button(RibbonCommand.Redo, OnText(() => { skipLegalCheck = true; Editor.Redo(); }, sourceBox.Redo), Keys.Control | Keys.Y, M("Redo"));
+		cutButton = Button(RibbonCommand.Cut, OnText(Editor.Cut, sourceBox.Cut), Keys.Control | Keys.X, M("Cut"));
+		copyButton = Button(RibbonCommand.Copy, OnText(Editor.Copy, sourceBox.Copy), Keys.Control | Keys.C, M("Copy"));
+		Button(RibbonCommand.Paste, OnText(Editor.Paste, () => sourceBox.Paste(DataFormats.GetFormat(DataFormats.UnicodeText))), Keys.Control | Keys.V, M("Paste"));
+		Button(RibbonCommand.SelectAll, OnText(Editor.SelectAll, sourceBox.SelectAll), Keys.Control | Keys.A, M("SelectAll"));
 		Button(RibbonCommand.Find, () => ShowFind(false), Keys.Control | Keys.F);
 		Button(RibbonCommand.Replace, () => ShowFind(true), Keys.Control | Keys.H);
 		Shortcut(Keys.F3, "Find Next", () => FindNext());
@@ -440,7 +583,11 @@ class WriterForm : Form
 		blockCombo.ExecuteEvent += (s, e) => {
 			if (updatingUi || GalleryItemEventArgs.Create(blockCombo, e).SelectedItem is not { SelectedItemIndex: >= 0 and <= (int)BlockStyle.Preformatted } item) return;
 			var style = (BlockStyle)item.SelectedItemIndex;
-			BeginInvoke(() => { Run(() => api.SetBlockStyle(style), M("SetBlockStyle", style)); Editor.Focus(); });
+			BeginInvoke(() => {
+				if (SourceActive) { RunSource(() => SourceBlockStyle(style)); return; }
+				Run(() => api.SetBlockStyle(style), M("SetBlockStyle", style));
+				Editor.Focus();
+			});
 		};
 		foreach (var style in Enum.GetValues<BlockStyle>()) {
 			Keys keys = style switch {
@@ -479,8 +626,11 @@ class WriterForm : Form
 		Button(RibbonCommand.ZoomIn, () => Editor.ZoomFactor = Math.Min(5f, Editor.ZoomFactor + 0.1f));
 		Button(RibbonCommand.ZoomOut, () => Editor.ZoomFactor = Math.Max(0.5f, Editor.ZoomFactor - 0.1f));
 		Button(RibbonCommand.Zoom100, () => Editor.ZoomFactor = 1f);
-		Button(RibbonCommand.HtmlSource, () => ShowText("HTML source", api.GetHtml()));
-		Button(RibbonCommand.MarkdownSource, () => ShowText("Markdown source (images shown as image1.png ...)", api.GetMarkdown(false)));
+		Toggle(RibbonCommand.ViewRich, () => SetView(SourceKind.None, false));
+		Toggle(RibbonCommand.ViewMarkdown, () => SetView(SourceKind.Markdown, sideBySide));
+		Toggle(RibbonCommand.ViewHtml, () => SetView(SourceKind.Html, sideBySide));
+		Toggle(RibbonCommand.SideBySide, () => SetView(view == SourceKind.None ? SourceKind.Markdown : view, !sideBySide));
+		Check(RibbonCommand.SourceWordWrap, () => sourceBox.WordWrap = !sourceBox.WordWrap);
 
 		// Tools
 		macrosGallery = new RibbonDropDownGallery(ribbon, (uint)RibbonCommand.Macros);
@@ -498,6 +648,8 @@ class WriterForm : Form
 		Button(RibbonCommand.AutomationApi, () => ShowText("Automation API (RteClient2.ahk: Rte.<Name>(...))", api.Help()));
 		Button(RibbonCommand.About, ShowAbout);
 
+		BuildSourceCommands();
+
 		// Table Tools (shown while the caret is in a table)
 		tableTools = new RibbonTabGroup(ribbon, (uint)RibbonCommand.TableTools);
 		Button(RibbonCommand.InsertAbove, () => api.InsertRow(false), Keys.None, M("InsertRow", false));
@@ -513,26 +665,40 @@ class WriterForm : Form
 	// while the ribbon is still handling the click.
 	RibbonButton Button(RibbonCommand id, Action action, Keys keys = Keys.None, string? macro = null) {
 		var button = new RibbonButton(ribbon, (uint)id);
-		button.ExecuteEvent += (s, e) => BeginInvoke(() => Run(action, macro));
-		if (keys != Keys.None) Shortcut(keys, CommandName(id), action, macro);
+		button.ExecuteEvent += (s, e) => BeginInvoke(() => Command(id, action, macro));
+		if (keys != Keys.None) { Shortcut(keys, CommandName(id), action, macro); keyCommands[keys] = id; }
 		return button;
 	}
 
 	void Toggle(RibbonCommand id, Action action, Keys keys = Keys.None, string? macro = null) {
 		var button = new RibbonToggleButton(ribbon, (uint)id);
-		button.ExecuteEvent += (s, e) => BeginInvoke(() => Run(action, macro));
-		if (keys != Keys.None) Shortcut(keys, CommandName(id), action, macro);
+		button.ExecuteEvent += (s, e) => BeginInvoke(() => Command(id, action, macro));
+		if (keys != Keys.None) { Shortcut(keys, CommandName(id), action, macro); keyCommands[keys] = id; }
 		toggleButtons[id] = button;
 	}
 
 	void Check(RibbonCommand id, Action action, Keys keys = Keys.None) {
 		var box = new RibbonCheckBox(ribbon, (uint)id);
-		box.ExecuteEvent += (s, e) => BeginInvoke(() => Run(action));
-		if (keys != Keys.None) Shortcut(keys, CommandName(id), action);
+		box.ExecuteEvent += (s, e) => BeginInvoke(() => Command(id, action, null));
+		if (keys != Keys.None) { Shortcut(keys, CommandName(id), action); keyCommands[keys] = id; }
 		checkBoxes[id] = box;
 	}
 
+	// A ribbon command. While the source editor is in use, formatting commands insert Markdown or HTML there (or say
+	// that they need the rich text view) instead of changing the formatted text out of sight.
+	void Command(RibbonCommand id, Action action, string? macro) {
+		if (SourceActive && !SourceDocumentCommands.Contains(id)) {
+			if (sourceCommands.TryGetValue(id, out var markup)) RunSource(markup);
+			else { SetStatus($"{CommandName(id)} works in the Rich Text view (View > Rich Text)."); UpdateUi(); }
+			return;
+		}
+		Run(action, macro);
+	}
+
 	void Shortcut(Keys keys, string name, Action action, string? macro = null) => shortcuts[keys] = (name, () => Run(action, macro));
+
+	// An editing command that acts on the source editor when it is the one in use, else on the formatted text.
+	Action OnText(Action rich, Action source) => () => { if (SourceActive) source(); else rich(); };
 
 	// "SaveAs" -> "Save As": the command's name for the macro hotkey warnings.
 	static string CommandName(RibbonCommand id) => Regex.Replace(id.ToString(), "(?<=[a-z])(?=[A-Z0-9])", " ");
@@ -546,13 +712,14 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 16: the ribbon)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 17: Markdown and HTML views)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
 	// "Automatic" text color and "No Color" highlight are not RGB values (the color itself then reads as black).
 	void ApplyFontChanges(Dictionary<FontPropertiesEnum, object>? changes) {
 		if (changes == null || changes.Count == 0) return;
+		if (SourceActive) { RunSource(() => SourceFont(changes)); return; }
 		// WindowsRibbon boxes some values as other enum types, so they are read by number.
 		uint Number(FontPropertiesEnum key) => Convert.ToUInt32(changes[key]);
 		bool Has(FontPropertiesEnum key) => changes.ContainsKey(key);
@@ -657,13 +824,18 @@ class WriterForm : Form
 	// Runs a UI command. Errors (e.g. a feature that is unavailable in the current mode) go to the status bar.
 	void Run(Action action, string? macro = null) {
 		try {
+			ApplySource();    // what was typed in the source view goes into the document first
+			inCommand = true;
 			action();
 			if (macro != null) Record(macro);
 		} catch (Exception ex) {
 			if (ex is TargetInvocationException { InnerException: { } inner }) ex = inner;
 			SetStatus("⚠ " + ex.Message);
 			System.Media.SystemSounds.Beep.Play();
+		} finally {
+			inCommand = false;
 		}
+		RefreshSource();    // and what the command changed shows in the source
 		UpdateUi();
 		UpdateTitle();
 		Restart(outlineTimer);
@@ -721,7 +893,8 @@ class WriterForm : Form
 		new("OpenDocument, converted by Word", "*.odt", OfficeConverters.Word), new("OpenDocument, converted by pandoc", "*.odt", OfficeConverters.Pandoc)
 	};
 
-	static readonly FileType[] SaveTypes = new[] { new FileType("HTML", "*.html"), new FileType("Markdown", "*.md"), new FileType("Rich Text Format", "*.rtf") }
+	static readonly FileType[] SaveTypes = new[] { new FileType("HTML, pictures in a folder", "*.html"), new FileType("HTML, pictures inside (one file)", "*.html", EditorApi.PicturesInside),
+			new FileType("Markdown", "*.md"), new FileType("Rich Text Format", "*.rtf") }
 		.Concat(WordTypes).Concat(OdtTypes).Append(new FileType("Text", "*.txt")).ToArray();
 
 	static string Filter(IEnumerable<FileType> types) => string.Join("|", types.Select(t => $"{t.Label} ({t.Patterns.Replace(";*.htm;", ";").Replace(";*.markdown", "")})|{t.Patterns}"));
@@ -803,6 +976,9 @@ class WriterForm : Form
 		Settings.SpellCheck = Editor.EnableSpellCheck;
 		Settings.AutoLevelStyles = AutoLevelStyles;
 		Settings.ShowOutline = !outlineSplit.Panel1Collapsed;
+		Settings.SourceView = view.ToString();
+		Settings.SideBySide = sideBySide;
+		Settings.SourceWordWrap = sourceBox.WordWrap;
 		if (!outlineSplit.Panel1Collapsed) Settings.OutlineWidth = (int)Math.Round(outlineSplit.SplitterDistance * 96.0 / DeviceDpi);
 		try { Settings.Zoom = Editor.ZoomFactor; } catch (ObjectDisposedException) { }
 		Settings.Save();
@@ -1353,7 +1529,8 @@ class WriterForm : Form
 
 	void ShowFind(bool replace) {
 		findForm ??= new FindReplaceForm(this);
-		findForm.ShowFor(replace, Editor.SelectionLength is > 0 and < 100 && !Editor.SelectedText.Contains('\n') ? Editor.SelectedText : null);
+		TextBoxBase box = SourceActive ? sourceBox : Editor;
+		findForm.ShowFor(replace, box.SelectionLength is > 0 and < 100 && !box.SelectedText.Contains('\n') ? box.SelectedText : null);
 	}
 
 	internal bool FindNext() {
@@ -1361,6 +1538,7 @@ class WriterForm : Form
 			ShowFind(false);
 			return false;
 		}
+		if (SourceActive) return FindInSource();
 		int index = api.Find(findForm.FindText, findForm.MatchCase, findForm.WholeWord);
 		Record(M("Find", findForm.FindText, findForm.MatchCase, findForm.WholeWord));
 		SetStatus(index < 0 ? $"\"{findForm.FindText}\" was not found." : "");
@@ -1370,6 +1548,11 @@ class WriterForm : Form
 	internal void ReplaceNext() {
 		if (findForm == null) return;
 		var comparison = findForm.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+		if (SourceActive) {
+			if (sourceBox.SelectionLength > 0 && string.Equals(sourceBox.SelectedText, findForm.FindText, comparison)) sourceBox.SelectedText = findForm.ReplaceText;
+			FindInSource();
+			return;
+		}
 		if (Editor.SelectionLength > 0 && string.Equals(Editor.SelectedText, findForm.FindText, comparison))
 			Run(() => Editor.SelectedText = findForm.ReplaceText, M("InsertText", findForm.ReplaceText));
 		FindNext();
@@ -1378,6 +1561,14 @@ class WriterForm : Form
 	internal void ReplaceAll() {
 		if (findForm == null || findForm.FindText == "") return;
 		int count = 0;
+		if (SourceActive) {
+			var pattern = new Regex((findForm.WholeWord ? @"\b" : "") + Regex.Escape(findForm.FindText) + (findForm.WholeWord ? @"\b" : ""), findForm.MatchCase ? RegexOptions.None : RegexOptions.IgnoreCase);
+			string replacement = findForm.ReplaceText;
+			string text = pattern.Replace(sourceBox.Text, m => { count++; return replacement; });
+			if (count > 0) { sourceBox.SelectAll(); sourceBox.SelectedText = text; }    // one undo step
+			SetStatus($"{count} replacement{(count == 1 ? "" : "s")} made.");
+			return;
+		}
 		Run(() => count = api.Replace(findForm.FindText, findForm.ReplaceText, findForm.MatchCase, findForm.WholeWord),
 			M("Replace", findForm.FindText, findForm.ReplaceText, findForm.MatchCase, findForm.WholeWord));
 		SetStatus($"{count} replacement{(count == 1 ? "" : "s")} made.");
@@ -1386,6 +1577,22 @@ class WriterForm : Form
 	// ---------------------------------------------------------------- Keyboard: Tab / Shift+Tab in lists
 
 	protected override bool ProcessCmdKey(ref Message msg, Keys keyData) {
+		// The source editor: its own editing keys, the document's (save, open, find ...); not the formatting ones, which
+		// would act on the formatted text out of sight (or let RichEdit format the plain text, as Ctrl+E would)
+		if (sourceBox.IsHandleCreated && msg.HWnd == sourceBox.Handle) {
+			if (MacroForKeys(keyData) is { } sourceMacro) { Run(() => RunMacroFromUi(sourceMacro)); return true; }
+			if ((keyData == Keys.Tab || keyData == (Keys.Shift | Keys.Tab)) && InMarkdown && SourceTableAt(sourceBox.SelectionStart) != null) {
+				RunSource(() => FormatSourceTable(keyData == Keys.Tab ? 1 : -1));
+				return true;
+			}
+			if (sourceKeys.TryGetValue(keyData, out var markupKey)) { RunSource(markupKey); return true; }
+			if (keyCommands.TryGetValue(keyData, out var keyCommand) && sourceCommands.TryGetValue(keyCommand, out var markupCommand)) { RunSource(markupCommand); return true; }
+			if (SourceDocumentKeys.Contains(keyData) && shortcuts.TryGetValue(keyData, out var documentShortcut)) { documentShortcut.Action(); return true; }
+			if (SourceEditKeys.Contains(keyData)) return base.ProcessCmdKey(ref msg, keyData);
+			if (keyData == (Keys.Control | Keys.V) || keyData == (Keys.Shift | Keys.Insert)) return base.ProcessCmdKey(ref msg, keyData);
+			if (shortcuts.ContainsKey(keyData) || SourceBox.FormattingKeys.Contains(keyData)) return true;
+			return base.ProcessCmdKey(ref msg, keyData);
+		}
 		// Ctrl+Enter: a page break
 		if (keyData == (Keys.Control | Keys.Enter) && Editor.IsHandleCreated && msg.HWnd == Editor.Handle) {
 			Run(() => api.InsertPageBreak(), M("InsertPageBreak"));
@@ -1405,6 +1612,13 @@ class WriterForm : Form
 			Run(() => handled = keyData switch { Keys.Enter => api.LegalEnter(), Keys.Back => api.LegalBackspace(), _ => api.LegalDelete() },
 				M("Key", keyData switch { Keys.Enter => "Enter", Keys.Back => "Backspace", _ => "Delete" }));
 			if (handled) return true;
+		}
+		// Tab / Shift+Tab in a table: the next or previous cell (RichEdit's own Tab doesn't in every table, such as
+		// some from Word), and a new row from the last cell
+		if ((keyData == Keys.Tab || keyData == (Keys.Shift | Keys.Tab)) && Editor.IsHandleCreated && msg.HWnd == Editor.Handle && CaretInTable() && api.InTable()) {
+			string key = keyData == Keys.Tab ? "Tab" : "Shift+Tab";
+			Run(() => api.NextCell(keyData == Keys.Tab ? 1 : -1), M("Key", key));
+			return true;
 		}
 		if ((keyData == Keys.Tab || keyData == (Keys.Shift | Keys.Tab)) && Editor.IsHandleCreated && msg.HWnd == Editor.Handle && api.InList() && !api.InTable()) {
 			int delta = keyData == Keys.Tab ? 1 : -1;
@@ -1614,7 +1828,15 @@ class WriterForm : Form
 		}
 		RunPostedCalls();    // calls run in the order they were made, posted or not
 		Restart(outlineTimer);
-		string reply = Automation.Dispatch(api, Editor, request);
+		string reply;
+		try {
+			if (request.Length < 2 || !request[1].Equals("SourceText", StringComparison.OrdinalIgnoreCase)) ApplySource();
+			inCommand = true;
+			reply = Automation.Dispatch(api, Editor, request);
+		} finally {
+			inCommand = false;
+		}
+		RefreshSource();
 		if (request.Length > 1) automationLabel.Text = $"Automation: {request[1]}";
 		UpdateUi();
 		UpdateTitle();
@@ -1656,10 +1878,11 @@ class WriterForm : Form
 			var range = api.SelectionRange();
 			if (ribbon.Initialized) UpdateRibbon(range);
 
-			int line = Editor.GetLineFromCharIndex(Editor.SelectionStart);
-			int column = Editor.SelectionStart - Editor.GetFirstCharIndexFromLine(line);
+			TextBoxBase box = SourceActive ? sourceBox : Editor;
+			int line = box.GetLineFromCharIndex(box.SelectionStart);
+			int column = box.SelectionStart - box.GetFirstCharIndexFromLine(line);
 			positionLabel.Text = $"Ln {line + 1}, Col {column + 1}";
-			modeLabel.Text = Editor.EnableHtmlFontSizing ? "Structured" : "Free-form";
+			modeLabel.Text = (view != SourceKind.None ? ViewName(view) + (sideBySide ? " | " : ", ") : "") + (Editor.EnableHtmlFontSizing ? "Structured" : "Free-form");
 		} catch (COMException) {
 			// The document can be briefly unavailable while it is being replaced.
 		} finally {
@@ -1701,6 +1924,11 @@ class WriterForm : Form
 		toggleButtons[RibbonCommand.Structured].BooleanValue = Editor.EnableHtmlFontSizing;
 		toggleButtons[RibbonCommand.FreeForm].BooleanValue = !Editor.EnableHtmlFontSizing;
 		toggleButtons[RibbonCommand.RecordMacro].BooleanValue = recorder.Recording;
+		toggleButtons[RibbonCommand.ViewRich].BooleanValue = view == SourceKind.None;
+		toggleButtons[RibbonCommand.ViewMarkdown].BooleanValue = view == SourceKind.Markdown;
+		toggleButtons[RibbonCommand.ViewHtml].BooleanValue = view == SourceKind.Html;
+		toggleButtons[RibbonCommand.SideBySide].BooleanValue = sideBySide;
+		checkBoxes[RibbonCommand.SourceWordWrap].BooleanValue = sourceBox.WordWrap;
 		checkBoxes[RibbonCommand.WordWrap].BooleanValue = Editor.WordWrap;
 		checkBoxes[RibbonCommand.ShowBands].BooleanValue = Settings.ShowBands;
 		checkBoxes[RibbonCommand.Outline].BooleanValue = !outlineSplit.Panel1Collapsed;
@@ -1711,6 +1939,559 @@ class WriterForm : Form
 		cutButton.Enabled = copyButton.Enabled = Editor.SelectionLength > 0;
 		var tools = CaretInTable() ? ContextAvailability.Available : ContextAvailability.NotAvailable;
 		if (tableTools.ContextAvailable != tools) tableTools.ContextAvailable = tools;
+	}
+
+	// ---------------------------------------------------------------- Iteration 17: Markdown and HTML views
+
+	internal SourceKind View => view;
+	internal bool SideBySide => sideBySide;
+
+	static string ViewName(SourceKind kind) => kind switch { SourceKind.Markdown => "Markdown", SourceKind.Html => "HTML", _ => "Rich text" };
+
+	// The source editor is the one in use: it has the focus, or had it last (a ribbon click doesn't take it away).
+	bool SourceActive => view != SourceKind.None && (sourceBox.Focused || sourceHadFocus && !Editor.Focused);
+
+	// Commands that work the same in the source editor (the document, the view, editing the source itself).
+	static readonly HashSet<RibbonCommand> SourceDocumentCommands = new() {
+		RibbonCommand.New, RibbonCommand.Open, RibbonCommand.Save, RibbonCommand.SaveAs, RibbonCommand.Print, RibbonCommand.PrintPreview,
+		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
+		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys,
+		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
+		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.Structured, RibbonCommand.FreeForm, RibbonCommand.WordWrap,
+		RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
+		RibbonCommand.HeaderFooter, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
+		RibbonCommand.SelectAll, RibbonCommand.Find, RibbonCommand.Replace,
+	};
+
+	// Keys the source editor handles itself (RichEdit's own editing), and the document's commands it lets through.
+	static readonly HashSet<Keys> SourceEditKeys = new() {
+		Keys.Control | Keys.Z, Keys.Control | Keys.Y, Keys.Control | Keys.X, Keys.Control | Keys.C, Keys.Control | Keys.A,
+	};
+	static readonly HashSet<Keys> SourceDocumentKeys = new() {
+		Keys.Control | Keys.N, Keys.Control | Keys.O, Keys.Control | Keys.S, Keys.Control | Keys.Shift | Keys.S, Keys.Control | Keys.P,
+		Keys.Control | Keys.F, Keys.Control | Keys.H, Keys.F3, Keys.Control | Keys.Shift | Keys.O,
+	};
+
+	/// Shows the formatted text (None), or the document as Markdown or HTML, alone or side by side with the formatted text.
+	internal void SetView(SourceKind kind, bool side) {
+		ApplySource();
+		side = side && kind != SourceKind.None;
+		bool wasHidden = view == SourceKind.None;
+		view = kind;
+		sideBySide = side;
+		if (kind != SourceKind.None && (wasHidden || shownKind != kind || !SourceCurrent(kind))) FillSource();
+		if (kind == SourceKind.None) {
+			sourceSplit.Panel2Collapsed = false;
+			sourceSplit.Panel1Collapsed = true;
+		} else {
+			sourceSplit.Panel1Collapsed = false;
+			sourceSplit.Panel2Collapsed = !side;
+			if (side) sourceSplit.SplitterDistance = Math.Clamp(sourceSplit.Width * Settings.SourceSplit / 100, 50, Math.Max(50, sourceSplit.Width - 50));
+		}
+		sourceTitle.Text = kind == SourceKind.None ? "" : ViewName(kind) + (kind == SourceKind.Markdown
+			? (side ? ": the formatted text follows as you type" : ": View > Rich Text shows it formatted") : (side ? ": the formatted text follows as you type; tags and styles it doesn't support are dropped" : ""))
+			+ (embeddedData.Count > 0 ? ". Pictures appear as embedded-1.png ..." : "");
+		if (kind == SourceKind.None) Editor.Focus(); else sourceBox.Focus();
+		UpdateUi();
+	}
+
+	// Fills the source editor from the document: with the source text it came from, if it is unchanged since; else
+	// regenerated (pictures as embedded-1.png ...).
+	void FillSource() {
+		var kind = view;
+		string regenerated = api.SourceOf(kind);
+		if (!sources.TryGetValue(kind, out var source) || source.Snapshot != regenerated)
+			sources[kind] = source = (Embedded(regenerated).Replace("\r\n", "\n"), regenerated, false);
+		filling = true;
+		try {
+			sourceBox.Text = source.Text;
+			sourceBox.ClearUndo();
+			sourceBox.Select(0, 0);
+		} finally {
+			filling = false;
+		}
+		shownKind = kind;
+		sourceDirty = false;
+	}
+
+	// The source again after the formatted text changed, unless edits typed in the source are waiting.
+	void RefreshSource() {
+		if (view == SourceKind.None || sourceDirty || loadingSource) return;
+		if (shownKind != view || !SourceCurrent(view)) {
+			int caret = sourceBox.SelectionStart;
+			FillSource();
+			sourceBox.Select(Math.Min(caret, sourceBox.TextLength), 0);
+			sourceBox.ScrollToCaret();
+		}
+	}
+
+	void SourceTextChanged() {
+		if (filling) return;
+		sourceDirty = true;
+		Editor.Modified = true;
+		UpdateTitle();
+		if (sideBySide) Restart(sourceTimer);
+	}
+
+	/// Loads what was typed in the source view into the document (if anything was).
+	internal void ApplySource() {
+		sourceTimer.Stop();
+		if (!sourceDirty || loadingSource) return;
+		string text = sourceBox.Text;
+		double where = sourceBox.TextLength > 0 ? (double)sourceBox.SelectionStart / sourceBox.TextLength : 0;
+		bool hadFocus = sourceBox.Focused;
+		loadingSource = true;
+		try {
+			api.LoadSource(shownKind, WithPictures(text));
+		} finally {
+			loadingSource = false;
+		}
+		sources[shownKind] = (text, api.SourceOf(shownKind), true);
+		sourceDirty = false;
+		Editor.Modified = true;
+		// the formatted text shows about where the caret is in the source
+		Editor.Select((int)(where * Editor.TextLength), 0);
+		Editor.ScrollToCaret();
+		if (hadFocus) sourceBox.Focus();
+		UpdateTitle();
+		Restart(outlineTimer);
+		Restart(wordCountTimer);
+	}
+
+	/// After New or Open: the source the document came from (a .md or .html file's text), if any.
+	internal void DocumentLoaded(SourceKind kind, string? text) {
+		sourceTimer.Stop();
+		richToSourceTimer.Stop();
+		embeddedData.Clear();
+		embeddedName.Clear();
+		sourceDirty = false;
+		sources.Clear();
+		// (a file's own pictures as data: URIs show as names too, and go back when it is saved)
+		if (text != null && kind != SourceKind.None) sources[kind] = (Embedded(text).Replace("\r\n", "\n"), api.SourceOf(kind), true);
+		sourceNewline = text != null && text.Contains("\r\n") ? "\r\n" : kind == SourceKind.Html ? "\r\n" : "\n";
+		if (view != SourceKind.None) FillSource();
+	}
+
+	/// The text to save a .md / .html file with, if the document came from such source text (the file's own, or typed in
+	/// the source view) and is unchanged since (null: save the document as usual). Pictures shown as names are data:
+	/// URIs again. Waiting source edits are loaded first.
+	internal string? VerbatimSource(string extension) {
+		ApplySource();
+		var kind = extension is ".md" or ".markdown" ? SourceKind.Markdown : extension is ".html" or ".htm" ? SourceKind.Html : SourceKind.None;
+		if (kind == SourceKind.None || !sources.TryGetValue(kind, out var source) || !source.Own) return null;
+		if (api.SourceOf(kind) != source.Snapshot) return null;
+		string text = WithPictures(source.Text);
+		return sourceNewline == "\n" ? text : text.Replace("\n", sourceNewline);
+	}
+
+	// Find in the source view: from the selection on, wrapping round once.
+	bool FindInSource() {
+		var options = (findForm!.MatchCase ? RichTextBoxFinds.MatchCase : RichTextBoxFinds.None) | (findForm.WholeWord ? RichTextBoxFinds.WholeWord : RichTextBoxFinds.None);
+		int start = Math.Min(sourceBox.SelectionStart + sourceBox.SelectionLength, sourceBox.TextLength);
+		int index = sourceBox.Find(findForm.FindText, start, sourceBox.TextLength, options);
+		if (index < 0 && start > 0) index = sourceBox.Find(findForm.FindText, 0, sourceBox.TextLength, options);
+		if (index >= 0) sourceBox.ScrollToCaret();
+		SetStatus(index < 0 ? $"\"{findForm.FindText}\" was not found." : "");
+		return index >= 0;
+	}
+
+	// Whether the remembered source text of this kind still matches the document.
+	bool SourceCurrent(SourceKind kind) => sources.TryGetValue(kind, out var source) && api.SourceOf(kind) == source.Snapshot;
+
+	/// The text in the source view ("" when the formatted text is shown).
+	internal string SourceText => view == SourceKind.None ? "" : sourceBox.Text;
+
+	/// Replaces the text in the source view and loads it into the document.
+	internal void SetSourceText(string text) {
+		if (view == SourceKind.None) throw new InvalidOperationException("Show the Markdown or HTML view first (View = \"Markdown\").");
+		sourceBox.Text = text.Replace("\r\n", "\n");
+		ApplySource();
+	}
+
+	internal static readonly Regex DataUri = new(@"data:image/(?<type>[a-zA-Z0-9.+-]+);base64,[A-Za-z0-9+/=]+", RegexOptions.Compiled);
+	static readonly Regex EmbeddedName = new(@"embedded-\d+\.[a-z]+", RegexOptions.Compiled);
+
+	// Pictures' data: URIs as short names (the same picture keeps its name), and back.
+	string Embedded(string text) => DataUri.Replace(text, m => {
+		if (!embeddedName.TryGetValue(m.Value, out var name)) {
+			string type = m.Groups["type"].Value.ToLowerInvariant();
+			string extension = type switch { "jpeg" => "jpg", "svg+xml" => "svg", "x-icon" or "vnd.microsoft.icon" => "ico", _ => type };
+			name = $"embedded-{embeddedData.Count + 1}.{extension}";
+			embeddedName[m.Value] = name;
+			embeddedData[name] = m.Value;
+		}
+		return name;
+	});
+
+	string WithPictures(string text) => embeddedData.Count == 0 ? text : EmbeddedName.Replace(text, m => embeddedData.TryGetValue(m.Value, out var data) ? data : m.Value);
+
+	// ---------------------------------------------------------------- Iteration 17: Markdown and HTML from the ribbon and keys
+
+	bool InMarkdown => shownKind == SourceKind.Markdown;
+
+	void BuildSourceCommands() {
+		void Both(RibbonCommand id, Action markdown, Action html) => sourceCommands[id] = () => { if (InMarkdown) markdown(); else html(); };
+		Both(RibbonCommand.Bullets, () => MarkdownList(false), () => HtmlList(false, ""));
+		Both(RibbonCommand.Numbering, () => MarkdownList(true), () => HtmlList(true, ""));
+		Both(RibbonCommand.ListBullet, () => MarkdownList(false), () => HtmlList(false, ""));
+		Both(RibbonCommand.ListDecimal, () => MarkdownList(true), () => HtmlList(true, ""));
+		foreach (var (id, type) in new[] { (RibbonCommand.ListLowerAlpha, "a"), (RibbonCommand.ListUpperAlpha, "A"), (RibbonCommand.ListLowerRoman, "i"), (RibbonCommand.ListUpperRoman, "I") })
+			Both(id, () => MarkdownList(true, type), () => HtmlList(true, $" type=\"{type}\""));
+		Both(RibbonCommand.Legal, () => MarkdownList(true, "legal"), () => HtmlList(true, " class=\"rte-legal\""));
+		sourceCommands[RibbonCommand.Indent] = () => ListLevel(1);
+		sourceCommands[RibbonCommand.Outdent] = () => ListLevel(-1);
+		sourceCommands[RibbonCommand.IndentParagraph] = () => ListLevel(1);
+		sourceCommands[RibbonCommand.OutdentParagraph] = () => ListLevel(-1);
+		sourceCommands[RibbonCommand.AlignLeft] = () => Align("left");
+		sourceCommands[RibbonCommand.AlignCenter] = () => Align("center");
+		sourceCommands[RibbonCommand.AlignRight] = () => Align("right");
+		sourceCommands[RibbonCommand.Justify] = () => Align("justify");
+		sourceCommands[RibbonCommand.UnderlineSingle] = () => Wrap("<u>", "</u>");
+		foreach (var (id, mode) in new[] { (RibbonCommand.CaseUpper, "upper"), (RibbonCommand.CaseLower, "lower"), (RibbonCommand.CaseTitle, "title") })
+			sourceCommands[id] = () => ChangeSourceCase(mode);
+		sourceCommands[RibbonCommand.PageBreak] = () => InsertBlock("<div style=\"page-break-after: always; break-after: page\"></div>");
+		sourceCommands[RibbonCommand.DateTime] = () => sourceBox.SelectedText = DateTime.Now.ToString("f");
+		sourceCommands[RibbonCommand.Link] = SourceLink;
+		sourceCommands[RibbonCommand.Picture] = SourcePicture;
+		sourceCommands[RibbonCommand.Table] = () => {
+			if (InMarkdown && SourceTableAt(sourceBox.SelectionStart) != null) { FormatSourceTable(0); SetStatus("The table's columns are lined up. Tab and Shift+Tab move between cells and do the same."); }
+			else SourceTable();
+		};
+		sourceKeys[Keys.Control | Keys.B] = () => Wrap(InMarkdown ? "**" : "<strong>", InMarkdown ? "**" : "</strong>");
+		sourceKeys[Keys.Control | Keys.I] = () => Wrap(InMarkdown ? "*" : "<em>", InMarkdown ? "*" : "</em>");
+		sourceKeys[Keys.Control | Keys.U] = () => Wrap("<u>", "</u>");
+		sourceKeys[Keys.Control | Keys.Shift | Keys.Oemplus] = () => Wrap("<sup>", "</sup>");
+		sourceKeys[Keys.Control | Keys.Oemplus] = () => Wrap("<sub>", "</sub>");
+		foreach (var style in Enum.GetValues<BlockStyle>())
+			sourceKeys[style == BlockStyle.Preformatted ? Keys.Control | Keys.D7 : Keys.Control | (Keys.D0 + (int)style)] = () => SourceBlockStyle(style);
+	}
+
+	// Runs a formatting command in the source editor (an edit there, loaded into the document as typing is).
+	void RunSource(Action action) {
+		try {
+			action();
+		} catch (Exception ex) {
+			if (ex is TargetInvocationException { InnerException: { } inner }) ex = inner;
+			SetStatus("⚠ " + ex.Message);
+			System.Media.SystemSounds.Beep.Play();
+		}
+		sourceBox.Focus();
+		UpdateUi();
+	}
+
+	// Replaces part of the source text (one undo step) and selects a part of the new text.
+	void ReplaceSource(int start, int length, string text, int selectFrom, int selectLength) {
+		sourceBox.Select(start, length);
+		sourceBox.SelectedText = text;
+		sourceBox.Select(start + selectFrom, selectLength);
+	}
+
+	// The whole lines the selection touches: where they start and end (without the last line's line break), and their text.
+	(int Start, int End, string[] Lines) SelectedLines() {
+		string text = sourceBox.Text;
+		int from = sourceBox.SelectionStart, to = from + sourceBox.SelectionLength;
+		if (to > from && text[to - 1] == '\n') to--;    // a selection of whole lines ends after the last one's line break
+		int start = from == 0 ? 0 : text.LastIndexOf('\n', from - 1) + 1;
+		int end = text.IndexOf('\n', to);
+		if (end < 0) end = text.Length;
+		return (start, end, text[start..end].Split('\n'));
+	}
+
+	void ReplaceLines(int start, int end, IEnumerable<string> lines) {
+		string text = string.Join("\n", lines);
+		ReplaceSource(start, end - start, text, 0, text.Length);
+	}
+
+	// Puts the selection between two markers, or takes them away if it already is (Ctrl+B: **...** or <strong>...</strong>).
+	void Wrap(string open, string close) {
+		string text = sourceBox.Text, selected = sourceBox.SelectedText;
+		int start = sourceBox.SelectionStart, length = sourceBox.SelectionLength;
+		bool boldNotItalic(string s) => open == "*" && s.StartsWith("**") && !s.StartsWith("***");
+		if (selected.Length >= open.Length + close.Length && selected.StartsWith(open) && selected.EndsWith(close) && !boldNotItalic(selected)) {
+			ReplaceSource(start, length, selected[open.Length..^close.Length], 0, length - open.Length - close.Length);
+			return;
+		}
+		if (start >= open.Length && start + length + close.Length <= text.Length && text.Substring(start - open.Length, open.Length) == open
+			&& text.Substring(start + length, close.Length) == close && !boldNotItalic(text[Math.Max(0, start - 2)..])) {
+			ReplaceSource(start - open.Length, length + open.Length + close.Length, selected, 0, length);
+			return;
+		}
+		ReplaceSource(start, length, open + selected + close, open.Length, length);
+	}
+
+	static readonly Regex MarkdownHeading = new(@"^#{1,6}\s+"), HtmlBlock = new(@"^\s*<(h[1-6]|p)(\s[^>]*)?>(.*)</\1>\s*$", RegexOptions.IgnoreCase),
+		ListMarker = new(@"^(\s*)([-*+]|\d+[.)])\s+"), ListType = new(@"\s*\[type=[^\]]*\]\s*$");
+
+	// Ctrl+0 ... Ctrl+7 and the Style list: # headings / <h1> ..., normal text, ``` or <pre> for preformatted.
+	void SourceBlockStyle(BlockStyle style) {
+		var (start, end, lines) = SelectedLines();
+		if (style == BlockStyle.Preformatted) {
+			bool fenced = InMarkdown ? lines.Length >= 2 && lines[0].StartsWith("```") && lines[^1].StartsWith("```")
+				: lines[0].TrimStart().StartsWith("<pre", StringComparison.OrdinalIgnoreCase) && lines[^1].TrimEnd().EndsWith("</pre>", StringComparison.OrdinalIgnoreCase);
+			if (fenced && InMarkdown) ReplaceLines(start, end, lines[1..^1]);
+			else if (fenced) ReplaceSource(start, end - start, Regex.Replace(Regex.Replace(sourceBox.Text[start..end], @"^\s*<pre[^>]*>", "", RegexOptions.IgnoreCase), @"</pre>\s*$", "", RegexOptions.IgnoreCase), 0, 0);
+			else ReplaceLines(start, end, InMarkdown ? lines.Prepend("```").Append("```") : new[] { "<pre>" + string.Join("\n", lines) + "</pre>" });
+			return;
+		}
+		int level = (int)style;    // 0: normal text
+		ReplaceLines(start, end, lines.Select(line => {
+			if (line.Trim() == "") return line;
+			if (InMarkdown) {
+				string text = MarkdownHeading.Replace(line, "");
+				return level > 0 ? new string('#', level) + " " + text : text;
+			}
+			var block = HtmlBlock.Match(line);
+			string inner = block.Success ? block.Groups[3].Value : line.Trim();
+			return level > 0 ? $"<h{level}>{inner}</h{level}>" : $"<p>{inner}</p>";
+		}));
+	}
+
+	// Bullets or numbers on the selected lines, or off if they all have them already; type: M-ArkDown's [type=a] ... or legal.
+	void MarkdownList(bool ordered, string? type = null) {
+		var (start, end, lines) = SelectedLines();
+		var items = lines.Where(line => line.Trim() != "").ToList();
+		bool already = items.Count > 0 && items.All(line => ListMarker.Match(line) is { Success: true } m && char.IsDigit(m.Groups[2].Value[0]) == ordered);
+		int number = 1;
+		bool first = true;
+		ReplaceLines(start, end, lines.Select(line => {
+			if (line.Trim() == "") return line;
+			var marker = ListMarker.Match(line);
+			string indent = marker.Success ? marker.Groups[1].Value : "", content = marker.Success ? line[marker.Length..] : line;
+			if (already && type == null) return indent + ListType.Replace(content, "");
+			content = ListType.Replace(content, "");
+			if (first && type != null) content += $" [type={type}]";
+			first = false;
+			return indent + (ordered ? $"{number++}." : "-") + " " + content;
+		}));
+		RenumberMarkdownList();
+	}
+
+	// The selected lines as an <ul> / <ol> of <li>, or back to lines if they are one already.
+	void HtmlList(bool ordered, string attributes) {
+		var (start, end, lines) = SelectedLines();
+		if (lines.Length >= 2 && Regex.IsMatch(lines[0].Trim(), @"^<(ul|ol)\b", RegexOptions.IgnoreCase) && Regex.IsMatch(lines[^1].Trim(), @"^</(ul|ol)>$", RegexOptions.IgnoreCase)) {
+			ReplaceLines(start, end, lines[1..^1].Select(line => Regex.Replace(line.Trim(), @"^<li[^>]*>(.*)</li>$", "$1", RegexOptions.IgnoreCase)));
+			return;
+		}
+		string tag = ordered ? "ol" : "ul";
+		ReplaceLines(start, end, lines.Where(line => line.Trim() != "").Select(line => $"<li>{Regex.Replace(line.Trim(), @"^<p>(.*)</p>$", "$1")}</li>")
+			.Prepend($"<{tag}{attributes}>").Append($"</{tag}>"));
+	}
+
+	// Tab / Shift+Tab for Markdown lists: list items move under the item above (to its text's column), or back out.
+	void ListLevel(int delta) {
+		if (!InMarkdown) throw new InvalidOperationException("In HTML, nest a list by putting an <ul> or <ol> inside an <li>.");
+		var (start, end, lines) = SelectedLines();
+		string before = sourceBox.Text[..start];
+		var above = before.Split('\n').Reverse().Select(line => ListMarker.Match(line)).Where(m => m.Success).ToList();
+		var firstMarker = ListMarker.Match(lines[0]);
+		int current = firstMarker.Success ? firstMarker.Groups[1].Value.Length : lines[0].Length - lines[0].TrimStart().Length;
+		int target;
+		if (delta > 0) {
+			var parent = above.FirstOrDefault(m => m.Groups[1].Value.Length <= current);
+			target = parent != null ? Math.Max(current + 1, parent.Groups[1].Value.Length + parent.Groups[2].Value.Length + 1) : current + 4;
+		} else {
+			var parent = above.FirstOrDefault(m => m.Groups[1].Value.Length < current);
+			target = parent != null ? parent.Groups[1].Value.Length : 0;
+		}
+		int shift = target - current;
+		ReplaceLines(start, end, lines.Select(line => line.Trim() == "" ? line
+			: shift >= 0 ? new string(' ', shift) + line : line[Math.Min(-shift, line.Length - line.TrimStart(' ').Length)..]));
+		RenumberMarkdownList();
+	}
+
+	// Numbers the items of the Markdown list around the selection 1, 2, 3 ... per level (keeping the top level's start
+	// number, and each item's "." or ")"), as they would be typed: after a level change, or making lines a list.
+	void RenumberMarkdownList() {
+		string text = sourceBox.Text;
+		int selectionStart = sourceBox.SelectionStart, selectionLength = sourceBox.SelectionLength;
+		var lines = text.Split('\n');
+		int caretLine = text[..selectionStart].Count(c => c == '\n');
+		int first = caretLine, last = caretLine;
+		while (first > 0 && lines[first - 1].Trim() != "") first--;
+		while (last < lines.Length - 1 && lines[last + 1].Trim() != "") last++;
+		var counters = new SortedDictionary<int, int>();    // indent -> the last number used at that level
+		int topIndent = Enumerable.Range(first, last - first + 1).Select(i => ListMarker.Match(lines[i])).Where(m => m.Success)
+			.Select(m => m.Groups[1].Value.Length).DefaultIfEmpty(0).Min();
+		bool changed = false;
+		for (int i = first; i <= last; i++) {
+			var marker = ListMarker.Match(lines[i]);
+			if (!marker.Success) continue;
+			int indent = marker.Groups[1].Value.Length;
+			foreach (int deeper in counters.Keys.Where(k => k > indent).ToList()) counters.Remove(deeper);
+			string value = marker.Groups[2].Value;
+			if (!char.IsDigit(value[0])) { counters.Remove(indent); continue; }
+			int number = counters.TryGetValue(indent, out int previous) ? previous + 1
+				: indent == topIndent ? int.Parse(value[..^1], CultureInfo.InvariantCulture) : 1;    // a nested run starts at 1
+			counters[indent] = number;
+			string renumbered = number.ToString(CultureInfo.InvariantCulture) + value[^1];
+			if (renumbered != value) {
+				lines[i] = marker.Groups[1].Value + renumbered + lines[i][(marker.Groups[1].Length + value.Length)..];
+				changed = true;
+			}
+		}
+		if (!changed) return;
+		int blockStart = lines.Take(first).Sum(line => line.Length + 1), blockEnd = blockStart + lines[first..(last + 1)].Sum(line => line.Length + 1) - 1;
+		string block = string.Join("\n", lines[first..(last + 1)]);
+		sourceBox.Select(blockStart, blockEnd - blockStart);
+		sourceBox.SelectedText = block;
+		sourceBox.Select(Math.Min(selectionStart, sourceBox.TextLength), 0);
+	}
+
+	// Alignment: the selected lines in <div align="..."> (with blank lines inside in Markdown, which keeps it Markdown).
+	void Align(string alignment) {
+		var (start, end, lines) = SelectedLines();
+		var body = lines.ToList();
+		if (body.Count >= 2 && Regex.IsMatch(body[0].Trim(), @"^<div\s+align=", RegexOptions.IgnoreCase) && body[^1].Trim().Equals("</div>", StringComparison.OrdinalIgnoreCase)) {
+			body = body.Skip(1).SkipLast(1).ToList();
+			while (body.Count > 0 && body[0].Trim() == "") body.RemoveAt(0);
+			while (body.Count > 0 && body[^1].Trim() == "") body.RemoveAt(body.Count - 1);
+		}
+		if (alignment != "left") {
+			body.Insert(0, $"<div align=\"{alignment}\">");
+			body.Add("</div>");
+			if (InMarkdown) { body.Insert(1, ""); body.Insert(body.Count - 1, ""); }
+		}
+		ReplaceLines(start, end, body);
+	}
+
+	void ChangeSourceCase(string mode) {
+		string text = sourceBox.SelectedText;
+		if (text == "") throw new InvalidOperationException("Select the text first.");
+		string changed = mode switch {
+			"upper" => text.ToUpper(CultureInfo.CurrentCulture),
+			"lower" => text.ToLower(CultureInfo.CurrentCulture),
+			_ => CultureInfo.CurrentCulture.TextInfo.ToTitleCase(text.ToLower(CultureInfo.CurrentCulture))
+		};
+		ReplaceSource(sourceBox.SelectionStart, text.Length, changed, 0, changed.Length);
+	}
+
+	// A block (page break, table) on lines of its own, after the line with the caret.
+	void InsertBlock(string block) {
+		string text = sourceBox.Text;
+		int at = text.IndexOf('\n', sourceBox.SelectionStart + sourceBox.SelectionLength);
+		at = at < 0 ? text.Length : at;
+		string insert = (at > 0 && text[..at].TrimEnd(' ') != "" ? "\n" : "") + (InMarkdown ? "\n" : "") + block + (InMarkdown ? "\n" : "");
+		ReplaceSource(at, 0, insert, insert.Length, 0);
+	}
+
+	void SourceLink() {
+		string selected = sourceBox.SelectedText.Trim();
+		if (Prompt("Insert hyperlink", ("Address", "https://"), ("Text to display", selected)) is not { } values) return;
+		string url = values[0], display = values[1] != "" ? values[1] : values[0];
+		sourceBox.SelectedText = InMarkdown ? $"[{display}]({url})" : $"<a href=\"{WebUtility.HtmlEncode(url)}\">{WebUtility.HtmlEncode(display)}</a>";
+	}
+
+	// The picture travels with the document: it goes in as a data: URI, shown as embedded-N.png.
+	void SourcePicture() {
+		if (ChooseImage() is not { } path) return;
+		if (Prompt("Insert image", ("Alt text: what the picture shows, for screen readers (empty for a decorative picture)", Path.GetFileNameWithoutExtension(path))) is not { } values) return;
+		string type = Path.GetExtension(path).ToLowerInvariant() switch { ".jpg" or ".jpeg" => "jpeg", ".gif" => "gif", _ => "png" };
+		string name = Embedded($"data:image/{type};base64,{Convert.ToBase64String(File.ReadAllBytes(path))}");
+		sourceBox.SelectedText = InMarkdown ? $"![{values[0]}]({name})" : $"<img src=\"{name}\" alt=\"{WebUtility.HtmlEncode(values[0])}\">";
+	}
+
+	void SourceTable() {
+		using var dlg = new InsertTableDialog(Settings.TableRows, Settings.TableColumns, Settings.TableHeader);
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		(Settings.TableRows, Settings.TableColumns, Settings.TableHeader) = (dlg.Rows, dlg.Columns, dlg.Header);
+		Settings.Save();
+		var columns = Enumerable.Range(1, dlg.Columns);
+		string table;
+		if (InMarkdown) {    // Markdown tables always have a header row
+			var rows = new List<string> { "| " + string.Join(" | ", columns.Select(c => $"Column {c}")) + " |", "|" + string.Concat(columns.Select(c => " --- |")) };
+			for (int r = 1; r < dlg.Rows; r++) rows.Add("|" + string.Concat(columns.Select(c => "   |")));
+			table = string.Join("\n", rows);
+		} else {
+			var rows = new List<string> { "<table>" };
+			for (int r = 0; r < dlg.Rows; r++) {
+				rows.Add("<tr>" + string.Concat(columns.Select(c => r == 0 && dlg.Header ? $"<th>Column {c}</th>" : "<td></td>")) + "</tr>");
+			}
+			rows.Add("</table>");
+			table = string.Join("\n", rows);
+		}
+		InsertBlock(table);
+	}
+
+	// The Markdown table the position is in (its rows and delimiter row, as lines next to each other with "|"), or null.
+	(int FirstLine, List<string> Lines)? SourceTableAt(int position) {
+		var lines = sourceBox.Text.Split('\n');
+		int line = sourceBox.Text[..Math.Min(position, sourceBox.TextLength)].Count(c => c == '\n');
+		bool IsRow(int i) => i >= 0 && i < lines.Length && lines[i].Trim() != "" && lines[i].Contains('|');
+		if (!IsRow(line)) return null;
+		int first = line, last = line;
+		while (IsRow(first - 1)) first--;
+		while (IsRow(last + 1)) last++;
+		var table = lines[first..(last + 1)].ToList();
+		return table.Count >= 2 && MarkdownConverter.IsTableDelimiter(table[1]) ? (first, table) : null;
+	}
+
+	// The cell a position on a table line is in: unescaped "|" before it, less the one the row starts with.
+	static int CellIndex(string line, int column) {
+		int pipes = 0;
+		for (int i = 0; i < Math.Min(column, line.Length); i++) {
+			if (line[i] == '\\') { i++; continue; }
+			if (line[i] == '|') pipes++;
+		}
+		return Math.Max(0, line.TrimStart().StartsWith('|') ? pipes - 1 : pipes);
+	}
+
+	// Lines up the columns of the Markdown table with the caret and moves the caret move cells on (Tab: 1, Shift+Tab:
+	// -1, 0: stays), as Markdown-aware editors do. Tab in the last cell adds a row.
+	void FormatSourceTable(int move) {
+		if (SourceTableAt(sourceBox.SelectionStart) is not var (first, lines)) return;
+		string text = sourceBox.Text;
+		int caretLine = text[..sourceBox.SelectionStart].Count(c => c == '\n');
+		int lineStart = caretLine == 0 ? 0 : text.LastIndexOf('\n', sourceBox.SelectionStart - 1) + 1;
+		int row = caretLine - first, cell = CellIndex(lines[row], sourceBox.SelectionStart - lineStart);
+		var aligned = MarkdownConverter.AlignTable(lines);
+		int columns = aligned[0].Count(c => c == '|') - 1;
+		cell = Math.Min(cell, columns - 1) + move;
+		if (cell >= columns) { cell = 0; row++; }
+		if (cell < 0) { cell = columns - 1; row--; }
+		if (row == 1) row += move < 0 ? -1 : 1;    // over the delimiter row
+		if (row < 0) { row = 0; cell = 0; }
+		if (row >= aligned.Count) {    // past the last cell: a new, empty row
+			aligned.Add("|" + string.Concat(Enumerable.Repeat(" |", columns)));
+			aligned = MarkdownConverter.AlignTable(aligned);
+		}
+		int start = text.Split('\n').Take(first).Sum(l => l.Length + 1);
+		int length = lines.Sum(l => l.Length + 1) - 1;
+		string table = string.Join("\n", aligned);
+		// the caret at the start of the cell's text (past the padding of a right-aligned column), or after "| " if it is empty
+		int offset = aligned.Take(row).Sum(l => l.Length + 1), pipe = -1;
+		for (int i = 0; i <= cell; i++) pipe = aligned[row].IndexOf('|', pipe + 1);
+		int next = aligned[row].IndexOf('|', pipe + 1), at = pipe + 2;
+		while (at < next - 1 && aligned[row][at] == ' ') at++;
+		if (at >= next - 1) at = pipe + 2;
+		ReplaceSource(start, length, table, Math.Min(offset + at, table.Length), 0);
+	}
+
+	// The font control: bold, italic ... as their markers; font, size and colors as <span style="...">.
+	void SourceFont(Dictionary<FontPropertiesEnum, object> changes) {
+		bool Has(FontPropertiesEnum key) => changes.ContainsKey(key);
+		uint Number(FontPropertiesEnum key) => Convert.ToUInt32(changes[key]);
+		if (Has(FontPropertiesEnum.Bold)) sourceKeys[Keys.Control | Keys.B]();
+		if (Has(FontPropertiesEnum.Italic)) sourceKeys[Keys.Control | Keys.I]();
+		if (Has(FontPropertiesEnum.Underline)) Wrap("<u>", "</u>");
+		if (Has(FontPropertiesEnum.Strikethrough)) Wrap(InMarkdown ? "~~" : "<s>", InMarkdown ? "~~" : "</s>");
+		if (Has(FontPropertiesEnum.VerticalPositioning)) {
+			var position = (FontVerticalPosition)Number(FontPropertiesEnum.VerticalPositioning);
+			if (position == FontVerticalPosition.SuperScript) Wrap("<sup>", "</sup>");
+			else if (position == FontVerticalPosition.SubScript) Wrap("<sub>", "</sub>");
+		}
+		var style = new List<string>();
+		if (Has(FontPropertiesEnum.Family) && changes[FontPropertiesEnum.Family] is string family && family.Trim() != "") style.Add($"font-family: {family.Trim()}");
+		if (Has(FontPropertiesEnum.Size) && changes[FontPropertiesEnum.Size] is decimal size && size > 0) style.Add($"font-size: {size.ToString(CultureInfo.InvariantCulture)}pt");
+		string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+		if (Has(FontPropertiesEnum.ForegroundColor) && changes[FontPropertiesEnum.ForegroundColor] is Color fore
+			&& !(Has(FontPropertiesEnum.ForegroundColorType) && (SwatchColorType)Number(FontPropertiesEnum.ForegroundColorType) != SwatchColorType.RGB))
+			style.Add($"color: {Hex(fore)}");
+		if (Has(FontPropertiesEnum.BackgroundColor) && changes[FontPropertiesEnum.BackgroundColor] is Color back
+			&& !(Has(FontPropertiesEnum.BackgroundColorType) && (SwatchColorType)Number(FontPropertiesEnum.BackgroundColorType) != SwatchColorType.RGB))
+			style.Add($"background-color: {Hex(back)}");
+		if (style.Count > 0) Wrap($"<span style=\"{string.Join("; ", style)}\">", "</span>");
+		if (Has(FontPropertiesEnum.DeltaSize) && !Has(FontPropertiesEnum.Size)) SetStatus("Grow and shrink font work in the Rich Text view; choose a size instead.");
 	}
 
 	// ---------------------------------------------------------------- Small dialogs
@@ -1784,6 +2565,7 @@ public class EditorApi
 		ed.Modified = false;
 		FileConverter = "";
 		form.SetFileName(null);
+		form.DocumentLoaded(WriterForm.SourceKind.None, null);
 		form.Events.Raise(EditorEvent.Opened);
 	}
 
@@ -1797,9 +2579,10 @@ public class EditorApi
 		// the header and footer: the document's own; documents that can have them but don't have none, others get the default
 		PageBands? bands = null;
 		bool canHaveBands = extension is ".rtf" or ".docx" or ".doc" or ".odt";
+		string? sourceText = null;    // a .md / .html file's own text, for the source view (and saving it as it was)
 		switch (extension) {
 			case ".md": case ".markdown": {
-				string markdown = File.ReadAllText(full);
+				string markdown = sourceText = File.ReadAllText(full);
 				bands = HeaderFooter.FromMarkdown(markdown);
 				MarkdownConverter.Load(ed, markdown, Path.GetDirectoryName(full));
 				break;
@@ -1823,6 +2606,7 @@ public class EditorApi
 			}
 			default: {
 				string html = File.ReadAllText(full);
+				if (extension is ".html" or ".htm") sourceText = html;
 				bands = HeaderFooter.FromHtml(html);
 				SetHtml(html);
 				break;
@@ -1836,8 +2620,11 @@ public class EditorApi
 		ed.Select(0, 0);
 		ed.Modified = false;
 		FileConverter = extension is ".docx" or ".doc" or ".odt" ? via : "";
+		// an HTML file with its pictures inside it is saved that way again
+		if (extension is ".html" or ".htm" && sourceText != null && sourceText.Contains("data:image/", StringComparison.OrdinalIgnoreCase)) FileConverter = PicturesInside;
 		form.SetFileName(full);
 		form.AddRecent(full);
+		form.DocumentLoaded(sourceText == null ? WriterForm.SourceKind.None : extension is ".md" or ".markdown" ? WriterForm.SourceKind.Markdown : WriterForm.SourceKind.Html, sourceText);
 		form.Events.Raise(EditorEvent.Opened);
 	}
 
@@ -1851,12 +2638,18 @@ public class EditorApi
 
 	/// Saves as HTML, Markdown, RTF, Word, OpenDocument or text, chosen by the extension (.html, .md, .rtf, .docx, .odt,
 	/// .txt), and returns the full path. .docx and .odt are converted (see Converters and LastConverter); via names the
-	/// converter(s) to use, e.g. "openxml".
+	/// converter(s) to use, e.g. "openxml". HTML and Markdown pictures are saved as files in a <name>_images folder;
+	/// via = "inside" keeps an HTML file's pictures inside it (as data: URIs), as one file.
 	public string SaveAs(string path, string via = "") {
 		string full = Path.GetFullPath(path);
 		string extension = Path.GetExtension(full).ToLowerInvariant();
 		LastConverter = "";
-		if (extension is ".docx" or ".odt") Export(full, via);
+		// HTML and Markdown keep their pictures in document_images\ next to the file, except HTML saved with "inside"
+		bool picturesInside = extension is ".html" or ".htm" && via == PicturesInside;
+		// a .md / .html file whose document came from its source text, unchanged since, gets that text as it was typed
+		if (form.VerbatimSource(extension) is { } verbatim)
+			File.WriteAllText(full, picturesInside ? verbatim : PicturesToFiles(verbatim, full), new UTF8Encoding(false));
+		else if (extension is ".docx" or ".odt") Export(full, via);
 		// (ordinary lists with hanging indents that fit their numbers: RichEdit's own RTF indents them so that Word and
 		// LibreOffice put the numbers too far in)
 		else if (extension == ".rtf")    // (and pictures as PNG, and the header and footer)
@@ -1865,12 +2658,13 @@ public class EditorApi
 			string content = extension switch {
 				".md" or ".markdown" => MarkdownConverter.ToMarkdown(ed, ImageFiles(full)) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : ""),
 				".txt" => ed.Text.Replace("\n", "\r\n"),
-				_ => HtmlFile(Path.GetFileNameWithoutExtension(full))
+				_ => picturesInside ? HtmlFile(Path.GetFileNameWithoutExtension(full), pretty: true)
+					: PicturesToFiles(HtmlFile(Path.GetFileNameWithoutExtension(full), pretty: true), full)
 			};
 			File.WriteAllText(full, content, new UTF8Encoding(false));
 		}
 		ed.Modified = false;
-		FileConverter = extension is ".docx" or ".odt" ? via : "";
+		FileConverter = extension is ".docx" or ".odt" || picturesInside ? via : "";
 		form.SetFileName(full);
 		form.AddRecent(full);
 		form.Events.Raise(EditorEvent.Saved);
@@ -1889,13 +2683,13 @@ public class EditorApi
 
 	/// Replaces the document with HTML (a whole page or a part of one), including the list numbering and tables GetHtml writes.
 	public void SetHtml(string html) {
-		RtfTables.LoadHtml(ed, BodyOf(PageBreaks.MarkHtml(html)), HtmlLists.Load, HtmlLists.Load, TableWidth());
-		if (PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) > 0) ed.ClearUndo();
+		RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(html))), HtmlLists.Load, HtmlLists.Load, TableWidth());
+		if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) > 0) ed.ClearUndo();
 	}
 
 	// The library's HTML, with page breaks, real tables (it writes their cells as paragraphs) and list numbering.
 	string HtmlBody(out string css) {
-		string body = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, ed.Html)), out css);
+		string body = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, LineBreaks.ExportHtml(ed, ed.Html))), out css);
 		css = ParagraphCss + css;
 		return body;
 	}
@@ -1910,9 +2704,25 @@ public class EditorApi
 		set => SetHtml(value);
 	}
 
-	string HtmlFile(string title) {
+	// The document as an HTML file. pretty: one block per line, lists and tables indented (the HTML view and .html files;
+	// conversions use it as it comes).
+	string HtmlFile(string title, bool pretty = false) {
 		string body = HtmlBody(out string css);
-		return HtmlDocument(body, title, css, OwnBands ? HeaderFooter.HtmlMeta(form.Bands) : "");
+		return HtmlDocument(pretty ? PrettyHtml.Format(body) : body, title, css, OwnBands ? HeaderFooter.HtmlMeta(form.Bands) : "");
+	}
+
+	/// The "via" for an HTML file that keeps its pictures inside it.
+	public const string PicturesInside = "inside";
+
+	// Pictures as data: URIs (HTML src, Markdown links) saved as files in document_images\ and referred to from there.
+	static string PicturesToFiles(string text, string path) {
+		var file = ImageFiles(path);
+		int number = 0;
+		return WriterForm.DataUri.Replace(text, m => {
+			string type = m.Groups["type"].Value.ToLowerInvariant();
+			string extension = type switch { "jpeg" => "jpg", "svg+xml" => "svg", _ => type };
+			return file(++number, Convert.FromBase64String(m.Value[(m.Value.IndexOf(',') + 1)..]), extension);
+		});
 	}
 
 	// Whether the document's header and footer differ from the default (HTML and Markdown keep them only then: a
@@ -2170,11 +2980,16 @@ public class EditorApi
 	/// The number of tables in the document.
 	public int TableCount => RtfTables.Find(ed.TextDocument).Count;
 
-	// Moves the caret to the start of the next (delta 1) or previous (-1) cell, as Tab and Shift+Tab do.
+	// Selects the next (delta 1) or previous (-1) cell, as Tab and Shift+Tab do; Tab in the last cell adds a row, as in Word.
 	internal void NextCell(int delta) {
 		if (RtfTables.At(ed, ed.SelectionStart) is not { } at) return;
 		var cells = at.Table.Rows.SelectMany(r => r.Cells).ToList();
 		int index = at.Table.Rows.Take(at.Row).Sum(r => r.Cells.Count) + at.Cell + delta;
+		if (index >= cells.Count && delta > 0) {
+			InsertRow(true);
+			if (RtfTables.At(ed, ed.SelectionStart) is not { } again) return;
+			cells = again.Table.Rows.SelectMany(r => r.Cells).ToList();
+		}
 		if (index < 0 || index >= cells.Count) return;
 		ed.Select(cells[index].Start, cells[index].End - cells[index].Start);
 	}
@@ -2395,6 +3210,52 @@ public class EditorApi
 	/// Replaces the document with Markdown. Relative image paths are resolved from the current file's folder.
 	public void SetMarkdown(string markdown) =>
 		MarkdownConverter.Load(ed, markdown, form.FileName != null ? Path.GetDirectoryName(form.FileName) : Environment.CurrentDirectory);
+
+	/// The document view: "Rich" (the formatted text), "Markdown" or "HTML" (the source view, see SideBySide).
+	public string View {
+		get => form.View switch { WriterForm.SourceKind.Markdown => "Markdown", WriterForm.SourceKind.Html => "HTML", _ => "Rich" };
+		set {
+			var kind = value.Trim().ToLowerInvariant() switch {
+				"rich" or "richtext" or "rich text" or "formatted" or "" => WriterForm.SourceKind.None,
+				"markdown" or "md" => WriterForm.SourceKind.Markdown,
+				"html" or "htm" => WriterForm.SourceKind.Html,
+				_ => throw new ArgumentException("View is \"Rich\", \"Markdown\" or \"HTML\".")
+			};
+			form.SetView(kind, form.SideBySide);
+		}
+	}
+
+	/// Whether the Markdown or HTML view shows the formatted text beside it (setting it on in the rich text view shows Markdown).
+	public bool SideBySide {
+		get => form.SideBySide;
+		set => form.SetView(form.View == WriterForm.SourceKind.None ? (value ? WriterForm.SourceKind.Markdown : WriterForm.SourceKind.None) : form.View, value);
+	}
+
+	/// The Markdown or HTML in the source view ("" in the rich text view); setting it replaces that text and loads it.
+	public string SourceText {
+		get => form.SourceText;
+		set => form.SetSourceText(value);
+	}
+
+	// The document as the source view shows it (and a .md / .html file gets it): Markdown with the header and footer
+	// line, or a whole HTML page; pictures as data: URIs.
+	internal string SourceOf(WriterForm.SourceKind kind) => kind == WriterForm.SourceKind.Markdown
+		? MarkdownConverter.ToMarkdown(ed, null) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "")
+		: HtmlFile(form.FileName != null ? Path.GetFileNameWithoutExtension(form.FileName) : "Untitled", pretty: true);
+
+	// Replaces the document with Markdown or HTML from the source view, as Open does with a file's.
+	internal void LoadSource(WriterForm.SourceKind kind, string text) {
+		if (kind == WriterForm.SourceKind.Markdown) {
+			form.Bands = HeaderFooter.FromMarkdown(text) ?? form.DefaultBands();
+			MarkdownConverter.Load(ed, text, form.FileName != null ? Path.GetDirectoryName(form.FileName) : Environment.CurrentDirectory);
+		} else {
+			form.Bands = HeaderFooter.FromHtml(text) ?? form.DefaultBands();
+			SetHtml(text);
+		}
+		PageBreaks.Normalize(ed);
+		MarksFollowText();
+		if (LegalLists.AnyLegal(ed.TextDocument)) LegalLists.Renumber(ed);
+	}
 
 	/// The document as Markdown (get), or replaced by Markdown (set); see GetMarkdown and SetMarkdown.
 	public string Markdown {
@@ -3119,7 +3980,7 @@ public class EditorApi
 		var headings = new List<(int, int, string)>();
 		var doc = ed.TextDocument;
 		ForEachParagraph((start, text) => {
-			text = text.Trim();
+			text = text.Replace("￼", "").Trim();    // (a picture in a heading is an object character)
 			// table cells are not headings, though a header row's bold text has a heading's font (cells end in U+0007)
 			if (text == "" || text.IndexOfAny(new[] { '\u0007', '￹', '￻' }) >= 0) return;
 			var font = doc.Range2(start, start + 1).Font;
@@ -3456,6 +4317,10 @@ public sealed class Settings
 	public string[] Header { get; set; } = DefaultHeader;
 	public bool ShowFooter { get; set; } = true;
 	public bool ShowOutline { get; set; } = true;
+	public string SourceView { get; set; } = "None";    // View > Document View: None (rich text), Markdown or Html
+	public bool SideBySide { get; set; }
+	public int SourceSplit { get; set; } = 50;    // side by side: the source's share of the width, in percent
+	public bool SourceWordWrap { get; set; } = true;
 	public bool ShowBands { get; set; } = true;    // View > Header and footer: the strips above and below the text
 	public List<ListLevel> ListLevels { get; set; } = ListLevel.Defaults();    // Paragraph > List levels
 	public int TableRows { get; set; } = 3;    // Table > Insert table
