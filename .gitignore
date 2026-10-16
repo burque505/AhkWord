@@ -28,3 +28,6 @@ ribbon_prototype/
 
 # Word lock files
 ~$*
+
+# Csharp-in-AHK path settings for this computer (made from Csharp-in-AHK.example.ini, or by Csharp-in-AHK-Paths.ahk)
+Csharp-in-AHK.ini

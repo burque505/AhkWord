@@ -86,12 +86,23 @@ The example macros include an auto-save, a word goal tracker, an event monitor, 
 |---|---|
 | Windows | 10 or 11 |
 | AutoHotkey v2 | **64-bit** (`AutoHotkey64.exe`) |
-| .NET runtime | .NET 10, including **Microsoft.WindowsDesktop.App** |
-| Roslyn compiler | The `Roslyn` folder containing `csc.exe`, e.g. from Visual Studio or Build Tools |
+| .NET runtime | The **.NET 10 Desktop Runtime** (x64), which includes Microsoft.WindowsDesktop.App. The runtime is enough: no SDK is needed |
+| C# compiler (Roslyn) | A folder with `csc.exe`, `Microsoft.CodeAnalysis.dll` and `Microsoft.CodeAnalysis.CSharp.dll`. Microsoft's NuGet package of the compiler needs no installation (see [The C# compiler without Visual Studio](#the-c-compiler-without-visual-studio)); Visual Studio or its Build Tools also have one |
 
-Csharp-in-AHK finds .NET and Roslyn by itself. If it can't, see [its README](https://github.com/burque505/Csharp-in-AHK#readme) for how to set the paths.
+Csharp-in-AHK finds .NET by itself, and Roslyn by itself if Visual Studio or Build Tools are installed. Otherwise, tell it where the compiler is, as described below.
 
 NuGet packages (RichEditorNET, WindowsRibbon, the Open XML libraries, SkiaSharp and others) are downloaded on the first start, which therefore takes longer.
+
+### The C# compiler without Visual Studio
+
+Microsoft publishes the C# compiler as a NuGet package, which is a zip file. Nothing needs to be installed:
+
+1. Download [Microsoft.Net.Compilers.Toolset](https://www.nuget.org/packages/Microsoft.Net.Compilers.Toolset) with **Download package** on its nuget.org page (AhkWord was tested with version 5.9.0).
+2. Rename the `.nupkg` file to `.zip` and extract it.
+3. Copy its `tasks\net472` folder somewhere permanent, for example `C:\Tools\Roslyn`.
+4. Run **`Csharp-in-AHK-Paths.ahk`** (in this folder): under *Roslyn compiler*, click **Browse...** next to *Csharp-in-AHK.ini*, choose that folder, then click **Save .ini** and **Test**. It writes `Csharp-in-AHK.ini` next to `Csharp-in-AHK.ahk`.
+
+Instead of step 4, you can copy `Csharp-in-AHK.example.ini` to `Csharp-in-AHK.ini` and set `RoslynDir=C:\Tools\Roslyn`, or set the environment variable `CSHARP_IN_AHK_ROSLYN` to the folder. [Csharp-in-AHK's README](https://github.com/burque505/Csharp-in-AHK#readme) describes the paths in full.
 
 ### Optional converters
 
@@ -115,7 +126,7 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 ## Getting started
 
-1. Install the requirements above.
+1. Install the requirements above. For the C# compiler, the NuGet package is the simplest (see [The C# compiler without Visual Studio](#the-c-compiler-without-visual-studio)).
 2. Clone this repository.
 3. Run `rte_writer20.ahk`. To open a document at start, pass its path: `rte_writer20.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
 
@@ -143,6 +154,8 @@ Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment v
 | `rte_macros\` | Example macros |
 | `examples\Showcase.rtf` | The showcase document in the picture above |
 | `Csharp-in-AHK.ahk` | A copy of [Csharp-in-AHK](https://github.com/burque505/Csharp-in-AHK), matching its commit `85aea2e` |
+| `Csharp-in-AHK-Paths.ahk`, `Csharp-in-AHK.example.ini` | From the same commit: a window for setting where .NET and the C# compiler are, and the template for `Csharp-in-AHK.ini` |
+| `Csx-in-AHK.ahk` | From the same commit: Csharp-in-AHK's C# script library, which `Csharp-in-AHK-Paths.ahk` needs (the editor doesn't use it) |
 
 ## Known limitations
 
