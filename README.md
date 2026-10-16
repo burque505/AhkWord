@@ -8,7 +8,7 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
 
 *[`examples/Showcase.rtf`](examples/Showcase.rtf), made entirely with the editor's own commands. The file has line numbers turned on (Layout > Line Numbers), which this picture doesn't show.*
 
-> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer20.*`). Renaming them to AhkWord is planned.
+> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer21.*`). Renaming them to AhkWord is planned.
 
 ## Features
 
@@ -34,7 +34,7 @@ The commands are on a ribbon, the one built into Windows (as in Paint and WordPa
 | **Insert** | Page Break, Table, Picture, Linked Thumbnail, Link, Date & Time |
 | **Layout** | Page Setup, Header & Footer, Line Numbers (None, Continuous, Restart Each Page, Suppress for Current Paragraph, Line Numbering Options), Print Preview |
 | **Review** | Next Spelling Error, Add to Dictionary, Check spelling as you type |
-| **View** | Document View (Rich Text, Markdown, HTML, Side by Side), Structured or Free-form, Word wrap, Header and footer, Outline, Zoom |
+| **View** | Document View (Rich Text, Markdown, HTML, Side by Side, Wrap source lines, Source line numbers), Structured or Free-form, Word wrap, Header and footer, Outline, Zoom |
 | **Tools** | Macros, Record Macro, Macro Hotkeys, Run Script, Macros Folder, Automation API, About |
 | **Table Tools** | Appears while the caret is in a table: insert rows and columns; Properties (column widths, alignment, padding, row height, borders, shading, vertical alignment), Borders and Shading for the selected cells; delete rows, columns or the table |
 
@@ -44,7 +44,7 @@ The commands are on a ribbon, the one built into Windows (as in Paint and WordPa
 
 ## Markdown and HTML views
 
-**View > Document View** shows the document as **Markdown** or **HTML** in a plain-text editor, alone or **Side by Side** with the formatted text, which follows a moment after you stop typing. Edits in the formatted text show in the source too.
+**View > Document View** shows the document as **Markdown** or **HTML** in a source editor, alone or **Side by Side** with the formatted text, which follows a moment after you stop typing. Edits in the formatted text show in the source too. The source editor is [Scintilla](https://www.scintilla.org/), with Markdown and HTML syntax colours and line numbers (**View > Source line numbers** turns them off); Ctrl+mouse wheel zooms it.
 
 ![The showcase document side by side: its Markdown source on the left and the formatted text on the right](images/sidebyside.png)
 
@@ -76,7 +76,7 @@ Rte.On("Saved", (e) => TrayTip(Rte.FileName, "Saved"))
 - **Calls** wait for the editor and return its result. `Rte.Post(...)` queues a call and returns at once. **Tools > Automation API** in the editor lists everything that can be called.
 - **Events** (`TextChanged`, `SelectionChanged`, `ModifiedChanged`, `Saved`, `Opened`, `Closed`, `AsyncError`) are delivered to callbacks registered with `Rte.On`.
 - **Macros:** the **Macros** button on the Tools tab runs the scripts in [`rte_macros`](rte_macros), and **Macro Hotkeys** gives any of them a hotkey. **Record Macro** (Ctrl+Shift+R) records typing and ribbon commands as a new macro script.
-- **Hotkeys in the host script:** `rte_writer20.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
+- **Hotkeys in the host script:** `rte_writer21.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
 
 The example macros include an auto-save, a word goal tracker, an event monitor, document statistics and Title Case for the selection.
 
@@ -123,7 +123,7 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 1. Install the requirements above: the .NET 10 Desktop Runtime and 64-bit AutoHotkey v2 (the C# compiler is downloaded on the first start if none is installed).
 2. Clone this repository.
-3. Run `rte_writer20.ahk`. To open a document at start, pass its path: `rte_writer20.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
+3. Run `rte_writer21.ahk`. To open a document at start, pass its path: `rte_writer21.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
 
 Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment variable `RTE_WRITER_SETTINGS` to a file path to keep them elsewhere.
 
@@ -131,8 +131,8 @@ Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment v
 
 | File | Purpose |
 |---|---|
-| `rte_writer20.ahk` | Starts the editor and holds its in-process hotkeys |
-| `rte_writer20.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
+| `rte_writer21.ahk` | Starts the editor and holds its in-process hotkeys |
+| `rte_writer21.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
 | `rte_markdown6.cs` | Markdown reading and writing |
 | `rte_linebreaks.cs` | Line breaks (Shift+Enter) in HTML |
 | `rte_htmllists2.cs` | HTML list numbering (start numbers, restarts, styles) |
@@ -141,6 +141,7 @@ Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment v
 | `rte_pagebreaks.cs` | Page breaks |
 | `rte_headerfooter.cs` | Headers and footers |
 | `rte_linenumbers2.cs` | Line numbers: shown beside the text, printed, and kept in the files |
+| `rte_sourcebox.cs` | The source editor of the Markdown and HTML views (Scintilla, with syntax colours and line numbers) |
 | `rte_office6.cs` | Word, OpenDocument and RTF conversion |
 | `ribbon\RteRibbon.xml` | The ribbon's markup: tabs, groups, commands, KeyTips and tooltips |
 | `ribbon\RteRibbon.ribbon` | The compiled ribbon (a resource-only DLL) that the editor loads |

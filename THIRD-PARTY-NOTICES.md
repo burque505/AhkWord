@@ -16,13 +16,15 @@ These are not included in this repository. Csharp-in-AHK downloads them from nug
 | [Codeuctivity.OpenXmlPowerTools](https://github.com/Codeuctivity/OpenXmlPowerTools) | Reading Word files (built-in converter) | MIT | [OpenXmlPowerTools-MIT.txt](licenses/OpenXmlPowerTools-MIT.txt) |
 | [Microsoft.Extensions.Logging.Abstractions](https://github.com/dotnet/runtime) | Needed by HtmlToOpenXml | MIT | [Microsoft.Extensions.Logging.Abstractions-MIT.txt](licenses/Microsoft.Extensions.Logging.Abstractions-MIT.txt) |
 | [SkiaSharp](https://github.com/mono/SkiaSharp) | Picture conversion for Word files | MIT | [SkiaSharp-MIT.txt](licenses/SkiaSharp-MIT.txt) |
+| [Scintilla5.NET](https://github.com/desjarlais/Scintilla.NET) | The editor of the Markdown and HTML views (a .NET wrapper of Scintilla) | MIT | [Scintilla.NET-MIT.txt](licenses/Scintilla.NET-MIT.txt) |
+| [Scintilla](https://www.scintilla.org/) and [Lexilla](https://www.scintilla.org/Lexilla.html), in the Scintilla5.NET package | The editing component, and its Markdown and HTML syntax colouring | The Scintilla license (permissive, by Neil Hodgson) | [Scintilla-Lexilla-License.txt](licenses/Scintilla-Lexilla-License.txt) |
 
 ## Included in this repository
 
 | Component | Where | License | Text |
 |---|---|---|---|
 | [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (Microsoft) | The ribbon's icons in `ribbon/RteRibbon.ribbon`, drawn from the icon font by `ribbon/make_icons.cs`. The font itself is downloaded by `ribbon/build_ribbon.ahk` when the ribbon is rebuilt, and is not included. | MIT | [FluentUISystemIcons-MIT.txt](licenses/FluentUISystemIcons-MIT.txt) |
-| [Csharp-in-AHK](https://github.com/burque505/Csharp-in-AHK) | `Csharp-in-AHK.ahk` | MIT, by the author of AhkWord | [LICENSE](LICENSE) |
+| [Csharp-in-AHK](https://github.com/burque505/Csharp-in-AHK) | `Csharp-in-AHK.ahk`, `Csx-in-AHK.ahk`, `Csharp-in-AHK-Paths.ahk`, `Csharp-in-AHK.example.ini` | MIT, by the author of AhkWord | [LICENSE](LICENSE) |
 
 ## Programs used if installed
 

@@ -1,4 +1,4 @@
-// Markdown for RichEditBox: a replacement for its Markdown property, used by RTE Writer (rte_writer20.cs, through #load).
+// Markdown for RichEditBox: a replacement for its Markdown property, used by RTE Writer (rte_writer21.cs, through #load).
 // Version 6: line breaks (Shift+Enter) where Markdown has no "\" + newline for them are written as <br>, as GitHub
 // does: in table cells and headings (they were written as spaces); and a list item line that ends in two spaces before
 // another line is read as a line break (it was read as a space). Tables are written with their columns lined up

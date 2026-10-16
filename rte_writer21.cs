@@ -1,5 +1,6 @@
 #:package EllipticBit.RichEditorNET
 #:package WindowsRibbon@2.16.2
+#:package Scintilla5.NET@7.0.0
 #load "rte_markdown6.cs"
 #load "rte_htmllists2.cs"
 #load "rte_tables2.cs"
@@ -9,8 +10,15 @@
 #load "rte_headerfooter.cs"
 #load "rte_linebreaks.cs"
 #load "rte_linenumbers2.cs"
+#load "rte_sourcebox.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer20.ahk. Iteration 20 adds to iteration 19:
+// Run it with rte_writer21.ahk. Iteration 21 adds to iteration 20:
+//   - The Markdown and HTML views edit in Scintilla (rte_sourcebox.cs, through the Scintilla5.NET package) instead of a
+//     plain-text RichEdit: Markdown and HTML syntax colours (Lexilla's lexers), line numbers (View > Source line
+//     numbers), Ctrl+wheel zoom. SourceBox keeps the text box members the views use, with character positions and "\n"
+//     line ends, so the views' commands are unchanged. Csharp-in-AHK runs packages from the NuGet folder, so SourceBox
+//     tells Scintilla5.NET where the package's native Scintilla.dll and Lexilla.dll are.
+// Iteration 20 added to iteration 19:
 //   - Line numbers are printed (Print, Print Preview, Export as PDF), numbering the printed lines: rte_linenumbers2.cs
 //     lays the document out as the printer does (PrintedLineNumbers: a hidden RichEdit with the printer as its target
 //     device gives the lines, EM_FORMATRANGE measuring gives each line's top) and DocumentPrinter draws them left of the
@@ -203,11 +211,12 @@ enum RibbonCommand : uint
 	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295,
 	AddToDictionary = 296, SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, ShowBands = 303,
 	Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331,
-	ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, Macros = 310, RecordMacro = 311, MacroHotkeys = 312,
-	RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321,
-	InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340,
-	TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346,
-	LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
+	ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311,
+	MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320,
+	InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326,
+	TableProperties = 340, TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345,
+	TableShading = 346, LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354,
+	LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -261,36 +270,6 @@ static class PrettyHtml
 		if (rest.Trim() != "") { Indent(); output.Append(rest); }
 		return output.ToString().TrimEnd();
 	}
-}
-
-// Iteration 17: the Markdown / HTML editor. RichEdit in plain-text mode (pasted formatting is dropped), which keeps
-// RichEdit's multi-level undo; a monospaced font; Tab inserts a tab.
-sealed class SourceBox : RichTextBox
-{
-	// RichEdit's own formatting keys, which do nothing useful in plain text (Ctrl+E would center all of it).
-	public static readonly HashSet<Keys> FormattingKeys = new() {
-		Keys.Control | Keys.L, Keys.Control | Keys.E, Keys.Control | Keys.R, Keys.Control | Keys.J, Keys.Control | Keys.D1,
-		Keys.Control | Keys.D2, Keys.Control | Keys.D5, Keys.Control | Keys.Shift | Keys.A, Keys.Control | Keys.Shift | Keys.L,
-		Keys.Control | Keys.Oemplus, Keys.Control | Keys.Shift | Keys.Oemplus, Keys.Control | Keys.B, Keys.Control | Keys.I, Keys.Control | Keys.U,
-	};
-
-	public SourceBox() {
-		AcceptsTab = true;
-		DetectUrls = false;
-		HideSelection = false;
-		BorderStyle = BorderStyle.None;
-		Font = new Font("Consolas", 10.5f);
-	}
-
-	protected override void OnHandleCreated(EventArgs e) {
-		base.OnHandleCreated(e);
-		SendMessage(Handle, EM_SETTEXTMODE, (IntPtr)(TM_PLAINTEXT | TM_MULTILEVELUNDO | TM_MULTICODEPAGE), IntPtr.Zero);
-		SendMessage(Handle, EM_SETMARGINS, (IntPtr)(EC_LEFTMARGIN | EC_RIGHTMARGIN), (IntPtr)(LogicalToDeviceUnits(6) | LogicalToDeviceUnits(6) << 16));
-	}
-
-	const int EM_SETTEXTMODE = 0x459, EM_SETMARGINS = 0xD3, TM_PLAINTEXT = 1, TM_MULTILEVELUNDO = 8, TM_MULTICODEPAGE = 32,
-		EC_LEFTMARGIN = 1, EC_RIGHTMARGIN = 2;
-	[DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 }
 
 class WriterForm : Form
@@ -421,6 +400,7 @@ class WriterForm : Form
 		sourceTitle.Height = LogicalToDeviceUnits(24);
 		sourceTitle.Padding = new Padding(LogicalToDeviceUnits(6), LogicalToDeviceUnits(4), 0, 0);
 		sourceBox.WordWrap = Settings.SourceWordWrap;
+		sourceBox.LineNumbers = Settings.SourceLineNumbers;
 		sourceSplit.Panel1.Controls.Add(sourcePanel);
 		sourceSplit.Panel2.Controls.Add(page);
 		outlineSplit.Panel2.Controls.Add(sourceSplit);
@@ -675,6 +655,7 @@ class WriterForm : Form
 		Toggle(RibbonCommand.ViewHtml, () => SetView(SourceKind.Html, sideBySide));
 		Toggle(RibbonCommand.SideBySide, () => SetView(view == SourceKind.None ? SourceKind.Markdown : view, !sideBySide));
 		Check(RibbonCommand.SourceWordWrap, () => sourceBox.WordWrap = !sourceBox.WordWrap);
+		Check(RibbonCommand.SourceLineNumbers, () => sourceBox.LineNumbers = !sourceBox.LineNumbers);
 
 		// Tools
 		macrosGallery = new RibbonDropDownGallery(ribbon, (uint)RibbonCommand.Macros);
@@ -765,7 +746,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 20: printed line numbers)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 21: Scintilla source views)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1033,6 +1014,7 @@ class WriterForm : Form
 		Settings.SourceView = view.ToString();
 		Settings.SideBySide = sideBySide;
 		Settings.SourceWordWrap = sourceBox.WordWrap;
+		Settings.SourceLineNumbers = sourceBox.LineNumbers;
 		if (!outlineSplit.Panel1Collapsed) Settings.OutlineWidth = (int)Math.Round(outlineSplit.SplitterDistance * 96.0 / DeviceDpi);
 		try { Settings.Zoom = Editor.ZoomFactor; } catch (ObjectDisposedException) { }
 		Settings.Save();
@@ -1639,8 +1621,8 @@ class WriterForm : Form
 
 	void ShowFind(bool replace) {
 		findForm ??= new FindReplaceForm(this);
-		TextBoxBase box = SourceActive ? sourceBox : Editor;
-		findForm.ShowFor(replace, box.SelectionLength is > 0 and < 100 && !box.SelectedText.Contains('\n') ? box.SelectedText : null);
+		var (length, selected) = SourceActive ? (sourceBox.SelectionLength, sourceBox.SelectedText) : (Editor.SelectionLength, Editor.SelectedText);
+		findForm.ShowFor(replace, length is > 0 and < 100 && !selected.Contains('\n') ? selected : null);
 	}
 
 	internal bool FindNext() {
@@ -1988,9 +1970,14 @@ class WriterForm : Form
 			var range = api.SelectionRange();
 			if (ribbon.Initialized) UpdateRibbon(range);
 
-			TextBoxBase box = SourceActive ? sourceBox : Editor;
-			int line = box.GetLineFromCharIndex(box.SelectionStart);
-			int column = box.SelectionStart - box.GetFirstCharIndexFromLine(line);
+			int line, column;
+			if (SourceActive) {
+				line = sourceBox.LineOf(sourceBox.SelectionStart);
+				column = sourceBox.SelectionStart - sourceBox.LineStart(line);
+			} else {
+				line = Editor.GetLineFromCharIndex(Editor.SelectionStart);
+				column = Editor.SelectionStart - Editor.GetFirstCharIndexFromLine(line);
+			}
 			positionLabel.Text = $"Ln {line + 1}, Col {column + 1}";
 			modeLabel.Text = (view != SourceKind.None ? ViewName(view) + (sideBySide ? " | " : ", ") : "") + (Editor.EnableHtmlFontSizing ? "Structured" : "Free-form");
 		} catch (COMException) {
@@ -2043,6 +2030,7 @@ class WriterForm : Form
 		toggleButtons[RibbonCommand.ViewHtml].BooleanValue = view == SourceKind.Html;
 		toggleButtons[RibbonCommand.SideBySide].BooleanValue = sideBySide;
 		checkBoxes[RibbonCommand.SourceWordWrap].BooleanValue = sourceBox.WordWrap;
+		checkBoxes[RibbonCommand.SourceLineNumbers].BooleanValue = sourceBox.LineNumbers;
 		checkBoxes[RibbonCommand.WordWrap].BooleanValue = Editor.WordWrap;
 		checkBoxes[RibbonCommand.ShowBands].BooleanValue = Settings.ShowBands;
 		checkBoxes[RibbonCommand.Outline].BooleanValue = !outlineSplit.Panel1Collapsed;
@@ -2071,7 +2059,7 @@ class WriterForm : Form
 		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys,
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
-		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.Structured, RibbonCommand.FreeForm, RibbonCommand.WordWrap,
+		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.Structured, RibbonCommand.FreeForm, RibbonCommand.WordWrap,
 		RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
 		RibbonCommand.HeaderFooter, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
 		RibbonCommand.LineNumberOptions, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
@@ -2119,6 +2107,7 @@ class WriterForm : Form
 			sources[kind] = source = (Embedded(regenerated).Replace("\r\n", "\n"), regenerated, false);
 		filling = true;
 		try {
+			sourceBox.Language = kind == SourceKind.Markdown ? SourceBox.Languages.Markdown : SourceBox.Languages.Html;
 			sourceBox.Text = source.Text;
 			sourceBox.ClearUndo();
 			sourceBox.Select(0, 0);
@@ -4621,6 +4610,7 @@ public sealed class Settings
 	public bool SideBySide { get; set; }
 	public int SourceSplit { get; set; } = 50;    // side by side: the source's share of the width, in percent
 	public bool SourceWordWrap { get; set; } = true;
+	public bool SourceLineNumbers { get; set; } = true;    // View > Source line numbers
 	public bool ShowBands { get; set; } = true;    // View > Header and footer: the strips above and below the text
 	public List<ListLevel> ListLevels { get; set; } = ListLevel.Defaults();    // Paragraph > List levels
 	public int TableRows { get; set; } = 3;    // Table > Insert table
