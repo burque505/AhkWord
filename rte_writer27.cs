@@ -13,8 +13,19 @@
 #load "rte_sourcebox.cs"
 #load "rte_linespacing2.cs"
 #load "rte_printlayout.cs"
+#load "rte_pageview.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer26.ahk. Iteration 26 adds to iteration 25:
+// Run it with rte_writer27.ahk. Iteration 27 adds to iteration 26:
+//   - Multiple Pages (rte_pageview.cs): View > Zoom > Multiple Pages shows the printed pages side by side, as many as
+//     fit across the window (the printer's own pages: the same page breaks, header, footer and line numbers), read-only.
+//     Zoom In / Out / 100% and Ctrl+wheel show them larger or smaller; the arrow keys move between them; double-click a
+//     page (or Enter) to edit the document there; Esc, or the button again, goes back to where the caret was. A command
+//     that changes the text goes back to editing first. Scripts: Rte.MultiplePages := 1.
+//   - Print Preview is a window of its own (PagePreviewForm) fitted to the screen's working area (it reached under the
+//     taskbar), with Print, First / Previous / "Page 2 of 6" / Next / Last, Zoom Out / In / Whole Page and Close, the
+//     page view's keys, and double-click a page to edit it there. Print Preview's pages no longer cut off the ends of
+//     long lines (DocumentPrinter.PreviewPage records the text for the printer first).
+// Iteration 26 added to iteration 25:
 //   - Table cells keep their paragraphs' indents, tab stops and spacing in HTML (rte_linespacing2.cs writes them for
 //     the cells' paragraphs too), as they already did in RTF, Word and OpenDocument files.
 // Iteration 25 added to iteration 24:
@@ -249,13 +260,13 @@ enum RibbonCommand : uint
 	NumberingMenu = 274, BlockStyle = 275, PageBreak = 280, Table = 281, Picture = 282, Thumbnail = 283,
 	Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296, SpellCheck = 297,
 	Structured = 300, FreeForm = 301, WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371, ZoomOnePage = 372,
-	ShowBands = 303, Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330,
-	ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310,
-	RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316,
-	InsertAbove = 320, InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325,
-	DeleteTable = 326, TableProperties = 340, TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344,
-	BordersNone = 345, TableShading = 346, LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353,
-	SuppressLineNumbers = 354, LineNumberOptions = 355,
+	ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307,
+	ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335,
+	Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315,
+	About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324,
+	DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341, BordersAll = 342, BordersOutside = 343,
+	BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352,
+	LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -602,7 +613,7 @@ class WriterForm : Form
 		fontControl = new RibbonFontControl(ribbon, (uint)RibbonCommand.Font);
 		fontControl.ExecuteEvent += (s, e) => {
 			var changes = FontControlEventArgs.Create(fontControl, e).ChangedFontValues;
-			BeginInvoke(() => { ApplyFontChanges(changes); Editor.Focus(); });
+			BeginInvoke(() => { if (PagesShown) ShowPages(false); ApplyFontChanges(changes); Editor.Focus(); });
 		};
 		Shortcut(Keys.Control | Keys.B, "Bold", api.ToggleBold, M("ToggleBold"));
 		Shortcut(Keys.Control | Keys.I, "Italic", api.ToggleItalic, M("ToggleItalic"));
@@ -664,6 +675,7 @@ class WriterForm : Form
 			if (updatingUi || GalleryItemEventArgs.Create(blockCombo, e).SelectedItem is not { SelectedItemIndex: >= 0 and <= (int)BlockStyle.Preformatted } item) return;
 			var style = (BlockStyle)item.SelectedItemIndex;
 			BeginInvoke(() => {
+				if (PagesShown) ShowPages(false);
 				if (SourceActive) { RunSource(() => SourceBlockStyle(style)); return; }
 				Run(() => api.SetBlockStyle(style), M("SetBlockStyle", style));
 				Editor.Focus();
@@ -709,11 +721,12 @@ class WriterForm : Form
 		Toggle(RibbonCommand.PrintLayout, () => api.PrintLayout = !Settings.PrintLayout, Keys.None, null);
 		Check(RibbonCommand.ShowBands, () => api.HeaderFooterVisible = !Settings.ShowBands);
 		Check(RibbonCommand.Outline, () => api.OutlineVisible = outlineSplit.Panel1Collapsed, Keys.Control | Keys.Shift | Keys.O);
-		Button(RibbonCommand.ZoomIn, () => ManualZoom(Math.Min(5f, EditorZoom() + 0.1f)));
-		Button(RibbonCommand.ZoomOut, () => ManualZoom(Math.Max(0.5f, EditorZoom() - 0.1f)));
-		Button(RibbonCommand.Zoom100, () => ManualZoom(1f));
+		Button(RibbonCommand.ZoomIn, () => { if (PagesShown) pageView!.Zoom(1.1f); else ManualZoom(Math.Min(5f, EditorZoom() + 0.1f)); });
+		Button(RibbonCommand.ZoomOut, () => { if (PagesShown) pageView!.Zoom(1 / 1.1f); else ManualZoom(Math.Max(0.5f, EditorZoom() - 0.1f)); });
+		Button(RibbonCommand.Zoom100, () => { if (PagesShown) pageView!.Zoom(0); else ManualZoom(1f); });
 		Toggle(RibbonCommand.ZoomPageWidth, () => api.ZoomMode = "PageWidth", Keys.None, M("ZoomMode", "PageWidth"));
 		Toggle(RibbonCommand.ZoomOnePage, () => api.ZoomMode = "OnePage", Keys.None, M("ZoomMode", "OnePage"));
+		Toggle(RibbonCommand.ZoomMultiplePages, () => { bool show = !PagesShown; api.MultiplePages = show; Record(M("MultiplePages", show)); });
 		Toggle(RibbonCommand.ViewRich, () => SetView(SourceKind.None, false));
 		Toggle(RibbonCommand.ViewMarkdown, () => SetView(SourceKind.Markdown, sideBySide));
 		Toggle(RibbonCommand.ViewHtml, () => SetView(SourceKind.Html, sideBySide));
@@ -727,7 +740,7 @@ class WriterForm : Form
 		macrosGallery.ExecuteEvent += (s, e) => {
 			if (GalleryItemEventArgs.Create(macrosGallery, e).SelectedItem is { } item && item.SelectedItemIndex >= 0 && item.SelectedItemIndex < galleryMacros.Count) {
 				string file = galleryMacros[item.SelectedItemIndex];
-				BeginInvoke(() => Run(() => RunMacroFromUi(file)));
+				BeginInvoke(() => { if (PagesShown) ShowPages(false); Run(() => RunMacroFromUi(file)); });
 			}
 		};
 		Toggle(RibbonCommand.RecordMacro, ToggleRecording, Keys.Control | Keys.Shift | Keys.R);
@@ -785,6 +798,7 @@ class WriterForm : Form
 	// A ribbon command. While the source editor is in use, formatting commands insert Markdown or HTML there (or say
 	// that they need the rich text view) instead of changing the formatted text out of sight.
 	void Command(RibbonCommand id, Action action, string? macro) {
+		if (PagesShown && !PageViewCommands.Contains(id)) ShowPages(false);
 		if (SourceActive && !SourceDocumentCommands.Contains(id)) {
 			if (sourceCommands.TryGetValue(id, out var markup)) RunSource(markup);
 			else { SetStatus($"{CommandName(id)} works in the Rich Text view (View > Rich Text)."); UpdateUi(); }
@@ -810,7 +824,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 26: cell paragraphs in HTML)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 27: multiple pages)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1400,7 +1414,64 @@ class WriterForm : Form
 		FitPagePadding();
 		lineGutter.DocumentChanged();
 		pageStartsStale = true;
+		if (PagesShown) RefreshPages();
 		UpdateUi();
+	}
+
+	// ---- Multiple Pages (iteration 27)
+
+	PageOverview? pageView;
+
+	/// Whether Multiple Pages is showing (the printed pages, read-only, in the editor's place).
+	internal bool PagesShown => pageView is { Visible: true };
+
+	// The commands that leave the pages showing: viewing, printing and saving the document; any other goes back to
+	// editing first (so it doesn't change the text out of sight).
+	static readonly HashSet<RibbonCommand> PageViewCommands = new() {
+		RibbonCommand.ZoomMultiplePages, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100, RibbonCommand.Print,
+		RibbonCommand.PrintPreview, RibbonCommand.ExportPdf, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Save,
+		RibbonCommand.SaveAs, RibbonCommand.PageSetup, RibbonCommand.HeaderFooter, RibbonCommand.ShowBands, RibbonCommand.Outline,
+		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.Exit,
+	};
+
+	/// Shows the printed pages in the editor's place (show) or goes back to editing where the caret was.
+	internal void ShowPages(bool show) {
+		if (show == PagesShown) { if (show) RefreshPages(); return; }
+		if (show) {
+			if (pageView == null) {
+				pageView = new PageOverview { Dock = DockStyle.Fill, Visible = false };
+				pageView.PageChosen += (page, start) => {
+					ShowPages(false);
+					Editor.Select(Math.Min(start, Editor.TextLength), 0);
+					Editor.ScrollToCaret();
+					SetStatus($"Page {page + 1}.");
+				};
+				pageView.Closing += () => ShowPages(false);
+				sourceSplit.Parent!.Controls.Add(pageView);
+			}
+			Cursor = Cursors.WaitCursor;
+			try { RefreshPages(); } finally { Cursor = Cursors.Default; }
+			pageView.Visible = true;
+			pageView.BringToFront();
+			pageView.Focus();
+			SetStatus($"Multiple Pages: {pageView.PageCount} page{(pageView.PageCount == 1 ? "" : "s")}, read-only. Double-click a page to edit it there; Esc goes back. Zoom or Ctrl+wheel shows them larger or smaller.");
+		} else {
+			pageView!.Visible = false;
+			pageView.Clear();
+			if (SourceActive) sourceBox.Focus(); else Editor.Focus();
+			SetStatus("");
+		}
+		UpdateUi();
+	}
+
+	// The pages again, as they print now (after Page Setup, the header and footer, a script's change).
+	void RefreshPages() {
+		if (pageView == null) return;
+		List<int> starts;
+		using (var measuring = CreatePrinter()) starts = measuring.PageStarts();
+		using var printer = CreatePrinter();
+		int caret = Editor.TextDocument.Selection2.Start;
+		pageView.Show(printer.Document, starts, Math.Max(0, starts.FindLastIndex(start => start <= caret)));
 	}
 
 	void LineNumbersCommand() {
@@ -1426,17 +1497,30 @@ class WriterForm : Form
 		ApplyPrintLayout();    // (the page's new width)
 	}
 
+	// Print Preview: the printed pages in a window fitted to the screen's working area (PagePreviewForm), from the page
+	// the caret is on; double-clicking a page edits the document there.
 	void PrintPreviewCommand() {
+		List<int> starts;
+		using (var measuring = CreatePrinter()) starts = measuring.PageStarts();
 		using var printer = CreatePrinter();
-		using var dlg = new PrintPreviewDialog { Document = printer.Document, ShowIcon = false,
-			Size = new Size(LogicalToDeviceUnits(900), LogicalToDeviceUnits(1000)), StartPosition = FormStartPosition.CenterParent };
-		dlg.ShowDialog(this);
+		using var preview = new PagePreviewForm(DocumentName, this);
+		int caret = Editor.TextDocument.Selection2.Start;
+		preview.Load += (s, e) => preview.Pages.Show(printer.Document, starts, Math.Max(0, starts.FindLastIndex(start => start <= caret)));
+		preview.PrintRequested += () => PrintCommand(preview);
+		if (preview.ShowDialog(this) == DialogResult.OK && preview.ChosenStart is int start) {
+			if (PagesShown) ShowPages(false);
+			Editor.Select(Math.Min(start, Editor.TextLength), 0);
+			Editor.ScrollToCaret();
+			Editor.Focus();
+		}
 	}
 
-	void PrintCommand() {
+	void PrintCommand() => PrintCommand(this);
+
+	void PrintCommand(IWin32Window owner) {
 		using var printer = CreatePrinter();
 		using var dlg = new PrintDialog { Document = printer.Document, UseEXDialog = true };
-		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		if (dlg.ShowDialog(owner) != DialogResult.OK) return;
 		printer.Document.Print();
 		SetStatus("Sent to " + printer.Document.PrinterSettings.PrinterName);
 	}
@@ -1878,6 +1962,11 @@ class WriterForm : Form
 	// ---------------------------------------------------------------- Keyboard: Tab / Shift+Tab in lists
 
 	protected override bool ProcessCmdKey(ref Message msg, Keys keyData) {
+		// Multiple Pages: its own keys; a shortcut that changes the text goes back to editing first
+		if (PagesShown && pageView!.IsHandleCreated && msg.HWnd == pageView.Handle) {
+			if (keyData is Keys.Escape or Keys.Enter) return base.ProcessCmdKey(ref msg, keyData);
+			if (shortcuts.TryGetValue(keyData, out var pageShortcut) && !PageViewCommands.Any(c => CommandName(c) == pageShortcut.Name)) ShowPages(false);
+		}
 		// The source editor: its own editing keys, the document's (save, open, find ...); not the formatting ones, which
 		// would act on the formatted text out of sight (or let RichEdit format the plain text, as Ctrl+E would)
 		if (sourceBox.IsHandleCreated && msg.HWnd == sourceBox.Handle) {
@@ -2252,6 +2341,7 @@ class WriterForm : Form
 		toggleButtons[RibbonCommand.ZoomPageWidth].BooleanValue = Settings.PrintLayout && Settings.ZoomMode == "PageWidth";
 		toggleButtons[RibbonCommand.ZoomOnePage].BooleanValue = Settings.PrintLayout && Settings.ZoomMode == "OnePage";
 		toggleButtons[RibbonCommand.ZoomPageWidth].Enabled = toggleButtons[RibbonCommand.ZoomOnePage].Enabled = Settings.PrintLayout;
+		toggleButtons[RibbonCommand.ZoomMultiplePages].BooleanValue = PagesShown;
 		checkBoxes[RibbonCommand.ShowBands].BooleanValue = Settings.ShowBands;
 		checkBoxes[RibbonCommand.Outline].BooleanValue = !outlineSplit.Panel1Collapsed;
 		checkBoxes[RibbonCommand.SpellCheck].BooleanValue = Editor.EnableSpellCheck;
@@ -2280,7 +2370,7 @@ class WriterForm : Form
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys,
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
 		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.Structured, RibbonCommand.FreeForm, RibbonCommand.WordWrap, RibbonCommand.PrintLayout, RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage,
-		RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
+		RibbonCommand.ZoomMultiplePages, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
 		RibbonCommand.HeaderFooter, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
 		RibbonCommand.LineNumberOptions, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
 		RibbonCommand.SelectAll, RibbonCommand.Find, RibbonCommand.Replace,
@@ -3223,6 +3313,12 @@ public class EditorApi
 			form.Settings.Save();
 			form.ApplyPrintLayout();
 		}
+	}
+
+	/// Multiple Pages: the printed pages side by side, read-only, in the editor's place (true), or editing (false).
+	public bool MultiplePages {
+		get => form.PagesShown;
+		set => form.ShowPages(value);
 	}
 
 	/// Print Layout's zoom: "PageWidth" (the page's width fills the window), "OnePage" (a page's height fits) or
@@ -5150,32 +5246,43 @@ sealed class DocumentPrinter : IDisposable
 	const int PreviewScale = 2;    // the preview's picture of a page: twice the screen's resolution
 
 	// Print Preview records each page as a metafile at the printer's resolution, and shrinking that to the screen loses
-	// RichEdit's thin lines (table borders, 1/2 point): there the text is drawn into a picture of the page instead, laid
-	// out for the printer as before (so the pages break in the same places), at twice the screen's resolution.
+	// RichEdit's thin lines (table borders, 1/2 point): there the page is drawn into a picture instead, at twice the
+	// screen's resolution. The text is first recorded in a metafile made for the printer, so that each letter is where it
+	// will print (drawn straight at the screen's resolution, letters are a little wider, and the end of a line could be
+	// cut off), laid out for the printer as before (so the pages break in the same places).
 	int PreviewPage(FORMATRANGE range, Rectangle page, out Bitmap? picture) {
 		int width = (int)Math.Ceiling(page.Width * 0.96 * PreviewScale), height = (int)Math.Ceiling(page.Height * 0.96 * PreviewScale);
-		picture = new Bitmap(width, height);
-		using var g = Graphics.FromImage(picture);
-		g.Clear(Color.White);
-		IntPtr hdc = g.GetHdc();
+		int next;
+		using var measuring = Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings);
+		IntPtr reference = measuring.GetHdc();
+		System.Drawing.Imaging.Metafile recorded;
 		try {
-			SetGraphicsMode(hdc, 2);    // GM_ADVANCED, for the scale
-			var scale = new XFORM { eM11 = PreviewScale, eM22 = PreviewScale };
-			SetWorldTransform(hdc, ref scale);
-			// the same areas, relative to the page's corner (the picture's) rather than the printable area's
-			int dx = (int)(range.rcPage.Left), dy = (int)(range.rcPage.Top);
-			range.hdc = hdc;
-			range.rc = new RECT { Left = range.rc.Left - dx, Top = range.rc.Top - dy, Right = range.rc.Right - dx, Bottom = range.rc.Bottom - dy };
-			range.rcPage = new RECT { Left = 0, Top = 0, Right = range.rcPage.Right - dx, Bottom = range.rcPage.Bottom - dy };
-			return (int)SendMessage(editor.Handle, EM_FORMATRANGE, (IntPtr)1, ref range);
+			recorded = new System.Drawing.Imaging.Metafile(reference, new RectangleF(0, 0, page.Width / 100f, page.Height / 100f), System.Drawing.Imaging.MetafileFrameUnit.Inch, System.Drawing.Imaging.EmfType.EmfOnly);
+			using var record = Graphics.FromImage(recorded);
+			IntPtr hdc = record.GetHdc();
+			try {
+				// the same areas, relative to the page's corner (the picture's) rather than the printable area's
+				int dx = range.rcPage.Left, dy = range.rcPage.Top;
+				range.hdc = hdc;
+				range.hdcTarget = reference;
+				range.rc = new RECT { Left = range.rc.Left - dx, Top = range.rc.Top - dy, Right = range.rc.Right - dx, Bottom = range.rc.Bottom - dy };
+				range.rcPage = new RECT { Left = 0, Top = 0, Right = range.rcPage.Right - dx, Bottom = range.rcPage.Bottom - dy };
+				next = (int)SendMessage(editor.Handle, EM_FORMATRANGE, (IntPtr)1, ref range);
+			} finally {
+				record.ReleaseHdc(hdc);
+			}
 		} finally {
-			g.ReleaseHdc(hdc);
+			measuring.ReleaseHdc(reference);
 		}
+		using (recorded) {
+			picture = new Bitmap(width, height);
+			using var g = Graphics.FromImage(picture);
+			g.Clear(Color.White);
+			g.SmoothingMode = SmoothingMode.HighQuality;
+			g.DrawImage(recorded, new Rectangle(0, 0, width, height));
+		}
+		return next;
 	}
-
-	[StructLayout(LayoutKind.Sequential)] struct XFORM { public float eM11, eM12, eM21, eM22, eDx, eDy; }
-	[DllImport("gdi32")] static extern int SetGraphicsMode(IntPtr hdc, int mode);
-	[DllImport("gdi32")] static extern bool SetWorldTransform(IntPtr hdc, ref XFORM transform);
 
 	/// The number of pages the document prints on now (laid out for the printer, without printing).
 	public int PageCount() => PageStarts().Count;

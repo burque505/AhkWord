@@ -1,8 +1,12 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
-; RTE Writer, iteration 26: a word processor built on RichEditorNET (rte_writer26.cs), hosted in this AHK process.
-; Adds to iteration 25:
+; RTE Writer, iteration 27: a word processor built on RichEditorNET (rte_writer27.cs), hosted in this AHK process.
+; Adds to iteration 26:
+;   - View > Zoom > Multiple Pages: the printed pages side by side, read-only; double-click one to edit it there.
+;     Scripts: Rte.MultiplePages := 1.
+;   - Print Preview fits the screen above the taskbar, with page buttons and "Page 2 of 6" instead of a spin box.
+; Iteration 26 added to iteration 25:
 ;   - Table cells keep their paragraphs' indents, tab stops and spacing in HTML files.
 ; Iteration 25 added to iteration 24:
 ;   - Space before and after paragraphs (Home > Paragraph > Line Spacing), and Word files open spaced as in Word: their
@@ -82,7 +86,7 @@
 ; Earlier iterations added events, recent files, settings, drag and drop, printing, PDF export, headers and footers,
 ; spelling suggestions, the outline, macro recording and hotkeys, and real Markdown. Settings are kept in
 ; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile); set RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
-; Optionally pass a document to open:  rte_writer26.ahk "C:\path\document.md"
+; Optionally pass a document to open:  rte_writer27.ahk "C:\path\document.md"
 ;
 ; AHK automation: other scripts #Include "RteClient2.ahk" and call Rte.<Name>(...), react to events with
 ; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Tools > Automation API lists everything that can be called,
@@ -104,7 +108,7 @@ SubscribeToSaved() {
 }
 
 StartFile := A_Args.Length ? A_Args[1] : ""
-RunCSharpFile(A_ScriptDir "\rte_writer26.cs", A_AhkPath, A_ScriptDir, StartFile)
+RunCSharpFile(A_ScriptDir "\rte_writer27.cs", A_AhkPath, A_ScriptDir, StartFile)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
     MsgBox("RTE Writer stopped because of an error (" CSExitCode "):`n`n" CSOutput, "RTE Writer", "Iconx")
 ExitApp
