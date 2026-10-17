@@ -1,4 +1,4 @@
-// Line and paragraph spacing for RTE Writer (rte_writer30.cs, through #load): the selected paragraphs' line spacing,
+// Line and paragraph spacing for RTE Writer (rte_writer31.cs, through #load): the selected paragraphs' line spacing,
 // as in Word's Line and Paragraph Spacing button (1.0, 1.15, 1.5, 2.0 ... lines, or at least / exactly so many points),
 // and (version 2) their space before and after. They are paragraph formats (TOM's SetLineSpacing, SpaceBefore,
 // SpaceAfter), kept by RichEdit in RTF (\sl \slmult \sb \sa) and so in Word and OpenDocument files made by Word or

@@ -17,7 +17,13 @@
 #load "rte_recovery.cs"
 #load "rte_templates.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer30.ahk. Iteration 30 adds to iteration 29:
+// Run it with rte_writer31.ahk. Iteration 31 adds to iteration 30:
+//   - Several windows: File > New Window and File > Open in New Window start another RTE Writer (a little down and to
+//     the right of this one), to work on two documents at once; each window is a whole editor of its own (its recovery
+//     copies, its macros, its automation). The windows share the settings file: each saves only what it changed, so a
+//     window closing doesn't undo the other's (recent documents, macro hotkeys and remembered values are merged item
+//     by item). Scripts started outside the editor talk to the RTE Writer window used last. Scripts: Rte.NewWindow().
+// Iteration 30 added to iteration 29:
 //   - Templates (rte_templates.cs): File > New from Template (and the start page) makes an untitled document from a
 //     template: a document in the templates folder beside the program (Letter, Memo, Report, Court Paper, Meeting Notes)
 //     or in your own Templates folder (beside the settings). Its fields, {{Your name}} or {{Salutation|Sir or Madam}},
@@ -264,6 +270,7 @@ using RibbonLib.Interop;
 // AHK hotkeys and timers keep running meanwhile and can call the editor (see RteClient.ahk).
 Application.EnableVisualStyles();
 AppFolders.ProgramFolder = args.Length > 1 ? args[1] : Environment.CurrentDirectory;    // (portable mode: before the settings)
+AppFolders.HostScript = args.Length > 3 && args[3] != "" ? args[3] : null;    // (rte_writer*.ahk: New Window starts it again)
 using var form = new WriterForm(
 	args.Length > 0 ? args[0] : "",
 	args.Length > 1 ? args[1] : Environment.CurrentDirectory,
@@ -282,26 +289,27 @@ enum RibbonCommand : uint
 	GroupTableFormat = 132, AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144,
 	PrintMenu = 145, New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204,
 	PrintPreview = 205, PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210,
-	NewFromTemplate = 212, StartPage = 215, InsertFromTemplate = 214, FillInFields = 213, GroupTemplates = 133, GroupHomeMacros = 134,
-	Close = 211, Undo = 220, Redo = 221, Paste = 222, Cut = 223, Copy = 224,
-	SelectAll = 225, Find = 226, Replace = 227, Font = 230, FontDialog = 231, ChangeCase = 232,
-	CaseUpper = 233, CaseLower = 234, CaseTitle = 235, UnderlineStyle = 236, UnderlineSingle = 237, UnderlineDouble = 238,
-	UnderlineDotted = 239, UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250, Numbering = 251, Legal = 252,
-	Outdent = 253, Indent = 254, AlignLeft = 255, AlignCenter = 256, AlignRight = 257, Justify = 258,
-	LineSpacing = 360, LineSpacing10 = 361, LineSpacing115 = 362, LineSpacing150 = 363, LineSpacing200 = 364, LineSpacing250 = 365,
-	LineSpacing300 = 366, LineSpacingOptions = 367, SpaceBefore = 368, SpaceAfter = 369, ListOptions = 259, ListStyle = 260,
-	ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264, ListLowerRoman = 265, ListUpperRoman = 266,
-	ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272,
-	OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, PageBreak = 280, Table = 281, Picture = 282,
-	Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296,
-	SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371,
-	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
-	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313,
-	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
-	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
-	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
-	LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
+	NewFromTemplate = 212, NewWindow = 216, OpenInNewWindow = 217, StartPage = 215, InsertFromTemplate = 214, FillInFields = 213,
+	GroupTemplates = 133, GroupHomeMacros = 134, Close = 211, Undo = 220, Redo = 221, Paste = 222,
+	Cut = 223, Copy = 224, SelectAll = 225, Find = 226, Replace = 227, Font = 230,
+	FontDialog = 231, ChangeCase = 232, CaseUpper = 233, CaseLower = 234, CaseTitle = 235, UnderlineStyle = 236,
+	UnderlineSingle = 237, UnderlineDouble = 238, UnderlineDotted = 239, UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250,
+	Numbering = 251, Legal = 252, Outdent = 253, Indent = 254, AlignLeft = 255, AlignCenter = 256,
+	AlignRight = 257, Justify = 258, LineSpacing = 360, LineSpacing10 = 361, LineSpacing115 = 362, LineSpacing150 = 363,
+	LineSpacing200 = 364, LineSpacing250 = 365, LineSpacing300 = 366, LineSpacingOptions = 367, SpaceBefore = 368, SpaceAfter = 369,
+	ListOptions = 259, ListStyle = 260, ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264,
+	ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270,
+	ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, PageBreak = 280,
+	Table = 281, Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290,
+	NextSpelling = 295, AddToDictionary = 296, SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302,
+	PrintLayout = 370, ZoomPageWidth = 371, ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303,
+	Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331,
+	ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311,
+	MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320,
+	InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326,
+	TableProperties = 340, TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345,
+	TableShading = 346, LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354,
+	LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -637,6 +645,8 @@ class WriterForm : Form
 		Button(RibbonCommand.Close, CloseDocumentCommand, Keys.Control | Keys.W);
 		Button(RibbonCommand.NewFromTemplate, NewFromTemplateCommand);
 		Button(RibbonCommand.StartPage, () => ShowStart(true));
+		Button(RibbonCommand.NewWindow, () => { StartWindow(null); SetStatus("Opening a new RTE Writer window..."); });
+		Button(RibbonCommand.OpenInNewWindow, OpenInNewWindowDialog);
 		Button(RibbonCommand.InsertFromTemplate, InsertTemplateCommand);
 		Button(RibbonCommand.FillInFields, FillFieldsCommand);
 		Button(RibbonCommand.Help, ShowAbout);
@@ -876,7 +886,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 30: templates and the start page)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 31: several windows)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1250,6 +1260,44 @@ class WriterForm : Form
 		UpdateRecentItems();
 	}
 
+	// ---- Several windows (iteration 31)
+
+	/// What New Window runs: AutoHotkey with RTE Writer's own script (the one this window was started with, else the
+	/// newest rte_writer*.ahk beside the program), and the document to open (null: a new one).
+	internal System.Diagnostics.ProcessStartInfo NewWindowStart(string? file) {
+		if (ahkPath == "" || !File.Exists(ahkPath)) throw new InvalidOperationException("AutoHotkey was not found; start RTE Writer with its rte_writer.ahk.");
+		string script = AppFolders.HostScript is { } host && File.Exists(host) ? host
+			: Directory.GetFiles(appDir, "rte_writer*.ahk").OrderByDescending(f => int.TryParse(Regex.Match(Path.GetFileNameWithoutExtension(f), @"\d+$").Value, out int n) ? n : 0).FirstOrDefault()
+			?? throw new FileNotFoundException("RTE Writer's script (rte_writer*.ahk) was not found in " + appDir + ".");
+		var start = new System.Diagnostics.ProcessStartInfo(ahkPath) { UseShellExecute = false, WorkingDirectory = appDir };
+		start.ArgumentList.Add(script);
+		if (file != null) start.ArgumentList.Add(Path.GetFullPath(file));
+		start.Environment["RTE_WRITER_CASCADE"] = "1";
+		start.Environment.Remove("RTE_WRITER_HWND");    // (a window of its own, not this one's macros' editor)
+		return start;
+	}
+
+	/// Starts another RTE Writer window, with a new document or the file given.
+	internal void StartWindow(string? file) {
+		using var process = System.Diagnostics.Process.Start(NewWindowStart(file));
+	}
+
+	// File > Open in New Window
+	void OpenInNewWindowDialog() {
+		using var dlg = new OpenFileDialog { Title = "Open in New Window", Filter = Filter(OpenTypes), InitialDirectory = StartFolder };
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		StartWindow(dlg.FileName);
+		SetStatus("Opening " + Path.GetFileName(dlg.FileName) + " in a new window...");
+	}
+
+	/// A window's place a step down and to the right of bounds, back at the top left of the working area once it would
+	/// run off it.
+	internal static Rectangle Cascaded(Rectangle bounds, Rectangle area, int step) {
+		var moved = new Rectangle(bounds.X + step, bounds.Y + step, bounds.Width, bounds.Height);
+		if (moved.Right > area.Right || moved.Bottom > area.Bottom) moved.Location = new Point(area.Left + step, area.Top + step);
+		return moved;
+	}
+
 	// File > Close: the document goes (its changes saved, if wanted), and an empty one takes its place.
 	void CloseDocumentCommand() {
 		string name = DocumentName;
@@ -1359,6 +1407,9 @@ class WriterForm : Form
 	void ApplyWindowSettings() {
 		if (Settings.Window is { Length: 4 } w && w[2] >= 400 && w[3] >= 300) {
 			var bounds = new Rectangle(w[0], w[1], w[2], w[3]);
+			// (started by New Window: not on top of the window that started it)
+			if (Environment.GetEnvironmentVariable("RTE_WRITER_CASCADE") == "1")
+				bounds = Cascaded(bounds, Screen.FromRectangle(bounds).WorkingArea, SystemInformation.CaptionHeight + LogicalToDeviceUnits(8));
 			if (Screen.AllScreens.Any(screen => screen.WorkingArea.IntersectsWith(bounds))) {
 				StartPosition = FormStartPosition.Manual;
 				Bounds = bounds;
@@ -1718,7 +1769,7 @@ class WriterForm : Form
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100, RibbonCommand.Print,
 		RibbonCommand.PrintPreview, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Save,
 		RibbonCommand.SaveAs, RibbonCommand.PageSetup, RibbonCommand.HeaderFooter, RibbonCommand.ShowBands, RibbonCommand.Outline,
-		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.Exit,
+		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.Exit, RibbonCommand.NewWindow, RibbonCommand.OpenInNewWindow,
 	};
 
 	/// Shows the printed pages in the editor's place (show) or goes back to editing where the caret was.
@@ -2654,7 +2705,7 @@ class WriterForm : Form
 
 	// Commands that work the same in the source editor (the document, the view, editing the source itself).
 	static readonly HashSet<RibbonCommand> SourceDocumentCommands = new() {
-		RibbonCommand.New, RibbonCommand.NewFromTemplate, RibbonCommand.StartPage, RibbonCommand.Open, RibbonCommand.Save, RibbonCommand.SaveAs, RibbonCommand.Close, RibbonCommand.Print, RibbonCommand.PrintPreview,
+		RibbonCommand.New, RibbonCommand.NewFromTemplate, RibbonCommand.StartPage, RibbonCommand.NewWindow, RibbonCommand.OpenInNewWindow, RibbonCommand.Open, RibbonCommand.Save, RibbonCommand.SaveAs, RibbonCommand.Close, RibbonCommand.Print, RibbonCommand.PrintPreview,
 		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys,
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
@@ -3366,6 +3417,10 @@ public class EditorApi
 		form.ForgetRecent(Path.GetFullPath(path));
 		ed.Modified = false;
 	}
+
+	/// Opens another RTE Writer window (File > New Window), with a new document or the file given. The new window is a
+	/// separate editor: scripts reach it once it is the RTE Writer used last (or with its RTE_WRITER_HWND).
+	public void NewWindow(string path = "") => form.StartWindow(path == "" ? null : path);
 
 	/// Closes the document and starts an empty one, as File > Close does (unsaved changes are discarded, as by New; the
 	/// window stays open).
@@ -5496,19 +5551,67 @@ public sealed class Settings
 		: Path.Combine(AppFolders.Roaming, "settings.json");
 
 	public static Settings Load() {
+		Settings settings;
 		try {
-			if (File.Exists(FilePath)) return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new Settings();
-		} catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { }
-		return new Settings();
+			settings = File.Exists(FilePath) ? JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new Settings() : new Settings();
+		} catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) {
+			settings = new Settings();
+		}
+		settings.known = settings.Snapshot();
+		return settings;
 	}
 
 	public void Save() {
 		try {
 			Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-			File.WriteAllText(FilePath, JsonSerializer.Serialize(this, new JsonSerializerOptions {
+			MergeFromFile();
+			string json = JsonSerializer.Serialize(this, new JsonSerializerOptions {
 				WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping    // "Ctrl+Alt+1", not "Ctrl+Alt+1"
-			}));
+			});
+			// (written beside, then moved over: another window never reads half a file)
+			string temporary = FilePath + "." + Environment.ProcessId + ".tmp";
+			File.WriteAllText(temporary, json);
+			File.Move(temporary, FilePath, true);
+			known = Snapshot();
 		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+	}
+
+	// Several RTE Writer windows share this file. Each remembers the settings as it last read or wrote them (known); a
+	// save first takes from the file what another window changed since and this one didn't: a setting changed only
+	// there is taken over, one changed in both keeps this window's, except that lists and maps (the recent documents,
+	// macro hotkeys, remembered template values) are merged item by item (this window's additions, changes and removals
+	// on top of the other's).
+	Dictionary<string, string>? known;
+	static readonly PropertyInfo[] Kept = typeof(Settings).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+		.Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0).ToArray();
+	static string Json(object? value) => JsonSerializer.Serialize(value);
+	Dictionary<string, string> Snapshot() => Kept.ToDictionary(p => p.Name, p => Json(p.GetValue(this)));
+
+	void MergeFromFile() {
+		if (known == null || !File.Exists(FilePath)) return;
+		Settings? disk;
+		try { disk = JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)); } catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { return; }
+		if (disk == null) return;
+		foreach (var property in Kept) {
+			string before = known.TryGetValue(property.Name, out var b) ? b : "", ours = Json(property.GetValue(this)), theirs = Json(property.GetValue(disk));
+			if (theirs == before || theirs == ours) continue;                                  // (not changed by another window)
+			if (ours == before) { property.SetValue(this, property.GetValue(disk)); continue; }    // (changed only there)
+			if (property.GetValue(this) is List<string> ourList && property.GetValue(disk) is List<string> theirList) {
+				// (what either window removed since stays removed; what either added is kept, this window's first)
+				var baseList = JsonSerializer.Deserialize<List<string>>(before) ?? new();
+				var removed = baseList.Where(x => !ourList.Contains(x, StringComparer.OrdinalIgnoreCase) || !theirList.Contains(x, StringComparer.OrdinalIgnoreCase)).ToList();
+				var merged = ourList.Concat(theirList.Where(x => !ourList.Contains(x, StringComparer.OrdinalIgnoreCase)))
+					.Where(x => !removed.Contains(x, StringComparer.OrdinalIgnoreCase)).ToList();
+				if (property.Name == nameof(RecentFiles)) merged = merged.Take(MaxRecentFiles).ToList();
+				property.SetValue(this, merged);
+			} else if (property.GetValue(this) is Dictionary<string, string> ourMap && property.GetValue(disk) is Dictionary<string, string> theirMap) {
+				var baseMap = JsonSerializer.Deserialize<Dictionary<string, string>>(before) ?? new();
+				var merged = new Dictionary<string, string>(theirMap, ourMap.Comparer);
+				foreach (var (key, value) in ourMap) if (!baseMap.TryGetValue(key, out var was) || was != value) merged[key] = value;
+				foreach (var key in baseMap.Keys) if (!ourMap.ContainsKey(key)) merged.Remove(key);
+				property.SetValue(this, merged);
+			}
+		}
 	}
 }
 

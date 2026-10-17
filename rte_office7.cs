@@ -5,7 +5,7 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer30.cs, through #load).
+// Word and OpenDocument conversions for RTE Writer (rte_writer31.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
 // without spacing of its own as 1.08 lines, and "at least" as exactly. All of a paragraph's tabs come back as tabs (the

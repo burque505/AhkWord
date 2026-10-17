@@ -24,7 +24,7 @@
 ; Rte.Timeout milliseconds. The editor stays responsive between calls.
 ;   - From another script: the request goes to the editor's hidden window "RTE Writer automation server <pid>" as
 ;     WM_COPYDATA, and the reply comes back the same way. Scripts started from the editor's Tools > Macros menu talk to
-;     that editor (RTE_WRITER_HWND); otherwise the most recently started editor is used.
+;     that editor (RTE_WRITER_HWND); otherwise the RTE Writer window used last (the frontmost; several can be open).
 ;   - From rte_writer2.ahk itself (hotkeys defined there): the call goes straight to the editor through RunCSharp.
 ;
 ; Events: the editor posts them to this script's window (A_ScriptHwnd) and never waits for the script. Callbacks run
@@ -189,6 +189,10 @@ class Rte {
         try {
             if (Hwnd := EnvGet("RTE_WRITER_HWND")) != "" && WinExist("ahk_id " Hwnd)
                 return Hwnd + 0
+            ; the RTE Writer used last: the frontmost of its windows (WinGetList lists them front to back)
+            for Window in WinGetList(" - RTE Writer$")
+                if Hwnd := WinExist("^RTE Writer automation server " WinGetPID(Window) "$")
+                    return Hwnd
             if Hwnd := WinExist("^RTE Writer automation server \d+$")
                 return Hwnd
         } finally {

@@ -1,5 +1,5 @@
 // Where RTE Writer keeps its files (AppFolders: portable mode), and the recovery copies it autosaves (Recovery), for
-// RTE Writer (rte_writer30.cs, through #load).
+// RTE Writer (rte_writer31.cs, through #load).
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -17,6 +17,9 @@ public static class AppFolders
 {
 	/// The program's folder (rte_writer*.ahk's): set before anything else is read.
 	public static string ProgramFolder { get; set; } = AppContext.BaseDirectory;
+
+	/// The script RTE Writer was started with (rte_writer*.ahk; null if not known): File > New Window starts it again.
+	public static string? HostScript { get; set; }
 
 	public static bool Portable => File.Exists(Path.Combine(ProgramFolder, "portable")) || File.Exists(Path.Combine(ProgramFolder, "portable.txt"));
 

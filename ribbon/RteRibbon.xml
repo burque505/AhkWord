@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer30.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer30.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer31.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer31.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -531,6 +531,34 @@
         <Image Source="icons/newtemplate_20.bmp" MinDPI="120" />
         <Image Source="icons/newtemplate_24.bmp" MinDPI="144" />
         <Image Source="icons/newtemplate_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdNewWindow" Id="216" LabelTitle="New &amp;Window" Keytip="W" TooltipTitle="New Window" TooltipDescription="Open another RTE Writer window, with a new document, to work on two documents at once.">
+      <Command.LargeImages>
+        <Image Source="icons/newwindow_32.bmp" MinDPI="96" />
+        <Image Source="icons/newwindow_40.bmp" MinDPI="120" />
+        <Image Source="icons/newwindow_48.bmp" MinDPI="144" />
+        <Image Source="icons/newwindow_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/newwindow_16.bmp" MinDPI="96" />
+        <Image Source="icons/newwindow_20.bmp" MinDPI="120" />
+        <Image Source="icons/newwindow_24.bmp" MinDPI="144" />
+        <Image Source="icons/newwindow_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdOpenInNewWindow" Id="217" LabelTitle="Open in New W&amp;indow..." Keytip="I" TooltipTitle="Open in New Window" TooltipDescription="Open a document in another RTE Writer window, keeping this one as it is.">
+      <Command.LargeImages>
+        <Image Source="icons/openwindow_32.bmp" MinDPI="96" />
+        <Image Source="icons/openwindow_40.bmp" MinDPI="120" />
+        <Image Source="icons/openwindow_48.bmp" MinDPI="144" />
+        <Image Source="icons/openwindow_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/openwindow_16.bmp" MinDPI="96" />
+        <Image Source="icons/openwindow_20.bmp" MinDPI="120" />
+        <Image Source="icons/openwindow_24.bmp" MinDPI="144" />
+        <Image Source="icons/openwindow_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
     <Command Name="cmdStartPage" Id="215" LabelTitle="Start Pa&amp;ge" Keytip="G" TooltipTitle="Start page" TooltipDescription="The start page: a blank document, the templates, the recent documents and the macros (it can also be shown at the start).">
@@ -1626,6 +1654,8 @@
             <Button CommandName="cmdNewFromTemplate" />
             <Button CommandName="cmdStartPage" />
             <Button CommandName="cmdOpen" />
+            <Button CommandName="cmdOpenInNewWindow" />
+            <Button CommandName="cmdNewWindow" />
             <Button CommandName="cmdSave" />
             <Button CommandName="cmdSaveAs" />
             <Button CommandName="cmdClose" />

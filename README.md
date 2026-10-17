@@ -8,12 +8,13 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
 
 *[`examples/Showcase.rtf`](examples/Showcase.rtf), made entirely with the editor's own commands. The file has line numbers turned on (Layout > Line Numbers), which this picture doesn't show.*
 
-> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer30.*`). Renaming them to AhkWord is planned.
+> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer31.*`). Renaming them to AhkWord is planned.
 
 ## Features
 
 - **Documents:** HTML, Markdown (GitHub flavor, with tables and images), plain text and RTF. Word (`.docx`, `.doc`) and OpenDocument (`.odt`) files are opened and saved through a converter (see [Optional converters](#optional-converters)). Export as PDF through "Microsoft Print to PDF".
 - **Templates and the start page:** File > New from Template makes a new document from a template: Letter, Memo, Report, Court Paper (with a certificate of service) and Meeting Notes, or your own. Its fields, such as `{{Plaintiff}}`, are asked for (your own details, `{{Your name}}` and the like, are remembered for next time); date fields (`{{Hearing date}}`) get a calendar. Insert > Insert from Template puts a template's content into the document you are writing (the parts Caption, Signature Block and Certificate of Service are made for that), and Insert > Fill In Fields fills in fields left in a document. File > Start Page shows the start page (blank document, templates, recent documents, macros), which can also open at the start. See [Making templates](#making-templates).
+- **Several windows:** File > New Window and File > Open in New Window open another editor window, to work on two documents at once. Each window is a complete editor; they share the settings without undoing each other's changes. Scripts started outside the editor talk to the window used last.
 - **Autosave and recovery:** while a document has unsaved changes, a recovery copy is written every minute (never over the document's own file). If the editor ends without closing (a crash, a power cut, Windows restarting), the next start offers to recover it. `Rte.AutosaveSeconds` sets the interval (0 turns it off).
 - **Formatting:** fonts, colors, highlight, alignment, line spacing (1.0 to 3.0 lines, or at least / exactly so many points, for the selected paragraphs), space before and after paragraphs, change case and underline styles. With nothing selected, a font, size, colour or style chosen applies to what you type next, and to an empty line at once, as in Word. Structured documents use block styles (normal text, headings, preformatted); free-form documents take any font size.
 - **Lists:** numbered and bulleted lists nested with Tab and Shift+Tab, a numbering style per level, restart and continue numbering, and legal numbering (1., 1.1, 1.1.1). Typed numbers in documents from elsewhere can be turned into real lists.
@@ -32,7 +33,7 @@ The commands are on a ribbon, the one built into Windows (as in Paint and WordPa
 
 | Tab | Groups |
 |---|---|
-| **File** (menu) | New, New from Template, Open, Save, Save As, Close (Ctrl+W), Print (with Print Preview and Page Setup), Export (PDF, Word, OpenDocument), Exit, and the recent documents |
+| **File** (menu) | New, New from Template, Start Page, Open, Open in New Window, New Window, Save, Save As, Close (Ctrl+W), Print (with Print Preview and Page Setup), Export (PDF, Word, OpenDocument), Exit, and the recent documents |
 | **Home** | Clipboard, Font, Text (change case, underline style, font dialog), Paragraph (lists, levels, alignment, Line Spacing, List Options), Styles, Editing (find, replace, select all) |
 | **Insert** | Page Break, Table, Picture, Linked Thumbnail, Link, Date & Time |
 | **Layout** | Page Setup, Header & Footer, Line Numbers (None, Continuous, Restart Each Page, Suppress for Current Paragraph, Line Numbering Options), Print Preview, Export as PDF |
@@ -79,7 +80,7 @@ Rte.On("Saved", (e) => TrayTip(Rte.FileName, "Saved"))
 - **Calls** wait for the editor and return its result. `Rte.Post(...)` queues a call and returns at once. **Tools > Automation API** in the editor lists everything that can be called.
 - **Events** (`TextChanged`, `SelectionChanged`, `ModifiedChanged`, `Saved`, `Opened`, `Closed`, `AsyncError`) are delivered to callbacks registered with `Rte.On`.
 - **Macros:** the **Macros** button on the Tools tab runs the scripts in [`rte_macros`](rte_macros), and **Macro Hotkeys** gives any of them a hotkey. **Record Macro** (Ctrl+Shift+R) records typing and ribbon commands as a new macro script.
-- **Hotkeys in the host script:** `rte_writer30.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
+- **Hotkeys in the host script:** `rte_writer31.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
 
 The example macros include:
 
@@ -156,18 +157,18 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 1. Install the requirements above: the .NET 10 Desktop Runtime and 64-bit AutoHotkey v2 (the C# compiler is downloaded on the first start if none is installed).
 2. Clone this repository.
-3. Run `rte_writer30.ahk`. To open a document at start, pass its path: `rte_writer30.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
+3. Run `rte_writer31.ahk`. To open a document at start, pass its path: `rte_writer31.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
 
 Settings are kept in `%APPDATA%\RTE Writer\settings.json`, with the recovery copies beside them in `Recovery`. Set the environment variable `RTE_WRITER_SETTINGS` to a file path to keep them elsewhere.
 
-**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `rte_writer30.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
+**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `rte_writer31.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `rte_writer30.ahk` | Starts the editor and holds its in-process hotkeys |
-| `rte_writer30.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
+| `rte_writer31.ahk` | Starts the editor and holds its in-process hotkeys |
+| `rte_writer31.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
 | `rte_markdown6.cs` | Markdown reading and writing |
 | `rte_linebreaks.cs` | Line breaks (Shift+Enter) in HTML |
 | `rte_htmllists2.cs` | HTML list numbering (start numbers, restarts, styles) |
