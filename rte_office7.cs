@@ -5,7 +5,7 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer22.cs, through #load).
+// Word and OpenDocument conversions for RTE Writer (rte_writer23.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing (DocxLineSpacing.IntoHtml, in
 // rte_linespacing.cs): the PowerTools read a paragraph without spacing of its own as 1.08 lines, and "at least" as exactly.
 // Version 6: pictures keep their alt text in RTF, as the picture property Word and LibreOffice use for it

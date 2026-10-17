@@ -13,7 +13,15 @@
 #load "rte_sourcebox.cs"
 #load "rte_linespacing.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer22.ahk. Iteration 22 adds to iteration 21:
+// Run it with rte_writer23.ahk. Iteration 23 adds to iteration 22:
+//   - Character formats at the caret, as in Word: with nothing selected, the font box (font, size, bold, italic,
+//     underline, strikethrough, superscript, subscript, colour, highlight), the Font dialog and Ctrl+B / I / U set the
+//     format of what is typed next, and on an empty paragraph its paragraph mark's too, so the empty line keeps the
+//     format and shows it when the caret comes back (EditorApi.AtCaret; RichEditorNET's commands changed only selected
+//     text). The font box shows the caret's format (TOM's insertion point) rather than the character at the caret's.
+//     Scripts get the same: Rte.SetFontName, ToggleBold, ToggleItalic, ToggleUnderline, ToggleStrikeThrough,
+//     SetFontColor, SetBackgroundColor are EditorApi's now.
+// Iteration 22 added to iteration 21:
 //   - Line spacing (rte_linespacing.cs): Home > Paragraph > Line Spacing sets the selected paragraphs' line spacing,
 //     1.0 to 3.0 lines, or Line Spacing Options for single, 1.5, double, a multiple, or at least / exactly so many points
 //     (TOM's SetLineSpacing; one undo step). RichEdit keeps it in RTF, so Word and LibreOffice files have it; HTML gets
@@ -559,9 +567,9 @@ class WriterForm : Form
 			var changes = FontControlEventArgs.Create(fontControl, e).ChangedFontValues;
 			BeginInvoke(() => { ApplyFontChanges(changes); Editor.Focus(); });
 		};
-		Shortcut(Keys.Control | Keys.B, "Bold", Editor.ToggleBold, M("ToggleBold"));
-		Shortcut(Keys.Control | Keys.I, "Italic", Editor.ToggleItalic, M("ToggleItalic"));
-		Shortcut(Keys.Control | Keys.U, "Underline", () => Editor.ToggleUnderline(), M("ToggleUnderline"));
+		Shortcut(Keys.Control | Keys.B, "Bold", api.ToggleBold, M("ToggleBold"));
+		Shortcut(Keys.Control | Keys.I, "Italic", api.ToggleItalic, M("ToggleItalic"));
+		Shortcut(Keys.Control | Keys.U, "Underline", () => api.ToggleUnderline(), M("ToggleUnderline"));
 		Shortcut(Keys.Control | Keys.Shift | Keys.Oemplus, "Superscript", api.ToggleSuperscript, M("ToggleSuperscript"));
 		Shortcut(Keys.Control | Keys.Oemplus, "Subscript", api.ToggleSubscript, M("ToggleSubscript"));
 		Shortcut(Keys.Control | Keys.OemCloseBrackets, "Increase font size", () => { if (FreeFormForSizes()) api.IncreaseFontSize(); }, M("IncreaseFontSize"));
@@ -571,7 +579,7 @@ class WriterForm : Form
 			Button(id, () => api.ChangeCase(mode), Keys.None, M("ChangeCase", mode));
 		foreach (var (id, style) in new[] { (RibbonCommand.UnderlineSingle, UnderlineStyle.Single), (RibbonCommand.UnderlineDouble, UnderlineStyle.Double),
 			(RibbonCommand.UnderlineDotted, UnderlineStyle.Dotted), (RibbonCommand.UnderlineDashed, UnderlineStyle.Dashed), (RibbonCommand.UnderlineWavy, UnderlineStyle.Wavy) })
-			Button(id, () => Editor.ToggleUnderline(style), Keys.None, M("ToggleUnderline", style));
+			Button(id, () => api.ToggleUnderline(style), Keys.None, M("ToggleUnderline", style));
 
 		// Home: paragraph
 		Toggle(RibbonCommand.Bullets, () => api.ToggleList(ListStyle.Bullet), Keys.Control | Keys.Shift | Keys.L, M("ToggleList", ListStyle.Bullet));
@@ -759,7 +767,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 22: line spacing)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 23: fonts at the caret)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -770,19 +778,19 @@ class WriterForm : Form
 		// WindowsRibbon boxes some values as other enum types, so they are read by number.
 		uint Number(FontPropertiesEnum key) => Convert.ToUInt32(changes[key]);
 		bool Has(FontPropertiesEnum key) => changes.ContainsKey(key);
-		var font = api.SelectionRange().Font;
+		var font = api.SelectionFont();
 		if (Has(FontPropertiesEnum.Family) && changes[FontPropertiesEnum.Family] is string name && name.Trim() != "")
-			Run(() => Editor.SetFontName(name.Trim()), M("SetFontName", name.Trim()));
+			Run(() => api.SetFontName(name.Trim()), M("SetFontName", name.Trim()));
 		if (Has(FontPropertiesEnum.Size) && changes[FontPropertiesEnum.Size] is decimal size && size > 0) {
 			if (FreeFormForSizes()) Run(() => api.SetFontSize((float)size), M("SetFontSize", (float)size));
 		} else if (Has(FontPropertiesEnum.DeltaSize) && FreeFormForSizes()) {
 			if ((FontDeltaSize)Number(FontPropertiesEnum.DeltaSize) == FontDeltaSize.Grow) Run(() => api.IncreaseFontSize(), M("IncreaseFontSize"));
 			else Run(() => api.DecreaseFontSize(), M("DecreaseFontSize"));
 		}
-		if (Has(FontPropertiesEnum.Bold)) Run(Editor.ToggleBold, M("ToggleBold"));
-		if (Has(FontPropertiesEnum.Italic)) Run(Editor.ToggleItalic, M("ToggleItalic"));
-		if (Has(FontPropertiesEnum.Underline)) Run(() => Editor.ToggleUnderline(), M("ToggleUnderline"));
-		if (Has(FontPropertiesEnum.Strikethrough)) Run(Editor.ToggleStrikeThrough, M("ToggleStrikeThrough"));
+		if (Has(FontPropertiesEnum.Bold)) Run(api.ToggleBold, M("ToggleBold"));
+		if (Has(FontPropertiesEnum.Italic)) Run(api.ToggleItalic, M("ToggleItalic"));
+		if (Has(FontPropertiesEnum.Underline)) Run(() => api.ToggleUnderline(), M("ToggleUnderline"));
+		if (Has(FontPropertiesEnum.Strikethrough)) Run(api.ToggleStrikeThrough, M("ToggleStrikeThrough"));
 		if (Has(FontPropertiesEnum.VerticalPositioning)) {
 			var position = (FontVerticalPosition)Number(FontPropertiesEnum.VerticalPositioning);
 			bool super = font.Superscript == tomConstants.tomTrue, sub = font.Subscript == tomConstants.tomTrue;
@@ -804,12 +812,12 @@ class WriterForm : Form
 	}
 
 	void SetFontColor(Color c) {
-		Editor.SetFontColor(c);
+		api.SetFontColor(c);
 		Record(M("SetFontColor", c));
 	}
 
 	void SetHighlight(Color c) {
-		Editor.SetBackgroundColor(c);
+		api.SetBackgroundColor(c);
 		Record(M("SetBackgroundColor", c));
 	}
 
@@ -1594,11 +1602,11 @@ class WriterForm : Form
 	}
 
 	void FontDialogCommand() {
-		var font = api.SelectionRange().Font;
+		var font = api.SelectionFont();
 		using var dlg = new FontDialog { ShowEffects = false, ShowColor = false };
 		try { dlg.Font = new Font(string.IsNullOrEmpty(font.Name) ? Editor.Font.Name : font.Name, font.Size > 0 ? font.Size : Editor.Font.Size); } catch (ArgumentException) { }
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
-		Editor.SetFontName(dlg.Font.Name);
+		api.SetFontName(dlg.Font.Name);
 		Record(M("SetFontName", dlg.Font.Name));
 		if (Editor.EnableFontSize) {
 			api.SetFontSize(dlg.Font.SizeInPoints);
@@ -2012,7 +2020,7 @@ class WriterForm : Form
 	// The ribbon shows the selection's format (properties that differ within it are blank, as in Word) and the view's
 	// settings; Table Tools appears while the caret is in a table.
 	void UpdateRibbon(ITextRange2 range) {
-		var font = range.Font;
+		var font = api.SelectionFont();    // (with nothing selected: what is typed next, as Word shows it)
 		FontProperties State(int value) => value == tomConstants.tomTrue ? FontProperties.Set : value == tomConstants.tomFalse ? FontProperties.NotSet : FontProperties.NotAvailable;
 		fontControl.Family = font.Name ?? "";
 		fontControl.Size = font.Size > 0 ? (decimal)Math.Round(font.Size, 1) : 0;
@@ -3367,8 +3375,9 @@ public class EditorApi
 		var selection = doc.Selection2;
 		int start = selection.Start, end = selection.End;
 		float New(float size) => Math.Clamp(MathF.Round(change(size > 0 ? size : ed.Font.SizeInPoints) * 2, MidpointRounding.AwayFromZero) / 2, 1, 1638);
-		if (start == end) {    // the caret: the size of what is typed next
-			selection.Font.Size = New(selection.Font.Size);
+		if (start == end) {    // the caret: the size of what is typed next (and of an empty line)
+			float size = New(selection.Font.Size);
+			AtCaret(font => font.Size = size);
 			return;
 		}
 		var ranges = new List<(int Start, int End)> { (start, end) };
@@ -3674,6 +3683,12 @@ public class EditorApi
 	public void ToggleSubscript() => ToggleScript(false);
 
 	void ToggleScript(bool superscript) {
+		var caret = ed.TextDocument.Selection2;
+		if (caret.Start == caret.End) {    // the caret: what is typed next (and an empty line)
+			bool on = (superscript ? caret.Font.Superscript : caret.Font.Subscript) != tomConstants.tomTrue;
+			AtCaret(font => { if (superscript) font.Superscript = on ? tomConstants.tomTrue : tomConstants.tomFalse; else font.Subscript = on ? tomConstants.tomTrue : tomConstants.tomFalse; });
+			return;
+		}
 		int IsOn() { var font = SelectionRange().Font; return superscript ? font.Superscript : font.Subscript; }
 		bool wasOn = IsOn() == tomConstants.tomTrue;
 		if (superscript) ed.ToggleSuperscript(); else ed.ToggleSubscript();
@@ -3731,8 +3746,41 @@ public class EditorApi
 		}
 	}
 
-	public void ClearFontColor() => SelectionRange().Font.ForeColor = tomConstants.tomAutoColor;
-	public void ClearHighlight() => SelectionRange().Font.BackColor = tomConstants.tomAutoColor;
+	public void ClearFontColor() => Format(() => SelectionRange().Font.ForeColor = tomConstants.tomAutoColor, font => font.ForeColor = tomConstants.tomAutoColor);
+	public void ClearHighlight() => Format(() => SelectionRange().Font.BackColor = tomConstants.tomAutoColor, font => font.BackColor = tomConstants.tomAutoColor);
+
+	// ---- Character formats (iteration 23): with nothing selected, for what is typed next (and an empty line), as in Word
+
+	/// Toggles bold: of the selected text; with nothing selected, of what is typed next (and of an empty line).
+	public void ToggleBold() => Format(ed.ToggleBold, Toggled(font => font.Bold, (font, value) => font.Bold = value));
+	/// Toggles italic, as ToggleBold.
+	public void ToggleItalic() => Format(ed.ToggleItalic, Toggled(font => font.Italic, (font, value) => font.Italic = value));
+	/// Toggles strikethrough, as ToggleBold.
+	public void ToggleStrikeThrough() => Format(ed.ToggleStrikeThrough, Toggled(font => font.StrikeThrough, (font, value) => font.StrikeThrough = value));
+
+	/// Toggles an underline style (Single, Double, Dotted, Dashed, Wavy), as ToggleBold.
+	public void ToggleUnderline(UnderlineStyle style = UnderlineStyle.Single) {
+		int tom = style switch { UnderlineStyle.Double => 3, UnderlineStyle.Dotted => 4, UnderlineStyle.Dashed => 5, UnderlineStyle.Wavy => 8, _ => 1 };    // tomSingle, tomDouble ...
+		int now = ed.TextDocument.Selection2.Font.Underline;
+		Format(() => ed.ToggleUnderline(style), font => font.Underline = now == tom ? 0 : tom);    // (0: tomNone)
+	}
+
+	/// Sets the font colour: of the selected text; with nothing selected, of what is typed next (and of an empty line).
+	public void SetFontColor(Color color) => Format(() => ed.SetFontColor(color), font => font.ForeColor = ColorTranslator.ToWin32(color));
+	/// Sets the highlight (background) colour, as SetFontColor.
+	public void SetBackgroundColor(Color color) => Format(() => ed.SetBackgroundColor(color), font => font.BackColor = ColorTranslator.ToWin32(color));
+
+	// A format: RichEditorNET's (or ours) for selected text, AtCaret's with nothing selected.
+	void Format(Action selected, Action<ITextFont> caret) {
+		var selection = ed.TextDocument.Selection2;
+		if (selection.Start != selection.End) selected(); else AtCaret(caret);
+	}
+
+	// An on/off format at the caret: on unless what is typed next has it (the mark of an empty line gets the same).
+	Action<ITextFont> Toggled(Func<ITextFont, int> get, Action<ITextFont, int> set) {
+		int value = get(ed.TextDocument.Selection2.Font) == tomConstants.tomTrue ? tomConstants.tomFalse : tomConstants.tomTrue;
+		return font => set(font, value);
+	}
 
 	/// True if the caret is in a list item.
 	public bool InList() => (SelectionRange().Para.ListType & 0xFFFF) != tomConstants.tomListNone;
@@ -4401,6 +4449,36 @@ public class EditorApi
 	internal ITextRange2 SelectionRange() {
 		var selection = ed.TextDocument.Selection2;
 		return ed.TextDocument.Range2(selection.Start, selection.End);
+	}
+
+	/// The selection's character format; with nothing selected, that of what is typed next (TOM's insertion point,
+	/// which a font change at the caret sets), as Word's font box shows it.
+	internal ITextFont SelectionFont() {
+		var selection = ed.TextDocument.Selection2;
+		return selection.Start == selection.End ? selection.Font : SelectionRange().Font;
+	}
+
+	/// Sets the font of the selected text; with nothing selected, of what is typed next, and on an empty paragraph of its
+	/// paragraph mark too (the empty line keeps the font), as in Word.
+	public void SetFontName(string name) {
+		if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("A font name is needed.");
+		var selection = ed.TextDocument.Selection2;
+		if (selection.Start != selection.End) { ed.SetFontName(name.Trim()); return; }
+		AtCaret(font => font.Name = name.Trim());
+	}
+
+	// A character format with nothing selected: for what is typed at the caret (TOM's insertion point) and, on an empty
+	// paragraph (or table cell), for its mark too, so the empty line keeps the format, and shows it when the caret comes
+	// back, as in Word. (RichEditorNET's font commands change selected text only.) The mark's change is an undo step.
+	void AtCaret(Action<ITextFont> set) {
+		var doc = ed.TextDocument;
+		var selection = doc.Selection2;
+		int at = selection.Start;
+		var paragraph = doc.Range2(at, at);
+		paragraph.Expand(4);    // tomParagraph
+		if (paragraph.End - paragraph.Start == 1 && (paragraph.Text ?? "") is "\r" or "\u0007")
+			set(doc.Range2(paragraph.Start, paragraph.End).Font);
+		set(selection.Font);    // (last: a change elsewhere can reset the insertion point's format)
 	}
 
 	static readonly MethodInfo? getBlockStyle = typeof(RichEditBox).GetMethod("GetBlockStyle", BindingFlags.NonPublic | BindingFlags.Instance);

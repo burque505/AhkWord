@@ -1,4 +1,4 @@
-// Line spacing for RTE Writer (rte_writer22.cs, through #load): the selected paragraphs' line spacing, as in Word's
+// Line spacing for RTE Writer (rte_writer23.cs, through #load): the selected paragraphs' line spacing, as in Word's
 // Line and Paragraph Spacing button (1.0, 1.15, 1.5, 2.0 ... lines, or at least / exactly so many points). It is a
 // paragraph format (TOM's SetLineSpacing), kept by RichEdit in RTF (\sl \slmult) and so in Word and OpenDocument files
 // made by Word or LibreOffice. RichEditorNET's HTML leaves it out, so:
