@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer27.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer27.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer28.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer28.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -517,6 +517,20 @@
         <Image Source="icons/exit_20.bmp" MinDPI="120" />
         <Image Source="icons/exit_24.bmp" MinDPI="144" />
         <Image Source="icons/exit_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdClose" Id="211" LabelTitle="&amp;Close" Keytip="C" TooltipTitle="Close (Ctrl+W)" TooltipDescription="Close the document (asking to save its changes) and start an empty one; the window stays open.">
+      <Command.LargeImages>
+        <Image Source="icons/close_32.bmp" MinDPI="96" />
+        <Image Source="icons/close_40.bmp" MinDPI="120" />
+        <Image Source="icons/close_48.bmp" MinDPI="144" />
+        <Image Source="icons/close_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/close_16.bmp" MinDPI="96" />
+        <Image Source="icons/close_20.bmp" MinDPI="120" />
+        <Image Source="icons/close_24.bmp" MinDPI="144" />
+        <Image Source="icons/close_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
     <Command Name="cmdUndo" Id="220" LabelTitle="Undo" Keytip="Z" TooltipTitle="Undo (Ctrl+Z)">
@@ -1072,6 +1086,20 @@
         <Image Source="icons/onepage_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdExportPdfButton" Id="374" LabelTitle="Export as &amp;PDF..." Keytip="F" TooltipTitle="Export as PDF" TooltipDescription="Save a copy as PDF, laid out as it prints (through Microsoft Print to PDF; the default printer stays as it is).">
+      <Command.LargeImages>
+        <Image Source="icons/exportpdf_32.bmp" MinDPI="96" />
+        <Image Source="icons/exportpdf_40.bmp" MinDPI="120" />
+        <Image Source="icons/exportpdf_48.bmp" MinDPI="144" />
+        <Image Source="icons/exportpdf_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/exportpdf_16.bmp" MinDPI="96" />
+        <Image Source="icons/exportpdf_20.bmp" MinDPI="120" />
+        <Image Source="icons/exportpdf_24.bmp" MinDPI="144" />
+        <Image Source="icons/exportpdf_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdZoomMultiplePages" Id="373" LabelTitle="Multiple Pages" Keytip="M" TooltipTitle="Multiple pages" TooltipDescription="The printed pages side by side, as many as fit (read-only; Zoom In and Out, or Ctrl+wheel, show them larger or smaller). Double-click a page to edit it there; Esc goes back.">
       <Command.LargeImages>
         <Image Source="icons/multiplepages_32.bmp" MinDPI="96" />
@@ -1514,6 +1542,7 @@
             <Button CommandName="cmdOpen" />
             <Button CommandName="cmdSave" />
             <Button CommandName="cmdSaveAs" />
+            <Button CommandName="cmdClose" />
             <SplitButton CommandName="cmdPrintMenu">
               <SplitButton.ButtonItem>
                 <Button CommandName="cmdPrint" />
@@ -1552,6 +1581,7 @@
             <Button CommandName="cmdOpen" ApplicationDefaults.IsChecked="false" />
             <Button CommandName="cmdPrint" ApplicationDefaults.IsChecked="false" />
             <Button CommandName="cmdPrintPreview" ApplicationDefaults.IsChecked="false" />
+            <Button CommandName="cmdExportPdfButton" ApplicationDefaults.IsChecked="false" />
           </QuickAccessToolbar.ApplicationDefaults>
         </QuickAccessToolbar>
       </Ribbon.QuickAccessToolbar>
@@ -1859,7 +1889,7 @@
           </Group>
         </Tab>
         <Tab CommandName="cmdTabLayout">
-          <Group CommandName="cmdGroupPage" SizeDefinition="FourButtons">
+          <Group CommandName="cmdGroupPage" SizeDefinition="FiveButtons">
             <Button CommandName="cmdPageSetup" />
             <Button CommandName="cmdHeaderFooter" />
             <DropDownButton CommandName="cmdLineNumbers">
@@ -1876,6 +1906,7 @@
               </MenuGroup>
             </DropDownButton>
             <Button CommandName="cmdPrintPreview" />
+            <Button CommandName="cmdExportPdfButton" />
           </Group>
         </Tab>
         <Tab CommandName="cmdTabReview">

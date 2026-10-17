@@ -15,7 +15,12 @@
 #load "rte_printlayout.cs"
 #load "rte_pageview.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer27.ahk. Iteration 27 adds to iteration 26:
+// Run it with rte_writer28.ahk. Iteration 28 adds to iteration 27:
+//   - File > Close (Ctrl+W): closes the document (asking to save its changes) and starts an empty one; the window stays
+//     open, as in Word. Scripts: Rte.Close().
+//   - Export as PDF on the ribbon (Layout, next to Print Preview) and in the Quick Access Toolbar's list, as well as in
+//     File > Export: through Microsoft Print to PDF, the default printer staying as it is (DefaultPrinterGuard).
+// Iteration 27 added to iteration 26:
 //   - Multiple Pages (rte_pageview.cs): View > Zoom > Multiple Pages shows the printed pages side by side, as many as
 //     fit across the window (the printer's own pages: the same page breaks, header, footer and line numbers), read-only.
 //     Zoom In / Out / 100% and Ctrl+wheel show them larger or smaller; the arrow keys move between them; double-click a
@@ -248,25 +253,25 @@ enum RibbonCommand : uint
 	GroupTableFormat = 132, AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144,
 	PrintMenu = 145, New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204,
 	PrintPreview = 205, PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210,
-	Undo = 220, Redo = 221, Paste = 222, Cut = 223, Copy = 224, SelectAll = 225,
-	Find = 226, Replace = 227, Font = 230, FontDialog = 231, ChangeCase = 232, CaseUpper = 233,
-	CaseLower = 234, CaseTitle = 235, UnderlineStyle = 236, UnderlineSingle = 237, UnderlineDouble = 238, UnderlineDotted = 239,
-	UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250, Numbering = 251, Legal = 252, Outdent = 253,
-	Indent = 254, AlignLeft = 255, AlignCenter = 256, AlignRight = 257, Justify = 258, LineSpacing = 360,
-	LineSpacing10 = 361, LineSpacing115 = 362, LineSpacing150 = 363, LineSpacing200 = 364, LineSpacing250 = 365, LineSpacing300 = 366,
-	LineSpacingOptions = 367, SpaceBefore = 368, SpaceAfter = 369, ListOptions = 259, ListStyle = 260, ListBullet = 261,
-	ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264, ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267,
-	AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273,
-	NumberingMenu = 274, BlockStyle = 275, PageBreak = 280, Table = 281, Picture = 282, Thumbnail = 283,
-	Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296, SpellCheck = 297,
-	Structured = 300, FreeForm = 301, WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371, ZoomOnePage = 372,
-	ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307,
-	ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335,
-	Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315,
-	About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324,
-	DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341, BordersAll = 342, BordersOutside = 343,
-	BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352,
-	LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
+	Close = 211, Undo = 220, Redo = 221, Paste = 222, Cut = 223, Copy = 224,
+	SelectAll = 225, Find = 226, Replace = 227, Font = 230, FontDialog = 231, ChangeCase = 232,
+	CaseUpper = 233, CaseLower = 234, CaseTitle = 235, UnderlineStyle = 236, UnderlineSingle = 237, UnderlineDouble = 238,
+	UnderlineDotted = 239, UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250, Numbering = 251, Legal = 252,
+	Outdent = 253, Indent = 254, AlignLeft = 255, AlignCenter = 256, AlignRight = 257, Justify = 258,
+	LineSpacing = 360, LineSpacing10 = 361, LineSpacing115 = 362, LineSpacing150 = 363, LineSpacing200 = 364, LineSpacing250 = 365,
+	LineSpacing300 = 366, LineSpacingOptions = 367, SpaceBefore = 368, SpaceAfter = 369, ListOptions = 259, ListStyle = 260,
+	ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264, ListLowerRoman = 265, ListUpperRoman = 266,
+	ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272,
+	OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, PageBreak = 280, Table = 281, Picture = 282,
+	Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296,
+	SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371,
+	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
+	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313,
+	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
+	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
+	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
+	LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -585,9 +590,11 @@ class WriterForm : Form
 		Button(RibbonCommand.PrintPreview, PrintPreviewCommand);
 		Button(RibbonCommand.PageSetup, PageSetupCommand);
 		Button(RibbonCommand.ExportPdf, ExportPdfDialog);
+		Button(RibbonCommand.ExportPdfButton, ExportPdfDialog);    // (the same, on the Layout tab and the Quick Access Toolbar)
 		Button(RibbonCommand.ExportWord, () => ExportOfficeDialog("docx"));
 		Button(RibbonCommand.ExportOdt, () => ExportOfficeDialog("odt"));
 		Button(RibbonCommand.Exit, Close);
+		Button(RibbonCommand.Close, CloseDocumentCommand, Keys.Control | Keys.W);
 		Button(RibbonCommand.Help, ShowAbout);
 		recentItems = new RibbonRecentItems(ribbon, (uint)RibbonCommand.Recent);
 		recentItems.ExecuteEvent += (s, e) => {
@@ -824,7 +831,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 27: multiple pages)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 28: Close, and PDF on the ribbon)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -969,6 +976,14 @@ class WriterForm : Form
 	void SetStructured(bool structured) {
 		Editor.EnableHtmlFontSizing = structured;
 		SetStatus(structured ? "Structured document: block styles (Ctrl+0..7) instead of font sizes." : "Free-form fonts: any font size; block styles are off.");
+	}
+
+	// File > Close: the document goes (its changes saved, if wanted), and an empty one takes its place.
+	void CloseDocumentCommand() {
+		string name = DocumentName;
+		if (!ConfirmDiscard()) return;
+		api.Close();
+		SetStatus($"Closed {name}.");
 	}
 
 	bool ConfirmDiscard() {
@@ -1429,7 +1444,7 @@ class WriterForm : Form
 	// editing first (so it doesn't change the text out of sight).
 	static readonly HashSet<RibbonCommand> PageViewCommands = new() {
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100, RibbonCommand.Print,
-		RibbonCommand.PrintPreview, RibbonCommand.ExportPdf, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Save,
+		RibbonCommand.PrintPreview, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Save,
 		RibbonCommand.SaveAs, RibbonCommand.PageSetup, RibbonCommand.HeaderFooter, RibbonCommand.ShowBands, RibbonCommand.Outline,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.Exit,
 	};
@@ -2365,8 +2380,8 @@ class WriterForm : Form
 
 	// Commands that work the same in the source editor (the document, the view, editing the source itself).
 	static readonly HashSet<RibbonCommand> SourceDocumentCommands = new() {
-		RibbonCommand.New, RibbonCommand.Open, RibbonCommand.Save, RibbonCommand.SaveAs, RibbonCommand.Print, RibbonCommand.PrintPreview,
-		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
+		RibbonCommand.New, RibbonCommand.Open, RibbonCommand.Save, RibbonCommand.SaveAs, RibbonCommand.Close, RibbonCommand.Print, RibbonCommand.PrintPreview,
+		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys,
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
 		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.Structured, RibbonCommand.FreeForm, RibbonCommand.WordWrap, RibbonCommand.PrintLayout, RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage,
@@ -2381,7 +2396,7 @@ class WriterForm : Form
 		Keys.Control | Keys.Z, Keys.Control | Keys.Y, Keys.Control | Keys.X, Keys.Control | Keys.C, Keys.Control | Keys.A,
 	};
 	static readonly HashSet<Keys> SourceDocumentKeys = new() {
-		Keys.Control | Keys.N, Keys.Control | Keys.O, Keys.Control | Keys.S, Keys.Control | Keys.Shift | Keys.S, Keys.Control | Keys.P,
+		Keys.Control | Keys.N, Keys.Control | Keys.O, Keys.Control | Keys.S, Keys.Control | Keys.Shift | Keys.S, Keys.Control | Keys.P, Keys.Control | Keys.W,
 		Keys.Control | Keys.F, Keys.Control | Keys.H, Keys.F3, Keys.Control | Keys.Shift | Keys.O,
 	};
 
@@ -2983,6 +2998,10 @@ public class EditorApi
 		form.DocumentLoaded(WriterForm.SourceKind.None, null);
 		form.Events.Raise(EditorEvent.Opened);
 	}
+
+	/// Closes the document and starts an empty one, as File > Close does (unsaved changes are discarded, as by New; the
+	/// window stays open).
+	public void Close() => New();
 
 	/// Opens an .html/.htm, .md/.markdown, .rtf, .docx/.doc, .odt or .txt file (unsaved changes are discarded).
 	/// Word and OpenDocument files are converted by Word, openxml, LibreOffice or pandoc (see Converters and
