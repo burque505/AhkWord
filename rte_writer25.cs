@@ -11,10 +11,19 @@
 #load "rte_linebreaks.cs"
 #load "rte_linenumbers2.cs"
 #load "rte_sourcebox.cs"
-#load "rte_linespacing.cs"
+#load "rte_linespacing2.cs"
 #load "rte_printlayout.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer24.ahk. Iteration 24 adds to iteration 23:
+// Run it with rte_writer25.ahk. Iteration 25 adds to iteration 24:
+//   - Paragraph spacing (rte_linespacing2.cs): space before and after paragraphs, in the Line Spacing menu (Add Space
+//     Before / After Paragraph, 12 points) and dialog, kept in RTF, Word and OpenDocument files and as CSS margins in
+//     HTML. Scripts: Rte.SpaceBefore := 12, Rte.SpaceAfter := 6.
+//   - Word files open spaced as in Word: each paragraph's line spacing and space before and after are worked out from
+//     the .docx as Word does it (document defaults, default style, a table's style winning over it in cells, the
+//     paragraph's style and its own format, and "don't add space between paragraphs of the same style"), whichever
+//     converter read it; the built-in reader also gets the paragraphs' indents and tab stops, which RichEditorNET's HTML
+//     import dropped (DocxLineSpacing).
+// Iteration 24 added to iteration 23:
 //   - Print Layout (rte_printlayout.cs), on by default: lines break where they will on the printed page, as in Word's
 //     Print Layout and LibreOffice (Word and OpenDocument files opened with very long lines before). RichEdit lays its
 //     lines out for the printer (EM_SETTARGETDEVICE with its information context and Page Setup's text width), so the
@@ -231,18 +240,19 @@ enum RibbonCommand : uint
 	UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250, Numbering = 251, Legal = 252, Outdent = 253,
 	Indent = 254, AlignLeft = 255, AlignCenter = 256, AlignRight = 257, Justify = 258, LineSpacing = 360,
 	LineSpacing10 = 361, LineSpacing115 = 362, LineSpacing150 = 363, LineSpacing200 = 364, LineSpacing250 = 365, LineSpacing300 = 366,
-	LineSpacingOptions = 367, ListOptions = 259, ListStyle = 260, ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263,
-	ListUpperAlpha = 264, ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269,
-	ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275,
-	PageBreak = 280, Table = 281, Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285,
-	HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296, SpellCheck = 297, Structured = 300, FreeForm = 301,
-	WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371, ZoomOnePage = 372, ShowBands = 303, Outline = 304,
-	ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332,
-	SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312,
-	RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321,
-	InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340,
-	TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346,
-	LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
+	LineSpacingOptions = 367, SpaceBefore = 368, SpaceAfter = 369, ListOptions = 259, ListStyle = 260, ListBullet = 261,
+	ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264, ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267,
+	AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273,
+	NumberingMenu = 274, BlockStyle = 275, PageBreak = 280, Table = 281, Picture = 282, Thumbnail = 283,
+	Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296, SpellCheck = 297,
+	Structured = 300, FreeForm = 301, WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371, ZoomOnePage = 372,
+	ShowBands = 303, Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330,
+	ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310,
+	RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316,
+	InsertAbove = 320, InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325,
+	DeleteTable = 326, TableProperties = 340, TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344,
+	BordersNone = 345, TableShading = 346, LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353,
+	SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -618,6 +628,9 @@ class WriterForm : Form
 			(RibbonCommand.LineSpacing200, "2"), (RibbonCommand.LineSpacing250, "2.5"), (RibbonCommand.LineSpacing300, "3") })
 			Toggle(id, () => api.SetLineSpacing(spacing), Keys.None, M("SetLineSpacing", spacing));
 		Button(RibbonCommand.LineSpacingOptions, LineSpacingCommand);
+		// (Word's Add / Remove Space Before / After Paragraph: 12 points, or none)
+		Toggle(RibbonCommand.SpaceBefore, () => { float points = api.SpaceBefore > 0 ? 0 : 12; api.SpaceBefore = points; Record(M("SpaceBefore", points)); });
+		Toggle(RibbonCommand.SpaceAfter, () => { float points = api.SpaceAfter > 0 ? 0 : 12; api.SpaceAfter = points; Record(M("SpaceAfter", points)); });
 		foreach (var (id, style) in new[] { (RibbonCommand.ListBullet, ListStyle.Bullet), (RibbonCommand.ListDecimal, ListStyle.Decimal), (RibbonCommand.ListLowerAlpha, ListStyle.LowerAlpha),
 			(RibbonCommand.ListUpperAlpha, ListStyle.UpperAlpha), (RibbonCommand.ListLowerRoman, ListStyle.LowerRoman), (RibbonCommand.ListUpperRoman, ListStyle.UpperRoman) })
 			Button(id, () => api.ToggleList(style), Keys.None, M("ToggleList", style));
@@ -794,7 +807,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 24: print layout)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 25: paragraph spacing)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1220,10 +1233,17 @@ class WriterForm : Form
 	// ---- line spacing (iteration 22)
 
 	void LineSpacingCommand() {
-		using var dlg = new LineSpacingDialog(api.LineSpacing);
+		using var dlg = new LineSpacingDialog(api.LineSpacing, api.SpaceBefore, api.SpaceAfter);
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
-		api.SetLineSpacing(dlg.Result);
-		Record(M("SetLineSpacing", dlg.Result));
+		Editor.TextDocument.BeginEditCollection();    // (one undo step)
+		try {
+			api.SetLineSpacing(dlg.Result);
+			Record(M("SetLineSpacing", dlg.Result));
+			if (dlg.BeforeChanged || api.SpaceBefore >= 0) { api.SpaceBefore = dlg.SpaceBefore; Record(M("SpaceBefore", dlg.SpaceBefore)); }
+			if (dlg.AfterChanged || api.SpaceAfter >= 0) { api.SpaceAfter = dlg.SpaceAfter; Record(M("SpaceAfter", dlg.SpaceAfter)); }
+		} finally {
+			Editor.TextDocument.EndEditCollection();
+		}
 	}
 
 	// ---- line numbers (iteration 19)
@@ -2204,6 +2224,8 @@ class WriterForm : Form
 		foreach (var (id, value) in new[] { (RibbonCommand.LineSpacing10, "1"), (RibbonCommand.LineSpacing115, "1.15"), (RibbonCommand.LineSpacing150, "1.5"),
 			(RibbonCommand.LineSpacing200, "2"), (RibbonCommand.LineSpacing250, "2.5"), (RibbonCommand.LineSpacing300, "3") })
 			toggleButtons[id].BooleanValue = spacing == value;
+		toggleButtons[RibbonCommand.SpaceBefore].BooleanValue = LineSpacing.SpaceOf(range, true) > 0;
+		toggleButtons[RibbonCommand.SpaceAfter].BooleanValue = LineSpacing.SpaceOf(range, false) > 0;
 		toggleButtons[RibbonCommand.AutoLevel].BooleanValue = AutoLevelStyles;
 		toggleButtons[RibbonCommand.LineNumbersNone].BooleanValue = !Numbering.On;
 		toggleButtons[RibbonCommand.LineNumbersContinuous].BooleanValue = Numbering.Mode == LineNumbering.Modes.Continuous;
@@ -2896,6 +2918,7 @@ public class EditorApi
 				numbering = LineNumberFormats.FromRtf(rtf);
 				Rtf = rtf;
 				LegalLists.AdoptTypedNumbers(ed);
+				LinkFonts(ed);
 				break;
 			}
 			case ".docx": case ".doc": case ".odt": {
@@ -2908,6 +2931,11 @@ public class EditorApi
 				LastConverter = converter;
 				// tables' borders, shading, padding ... from the file itself, where the converter went through HTML
 				if (extension == ".docx" && converter is OfficeConverters.OpenXml or OfficeConverters.Pandoc) RtfTables.TablesFromDocx(ed, full);
+				// paragraphs spaced as Word spaces them (RTF from Word or LibreOffice: RichEdit can't leave out the space
+				// between paragraphs of the same style, nor give cells their table style's spacing)
+				if (extension == ".docx" && kind == "rtf" && !DocxLineSpacing.IntoEditor(ed, full))
+					form.SetStatus("The paragraphs' spacing could not be matched to the file's; it is as the converter made it.");
+				if (kind == "rtf") LinkFonts(ed);
 				break;
 			}
 			default: {
@@ -2993,6 +3021,21 @@ public class EditorApi
 	public void SetHtml(string html) {
 		RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(html)))), HtmlLists.Load, HtmlLists.Load, TableWidth());
 		if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) + global::LineSpacing.FromMarkers(ed) > 0) ed.ClearUndo();
+	}
+
+	// A link's hidden field instruction (HYPERLINK "...") in its text's font: RTF from Word and LibreOffice gives it the
+	// document's default size, and the HTML (and so the built-in converter's .docx) took the link's size from it.
+	static void LinkFonts(RichEditBox editor) {
+		var doc = editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		foreach (Match m in Regex.Matches(story, "HYPERLINK\\s+\"[^\"]*\"\\s?")) {
+			int end = m.Index + m.Length;
+			if (end >= story.Length || doc.Range2(m.Index, m.Index + 1).Font.Hidden != tomConstants.tomTrue) continue;
+			var text = doc.Range2(end, end + 1).Font;
+			var instruction = doc.Range2(m.Index, end).Font;
+			if (instruction.Size != text.Size) instruction.Size = text.Size;
+			if (text.Name is { Length: > 0 } name && instruction.Name != name) instruction.Name = name;
+		}
 	}
 
 	// The library's HTML, with page breaks, real tables (it writes their cells as paragraphs) and list numbering.
@@ -3208,6 +3251,18 @@ public class EditorApi
 
 	/// The line spacing of the selected paragraphs: "1.5" (lines), "exactly 14pt", "at least 12pt", or "mixed".
 	public string LineSpacing => global::LineSpacing.Of(SelectionRange());
+
+	/// The space before the selected paragraphs, in points (-1 if they differ); setting it sets it for them (one undo step).
+	public float SpaceBefore {
+		get => global::LineSpacing.SpaceOf(SelectionRange(), true);
+		set { global::LineSpacing.ApplySpace(SelectionRange(), true, value); form.LineGutter.DocumentChanged(); }
+	}
+
+	/// The space after the selected paragraphs, in points (-1 if they differ), as SpaceBefore.
+	public float SpaceAfter {
+		get => global::LineSpacing.SpaceOf(SelectionRange(), false);
+		set { global::LineSpacing.ApplySpace(SelectionRange(), false, value); form.LineGutter.DocumentChanged(); }
+	}
 
 	// ---- Line numbers (iteration 19)
 

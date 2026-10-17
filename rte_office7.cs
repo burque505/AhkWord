@@ -5,9 +5,11 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer24.cs, through #load).
-// Version 7: the built-in reader's paragraphs get the .docx's own line spacing (DocxLineSpacing.IntoHtml, in
-// rte_linespacing.cs): the PowerTools read a paragraph without spacing of its own as 1.08 lines, and "at least" as exactly.
+// Word and OpenDocument conversions for RTE Writer (rte_writer25.cs, through #load).
+// Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
+// stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
+// without spacing of its own as 1.08 lines, and "at least" as exactly. All of a paragraph's tabs come back as tabs (the
+// PowerTools write those after the first as a margin on a no-break space), and its empty paragraphs stay.
 // Version 6: pictures keep their alt text in RTF, as the picture property Word and LibreOffice use for it
 // ({\*\picprop{\sp{\sn wzDescription}{\sv ...}}}): WithAltTexts writes it, Pictures reads it, PngPictures keeps it.
 // Version 5: Export takes a last change to the RTF given to Word and LibreOffice (RTE Writer adds the header, footer
@@ -376,8 +378,9 @@ public static class OfficeConverters {
 			main.Document = new W.Document(new W.Body());
 			var converter = new HtmlToOpenXml.HtmlConverter(main);
 			// on a thread of its own: waiting for it here, on the window's thread, could otherwise deadlock
-			html = HeadingSizes(UnquotedFonts(html));
+			html = KeepBlanksAndTabs(HeadingSizes(UnquotedFonts(html)));
 			Task.Run(() => converter.ParseBody(ListStyles(html), CancellationToken.None)).GetAwaiter().GetResult();
+			BlanksAndTabs(main);
 			HeadingFonts(main);
 			RepairNumbering(main, html);
 			MarksFromRuns(main);
@@ -414,15 +417,49 @@ public static class OfficeConverters {
 
 	// HtmlToOpenXml's Heading styles use the theme's heading font, and its documents have no theme (Word and LibreOffice
 	// then fell back to a serif font): the editor's font instead.
+	// Nor are the editor's headings italic (Heading 4's is), and they are all bold (Heading 5's isn't): italics are in
+	// the text where it has them.
 	static void HeadingFonts(MainDocumentPart main) {
-		if (main.StyleDefinitionsPart?.Styles is not { } styles || DefaultFont is not { } font) return;
+		if (main.StyleDefinitionsPart?.Styles is not { } styles) return;
 		foreach (var style in styles.Elements<W.Style>().Where(s => s.StyleId?.Value?.StartsWith("Heading", StringComparison.OrdinalIgnoreCase) == true)) {
 			var run = style.StyleRunProperties;
 			if (run == null) continue;
-			run.RunFonts = new W.RunFonts { Ascii = font.Name, HighAnsi = font.Name, ComplexScript = font.Name, EastAsia = font.Name };
+			if (DefaultFont is { } font) run.RunFonts = new W.RunFonts { Ascii = font.Name, HighAnsi = font.Name, ComplexScript = font.Name, EastAsia = font.Name };
 			run.Color = null;    // (the styles' own blue: the editor's headings have no colour but the one given them, which is in the text)
+			run.Italic = null;
+			run.ItalicComplexScript = null;
+			run.Bold ??= new W.Bold();
+			run.BoldComplexScript ??= new W.BoldComplexScript();
 		}
 		styles.Save();
+	}
+
+	// HtmlToOpenXml leaves out empty paragraphs (Word's blank lines) and makes tabs spaces: they go through it as text
+	// (KeepBlanksAndTabs), and come back as empty paragraphs and tabs (BlanksAndTabs).
+	const string EmptyMark = "@@RTE-EMPTY@@", TabMark = "@@RTE-TAB@@";
+
+	static string KeepBlanksAndTabs(string html) {
+		int body = html.IndexOf("<body", StringComparison.OrdinalIgnoreCase);
+		if (body < 0) body = 0;
+		string text = Regex.Replace(html[body..], @"(<(p|h[1-6])\b[^>]*>)\s*(</\2\s*>)", m => m.Groups[1].Value + EmptyMark + m.Groups[3].Value, RegexOptions.IgnoreCase);
+		text = Regex.Replace(text, @"(?<=>)[^<]+", m => m.Value.Replace("&#9;", TabMark).Replace("&#x9;", TabMark).Replace("&#x09;", TabMark).Replace("\t", TabMark));
+		return html[..body] + text;
+	}
+
+	static void BlanksAndTabs(MainDocumentPart main) {
+		if (main.Document?.Body is not { } body) return;
+		foreach (var text in body.Descendants<W.Text>().Where(t => t.Text.Contains(EmptyMark) || t.Text.Contains(TabMark)).ToList()) {
+			var pieces = text.Text.Replace(EmptyMark, "").Split(TabMark);
+			DocumentFormat.OpenXml.OpenXmlElement at = text;
+			for (int i = 0; i < pieces.Length; i++) {
+				if (i > 0) at = at.InsertAfterSelf(new W.TabChar());
+				if (pieces[i] != "") at = at.InsertAfterSelf(new W.Text(pieces[i]) { Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve });
+			}
+			var run = text.Parent;
+			text.Remove();
+			if (run is W.Run r && !r.ChildElements.Any(e => e is not W.RunProperties)) r.Remove();
+		}
+		main.Document.Save();
 	}
 
 	// HtmlToOpenXml takes a list's numbering from CSS, not from <ol type="a">.
@@ -606,6 +643,12 @@ public static class OfficeConverters {
 		XNamespace x = html.Name.Namespace;
 		foreach (var span in html.Descendants(x + "span").ToList()) {
 			string style = (string?)span.Attribute("style") ?? "";
+			// (and the tabs after the first as a left margin on a space: <span style="margin: 0 0 0 0.50in">&nbsp;</span>)
+			if (span.Value == " " && !span.HasElements && Regex.IsMatch(style, @"^\s*margin:\s*0 0 0 [\d.]+(in|pt|cm|mm|px)?;")) {
+				span.Value = "\t";
+				span.SetAttributeValue("style", null);
+				continue;
+			}
 			var margin = Regex.Match(style, @"margin-right:\s*([\d.]+)(in|pt|cm|mm|px)?");
 			if (!margin.Success || !double.TryParse(margin.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double width) || width <= 0) continue;
 			if (span.ElementsAfterSelf().FirstOrDefault() == null && span.NodesAfterSelf().FirstOrDefault() == null) continue;    // nothing after it

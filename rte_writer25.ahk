@@ -1,8 +1,12 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
-; RTE Writer, iteration 24: a word processor built on RichEditorNET (rte_writer24.cs), hosted in this AHK process.
-; Adds to iteration 23:
+; RTE Writer, iteration 25: a word processor built on RichEditorNET (rte_writer25.cs), hosted in this AHK process.
+; Adds to iteration 24:
+;   - Space before and after paragraphs (Home > Paragraph > Line Spacing), and Word files open spaced as in Word: their
+;     paragraphs' line spacing and space before and after (and, through the built-in converter, indents and tab stops).
+;     Scripts: Rte.SpaceBefore := 12, Rte.SpaceAfter := 6.
+; Iteration 24 added to iteration 23:
 ;   - Print Layout, on by default (View > Print Layout): lines break where they will on the printed page, as in Word
 ;     and LibreOffice, with the page on grey; line numbers on screen are then the printed ones. Its zoom: Page Width
 ;     (the default: the page fills the window's width), One Page, or manual (Zoom In / Out / 100%, Ctrl+wheel).
@@ -76,7 +80,7 @@
 ; Earlier iterations added events, recent files, settings, drag and drop, printing, PDF export, headers and footers,
 ; spelling suggestions, the outline, macro recording and hotkeys, and real Markdown. Settings are kept in
 ; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile); set RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
-; Optionally pass a document to open:  rte_writer24.ahk "C:\path\document.md"
+; Optionally pass a document to open:  rte_writer25.ahk "C:\path\document.md"
 ;
 ; AHK automation: other scripts #Include "RteClient2.ahk" and call Rte.<Name>(...), react to events with
 ; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Tools > Automation API lists everything that can be called,
@@ -98,7 +102,7 @@ SubscribeToSaved() {
 }
 
 StartFile := A_Args.Length ? A_Args[1] : ""
-RunCSharpFile(A_ScriptDir "\rte_writer24.cs", A_AhkPath, A_ScriptDir, StartFile)
+RunCSharpFile(A_ScriptDir "\rte_writer25.cs", A_AhkPath, A_ScriptDir, StartFile)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
     MsgBox("RTE Writer stopped because of an error (" CSExitCode "):`n`n" CSOutput, "RTE Writer", "Iconx")
 ExitApp
