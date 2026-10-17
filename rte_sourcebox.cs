@@ -1,4 +1,4 @@
-// The source editor of the Markdown and HTML views, for RTE Writer (rte_writer25.cs, through #load): Scintilla, through
+// The source editor of the Markdown and HTML views, for RTE Writer (rte_writer26.cs, through #load): Scintilla, through
 // the Scintilla5.NET package (MIT license; Scintilla and Lexilla are under their own permissive license), with the
 // Markdown and HTML lexers' colours and line numbers. It has the members of a text box that the views use (Text,
 // SelectionStart, SelectionLength, SelectedText, Select, Find, WordWrap ...), with the same meaning: character

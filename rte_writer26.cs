@@ -14,7 +14,10 @@
 #load "rte_linespacing2.cs"
 #load "rte_printlayout.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer25.ahk. Iteration 25 adds to iteration 24:
+// Run it with rte_writer26.ahk. Iteration 26 adds to iteration 25:
+//   - Table cells keep their paragraphs' indents, tab stops and spacing in HTML (rte_linespacing2.cs writes them for
+//     the cells' paragraphs too), as they already did in RTF, Word and OpenDocument files.
+// Iteration 25 added to iteration 24:
 //   - Paragraph spacing (rte_linespacing2.cs): space before and after paragraphs, in the Line Spacing menu (Add Space
 //     Before / After Paragraph, 12 points) and dialog, kept in RTF, Word and OpenDocument files and as CSS margins in
 //     HTML. Scripts: Rte.SpaceBefore := 12, Rte.SpaceAfter := 6.
@@ -807,7 +810,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 25: paragraph spacing)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 26: cell paragraphs in HTML)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:

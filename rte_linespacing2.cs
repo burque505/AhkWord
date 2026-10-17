@@ -1,4 +1,4 @@
-// Line and paragraph spacing for RTE Writer (rte_writer25.cs, through #load): the selected paragraphs' line spacing,
+// Line and paragraph spacing for RTE Writer (rte_writer26.cs, through #load): the selected paragraphs' line spacing,
 // as in Word's Line and Paragraph Spacing button (1.0, 1.15, 1.5, 2.0 ... lines, or at least / exactly so many points),
 // and (version 2) their space before and after. They are paragraph formats (TOM's SetLineSpacing, SpaceBefore,
 // SpaceAfter), kept by RichEdit in RTF (\sl \slmult \sb \sa) and so in Word and OpenDocument files made by Word or
@@ -100,7 +100,8 @@ public static class LineSpacing
 	};
 
 	/// RichEditorNET's HTML (with one block per paragraph, as LineBreaks.ExportHtml leaves it) with each paragraph's
-	/// line spacing and space before and after as CSS. If its blocks don't match the document's paragraphs, html comes
+	/// line spacing, space before and after, indents and tab stops as CSS (and data-rte-tabs), table cells' paragraphs
+	/// included (RtfTables.ExportHtml then puts them in their cells). If its blocks don't match the document's paragraphs, html comes
 	/// back as it was.
 	public static string ExportHtml(RichEditBox editor, string html) {
 		var doc = editor.TextDocument;
@@ -112,13 +113,12 @@ public static class LineSpacing
 			if (story[i] is '\r' or CellEnd or '\f') { starts.Add(start); start = i + 1; }
 		var blocks = BlockStart.Matches(html).ToList();
 		if (blocks.Count != starts.Count) return html;
-		var tables = RtfTables.Find(doc);
 		var output = new StringBuilder();
 		int position = 0;
 		bool any = false;
 		for (int k = 0; k < blocks.Count; k++) {
 			int at = starts[k];
-			if (tables.Any(t => at >= t.Start && at < t.End)) continue;    // (cells: the table's own formatting)
+			if (at < story.Length && story[at] is '￹' or '￻') continue;    // (the marks that start and end table rows: the row's own format)
 			var para = doc.Range2(at, at).Para;
 			var parts = new List<string>();
 			if (Css(para.LineSpacingRule, para.LineSpacing) is { } lineHeight) parts.Add(lineHeight);
@@ -417,10 +417,12 @@ public static class DocxLineSpacing
 		(t.Position / 20.0).ToString("0.##", Invariant) + "/" + (t.Alignment switch { "center" => 1, "right" or "end" => 2, "decimal" => 3, "bar" => 4, _ => 0 })
 		+ "/" + (t.Leader switch { "dot" => 1, "hyphen" => 2, "underscore" or "heavy" => 3, "middleDot" => 1, _ => 0 })));
 
+	static readonly Regex IndentCss = new(@"\s*(margin-left|margin-right|text-indent)\s*:[^;]*;?", RegexOptions.IgnoreCase);
 	static readonly Regex SpacingCss = new(@"\s*(line-height|mso-line-height-rule|margin-top|margin-bottom)\s*:[^;]*;?", RegexOptions.IgnoreCase);
 
-	/// The built-in reader's HTML of a .docx (its paragraphs in document order) with the .docx's own spacing and tab
-	/// stops; its indents are the reader's. Without a pairing, the reader's spacing is left out rather than trusted.
+	/// The built-in reader's HTML of a .docx (its paragraphs in document order) with the .docx's own spacing, indents
+	/// (list items' are the reader's) and tab stops. Without a pairing, the reader's spacing is left out rather than
+	/// trusted, and its indents are kept.
 	public static void IntoHtml(string path, XElement html) {
 		XNamespace x = html.Name.Namespace;
 		var blocks = html.Descendants().Where(e => e.Name.Namespace == x && Regex.IsMatch(e.Name.LocalName, "^(p|h[1-6])$")).ToList();
@@ -431,7 +433,10 @@ public static class DocxLineSpacing
 			var block = blocks[i];
 			string style = SpacingCss.Replace((string?)block.Attribute("style") ?? "", "").Trim();
 			if (paired) {
-				style = (style == "" || style.EndsWith(";") ? style : style + ";") + Css(formats![i]) + ";";
+				// (and the exact indents: the PowerTools round them to hundredths of an inch; list items keep the list's)
+				if (!formats![i].List) style = IndentCss.Replace(style, "").Trim();
+				style = (style == "" || style.EndsWith(";") ? style : style + ";") + Css(formats[i]) + ";";
+				if (!formats[i].List) style += $" margin-left: {Points(formats[i].Left ?? 0)}; margin-right: {Points(formats[i].Right ?? 0)}; text-indent: {Points(formats[i].FirstLine ?? 0)};";
 				if (formats[i].TabsSet && formats[i].Tabs.Count > 0 && !formats[i].List) block.SetAttributeValue("data-rte-tabs", Tabs(formats[i]));
 			}
 			if (style == "") block.Attribute("style")?.Remove(); else block.SetAttributeValue("style", style);
