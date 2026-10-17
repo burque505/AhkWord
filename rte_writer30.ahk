@@ -1,8 +1,13 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
-; RTE Writer, iteration 29: a word processor built on RichEditorNET (rte_writer29.cs), hosted in this AHK process.
-; Adds to iteration 28:
+; RTE Writer, iteration 30: a word processor built on RichEditorNET (rte_writer30.cs), hosted in this AHK process.
+; Adds to iteration 29:
+;   - Templates (File > New from Template: Letter, Memo, Report, Court Paper, Meeting Notes, and your own), with
+;     {{fields}} asked for and remembered; Insert from Template (parts: Caption, Signature Block, Certificate of
+;     Service) and Fill In Fields; File > Start Page; more macros in rte_macros, and on the Home tab.
+;     Scripts: Rte.NewFromTemplate("Letter"), Rte.InsertTemplate("Signature Block"), Rte.FillFields(), Rte.StartPage := 1.
+; Iteration 29 added to iteration 28:
 ;   - Autosave and recovery: a recovery copy every minute while there are unsaved changes, offered at the next start if
 ;     RTE Writer didn't close normally. Portable mode: a file named "portable" (or portable.txt) beside this script keeps
 ;     the settings and recovery copies in a "data" folder here. Scripts: Rte.AutosaveSeconds, Rte.Portable.
@@ -94,7 +99,7 @@
 ; spelling suggestions, the outline, macro recording and hotkeys, and real Markdown. Settings are kept in
 ; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile), or data\settings.json here in portable mode; set
 ; RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
-; Optionally pass a document to open:  rte_writer29.ahk "C:\path\document.md"
+; Optionally pass a document to open:  rte_writer30.ahk "C:\path\document.md"
 ;
 ; AHK automation: other scripts #Include "RteClient2.ahk" and call Rte.<Name>(...), react to events with
 ; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Tools > Automation API lists everything that can be called,
@@ -116,7 +121,7 @@ SubscribeToSaved() {
 }
 
 StartFile := A_Args.Length ? A_Args[1] : ""
-RunCSharpFile(A_ScriptDir "\rte_writer29.cs", A_AhkPath, A_ScriptDir, StartFile)
+RunCSharpFile(A_ScriptDir "\rte_writer30.cs", A_AhkPath, A_ScriptDir, StartFile)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
     MsgBox("RTE Writer stopped because of an error (" CSExitCode "):`n`n" CSOutput, "RTE Writer", "Iconx")
 ExitApp

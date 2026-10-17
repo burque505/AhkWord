@@ -31,3 +31,6 @@ ribbon_prototype/
 
 # Csharp-in-AHK path settings for this computer (made from Csharp-in-AHK.example.ini, or by Csharp-in-AHK-Paths.ahk)
 Csharp-in-AHK.ini
+
+# Macros' own settings (My signature.ini holds your name and details)
+rte_macros/*.ini

@@ -15,8 +15,24 @@
 #load "rte_printlayout.cs"
 #load "rte_pageview.cs"
 #load "rte_recovery.cs"
+#load "rte_templates.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer29.ahk. Iteration 29 adds to iteration 28:
+// Run it with rte_writer30.ahk. Iteration 30 adds to iteration 29:
+//   - Templates (rte_templates.cs): File > New from Template (and the start page) makes an untitled document from a
+//     template: a document in the templates folder beside the program (Letter, Memo, Report, Court Paper, Meeting Notes)
+//     or in your own Templates folder (beside the settings). Its fields, {{Your name}} or {{Salutation|Sir or Madam}},
+//     are asked for in a dialog, and the values of your own (Your name, Your address ...) remembered; a field named with the word
+//     "date" ({{Hearing date}}) gets a calendar beside its box (dates aren't remembered). Insert > Insert from Template puts a template's content at the caret instead, its fields
+//     filled in: the parts in a Parts folder are pieces for that (Caption, Signature Block, Certificate of Service).
+//     Insert > Fill In Fields fills in the fields left in the document. Scripts: Rte.NewFromTemplate("Letter",
+//     "Recipient=Ms. Rivera"), Rte.InsertTemplate("Signature Block"), Rte.FillFields(), Rte.Templates().
+//   - The start page, shown at the start (without a file to open; "Show this page when RTE Writer starts") and by
+//     File > Start Page: a blank document, the templates, the recent documents and the macros. Esc goes to the blank
+//     document. Scripts: Rte.StartPage := 1.
+//   - The macros gallery is on the Home tab too, and in the Quick Access Toolbar's list.
+//   - More macros in rte_macros: Clean up pasted text, My signature, Collect from anywhere (a hotkey in any
+//     program), PDF on save, and Folder to PDF.
+// Iteration 29 added to iteration 28:
 //   - Autosave and recovery (rte_recovery.cs): while the document has unsaved changes, a recovery copy of it (RTF, with
 //     its header, footer and line numbering) is written every minute, beside the settings, and removed when it is
 //     saved, closed or discarded, and when RTE Writer closes. If RTE Writer ended without closing (a crash, a power cut,
@@ -266,6 +282,7 @@ enum RibbonCommand : uint
 	GroupTableFormat = 132, AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144,
 	PrintMenu = 145, New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204,
 	PrintPreview = 205, PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210,
+	NewFromTemplate = 212, StartPage = 215, InsertFromTemplate = 214, FillInFields = 213, GroupTemplates = 133, GroupHomeMacros = 134,
 	Close = 211, Undo = 220, Redo = 221, Paste = 222, Cut = 223, Copy = 224,
 	SelectAll = 225, Find = 226, Replace = 227, Font = 230, FontDialog = 231, ChangeCase = 232,
 	CaseUpper = 233, CaseLower = 234, CaseTitle = 235, UnderlineStyle = 236, UnderlineSingle = 237, UnderlineDouble = 238,
@@ -578,7 +595,9 @@ class WriterForm : Form
 			SetStatus(startFile != null ? "" : "New document. Press Alt for the ribbon's KeyTips. View > Document View edits it as Markdown or HTML; the Tools tab runs AHK macros.");
 			autosaveTimer.Tick += (s, e) => Autosave();
 			StartAutosave();
-			BeginInvoke(() => OfferRecovery(startFile != null));
+			BeginInvoke(() => {
+				if (!OfferRecovery(startFile != null) && startFile == null && Settings.ShowStartPage) ShowStart(true);
+			});
 		};
 		FormClosing += OnFormClosing;
 		FormClosed += (s, e) => {
@@ -616,6 +635,10 @@ class WriterForm : Form
 		Button(RibbonCommand.ExportOdt, () => ExportOfficeDialog("odt"));
 		Button(RibbonCommand.Exit, Close);
 		Button(RibbonCommand.Close, CloseDocumentCommand, Keys.Control | Keys.W);
+		Button(RibbonCommand.NewFromTemplate, NewFromTemplateCommand);
+		Button(RibbonCommand.StartPage, () => ShowStart(true));
+		Button(RibbonCommand.InsertFromTemplate, InsertTemplateCommand);
+		Button(RibbonCommand.FillInFields, FillFieldsCommand);
 		Button(RibbonCommand.Help, ShowAbout);
 		recentItems = new RibbonRecentItems(ribbon, (uint)RibbonCommand.Recent);
 		recentItems.ExecuteEvent += (s, e) => {
@@ -641,7 +664,7 @@ class WriterForm : Form
 		fontControl = new RibbonFontControl(ribbon, (uint)RibbonCommand.Font);
 		fontControl.ExecuteEvent += (s, e) => {
 			var changes = FontControlEventArgs.Create(fontControl, e).ChangedFontValues;
-			BeginInvoke(() => { if (PagesShown) ShowPages(false); ApplyFontChanges(changes); Editor.Focus(); });
+			BeginInvoke(() => { LeaveOverlays(); ApplyFontChanges(changes); Editor.Focus(); });
 		};
 		Shortcut(Keys.Control | Keys.B, "Bold", api.ToggleBold, M("ToggleBold"));
 		Shortcut(Keys.Control | Keys.I, "Italic", api.ToggleItalic, M("ToggleItalic"));
@@ -703,7 +726,7 @@ class WriterForm : Form
 			if (updatingUi || GalleryItemEventArgs.Create(blockCombo, e).SelectedItem is not { SelectedItemIndex: >= 0 and <= (int)BlockStyle.Preformatted } item) return;
 			var style = (BlockStyle)item.SelectedItemIndex;
 			BeginInvoke(() => {
-				if (PagesShown) ShowPages(false);
+				LeaveOverlays();
 				if (SourceActive) { RunSource(() => SourceBlockStyle(style)); return; }
 				Run(() => api.SetBlockStyle(style), M("SetBlockStyle", style));
 				Editor.Focus();
@@ -768,7 +791,7 @@ class WriterForm : Form
 		macrosGallery.ExecuteEvent += (s, e) => {
 			if (GalleryItemEventArgs.Create(macrosGallery, e).SelectedItem is { } item && item.SelectedItemIndex >= 0 && item.SelectedItemIndex < galleryMacros.Count) {
 				string file = galleryMacros[item.SelectedItemIndex];
-				BeginInvoke(() => { if (PagesShown) ShowPages(false); Run(() => RunMacroFromUi(file)); });
+				BeginInvoke(() => { LeaveOverlays(); Run(() => RunMacroFromUi(file)); });
 			}
 		};
 		Toggle(RibbonCommand.RecordMacro, ToggleRecording, Keys.Control | Keys.Shift | Keys.R);
@@ -827,6 +850,7 @@ class WriterForm : Form
 	// that they need the rich text view) instead of changing the formatted text out of sight.
 	void Command(RibbonCommand id, Action action, string? macro) {
 		if (PagesShown && !PageViewCommands.Contains(id)) ShowPages(false);
+		if (StartShown && id != RibbonCommand.StartPage) ShowStart(false);
 		if (SourceActive && !SourceDocumentCommands.Contains(id)) {
 			if (sourceCommands.TryGetValue(id, out var markup)) RunSource(markup);
 			else { SetStatus($"{CommandName(id)} works in the Rich Text view (View > Rich Text)."); UpdateUi(); }
@@ -852,7 +876,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 29: autosave, recovery and portable mode)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 30: templates and the start page)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1031,22 +1055,24 @@ class WriterForm : Form
 
 	// At the start: copies that an RTE Writer which didn't close normally left behind are offered, the newest first (one
 	// a start; the others the next times). Started with a file, they wait for a start without one.
-	void OfferRecovery(bool startedWithFile) {
+	// Returns whether a copy was recovered.
+	bool OfferRecovery(bool startedWithFile) {
 		List<Recovery.Orphan> orphans;
-		try { orphans = Recovery.Orphans(recovery.Folder); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; }
-		if (orphans.Count == 0) return;
+		try { orphans = Recovery.Orphans(recovery.Folder); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+		if (orphans.Count == 0) return false;
 		var newest = orphans[0];
 		string when = $"{newest.Info.Saved.ToShortTimeString()} on {newest.Info.Saved.ToShortDateString()}";
 		if (startedWithFile) {
 			SetStatus($"RTE Writer didn't close normally last time: start it without a file to recover \"{newest.Info.Name}\" (autosaved at {when}).");
-			return;
+			return false;
 		}
 		string more = orphans.Count > 1 ? $"\n\n({orphans.Count - 1} more recovery cop{(orphans.Count == 2 ? "y is" : "ies are")} offered at the next start.)" : "";
 		var answer = MessageBox.Show(this, $"RTE Writer didn't close normally last time. It had autosaved \"{newest.Info.Name}\" at {when}.\n\n"
 			+ "Yes: recover it (then save it to keep it).\nNo: discard the recovery copy.\nCancel: decide at the next start." + more,
 			AppName, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-		if (answer == DialogResult.Yes) Recover(newest);
-		else if (answer == DialogResult.No) Recovery.Discard(newest);
+		if (answer == DialogResult.Yes) { Recover(newest); return true; }
+		if (answer == DialogResult.No) Recovery.Discard(newest);
+		return false;
 	}
 
 	/// Restores a copy left behind, as unsaved changes to the document it was (Save replaces its file), and removes it.
@@ -1061,6 +1087,167 @@ class WriterForm : Form
 		Autosave();    // (a copy of its own at once)
 		string file = orphan.Info.FileName is { Length: > 0 } f ? $" Save replaces {Path.GetFileName(f)}; Save As keeps both." : " Save it to keep it.";
 		SetStatus($"Recovered \"{orphan.Info.Name}\" as autosaved at {orphan.Info.Saved.ToShortTimeString()}.{file}");
+	}
+
+	// ---- Templates and the start page (iteration 30)
+
+	/// The templates beside the program (shipped) and the user's own (beside the settings).
+	internal string ShippedTemplatesFolder => Path.Combine(appDir, "templates");
+	internal string OwnTemplatesFolder => Path.Combine(Path.GetDirectoryName(Path.GetFullPath(Settings.FilePath))!, "Templates");
+	internal List<TemplateInfo> TemplateList() => Templates.Find(ShippedTemplatesFolder, OwnTemplatesFolder);
+
+	// Insert from Template's list: the parts (pieces made to be inserted) first, then the documents.
+	internal List<TemplateInfo> InsertChoices() => TemplateList().OrderBy(t => !t.Part).ThenBy(t => t.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+
+	StartPage? startPage;
+
+	/// Whether the start page is showing (in the editor's place).
+	internal bool StartShown => startPage is { Visible: true };
+
+	// Leaves the start page and Multiple Pages (for a command that acts on the document).
+	void LeaveOverlays() {
+		if (PagesShown) ShowPages(false);
+		if (StartShown) ShowStart(false);
+	}
+
+	/// Shows the start page (show) or goes back to the document.
+	internal void ShowStart(bool show) {
+		if (!show) {
+			if (!StartShown) return;
+			startPage!.Visible = false;
+			Editor.Focus();
+			UpdateUi();
+			return;
+		}
+		if (PagesShown) ShowPages(false);
+		if (startPage == null) {
+			startPage = new StartPage { Dock = DockStyle.Fill, Visible = false };
+			startPage.BlankChosen += () => { ShowStart(false); if (Editor.TextLength > 0 || FileName != null) Run(() => { if (ConfirmDiscard()) api.New(); }); };
+			startPage.Closing += () => ShowStart(false);
+			startPage.TemplateChosen += template => { ShowStart(false); Run(() => NewFromTemplate(template, null, ask: true)); };
+			startPage.RecentChosen += path => { ShowStart(false); Run(() => { if (ConfirmDiscard()) OpenRecent(path); }); };
+			startPage.OpenChosen += () => { ShowStart(false); Run(OpenDialog); };
+			startPage.MacroChosen += path => { ShowStart(false); Run(() => RunMacroFromUi(path)); };
+			startPage.TemplatesFolderChosen += () => Run(() => {
+				Directory.CreateDirectory(OwnTemplatesFolder);
+				System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(OwnTemplatesFolder) { UseShellExecute = true });
+				SetStatus("Your templates folder: put documents there (with {{Field}} fields if you like) to use them as templates.");
+			});
+			startPage.ShowAtStartChanged += on => { Settings.ShowStartPage = on; Settings.Save(); };
+			sourceSplit.Parent!.Controls.Add(startPage);
+		}
+		var macros = new List<(string, string, string?)>();
+		if (Directory.Exists(MacrosDir))
+			foreach (var file in Directory.GetFiles(MacrosDir, "*.ahk").OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+				macros.Add((Path.GetFileNameWithoutExtension(file), file, Settings.MacroHotkeys.TryGetValue(Path.GetFileName(file), out var keys) ? keys : null));
+		startPage.Visible = true;
+		startPage.BringToFront();
+		startPage.Fill(TemplateList().Where(t => !t.Part).ToList(), Settings.RecentFiles, macros, Settings.ShowStartPage);
+		(startPage.FirstTile ?? (Control)startPage).Focus();
+		UpdateUi();
+	}
+
+	/// Makes an untitled document from a template: its fields are filled from values (name -> value), and, if ask, the
+	/// others are asked for (with the values typed last time). Returns false if the user kept the document they had.
+	internal bool NewFromTemplate(TemplateInfo template, IDictionary<string, string>? values, bool ask) {
+		if (ask && !ConfirmDiscard()) return false;
+		api.OpenTemplate(template.Path);
+		var doc = Editor.TextDocument;
+		var given = FieldValues("New from " + template.Name, doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "", values, ask);
+		int filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null);
+		Editor.ClearUndo();
+		Editor.Select(0, 0);
+		Editor.Modified = filled > 0;
+		SetStatus($"New document from the {template.Name} template" + (filled > 0 ? $" ({filled} field{(filled == 1 ? "" : "s")} filled in)." : "."));
+		return true;
+	}
+
+	// The values for the fields in text: those given, and for the others, if ask, what the dialog was given (the values
+	// of fields about the user, "Your ...", remembered), else for those the values typed last time (the others stay to
+	// fill in).
+	Dictionary<string, string> FieldValues(string title, string text, IDictionary<string, string>? values, bool ask) {
+		var given = new Dictionary<string, string>(values ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+		var asked = Templates.Fields(text).Where(f => !given.ContainsKey(f.Name)).ToList();
+		if (ask && asked.Count > 0) {
+			using var dlg = new TemplateFieldsDialog(title, asked, Settings.TemplateValues, () => { Settings.TemplateValues.Clear(); Settings.Save(); });
+			if (dlg.ShowDialog(this) == DialogResult.OK) {
+				foreach (var (name, value) in dlg.Values) {
+					given[name] = value;
+					if (value != "" && Templates.IsRemembered(name)) Settings.TemplateValues[name] = value;    // (only "Your ..." fields)
+				}
+				// (values kept by earlier versions for other fields, such as a paper's parties, go)
+				foreach (var old in Settings.TemplateValues.Keys.Where(k => !Templates.IsRemembered(k)).ToList()) Settings.TemplateValues.Remove(old);
+				Settings.Save();
+			}
+		} else {
+			foreach (var (name, _) in asked)
+				if (Templates.IsRemembered(name) && Settings.TemplateValues.TryGetValue(name, out var last)) given[name] = last;
+		}
+		return given;
+	}
+
+	// File > New from Template: the documents (not the parts) to choose from.
+	void NewFromTemplateCommand() {
+		using var dlg = new TemplatePickerDialog("New from Template", TemplateList().Where(t => !t.Part).ToList(), OwnTemplatesFolder);
+		if (dlg.ShowDialog(this) == DialogResult.OK && dlg.Chosen is { } template) NewFromTemplate(template, null, ask: true);
+	}
+
+	// Insert > Insert from Template: the parts first, then the documents.
+	void InsertTemplateCommand() {
+		using var dlg = new TemplatePickerDialog("Insert from Template", InsertChoices(), OwnTemplatesFolder);
+		if (dlg.ShowDialog(this) == DialogResult.OK && dlg.Chosen is { } template) InsertTemplate(template, null, ask: true);
+	}
+
+	/// Inserts a template's content at the caret (replacing the selection), in one undo step, and fills in its fields
+	/// (only the inserted ones) as NewFromTemplate does. Returns how many were filled in.
+	internal int InsertTemplate(TemplateInfo template, IDictionary<string, string>? values, bool ask) {
+		if (!template.Path.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase))
+			throw new InvalidOperationException($"Only RTF templates can be inserted; open {Path.GetFileName(template.Path)} and save it as Rich Text Format.");
+		string rtf = HeaderFooter.StripFromRtf(File.ReadAllText(template.Path, Encoding.Latin1));    // (the header and footer stay the document's)
+		var doc = Editor.TextDocument;
+		doc.BeginEditCollection();
+		int filled;
+		try {
+			int start = doc.Selection2.Start;
+			Editor.SelectedRtf = rtf;
+			int end = doc.Selection2.Start;
+			string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+			var given = FieldValues("Insert " + template.Name, story[Math.Min(start, story.Length)..Math.Min(end, story.Length)], values, ask);
+			int before = Editor.TextLength;
+			filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null, start, end);
+			Editor.Select(Math.Max(start, end + Editor.TextLength - before), 0);    // (after what was inserted)
+		} finally {
+			doc.EndEditCollection();
+		}
+		SetStatus($"Inserted the {template.Name} template" + (filled > 0 ? $" ({filled} field{(filled == 1 ? "" : "s")} filled in)." : "."));
+		return filled;
+	}
+
+	// Insert > Fill In Fields
+	void FillFieldsCommand() {
+		var doc = Editor.TextDocument;
+		if (Templates.Fields(doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "").Count == 0) {
+			SetStatus("There are no {{fields}} to fill in in this document (fields are written {{Name}} or {{Name|default}}).");
+			return;
+		}
+		int filled = FillFields(null, ask: true);
+		SetStatus(filled > 0 ? $"{filled} field{(filled == 1 ? "" : "s")} filled in." : "No fields were filled in.");
+	}
+
+	/// Fills in the document's fields (one undo step): values given, then (ask) the dialog, or the values typed last time.
+	internal int FillFields(IDictionary<string, string>? values, bool ask) {
+		var doc = Editor.TextDocument;
+		var given = FieldValues("Fill In Fields", doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "", values, ask);
+		doc.BeginEditCollection();
+		try { return Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null); }
+		finally { doc.EndEditCollection(); }
+	}
+
+	// The recent list without a template (a document made from it is a new one)
+	internal void ForgetRecent(string path) {
+		if (Settings.RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase)) == 0) return;
+		Settings.Save();
+		UpdateRecentItems();
 	}
 
 	// File > Close: the document goes (its changes saved, if wanted), and an empty one takes its place.
@@ -2062,6 +2249,8 @@ class WriterForm : Form
 	// ---------------------------------------------------------------- Keyboard: Tab / Shift+Tab in lists
 
 	protected override bool ProcessCmdKey(ref Message msg, Keys keyData) {
+		// The start page: a shortcut leaves it first (Ctrl+O, Ctrl+N ... then act on the document as usual)
+		if (StartShown && startPage!.ContainsFocus && shortcuts.ContainsKey(keyData)) ShowStart(false);
 		// Multiple Pages: its own keys; a shortcut that changes the text goes back to editing first
 		if (PagesShown && pageView!.IsHandleCreated && msg.HWnd == pageView.Handle) {
 			if (keyData is Keys.Escape or Keys.Enter) return base.ProcessCmdKey(ref msg, keyData);
@@ -2465,7 +2654,7 @@ class WriterForm : Form
 
 	// Commands that work the same in the source editor (the document, the view, editing the source itself).
 	static readonly HashSet<RibbonCommand> SourceDocumentCommands = new() {
-		RibbonCommand.New, RibbonCommand.Open, RibbonCommand.Save, RibbonCommand.SaveAs, RibbonCommand.Close, RibbonCommand.Print, RibbonCommand.PrintPreview,
+		RibbonCommand.New, RibbonCommand.NewFromTemplate, RibbonCommand.StartPage, RibbonCommand.Open, RibbonCommand.Save, RibbonCommand.SaveAs, RibbonCommand.Close, RibbonCommand.Print, RibbonCommand.PrintPreview,
 		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys,
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
@@ -3121,6 +3310,61 @@ public class EditorApi
 		form.DocumentLoaded(WriterForm.SourceKind.None, null);
 		ed.Modified = true;
 		form.Events.Raise(EditorEvent.Opened);
+	}
+
+	/// The templates' names, one a line: the documents (File > New from Template), or with parts = true the parts (pieces
+	/// for Insert from Template, in the Parts folders).
+	public string Templates(bool parts = false) => string.Join("\n", form.TemplateList().Where(t => t.Part == parts).Select(t => t.Name));
+
+	/// Inserts a template's content at the caret (a part, by name, such as "Signature Block", or a document, or a file's
+	/// path), its fields filled in: fields as for NewFromTemplate. Returns how many fields were filled in.
+	public int InsertTemplate(string template, string fields = "", bool ask = false) =>
+		form.InsertTemplate(TemplateNamed(template, parts: true), FieldLines(fields), ask);
+
+	/// Fills in the {{fields}} left in the document: fields as for NewFromTemplate. Returns how many were filled in.
+	public int FillFields(string fields = "", bool ask = false) => form.FillFields(FieldLines(fields), ask);
+
+	// A template by name (the parts or the documents first), or a file's path.
+	TemplateInfo TemplateNamed(string template, bool parts) =>
+		form.TemplateList().OrderBy(t => t.Part != parts).FirstOrDefault(t => string.Equals(t.Name, template, StringComparison.OrdinalIgnoreCase))
+		?? (File.Exists(template) ? new TemplateInfo(Path.GetFileNameWithoutExtension(template), Path.GetFullPath(template), false)
+			: throw new FileNotFoundException($"There is no template \"{template}\" (Rte.Templates() and Rte.Templates(true) list them)."));
+
+	// "Name=Value" lines (\n in a value: a new line)
+	static Dictionary<string, string> FieldLines(string fields) {
+		var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		foreach (var line in fields.Split('\n', StringSplitOptions.RemoveEmptyEntries)) {
+			int equals = line.IndexOf('=');
+			if (equals > 0) values[line[..equals].Trim()] = line[(equals + 1)..].Trim().Replace("\\n", "\n");
+		}
+		return values;
+	}
+
+	/// Your own templates' folder (beside the settings); the shipped ones are in the templates folder beside RTE Writer.
+	public string TemplatesFolder => form.OwnTemplatesFolder;
+
+	/// Makes an untitled document from a template (by name, or a file's path); unsaved changes are discarded. fields:
+	/// "Name=Value" lines for its {{Name}} fields; the others get the values typed last time (or their defaults). With
+	/// ask = true, the fields not given are asked for in the dialog instead.
+	public void NewFromTemplate(string template, string fields = "", bool ask = false) {
+		var info = TemplateNamed(template, parts: false);
+		ed.Modified = false;
+		form.NewFromTemplate(info, FieldLines(fields), ask);
+	}
+
+	/// The start page: showing (true) or the document (false).
+	public bool StartPage {
+		get => form.StartShown;
+		set => form.ShowStart(value);
+	}
+
+	// A template as a new document: opened, then untitled (and not a recent document).
+	internal void OpenTemplate(string path) {
+		Open(path);
+		FileConverter = "";
+		form.SetFileName(null);
+		form.ForgetRecent(Path.GetFullPath(path));
+		ed.Modified = false;
 	}
 
 	/// Closes the document and starts an empty one, as File > Close does (unsaved changes are discarded, as by New; the
@@ -5234,7 +5478,13 @@ public sealed class Settings
 	public Dictionary<string, string> MacroHotkeys { get; set; } = new(StringComparer.OrdinalIgnoreCase);    // macro file name -> keys, e.g. "Ctrl+Alt+1"
 	public int OutlineWidth { get; set; } = 220;    // at 96 dpi
 	public int? PrinterModeToRestore { get; set; }
-	public int AutosaveSeconds { get; set; } = 60;    // between recovery copies while there are unsaved changes (0: none)    // Windows' LegacyDefaultPrinterMode while a PDF export changed it (-1: none)
+	public int AutosaveSeconds { get; set; } = 60;
+	public bool ShowStartPage { get; set; } = true;    // the start page at the start (without a file to open)
+	public Dictionary<string, string> TemplateValues {    // a "Your ..." template field's name -> the value typed last
+		get => templateValues;
+		set => templateValues = new(value ?? new(), StringComparer.OrdinalIgnoreCase);    // (names ignoring case, also when read back)
+	}
+	Dictionary<string, string> templateValues = new(StringComparer.OrdinalIgnoreCase);    // between recovery copies while there are unsaved changes (0: none)    // Windows' LegacyDefaultPrinterMode while a PDF export changed it (-1: none)
 	public string[] Footer { get; set; } = DefaultFooter;
 	public static string[] DefaultHeader => new[] { "{title}", "", "{date}" };
 	public static string[] DefaultFooter => new[] { "", "Page {page} of {pages}", "" };

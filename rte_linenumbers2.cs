@@ -1,4 +1,4 @@
-// Line numbers for RTE Writer (rte_writer29.cs, through #load; uses the Open XML SDK packages that rte_office7.cs lists).
+// Line numbers for RTE Writer (rte_writer30.cs, through #load; uses the Open XML SDK packages that rte_office7.cs lists).
 // Iteration 20: they are printed too (PrintedLineNumbers), in Print, Print Preview and PDF export.
 // A document's line numbering is set as in Word (Layout > Line Numbers): off, continuous, or restarting on each page; the
 // first line's number; which numbers are shown (every line's, or every 5th ...); the distance from the text. Lines in
