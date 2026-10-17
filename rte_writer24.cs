@@ -12,8 +12,17 @@
 #load "rte_linenumbers2.cs"
 #load "rte_sourcebox.cs"
 #load "rte_linespacing.cs"
+#load "rte_printlayout.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer23.ahk. Iteration 23 adds to iteration 22:
+// Run it with rte_writer24.ahk. Iteration 24 adds to iteration 23:
+//   - Print Layout (rte_printlayout.cs), on by default: lines break where they will on the printed page, as in Word's
+//     Print Layout and LibreOffice (Word and OpenDocument files opened with very long lines before). RichEdit lays its
+//     lines out for the printer (EM_SETTARGETDEVICE with its information context and Page Setup's text width), so the
+//     editor's lines, and its line numbers, are the printed ones. The page is shown on grey, its margins as on paper.
+//     Its zoom, as Word's: Page Width (the default: the page's width fills the window, as it is resized), One Page (a
+//     page's height fits), or manual (Zoom In / Out / 100%, Ctrl+wheel). View > Print Layout; off: Word wrap as before.
+//     Scripts: Rte.PrintLayout := 0, Rte.ZoomMode := "OnePage".
+// Iteration 23 added to iteration 22:
 //   - Character formats at the caret, as in Word: with nothing selected, the font box (font, size, bold, italic,
 //     underline, strikethrough, superscript, subscript, colour, highlight), the Font dialog and Ctrl+B / I / U set the
 //     format of what is typed next, and on an empty paragraph its paragraph mark's too, so the empty line keeps the
@@ -227,13 +236,13 @@ enum RibbonCommand : uint
 	ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275,
 	PageBreak = 280, Table = 281, Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285,
 	HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296, SpellCheck = 297, Structured = 300, FreeForm = 301,
-	WordWrap = 302, ShowBands = 303, Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307,
-	ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335,
-	Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315,
-	About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324,
-	DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341, BordersAll = 342, BordersOutside = 343,
-	BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352,
-	LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
+	WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371, ZoomOnePage = 372, ShowBands = 303, Outline = 304,
+	ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332,
+	SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312,
+	RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321,
+	InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340,
+	TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346,
+	LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -399,7 +408,21 @@ class WriterForm : Form
 		page.Controls.Add(headerStrip);    // (added after the editor, so docked before it)
 		page.Controls.Add(footerStrip);
 		Editor.Painted += lineGutter.EditorPainted;
-		lineGutter.SizeChanged += (s, e) => FitPagePadding();    // (wider numbers: the text stays where it was, as far as it can)
+		lineGutter.SizeChanged += (s, e) => FitPagePadding();
+		// Print Layout: the page follows the window, the zoom (Ctrl+wheel too) and a new editor window
+		sourceSplit.Panel2.Resize += (s, e) => FitPagePadding();
+		Editor.Painted += () => {
+			if (pageLayout == null) return;
+			if (Math.Abs(EditorZoom() - pageZoom) > 0.001f) {
+				// a zoom not made by Page Width or One Page (Ctrl+wheel): the zoom is the user's from now on
+				if (Settings.ZoomMode != "Manual" && Math.Abs(EditorZoom() - autoZoom) > 0.01f) Settings.ZoomMode = "Manual";
+				pageOverhang = 0; overhangStale = true; FitPagePadding(); UpdateUi();
+			}
+			CheckPageOverhang();
+		};
+		Editor.TextChanged += (s, e) => overhangStale = true;
+		Editor.VScroll += (s, e) => overhangStale = true;
+		Editor.HandleCreated += (s, e) => BeginInvoke(() => ApplyPrintLayout());    // (wider numbers: the text stays where it was, as far as it can)
 		headerStrip.Click += (s, e) => Run(HeaderFooterCommand);
 		footerStrip.Click += (s, e) => Run(HeaderFooterCommand);
 		Editor.TextChanged += (s, e) => { bandPagesStale = pageStartsStale = true; lastEdit = DateTime.Now; };
@@ -496,6 +519,7 @@ class WriterForm : Form
 
 		Shown += (s, e) => {
 			try { Editor.ZoomFactor = Settings.Zoom; } catch (ArgumentException) { }
+			ApplyPrintLayout();
 			outlineSplit.SplitterDistance = Math.Clamp(LogicalToDeviceUnits(Settings.OutlineWidth), LogicalToDeviceUnits(100), Math.Max(LogicalToDeviceUnits(100), outlineSplit.Width / 2));
 			RefreshOutline();
 			if (startFile != null) Run(() => api.Open(startFile));
@@ -666,11 +690,14 @@ class WriterForm : Form
 		Toggle(RibbonCommand.Structured, () => SetStructured(true));
 		Toggle(RibbonCommand.FreeForm, () => SetStructured(false));
 		Check(RibbonCommand.WordWrap, () => Editor.WordWrap = !Editor.WordWrap);
+		Toggle(RibbonCommand.PrintLayout, () => api.PrintLayout = !Settings.PrintLayout, Keys.None, null);
 		Check(RibbonCommand.ShowBands, () => api.HeaderFooterVisible = !Settings.ShowBands);
 		Check(RibbonCommand.Outline, () => api.OutlineVisible = outlineSplit.Panel1Collapsed, Keys.Control | Keys.Shift | Keys.O);
-		Button(RibbonCommand.ZoomIn, () => Editor.ZoomFactor = Math.Min(5f, Editor.ZoomFactor + 0.1f));
-		Button(RibbonCommand.ZoomOut, () => Editor.ZoomFactor = Math.Max(0.5f, Editor.ZoomFactor - 0.1f));
-		Button(RibbonCommand.Zoom100, () => Editor.ZoomFactor = 1f);
+		Button(RibbonCommand.ZoomIn, () => ManualZoom(Math.Min(5f, EditorZoom() + 0.1f)));
+		Button(RibbonCommand.ZoomOut, () => ManualZoom(Math.Max(0.5f, EditorZoom() - 0.1f)));
+		Button(RibbonCommand.Zoom100, () => ManualZoom(1f));
+		Toggle(RibbonCommand.ZoomPageWidth, () => api.ZoomMode = "PageWidth", Keys.None, M("ZoomMode", "PageWidth"));
+		Toggle(RibbonCommand.ZoomOnePage, () => api.ZoomMode = "OnePage", Keys.None, M("ZoomMode", "OnePage"));
 		Toggle(RibbonCommand.ViewRich, () => SetView(SourceKind.None, false));
 		Toggle(RibbonCommand.ViewMarkdown, () => SetView(SourceKind.Markdown, sideBySide));
 		Toggle(RibbonCommand.ViewHtml, () => SetView(SourceKind.Html, sideBySide));
@@ -767,7 +794,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 23: fonts at the caret)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 24: print layout)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1218,11 +1245,139 @@ class WriterForm : Form
 		UpdateUi();
 	}
 
-	// The page's padding left of the text: the line numbers take its place (the text moves as little as it can).
+	// The page: in Print Layout, a sheet as wide as the paper at the zoom (its margins either side of the text, the line
+	// numbers in the left one), centred on grey, which scrolls sideways if the window is narrower; Page Width and One
+	// Page set the zoom first. Otherwise the whole width, the line numbers taking the padding's place left of the text
+	// (the text moves as little as it can).
 	void FitPagePadding() {
-		int left = LogicalToDeviceUnits(28);
-		if (Numbering.On) left = Math.Max(LogicalToDeviceUnits(4), left - Math.Max(lineGutter.Width, LogicalToDeviceUnits(30)));
-		pagePanel.Padding = new Padding(left, LogicalToDeviceUnits(14), LogicalToDeviceUnits(16), 0);
+		if (fittingPage) return;
+		fittingPage = true;
+		try {
+			var host = sourceSplit.Panel2;
+			if (pageLayout == null) {
+				host.AutoScroll = false;
+				host.BackColor = SystemColors.Window;
+				pagePanel.Dock = DockStyle.Fill;
+				int left = LogicalToDeviceUnits(28);
+				if (Numbering.On) left = Math.Max(LogicalToDeviceUnits(4), left - Math.Max(lineGutter.Width, LogicalToDeviceUnits(30)));
+				pagePanel.Padding = new Padding(left, LogicalToDeviceUnits(14), LogicalToDeviceUnits(16), 0);
+				return;
+			}
+			if (Settings.ZoomMode is "PageWidth" or "OnePage") FitZoom(host);
+			pageZoom = EditorZoom();
+			var (marginLeft, text, marginRight) = PrintLayoutPage.Pixels(pageLayout, pageZoom, DeviceDpi);
+			// (the lines are broken with the printer's measurements but drawn with the screen's, whose hinted letters are a
+			// little wider: 3% more, and more if a line drawn still reaches the edge, PageOverhang)
+			int gutter = Numbering.On ? lineGutter.Width : 0, bar = SystemInformation.VerticalScrollBarWidth;
+			int slack = LogicalToDeviceUnits(6) + (int)Math.Ceiling(text * 0.03) + pageOverhang;
+			int padLeft = Math.Max(LogicalToDeviceUnits(4), marginLeft - gutter), padRight = Math.Max(LogicalToDeviceUnits(4), marginRight - bar - slack);
+			int width = padLeft + gutter + text + bar + slack + padRight;
+			pagePanel.Dock = DockStyle.None;
+			pagePanel.Padding = new Padding(padLeft, LogicalToDeviceUnits(14), padRight, 0);
+			host.BackColor = PrintLayoutPage.Surround;
+			host.AutoScrollMinSize = new Size(width, 0);
+			host.AutoScroll = width > host.ClientSize.Width;
+			int x = Math.Max(0, (host.ClientSize.Width - width) / 2);
+			pagePanel.SetBounds(x + host.AutoScrollPosition.X, 0, width, host.ClientSize.Height);
+		} finally {
+			fittingPage = false;
+		}
+	}
+
+	bool fittingPage;
+	float autoZoom = -1;    // the zoom Page Width or One Page set last
+
+	// Page Width: the zoom at which the page (paper width) fills the window, a little space either side; One Page: at
+	// which a page's height fits.
+	void FitZoom(Control host) {
+		// a zoom this didn't set (Ctrl+wheel, a script's ZoomFactor): the user's from now on, not undone
+		if (autoZoom > 0 && Math.Abs(EditorZoom() - autoZoom) > 0.01f) { Settings.ZoomMode = "Manual"; return; }
+		var (paperWidth, paperHeight) = PrintLayoutPage.Paper(pageLayout!, DeviceDpi);
+		int gap = LogicalToDeviceUnits(12);
+		double zoom = Settings.ZoomMode == "OnePage"
+			? (host.ClientSize.Height - pagePanel.Padding.Top - (headerStrip.Visible ? headerStrip.Height : 0) - (footerStrip.Visible ? footerStrip.Height : 0) - gap) / paperHeight
+			: (host.ClientSize.Width - 2 * gap) / paperWidth;
+		if (host.ClientSize.Width <= 0 || host.ClientSize.Height <= 0) return;
+		float value = (float)Math.Clamp(Math.Round(zoom, 3), 0.3, 4.0);
+		if (Math.Abs(value - EditorZoom()) < 0.005f) { autoZoom = EditorZoom(); return; }
+		autoZoom = value;
+		try { Editor.ZoomFactor = value; } catch (ArgumentException) { }
+		autoZoom = EditorZoom();
+	}
+
+	// Zoom In / Out / 100%: the zoom is the user's (not Page Width's or One Page's).
+	void ManualZoom(float zoom) {
+		Settings.ZoomMode = "Manual";
+		try { Editor.ZoomFactor = zoom; } catch (ArgumentException) { }
+		FitPagePadding();
+	}
+
+	// ---- Print Layout (iteration 24)
+
+	PrintLayoutTarget? pageTarget;
+	PageLayout? pageLayout;    // Page Setup's paper and margins while Print Layout is on (null: off)
+
+	/// The page's text width in twips while Print Layout is on (null: off).
+	internal int? PrintTextWidth => pageLayout?.TextWidth;
+	float pageZoom = -1;
+	int pageOverhang;          // pixels the editor was widened by, for lines drawn wider than the text width
+	bool overhangStale = true; // the text or layout changed since the drawn lines were measured
+
+	// After the editor painted: whether a line it drew reaches its right edge (wider letters than the printer's); if so,
+	// the page widens to fit (only ever widens, until the zoom or the page changes).
+	void CheckPageOverhang() {
+		if (pageLayout == null || !overhangStale || !Editor.IsHandleCreated) return;
+		overhangStale = false;
+		const int EM_GETLINECOUNT = 0x00BA, EM_LINEINDEX = 0x00BB, EM_GETFIRSTVISIBLELINE = 0x00CE;
+		var doc = Editor.TextDocument;
+		int count = (int)SendMessage(Editor.Handle, EM_GETLINECOUNT, IntPtr.Zero, IntPtr.Zero);
+		int first = (int)SendMessage(Editor.Handle, EM_GETFIRSTVISIBLELINE, IntPtr.Zero, IntPtr.Zero), widest = 0;
+		try {
+			for (int line = first; line < Math.Min(count, first + 60); line++) {
+				int start = (int)SendMessage(Editor.Handle, EM_LINEINDEX, (IntPtr)line, IntPtr.Zero);
+				int next = line + 1 < count ? (int)SendMessage(Editor.Handle, EM_LINEINDEX, (IntPtr)(line + 1), IntPtr.Zero) : Editor.TextLength;
+				if (start < 0 || next <= start) continue;
+				int last = next - 1;
+				while (last > start && (doc.Range2(last, last + 1).Text ?? "") is "\r" or " " or "\v" or "\u0007") last--;
+				doc.Range2(last, last + 1).GetPoint(0x0A | 0x200, out int x, out int y);    // tomEnd | tomAllowOffClient (screen)
+				if (Editor.PointToClient(new Point(x, y)).Y > Editor.ClientSize.Height) break;
+				widest = Math.Max(widest, Editor.PointToClient(new Point(x, y)).X);
+			}
+		} catch (COMException) { return; }
+		int room = Editor.ClientSize.Width - LogicalToDeviceUnits(2);
+		if (widest <= room) return;
+		pageOverhang += widest - room + LogicalToDeviceUnits(4);
+		FitPagePadding();
+	}
+
+	float EditorZoom() {
+		try { return Editor.ZoomFactor; } catch (Exception) { return 1f; }
+	}
+
+	/// Lays the editor's lines out as on the printed page (Print Layout), or at the window's width (Word wrap) or not
+	/// wrapped. Again after Page Setup, and when the editor gets a new window.
+	internal void ApplyPrintLayout() {
+		if (!Editor.IsHandleCreated || IsDisposed) return;
+		autoZoom = -1;    // (Page Width or One Page fit the zoom afresh, whatever it is now)
+		var old = pageTarget;
+		if (Settings.PrintLayout) {
+			pageLayout = PageLayout();
+			string? printer = null;
+			try { var settings = new PrinterSettings(); if (settings.IsValid) printer = settings.PrinterName; } catch (Exception) { }
+			pageTarget = old != null && old.IsPrinter && old.Device == printer ? old : new PrintLayoutTarget(printer);
+			pageTarget.Apply(Editor, pageLayout.TextWidth);
+		} else {
+			pageLayout = null;
+			pageTarget = null;
+			PrintLayoutTarget.Release(Editor, Editor.WordWrap);
+		}
+		if (old != null && old != pageTarget) old.Dispose();    // (after the editor has let go of it)
+		pageOverhang = 0;
+		overhangStale = true;
+		FitPagePadding();
+		lineGutter.DocumentChanged();
+		pageStartsStale = true;
+		UpdateUi();
 	}
 
 	void LineNumbersCommand() {
@@ -1245,6 +1400,7 @@ class WriterForm : Form
 		pageStartsStale = bandPagesStale = true;
 		Settings.Landscape = page.Landscape;
 		Settings.Save();
+		ApplyPrintLayout();    // (the page's new width)
 	}
 
 	void PrintPreviewCommand() {
@@ -2066,6 +2222,11 @@ class WriterForm : Form
 		checkBoxes[RibbonCommand.SourceWordWrap].BooleanValue = sourceBox.WordWrap;
 		checkBoxes[RibbonCommand.SourceLineNumbers].BooleanValue = sourceBox.LineNumbers;
 		checkBoxes[RibbonCommand.WordWrap].BooleanValue = Editor.WordWrap;
+		checkBoxes[RibbonCommand.WordWrap].Enabled = !Settings.PrintLayout;    // (Print Layout breaks lines as on paper)
+		toggleButtons[RibbonCommand.PrintLayout].BooleanValue = Settings.PrintLayout;
+		toggleButtons[RibbonCommand.ZoomPageWidth].BooleanValue = Settings.PrintLayout && Settings.ZoomMode == "PageWidth";
+		toggleButtons[RibbonCommand.ZoomOnePage].BooleanValue = Settings.PrintLayout && Settings.ZoomMode == "OnePage";
+		toggleButtons[RibbonCommand.ZoomPageWidth].Enabled = toggleButtons[RibbonCommand.ZoomOnePage].Enabled = Settings.PrintLayout;
 		checkBoxes[RibbonCommand.ShowBands].BooleanValue = Settings.ShowBands;
 		checkBoxes[RibbonCommand.Outline].BooleanValue = !outlineSplit.Panel1Collapsed;
 		checkBoxes[RibbonCommand.SpellCheck].BooleanValue = Editor.EnableSpellCheck;
@@ -2093,7 +2254,7 @@ class WriterForm : Form
 		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys,
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
-		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.Structured, RibbonCommand.FreeForm, RibbonCommand.WordWrap,
+		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.Structured, RibbonCommand.FreeForm, RibbonCommand.WordWrap, RibbonCommand.PrintLayout, RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage,
 		RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
 		RibbonCommand.HeaderFooter, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
 		RibbonCommand.LineNumberOptions, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
@@ -3005,6 +3166,36 @@ public class EditorApi
 	/// Which converters for Word and OpenDocument files are available.
 	public string Converters() => OfficeConverters.Describe();
 
+	// ---- Print Layout (iteration 24)
+
+	/// Print Layout (1): lines break where they will on the printed page, the page shown on grey; 0: lines wrap at the
+	/// window's width (WordWrap). Remembered.
+	public bool PrintLayout {
+		get => form.Settings.PrintLayout;
+		set {
+			form.Settings.PrintLayout = value;
+			form.Settings.Save();
+			form.ApplyPrintLayout();
+		}
+	}
+
+	/// Print Layout's zoom: "PageWidth" (the page's width fills the window), "OnePage" (a page's height fits) or
+	/// "Manual" (ZoomFactor, as Zoom In / Out / 100% and Ctrl+wheel set it). Remembered.
+	public string ZoomMode {
+		get => form.Settings.ZoomMode;
+		set {
+			string mode = value.Trim().ToLowerInvariant() switch {
+				"pagewidth" or "page width" or "width" => "PageWidth",
+				"onepage" or "one page" or "page" => "OnePage",
+				"manual" or "none" or "" => "Manual",
+				_ => throw new ArgumentException($"\"{value}\" is not a zoom mode (PageWidth, OnePage or Manual).")
+			};
+			form.Settings.ZoomMode = mode;
+			form.Settings.Save();
+			form.ApplyPrintLayout();
+		}
+	}
+
 	// ---- Line spacing (iteration 22)
 
 	/// Sets the line spacing of the selected paragraphs (every paragraph the selection touches): a number of lines
@@ -3537,7 +3728,10 @@ public class EditorApi
 		LegalLists.Paragraphs(ed.TextDocument).FirstOrDefault(p => position >= p.Start && position < Math.Max(p.End, p.Start + 1));
 
 	// New tables are as wide as the editor shows text (at most 6.5 inches, the width of a Letter page's text).
-	int TableWidth() => ed.ClientSize.Width > 200 ? Math.Min(9360, (ed.ClientSize.Width - 40) * 1440 / Math.Max(96, ed.DeviceDpi)) : 9360;
+	// A new table's width: in Print Layout the page's text width (as in Word; the editor's width depends on the zoom),
+	// otherwise what the window shows, at most 6.5 inches.
+	int TableWidth() => form.PrintTextWidth is int text ? text
+		: ed.ClientSize.Width > 200 ? Math.Min(9360, (ed.ClientSize.Width - 40) * 1440 / Math.Max(96, ed.DeviceDpi)) : 9360;
 	/// The document as Markdown. With embedImages = 1 (the default) images are data: URIs, so the text is complete on
 	/// its own; with 0 they are written as image1.png, image2.png ... (as when viewing the source).
 	public string GetMarkdown(bool embedImages = true) =>
@@ -4715,6 +4909,8 @@ public sealed class Settings
 	public string? LastFolder { get; set; }
 	public bool Structured { get; set; } = true;
 	public bool WordWrap { get; set; } = true;
+	public bool PrintLayout { get; set; } = true;    // View > Print Layout: lines as on the printed page
+	public string ZoomMode { get; set; } = "PageWidth";    // Print Layout's zoom: PageWidth, OnePage or Manual (View > Zoom)
 	public bool SpellCheck { get; set; } = true;
 	public bool AutoLevelStyles { get; set; } = true;
 	public float Zoom { get; set; } = 1f;
@@ -5426,8 +5622,25 @@ sealed class WriterEditBox : RichEditBox
 	/// After the editor painted (and so scrolled, changed or zoomed): the line numbers follow.
 	public Action? Painted;
 
+	// Replacing the text (WM_SETTEXT, as New and Open do through RichEditorNET; EM_STREAMIN, EM_SETTEXTEX) resets
+	// RichEdit's zoom to 100%: it is put back, so a zoom (the user's, or Page Width's) outlives a new document.
+	const int WM_SETTEXT = 0x000C, EM_STREAMIN = 0x0449, EM_SETTEXTEX = 0x0461, EM_GETZOOM = 0x04E0, EM_SETZOOM = 0x04E1;
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendZoom(IntPtr hWnd, int msg, ref int numerator, ref int denominator);
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendZoom(IntPtr hWnd, int msg, IntPtr numerator, IntPtr denominator);
+
 	protected override void WndProc(ref Message m) {
 		const int WM_CONTEXTMENU = 0x007B, WM_PAINT = 0x000F;
+		if (m.Msg is WM_SETTEXT or EM_STREAMIN or EM_SETTEXTEX && IsHandleCreated) {
+			int numerator = 0, denominator = 0;
+			SendZoom(Handle, EM_GETZOOM, ref numerator, ref denominator);
+			base.WndProc(ref m);
+			int after = 0, afterDenominator = 0;
+			SendZoom(Handle, EM_GETZOOM, ref after, ref afterDenominator);
+			if (after <= 0 || afterDenominator <= 0) (after, afterDenominator) = (1, 1);    // (0/0: no zoom, 100%)
+			if (numerator > 0 && denominator > 0 && (long)after * denominator != (long)numerator * afterDenominator)
+				SendZoom(Handle, EM_SETZOOM, (IntPtr)numerator, (IntPtr)denominator);
+			return;
+		}
 		if (m.Msg == WM_PAINT) {
 			base.WndProc(ref m);
 			if ((pageBreaks == null || pageBreaks.Count > 0) && IsHandleCreated) {

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer23.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer23.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer24.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer24.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -1027,7 +1027,49 @@
         <Image Source="icons/freeform_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
-    <Command Name="cmdWordWrap" Id="302" LabelTitle="Word wrap" Keytip="W" />
+    <Command Name="cmdWordWrap" Id="302" LabelTitle="Word wrap" Keytip="W" TooltipDescription="Without Print Layout: lines wrap at the window's edge (or not at all)." />
+    <Command Name="cmdPrintLayout" Id="370" LabelTitle="Print Layout" Keytip="L" TooltipTitle="Print layout" TooltipDescription="Lines break where they will on the printed page (Page Setup's paper and margins), as in Word and LibreOffice, with the page shown on grey. Off: lines wrap at the window's edge.">
+      <Command.LargeImages>
+        <Image Source="icons/printlayout_32.bmp" MinDPI="96" />
+        <Image Source="icons/printlayout_40.bmp" MinDPI="120" />
+        <Image Source="icons/printlayout_48.bmp" MinDPI="144" />
+        <Image Source="icons/printlayout_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/printlayout_16.bmp" MinDPI="96" />
+        <Image Source="icons/printlayout_20.bmp" MinDPI="120" />
+        <Image Source="icons/printlayout_24.bmp" MinDPI="144" />
+        <Image Source="icons/printlayout_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdZoomPageWidth" Id="371" LabelTitle="Page Width" Keytip="P" TooltipTitle="Page width" TooltipDescription="Zoom so that the page's width fills the window, as the window is resized too (Print Layout).">
+      <Command.LargeImages>
+        <Image Source="icons/pagewidth_32.bmp" MinDPI="96" />
+        <Image Source="icons/pagewidth_40.bmp" MinDPI="120" />
+        <Image Source="icons/pagewidth_48.bmp" MinDPI="144" />
+        <Image Source="icons/pagewidth_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/pagewidth_16.bmp" MinDPI="96" />
+        <Image Source="icons/pagewidth_20.bmp" MinDPI="120" />
+        <Image Source="icons/pagewidth_24.bmp" MinDPI="144" />
+        <Image Source="icons/pagewidth_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdZoomOnePage" Id="372" LabelTitle="One Page" Keytip="G" TooltipTitle="One page" TooltipDescription="Zoom so that a whole page's height fits in the window (Print Layout).">
+      <Command.LargeImages>
+        <Image Source="icons/onepage_32.bmp" MinDPI="96" />
+        <Image Source="icons/onepage_40.bmp" MinDPI="120" />
+        <Image Source="icons/onepage_48.bmp" MinDPI="144" />
+        <Image Source="icons/onepage_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/onepage_16.bmp" MinDPI="96" />
+        <Image Source="icons/onepage_20.bmp" MinDPI="120" />
+        <Image Source="icons/onepage_24.bmp" MinDPI="144" />
+        <Image Source="icons/onepage_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdShowBands" Id="303" LabelTitle="Header and footer" Keytip="H" />
     <Command Name="cmdOutline" Id="304" LabelTitle="Outline" Keytip="O" TooltipTitle="Outline (Ctrl+Shift+O)" />
     <Command Name="cmdZoomIn" Id="305" LabelTitle="Zoom In" Keytip="I" TooltipTitle="Zoom in">
@@ -1837,11 +1879,14 @@
             <ToggleButton CommandName="cmdFreeForm" />
           </Group>
           <Group CommandName="cmdGroupShow">
+            <ToggleButton CommandName="cmdPrintLayout" />
             <CheckBox CommandName="cmdWordWrap" />
             <CheckBox CommandName="cmdShowBands" />
             <CheckBox CommandName="cmdOutline" />
           </Group>
-          <Group CommandName="cmdGroupZoom" SizeDefinition="ThreeButtons">
+          <Group CommandName="cmdGroupZoom" SizeDefinition="FiveButtons">
+            <ToggleButton CommandName="cmdZoomPageWidth" />
+            <ToggleButton CommandName="cmdZoomOnePage" />
             <Button CommandName="cmdZoomIn" />
             <Button CommandName="cmdZoomOut" />
             <Button CommandName="cmdZoom100" />
