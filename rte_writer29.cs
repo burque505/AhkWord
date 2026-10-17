@@ -14,8 +14,19 @@
 #load "rte_linespacing2.cs"
 #load "rte_printlayout.cs"
 #load "rte_pageview.cs"
+#load "rte_recovery.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer28.ahk. Iteration 28 adds to iteration 27:
+// Run it with rte_writer29.ahk. Iteration 29 adds to iteration 28:
+//   - Autosave and recovery (rte_recovery.cs): while the document has unsaved changes, a recovery copy of it (RTF, with
+//     its header, footer and line numbering) is written every minute, beside the settings, and removed when it is
+//     saved, closed or discarded, and when RTE Writer closes. If RTE Writer ended without closing (a crash, a power cut,
+//     Windows restarting), the next start offers the copy: recover it (as unsaved changes to the document it was, which
+//     Save then replaces), discard it, or decide next time. The document's own file is never written by autosave.
+//     Scripts: Rte.AutosaveSeconds := 120 (0: off), Rte.RecoveryFolder.
+//   - Portable mode: with a file named "portable" or "portable.txt" beside the program, the settings, the recovery copies
+//     and the converters' state (LibreOffice's profile, the log) are kept in a "data" folder beside it instead of
+//     %APPDATA% and %LOCALAPPDATA%, so that the folder can be carried to another computer with them. Scripts: Rte.Portable.
+// Iteration 28 added to iteration 27:
 //   - File > Close (Ctrl+W): closes the document (asking to save its changes) and starts an empty one; the window stays
 //     open, as in Word. Scripts: Rte.Close().
 //   - Export as PDF on the ribbon (Layout, next to Print Preview) and in the Quick Access Toolbar's list, as well as in
@@ -191,7 +202,8 @@
 //     {pages} {date} {time} are filled in on each page. Headers and footers are drawn in the page margins.
 // Iteration 3 added comfort features to iteration 2:
 //   - File > Open Recent; the window size and position, view settings, last folder and page setup are remembered in
-//     %APPDATA%\RTE Writer\settings.json (or the file named by the RTE_WRITER_SETTINGS environment variable).
+//     %APPDATA%\RTE Writer\settings.json (or the file named by the RTE_WRITER_SETTINGS environment variable; in
+//     portable mode, data\settings.json beside the program).
 //   - Drag and drop: drop a document to open it, or images to insert them where they are dropped.
 //   - Page Setup, Print Preview, Print, and Export as PDF (through the "Microsoft Print to PDF" printer).
 // Iteration 2 added events and fire-and-forget calls to iteration 1:
@@ -235,6 +247,7 @@ using RibbonLib.Interop;
 // Runs on AutoHotkey's (STA) thread. ShowDialog runs the WinForms message loop until the window is closed;
 // AHK hotkeys and timers keep running meanwhile and can call the editor (see RteClient.ahk).
 Application.EnableVisualStyles();
+AppFolders.ProgramFolder = args.Length > 1 ? args[1] : Environment.CurrentDirectory;    // (portable mode: before the settings)
 using var form = new WriterForm(
 	args.Length > 0 ? args[0] : "",
 	args.Length > 1 ? args[1] : Environment.CurrentDirectory,
@@ -385,6 +398,9 @@ class WriterForm : Form
 
 	// Iteration 3: settings, recent files, drag and drop
 	internal readonly Settings Settings = Settings.Load();
+	// (the recovery copies are kept beside the settings)
+	readonly Recovery recovery = new(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(Settings.FilePath))!, "Recovery"));
+	readonly System.Windows.Forms.Timer autosaveTimer = new();
 
 	// Iteration 5: spelling and outline
 	internal readonly Spelling? Spelling = Spelling.Create();
@@ -560,9 +576,14 @@ class WriterForm : Form
 			UpdateRecentItems();
 			if (Enum.TryParse<SourceKind>(Settings.SourceView, out var lastView) && lastView != SourceKind.None) SetView(lastView, Settings.SideBySide);
 			SetStatus(startFile != null ? "" : "New document. Press Alt for the ribbon's KeyTips. View > Document View edits it as Markdown or HTML; the Tools tab runs AHK macros.");
+			autosaveTimer.Tick += (s, e) => Autosave();
+			StartAutosave();
+			BeginInvoke(() => OfferRecovery(startFile != null));
 		};
 		FormClosing += OnFormClosing;
 		FormClosed += (s, e) => {
+			autosaveTimer.Stop();
+			ClearRecovery();    // (closed as the user wanted: saved, or the changes discarded)
 			Events.Raise(EditorEvent.Closed);
 			AppContext.SetData("rte.dispatch", null);
 			server.Dispose();
@@ -831,7 +852,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 28: Close, and PDF on the ribbon)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 29: autosave, recovery and portable mode)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -976,6 +997,70 @@ class WriterForm : Form
 	void SetStructured(bool structured) {
 		Editor.EnableHtmlFontSizing = structured;
 		SetStatus(structured ? "Structured document: block styles (Ctrl+0..7) instead of font sizes." : "Free-form fonts: any font size; block styles are off.");
+	}
+
+	// ---- Autosave and recovery (iteration 29)
+
+	internal string RecoveryFolder => recovery.Folder;
+
+	/// Writes recovery copies every AutosaveSeconds while there are unsaved changes (0: none).
+	internal void StartAutosave() {
+		autosaveTimer.Stop();
+		if (Settings.AutosaveSeconds <= 0) { ClearRecovery(); return; }
+		autosaveTimer.Interval = Math.Max(10, Settings.AutosaveSeconds) * 1000;
+		autosaveTimer.Start();
+	}
+
+	bool autosaveFailed;
+
+	// The recovery copy: written while there are unsaved changes (if they changed since), removed once there are none.
+	internal void Autosave() {
+		if (!Editor.Modified) { ClearRecovery(); return; }
+		try {
+			recovery.Write(api.RecoveryRtf(), FileName, DocumentName);
+			autosaveFailed = false;
+		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+			if (!autosaveFailed) SetStatus("⚠ The recovery copy could not be written: " + ex.Message);
+			autosaveFailed = true;
+		}
+	}
+
+	internal void ClearRecovery() {
+		try { recovery.Clear(); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+	}
+
+	// At the start: copies that an RTE Writer which didn't close normally left behind are offered, the newest first (one
+	// a start; the others the next times). Started with a file, they wait for a start without one.
+	void OfferRecovery(bool startedWithFile) {
+		List<Recovery.Orphan> orphans;
+		try { orphans = Recovery.Orphans(recovery.Folder); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; }
+		if (orphans.Count == 0) return;
+		var newest = orphans[0];
+		string when = $"{newest.Info.Saved.ToShortTimeString()} on {newest.Info.Saved.ToShortDateString()}";
+		if (startedWithFile) {
+			SetStatus($"RTE Writer didn't close normally last time: start it without a file to recover \"{newest.Info.Name}\" (autosaved at {when}).");
+			return;
+		}
+		string more = orphans.Count > 1 ? $"\n\n({orphans.Count - 1} more recovery cop{(orphans.Count == 2 ? "y is" : "ies are")} offered at the next start.)" : "";
+		var answer = MessageBox.Show(this, $"RTE Writer didn't close normally last time. It had autosaved \"{newest.Info.Name}\" at {when}.\n\n"
+			+ "Yes: recover it (then save it to keep it).\nNo: discard the recovery copy.\nCancel: decide at the next start." + more,
+			AppName, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+		if (answer == DialogResult.Yes) Recover(newest);
+		else if (answer == DialogResult.No) Recovery.Discard(newest);
+	}
+
+	/// Restores a copy left behind, as unsaved changes to the document it was (Save replaces its file), and removes it.
+	internal void Recover(Recovery.Orphan orphan) {
+		try {
+			api.Recover(Recovery.Read(orphan), orphan.Info.FileName);
+		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+			MessageBox.Show(this, "The recovery copy could not be read: " + ex.Message, AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+			return;
+		}
+		Recovery.Discard(orphan);
+		Autosave();    // (a copy of its own at once)
+		string file = orphan.Info.FileName is { Length: > 0 } f ? $" Save replaces {Path.GetFileName(f)}; Save As keeps both." : " Save it to keep it.";
+		SetStatus($"Recovered \"{orphan.Info.Name}\" as autosaved at {orphan.Info.Saved.ToShortTimeString()}.{file}");
 	}
 
 	// File > Close: the document goes (its changes saved, if wanted), and an empty one takes its place.
@@ -2489,6 +2574,7 @@ class WriterForm : Form
 
 	/// After New or Open: the source the document came from (a .md or .html file's text), if any.
 	internal void DocumentLoaded(SourceKind kind, string? text) {
+		ClearRecovery();    // (the document before it went, as the user wanted)
 		sourceTimer.Stop();
 		richToSourceTimer.Stop();
 		embeddedData.Clear();
@@ -2999,6 +3085,44 @@ public class EditorApi
 		form.Events.Raise(EditorEvent.Opened);
 	}
 
+	/// Seconds between the recovery copies written while the document has unsaved changes (0: none; at least 10).
+	/// Remembered.
+	public int AutosaveSeconds {
+		get => form.Settings.AutosaveSeconds;
+		set {
+			if (value < 0) throw new ArgumentException("AutosaveSeconds is 0 (off) or more.");
+			form.Settings.AutosaveSeconds = value;
+			form.Settings.Save();
+			form.StartAutosave();
+		}
+	}
+
+	/// The folder of the recovery copies (beside the settings).
+	public string RecoveryFolder => form.RecoveryFolder;
+
+	/// Whether RTE Writer runs in portable mode (a file named "portable" or "portable.txt" beside it): its settings,
+	/// recovery copies and the converters' state are in its data folder.
+	public bool Portable => AppFolders.Portable;
+
+	// The recovery copy's content: the document as RTF, with its header, footer and line numbering.
+	internal string RecoveryRtf() => WithBands(OfficeConverters.ListIndentsRtf(RawRtf), form.FileName ?? "");
+
+	// A recovery copy back in the editor: as unsaved changes to the document it was (fileName; null: a new one).
+	internal void Recover(string rtf, string? fileName) {
+		var bands = HeaderFooter.FromRtf(rtf);
+		var numbering = LineNumberFormats.FromRtf(rtf);
+		Rtf = rtf;
+		form.Bands = bands ?? form.DefaultBands();
+		form.SetLineNumbering(numbering ?? new LineNumbering(), changesDocument: false);
+		MarksFollowText();
+		FileConverter = "";
+		LastConverter = "";
+		form.SetFileName(fileName is { Length: > 0 } ? fileName : null);
+		form.DocumentLoaded(WriterForm.SourceKind.None, null);
+		ed.Modified = true;
+		form.Events.Raise(EditorEvent.Opened);
+	}
+
 	/// Closes the document and starts an empty one, as File > Close does (unsaved changes are discarded, as by New; the
 	/// window stays open).
 	public void Close() => New();
@@ -3112,6 +3236,7 @@ public class EditorApi
 			File.WriteAllText(full, content, new UTF8Encoding(false));
 		}
 		ed.Modified = false;
+		form.ClearRecovery();
 		FileConverter = extension is ".docx" or ".odt" || picturesInside ? via : "";
 		form.SetFileName(full);
 		form.AddRecent(full);
@@ -5071,8 +5196,9 @@ sealed class EventHub
 	[DllImport("user32")] static extern bool IsWindow(IntPtr hWnd);
 }
 
-// Settings remembered between sessions, stored as JSON in %APPDATA%\RTE Writer\settings.json, or in the file named by
-// the RTE_WRITER_SETTINGS environment variable. A missing or unreadable file gives the defaults.
+// Settings remembered between sessions, stored as JSON in %APPDATA%\RTE Writer\settings.json (in portable mode,
+// data\settings.json beside the program), or in the file named by the RTE_WRITER_SETTINGS environment variable. A
+// missing or unreadable file gives the defaults.
 public sealed class Settings
 {
 	public const int MaxRecentFiles = 10;
@@ -5107,7 +5233,8 @@ public sealed class Settings
 	public string LegalFormat { get; set; } = "Top";    // legal numbering: Top (1. 1.1), All (1. 1.1.) or None (1 1.1)
 	public Dictionary<string, string> MacroHotkeys { get; set; } = new(StringComparer.OrdinalIgnoreCase);    // macro file name -> keys, e.g. "Ctrl+Alt+1"
 	public int OutlineWidth { get; set; } = 220;    // at 96 dpi
-	public int? PrinterModeToRestore { get; set; }    // Windows' LegacyDefaultPrinterMode while a PDF export changed it (-1: none)
+	public int? PrinterModeToRestore { get; set; }
+	public int AutosaveSeconds { get; set; } = 60;    // between recovery copies while there are unsaved changes (0: none)    // Windows' LegacyDefaultPrinterMode while a PDF export changed it (-1: none)
 	public string[] Footer { get; set; } = DefaultFooter;
 	public static string[] DefaultHeader => new[] { "{title}", "", "{date}" };
 	public static string[] DefaultFooter => new[] { "", "Page {page} of {pages}", "" };
@@ -5116,7 +5243,7 @@ public sealed class Settings
 	public static string[] Parts(string[]? parts) => Enumerable.Range(0, 3).Select(i => parts != null && i < parts.Length ? parts[i] ?? "" : "").ToArray();
 
 	public static string FilePath => Environment.GetEnvironmentVariable("RTE_WRITER_SETTINGS") is { Length: > 0 } path ? path
-		: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RTE Writer", "settings.json");
+		: Path.Combine(AppFolders.Roaming, "settings.json");
 
 	public static Settings Load() {
 		try {

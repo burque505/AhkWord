@@ -5,7 +5,7 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer28.cs, through #load).
+// Word and OpenDocument conversions for RTE Writer (rte_writer29.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
 // without spacing of its own as 1.08 lines, and "at least" as exactly. All of a paragraph's tabs come back as tabs (the
@@ -237,7 +237,7 @@ public static class OfficeConverters {
 	// a conversion) is known to be RTE Writer's, and is ended by the next conversion instead of being taken for the
 	// user's Word. The user's own Word is never in the record.
 
-	static string StateFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RTE Writer");
+	static string StateFolder => AppFolders.Local;    // (%LOCALAPPDATA%\RTE Writer, or beside the program in portable mode)
 	static string WordRecord => Path.Combine(StateFolder, "word-processes.txt");
 
 	/// The converters' log (Word conversions and the Words they end).
@@ -325,7 +325,7 @@ public static class OfficeConverters {
 
 	// ---- LibreOffice
 
-	public static string LibreOfficeProfile => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RTE Writer", "libreoffice-profile");
+	public static string LibreOfficeProfile => Path.Combine(AppFolders.Local, "libreoffice-profile");
 
 	static string LibreOfficeConvert(string input, string folder, string filter, string extension) {
 		string soffice = LibreOfficePath ?? throw new InvalidOperationException("not found");

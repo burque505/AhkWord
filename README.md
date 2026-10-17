@@ -8,11 +8,12 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
 
 *[`examples/Showcase.rtf`](examples/Showcase.rtf), made entirely with the editor's own commands. The file has line numbers turned on (Layout > Line Numbers), which this picture doesn't show.*
 
-> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer28.*`). Renaming them to AhkWord is planned.
+> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer29.*`). Renaming them to AhkWord is planned.
 
 ## Features
 
 - **Documents:** HTML, Markdown (GitHub flavor, with tables and images), plain text and RTF. Word (`.docx`, `.doc`) and OpenDocument (`.odt`) files are opened and saved through a converter (see [Optional converters](#optional-converters)). Export as PDF through "Microsoft Print to PDF".
+- **Autosave and recovery:** while a document has unsaved changes, a recovery copy is written every minute (never over the document's own file). If the editor ends without closing (a crash, a power cut, Windows restarting), the next start offers to recover it. `Rte.AutosaveSeconds` sets the interval (0 turns it off).
 - **Formatting:** fonts, colors, highlight, alignment, line spacing (1.0 to 3.0 lines, or at least / exactly so many points, for the selected paragraphs), space before and after paragraphs, change case and underline styles. With nothing selected, a font, size, colour or style chosen applies to what you type next, and to an empty line at once, as in Word. Structured documents use block styles (normal text, headings, preformatted); free-form documents take any font size.
 - **Lists:** numbered and bulleted lists nested with Tab and Shift+Tab, a numbering style per level, restart and continue numbering, and legal numbering (1., 1.1, 1.1.1). Typed numbers in documents from elsewhere can be turned into real lists.
 - **Tables:** insert tables, add and delete rows and columns, set column widths, borders (none, all, outside, inside ..., with line width and color), shading, row height, vertical alignment, cell padding and the table's alignment on the page, move between cells with Tab and Shift+Tab (Tab in the last cell adds a row, as in Word), also in tables from Word and other programs.
@@ -77,7 +78,7 @@ Rte.On("Saved", (e) => TrayTip(Rte.FileName, "Saved"))
 - **Calls** wait for the editor and return its result. `Rte.Post(...)` queues a call and returns at once. **Tools > Automation API** in the editor lists everything that can be called.
 - **Events** (`TextChanged`, `SelectionChanged`, `ModifiedChanged`, `Saved`, `Opened`, `Closed`, `AsyncError`) are delivered to callbacks registered with `Rte.On`.
 - **Macros:** the **Macros** button on the Tools tab runs the scripts in [`rte_macros`](rte_macros), and **Macro Hotkeys** gives any of them a hotkey. **Record Macro** (Ctrl+Shift+R) records typing and ribbon commands as a new macro script.
-- **Hotkeys in the host script:** `rte_writer28.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
+- **Hotkeys in the host script:** `rte_writer29.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
 
 The example macros include an auto-save, a word goal tracker, an event monitor, document statistics and Title Case for the selection.
 
@@ -126,16 +127,18 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 1. Install the requirements above: the .NET 10 Desktop Runtime and 64-bit AutoHotkey v2 (the C# compiler is downloaded on the first start if none is installed).
 2. Clone this repository.
-3. Run `rte_writer28.ahk`. To open a document at start, pass its path: `rte_writer28.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
+3. Run `rte_writer29.ahk`. To open a document at start, pass its path: `rte_writer29.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`.
 
-Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment variable `RTE_WRITER_SETTINGS` to a file path to keep them elsewhere.
+Settings are kept in `%APPDATA%\RTE Writer\settings.json`, with the recovery copies beside them in `Recovery`. Set the environment variable `RTE_WRITER_SETTINGS` to a file path to keep them elsewhere.
+
+**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `rte_writer29.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `rte_writer28.ahk` | Starts the editor and holds its in-process hotkeys |
-| `rte_writer28.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
+| `rte_writer29.ahk` | Starts the editor and holds its in-process hotkeys |
+| `rte_writer29.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
 | `rte_markdown6.cs` | Markdown reading and writing |
 | `rte_linebreaks.cs` | Line breaks (Shift+Enter) in HTML |
 | `rte_htmllists2.cs` | HTML list numbering (start numbers, restarts, styles) |
@@ -149,6 +152,7 @@ Settings are kept in `%APPDATA%\RTE Writer\settings.json`. Set the environment v
 | `rte_linespacing2.cs` | Line spacing and space before and after paragraphs: the ribbon's commands, keeping them in HTML and in the built-in converter's Word files, and giving Word files' paragraphs the spacing Word gives them |
 | `rte_printlayout.cs` | Print Layout: the editor's lines laid out as the printer lays them out |
 | `rte_pageview.cs` | Multiple Pages (the printed pages side by side, read-only) and the Print Preview window |
+| `rte_recovery.cs` | Autosaved recovery copies, and where the editor keeps its files (portable mode) |
 | `ribbon\RteRibbon.xml` | The ribbon's markup: tabs, groups, commands, KeyTips and tooltips |
 | `ribbon\RteRibbon.ribbon` | The compiled ribbon (a resource-only DLL) that the editor loads |
 | `ribbon\build_ribbon.ahk`, `ribbon\make_icons.cs` | Rebuild the ribbon and its icons |

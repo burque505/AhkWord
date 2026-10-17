@@ -1,8 +1,12 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
-; RTE Writer, iteration 28: a word processor built on RichEditorNET (rte_writer28.cs), hosted in this AHK process.
-; Adds to iteration 27:
+; RTE Writer, iteration 29: a word processor built on RichEditorNET (rte_writer29.cs), hosted in this AHK process.
+; Adds to iteration 28:
+;   - Autosave and recovery: a recovery copy every minute while there are unsaved changes, offered at the next start if
+;     RTE Writer didn't close normally. Portable mode: a file named "portable" (or portable.txt) beside this script keeps
+;     the settings and recovery copies in a "data" folder here. Scripts: Rte.AutosaveSeconds, Rte.Portable.
+; Iteration 28 added to iteration 27:
 ;   - File > Close (Ctrl+W) closes the document and starts an empty one; Export as PDF is on the Layout tab and in the
 ;     Quick Access Toolbar's list. Scripts: Rte.Close().
 ; Iteration 27 added to iteration 26:
@@ -88,8 +92,9 @@
 ; Iteration 8 added Markdown formatting (HTML and M-ArkDown), Paragraph > List levels and Restart / Continue numbering.
 ; Earlier iterations added events, recent files, settings, drag and drop, printing, PDF export, headers and footers,
 ; spelling suggestions, the outline, macro recording and hotkeys, and real Markdown. Settings are kept in
-; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile); set RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
-; Optionally pass a document to open:  rte_writer28.ahk "C:\path\document.md"
+; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile), or data\settings.json here in portable mode; set
+; RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
+; Optionally pass a document to open:  rte_writer29.ahk "C:\path\document.md"
 ;
 ; AHK automation: other scripts #Include "RteClient2.ahk" and call Rte.<Name>(...), react to events with
 ; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Tools > Automation API lists everything that can be called,
@@ -111,7 +116,7 @@ SubscribeToSaved() {
 }
 
 StartFile := A_Args.Length ? A_Args[1] : ""
-RunCSharpFile(A_ScriptDir "\rte_writer28.cs", A_AhkPath, A_ScriptDir, StartFile)
+RunCSharpFile(A_ScriptDir "\rte_writer29.cs", A_AhkPath, A_ScriptDir, StartFile)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
     MsgBox("RTE Writer stopped because of an error (" CSExitCode "):`n`n" CSOutput, "RTE Writer", "Iconx")
 ExitApp
