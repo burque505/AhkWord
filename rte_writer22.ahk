@@ -1,8 +1,12 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
-; RTE Writer, iteration 21: a word processor built on RichEditorNET (rte_writer21.cs), hosted in this AHK process.
-; Adds to iteration 20:
+; RTE Writer, iteration 22: a word processor built on RichEditorNET (rte_writer22.cs), hosted in this AHK process.
+; Adds to iteration 21:
+;   - Line spacing: Home > Paragraph > Line Spacing (1.0 to 3.0 lines, or Line Spacing Options for at least / exactly so
+;     many points) for the selected paragraphs. Kept in RTF, Word, OpenDocument and HTML files. Scripts:
+;     Rte.SetLineSpacing("1.5"), Rte.SetLineSpacing("exactly 14pt"), Rte.LineSpacing.
+; Iteration 21 added to iteration 20:
 ;   - The Markdown and HTML views edit in Scintilla: syntax colours, line numbers (View > Source line numbers) and
 ;     Ctrl+wheel zoom; everything else in the views works as before.
 ; Iteration 20 added to iteration 19:
@@ -65,7 +69,7 @@
 ; Earlier iterations added events, recent files, settings, drag and drop, printing, PDF export, headers and footers,
 ; spelling suggestions, the outline, macro recording and hotkeys, and real Markdown. Settings are kept in
 ; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile); set RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
-; Optionally pass a document to open:  rte_writer21.ahk "C:\path\document.md"
+; Optionally pass a document to open:  rte_writer22.ahk "C:\path\document.md"
 ;
 ; AHK automation: other scripts #Include "RteClient2.ahk" and call Rte.<Name>(...), react to events with
 ; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Tools > Automation API lists everything that can be called,
@@ -87,7 +91,7 @@ SubscribeToSaved() {
 }
 
 StartFile := A_Args.Length ? A_Args[1] : ""
-RunCSharpFile(A_ScriptDir "\rte_writer21.cs", A_AhkPath, A_ScriptDir, StartFile)
+RunCSharpFile(A_ScriptDir "\rte_writer22.cs", A_AhkPath, A_ScriptDir, StartFile)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
     MsgBox("RTE Writer stopped because of an error (" CSExitCode "):`n`n" CSOutput, "RTE Writer", "Iconx")
 ExitApp

@@ -1,4 +1,4 @@
-// Real tables for RichEditBox (used by RTE Writer, rte_writer21.cs, through #load).
+// Real tables for RichEditBox (used by RTE Writer, rte_writer22.cs, through #load).
 // Version 2: table properties. Each row's alignment on the page, height and cell padding, and each cell's width,
 // borders (width and color per side), shading and vertical alignment are read from the rows' RTF (RowFormats) and set by
 // rewriting the rows (Format); HTML gets them as CSS and reads them back, and Word's cell backgrounds (\clcbpat), which

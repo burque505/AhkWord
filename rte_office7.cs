@@ -5,7 +5,9 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer14.cs, through #load).
+// Word and OpenDocument conversions for RTE Writer (rte_writer22.cs, through #load).
+// Version 7: the built-in reader's paragraphs get the .docx's own line spacing (DocxLineSpacing.IntoHtml, in
+// rte_linespacing.cs): the PowerTools read a paragraph without spacing of its own as 1.08 lines, and "at least" as exactly.
 // Version 6: pictures keep their alt text in RTF, as the picture property Word and LibreOffice use for it
 // ({\*\picprop{\sp{\sn wzDescription}{\sv ...}}}): WithAltTexts writes it, Pictures reads it, PngPictures keeps it.
 // Version 5: Export takes a last change to the RTF given to Word and LibreOffice (RTE Writer adds the header, footer
@@ -568,6 +570,7 @@ public static class OfficeConverters {
 		var settings = new WmlToHtmlConverterSettings(title, d.ImageHandler, d.TextHandler, d.SymbolHandler, new PageBreakHandler(d.BreakHandler), d.FontHandler,
 			false, "span { white-space: pre-wrap; }", "", d.CssClassPrefix);
 		XElement html = WmlToHtmlConverter.ConvertToHtml(new WmlDocument(input), settings);
+		DocxLineSpacing.IntoHtml(input, html);    // (before the lists are rebuilt: one block per paragraph, in order)
 		NoNamesAsAltTexts(html);
 		ListsFromMarkers(html);
 		TabsFromMargins(html);

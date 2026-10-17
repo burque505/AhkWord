@@ -4,15 +4,23 @@
 #load "rte_markdown6.cs"
 #load "rte_htmllists2.cs"
 #load "rte_tables2.cs"
-#load "rte_office6.cs"
+#load "rte_office7.cs"
 #load "rte_legal.cs"
 #load "rte_pagebreaks.cs"
 #load "rte_headerfooter.cs"
 #load "rte_linebreaks.cs"
 #load "rte_linenumbers2.cs"
 #load "rte_sourcebox.cs"
+#load "rte_linespacing.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer21.ahk. Iteration 21 adds to iteration 20:
+// Run it with rte_writer22.ahk. Iteration 22 adds to iteration 21:
+//   - Line spacing (rte_linespacing.cs): Home > Paragraph > Line Spacing sets the selected paragraphs' line spacing,
+//     1.0 to 3.0 lines, or Line Spacing Options for single, 1.5, double, a multiple, or at least / exactly so many points
+//     (TOM's SetLineSpacing; one undo step). RichEdit keeps it in RTF, so Word and LibreOffice files have it; HTML gets
+//     it as CSS line-height (also read back); the built-in .docx converter gets the exact values both ways (rte_office7.cs
+//     and DocxLineSpacing, which also keeps its reader from making every paragraph 1.08 lines); Markdown has no line
+//     spacing. Scripts: Rte.SetLineSpacing("1.5"), Rte.SetLineSpacing("exactly 14pt"), Rte.LineSpacing.
+// Iteration 21 added to iteration 20:
 //   - The Markdown and HTML views edit in Scintilla (rte_sourcebox.cs, through the Scintilla5.NET package) instead of a
 //     plain-text RichEdit: Markdown and HTML syntax colours (Lexilla's lexers), line numbers (View > Source line
 //     numbers), Ctrl+wheel zoom. SourceBox keeps the text box members the views use, with character positions and "\n"
@@ -204,19 +212,20 @@ enum RibbonCommand : uint
 	Find = 226, Replace = 227, Font = 230, FontDialog = 231, ChangeCase = 232, CaseUpper = 233,
 	CaseLower = 234, CaseTitle = 235, UnderlineStyle = 236, UnderlineSingle = 237, UnderlineDouble = 238, UnderlineDotted = 239,
 	UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250, Numbering = 251, Legal = 252, Outdent = 253,
-	Indent = 254, AlignLeft = 255, AlignCenter = 256, AlignRight = 257, Justify = 258, ListOptions = 259,
-	ListStyle = 260, ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264, ListLowerRoman = 265,
-	ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270, ConvertTyped = 271,
-	IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, PageBreak = 280, Table = 281,
-	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295,
-	AddToDictionary = 296, SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, ShowBands = 303,
-	Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331,
-	ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311,
-	MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320,
-	InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326,
-	TableProperties = 340, TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345,
-	TableShading = 346, LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354,
-	LineNumberOptions = 355,
+	Indent = 254, AlignLeft = 255, AlignCenter = 256, AlignRight = 257, Justify = 258, LineSpacing = 360,
+	LineSpacing10 = 361, LineSpacing115 = 362, LineSpacing150 = 363, LineSpacing200 = 364, LineSpacing250 = 365, LineSpacing300 = 366,
+	LineSpacingOptions = 367, ListOptions = 259, ListStyle = 260, ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263,
+	ListUpperAlpha = 264, ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269,
+	ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275,
+	PageBreak = 280, Table = 281, Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285,
+	HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296, SpellCheck = 297, Structured = 300, FreeForm = 301,
+	WordWrap = 302, ShowBands = 303, Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307,
+	ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335,
+	Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315,
+	About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324,
+	DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341, BordersAll = 342, BordersOutside = 343,
+	BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352,
+	LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -573,6 +582,10 @@ class WriterForm : Form
 		foreach (var (id, alignment, key) in new[] { (RibbonCommand.AlignLeft, ParagraphAlignment.Left, Keys.L), (RibbonCommand.AlignCenter, ParagraphAlignment.Center, Keys.E),
 			(RibbonCommand.AlignRight, ParagraphAlignment.Right, Keys.R), (RibbonCommand.Justify, ParagraphAlignment.Justify, Keys.J) })
 			Toggle(id, () => Editor.SetAlignment(alignment), Keys.Control | key, M("SetAlignment", alignment));
+		foreach (var (id, spacing) in new[] { (RibbonCommand.LineSpacing10, "1"), (RibbonCommand.LineSpacing115, "1.15"), (RibbonCommand.LineSpacing150, "1.5"),
+			(RibbonCommand.LineSpacing200, "2"), (RibbonCommand.LineSpacing250, "2.5"), (RibbonCommand.LineSpacing300, "3") })
+			Toggle(id, () => api.SetLineSpacing(spacing), Keys.None, M("SetLineSpacing", spacing));
+		Button(RibbonCommand.LineSpacingOptions, LineSpacingCommand);
 		foreach (var (id, style) in new[] { (RibbonCommand.ListBullet, ListStyle.Bullet), (RibbonCommand.ListDecimal, ListStyle.Decimal), (RibbonCommand.ListLowerAlpha, ListStyle.LowerAlpha),
 			(RibbonCommand.ListUpperAlpha, ListStyle.UpperAlpha), (RibbonCommand.ListLowerRoman, ListStyle.LowerRoman), (RibbonCommand.ListUpperRoman, ListStyle.UpperRoman) })
 			Button(id, () => api.ToggleList(style), Keys.None, M("ToggleList", style));
@@ -746,7 +759,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 21: Scintilla source views)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 22: line spacing)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1167,6 +1180,15 @@ class WriterForm : Form
 		if (dlg.MakeDefault) MakeDefault(bands);
 		SetStatus((dlg.MakeDefault ? "Header and footer set for this document and new ones." : "Header and footer set for this document.")
 			+ " File > Print Preview shows them; Word and OpenDocument files get them too.");
+	}
+
+	// ---- line spacing (iteration 22)
+
+	void LineSpacingCommand() {
+		using var dlg = new LineSpacingDialog(api.LineSpacing);
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		api.SetLineSpacing(dlg.Result);
+		Record(M("SetLineSpacing", dlg.Result));
 	}
 
 	// ---- line numbers (iteration 19)
@@ -2014,6 +2036,10 @@ class WriterForm : Form
 		toggleButtons[RibbonCommand.AlignCenter].BooleanValue = para.Alignment == (int)ParagraphAlignment.Center;
 		toggleButtons[RibbonCommand.AlignRight].BooleanValue = para.Alignment == (int)ParagraphAlignment.Right;
 		toggleButtons[RibbonCommand.Justify].BooleanValue = para.Alignment == (int)ParagraphAlignment.Justify;
+		string spacing = LineSpacing.Of(range);
+		foreach (var (id, value) in new[] { (RibbonCommand.LineSpacing10, "1"), (RibbonCommand.LineSpacing115, "1.15"), (RibbonCommand.LineSpacing150, "1.5"),
+			(RibbonCommand.LineSpacing200, "2"), (RibbonCommand.LineSpacing250, "2.5"), (RibbonCommand.LineSpacing300, "3") })
+			toggleButtons[id].BooleanValue = spacing == value;
 		toggleButtons[RibbonCommand.AutoLevel].BooleanValue = AutoLevelStyles;
 		toggleButtons[RibbonCommand.LineNumbersNone].BooleanValue = !Numbering.On;
 		toggleButtons[RibbonCommand.LineNumbersContinuous].BooleanValue = Numbering.Mode == LineNumbering.Modes.Continuous;
@@ -2796,13 +2822,13 @@ public class EditorApi
 
 	/// Replaces the document with HTML (a whole page or a part of one), including the list numbering and tables GetHtml writes.
 	public void SetHtml(string html) {
-		RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(html))), HtmlLists.Load, HtmlLists.Load, TableWidth());
-		if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) > 0) ed.ClearUndo();
+		RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(html)))), HtmlLists.Load, HtmlLists.Load, TableWidth());
+		if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) + global::LineSpacing.FromMarkers(ed) > 0) ed.ClearUndo();
 	}
 
 	// The library's HTML, with page breaks, real tables (it writes their cells as paragraphs) and list numbering.
 	string HtmlBody(out string css) {
-		string body = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, LineBreaks.ExportHtml(ed, ed.Html))), out css);
+		string body = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, global::LineSpacing.ExportHtml(ed, LineBreaks.ExportHtml(ed, ed.Html)))), out css);
 		css = ParagraphCss + css;
 		return body;
 	}
@@ -2954,8 +2980,10 @@ public class EditorApi
 			else LineNumberFormats.AddToOdt(full, form.Numbering);
 			OfficeConverters.AltTextsToFile(full, AltTexts());    // (pictures' alt texts that the converter left out)
 			// tables' borders, shading, padding ... in Word's own terms, where the converter went through HTML
-			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) && LastConverter is OfficeConverters.OpenXml or OfficeConverters.Pandoc)
+			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) && LastConverter is OfficeConverters.OpenXml or OfficeConverters.Pandoc) {
 				RtfTables.TablesToDocx(full, RtfTables.Find(ed.TextDocument).Select(t => RtfTables.Formats(ed, t)).ToList());
+				DocxLineSpacing.FromEditor(full, ed);    // (HtmlToOpenXml writes "at least" as exactly)
+			}
 		} catch (Exception ex) {
 			form.SetStatus("⚠ The header and footer could not be added to " + Path.GetFileName(full) + ": " + ex.Message);
 		}
@@ -2968,6 +2996,19 @@ public class EditorApi
 
 	/// Which converters for Word and OpenDocument files are available.
 	public string Converters() => OfficeConverters.Describe();
+
+	// ---- Line spacing (iteration 22)
+
+	/// Sets the line spacing of the selected paragraphs (every paragraph the selection touches): a number of lines
+	/// ("1", "1.15", "1.5", "2"), or "exactly 14pt" / "at least 12pt". One undo step.
+	public void SetLineSpacing(string spacing) {
+		var (rule, value) = global::LineSpacing.Parse(spacing);
+		global::LineSpacing.Apply(SelectionRange(), rule, value);
+		form.LineGutter.DocumentChanged();
+	}
+
+	/// The line spacing of the selected paragraphs: "1.5" (lines), "exactly 14pt", "at least 12pt", or "mixed".
+	public string LineSpacing => global::LineSpacing.Of(SelectionRange());
 
 	// ---- Line numbers (iteration 19)
 
