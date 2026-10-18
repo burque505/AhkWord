@@ -91,6 +91,7 @@ The example macros include:
 - **Collect from anywhere:** select text in any program and press Win+Shift+C to add it, with its source and time, to the end of the document.
 - **PDF on save:** each save also makes a PDF beside the document.
 - **Folder to PDF:** makes a PDF of every document in a folder.
+- **Arrange windows:** puts the open RTE Writer windows side by side on the screen (three or fewer in columns, more in a grid), each page fitted to its window's width. Give it a hotkey with Macro Hotkeys.
 - An auto-save, a word goal tracker, an event monitor, document statistics, and Title Case for the selection.
 
 ## Making templates
