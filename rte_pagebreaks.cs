@@ -211,6 +211,8 @@ public static class PageBreaks
 			if (tag.Index < position) continue;
 			var style = StyleAttribute.Match(tag.Groups[2].Value);
 			if (!style.Success || BreakStyle.Match(style.Value) is not { Success: true } breakStyle) continue;
+			// (RTE Writer's own "page break before" paragraph: the paragraph's setting, which data-rte-breaks gives back)
+			if (Regex.IsMatch(tag.Groups[2].Value, "data-rte-breaks=\"[^\"]*p", RegexOptions.IgnoreCase)) continue;
 			string name = tag.Groups[1].Value.ToLowerInvariant();
 			bool before = breakStyle.Groups["side"].Value.Equals("before", StringComparison.OrdinalIgnoreCase);
 			sb.Append(html, position, tag.Index - position);

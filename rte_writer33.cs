@@ -17,8 +17,19 @@
 #load "rte_recovery.cs"
 #load "rte_templates.cs"
 #load "rte_styles.cs"
+#load "rte_paragraph.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer32.ahk. Iteration 32 adds to iteration 31:
+// Run it with rte_writer33.ahk. Iteration 33 adds to iteration 32:
+//   - The Paragraph dialog (rte_paragraph.cs; Home > Paragraph's Paragraph settings button, and Line Spacing
+//     Options), as Word's: Indents and Spacing (alignment, left and right indents, a first-line or hanging indent, the space
+//     before and after, line spacing) and Line and Page Breaks (widow/orphan control, keep with next, keep lines
+//     together, page break before, suppress line numbers), with a preview; Tabs (the paragraphs' tab stops and the
+//     document's default ones); Set As Default (the paragraph's style gets these, for this document or new ones too).
+//     Modify Style has it too (its Paragraph button), with "Don't add space between paragraphs of the same style".
+//   - Printing, Print Preview, Export as PDF, Multiple Pages and line numbers restarting on each page now keep those
+//     rules (RichEdit's own page layout ignores them). Scripts: Rte.ParagraphFormat(), Rte.SetParagraphFormat(...),
+//     Rte.Tabs, Rte.SetTabs(...), Rte.DefaultTabStop.
+// Iteration 32 added to iteration 31:
 //   - Paragraph styles (rte_styles.cs): each paragraph has a style (Normal, Title, Subtitle, Heading 1 to 6, Quote,
 //     Code, and your own), chosen in the Style box (Ctrl+0 Normal, Ctrl+1 to Ctrl+6 the headings, Ctrl+7 Code). Home >
 //     Styles: Modify Style (font, size, colour, alignment, indents, spacing, line spacing, keep with next, heading level,
@@ -310,21 +321,21 @@ enum RibbonCommand : uint
 	UnderlineSingle = 237, UnderlineDouble = 238, UnderlineDotted = 239, UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250,
 	Numbering = 251, Legal = 252, Outdent = 253, Indent = 254, AlignLeft = 255, AlignCenter = 256,
 	AlignRight = 257, Justify = 258, LineSpacing = 360, LineSpacing10 = 361, LineSpacing115 = 362, LineSpacing150 = 363,
-	LineSpacing200 = 364, LineSpacing250 = 365, LineSpacing300 = 366, LineSpacingOptions = 367, SpaceBefore = 368, SpaceAfter = 369,
-	ListOptions = 259, ListStyle = 260, ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264,
-	ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270,
-	ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, StylesMenu = 380,
-	ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384, StyleSetClassic = 385,
-	StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, PageBreak = 280, Table = 281, Picture = 282,
-	Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296,
-	SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371,
-	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
-	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313,
-	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
-	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
-	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
-	LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
+	LineSpacing200 = 364, LineSpacing250 = 365, LineSpacing300 = 366, LineSpacingOptions = 367, ParagraphDialog = 390, SpaceBefore = 368,
+	SpaceAfter = 369, ListOptions = 259, ListStyle = 260, ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263,
+	ListUpperAlpha = 264, ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269,
+	ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275,
+	StylesMenu = 380, ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384,
+	StyleSetClassic = 385, StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, PageBreak = 280, Table = 281,
+	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295,
+	AddToDictionary = 296, SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, PrintLayout = 370,
+	ZoomPageWidth = 371, ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304,
+	ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332,
+	SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312,
+	RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321,
+	InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340,
+	TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346,
+	LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -725,7 +736,8 @@ class WriterForm : Form
 		foreach (var (id, spacing) in new[] { (RibbonCommand.LineSpacing10, "1"), (RibbonCommand.LineSpacing115, "1.15"), (RibbonCommand.LineSpacing150, "1.5"),
 			(RibbonCommand.LineSpacing200, "2"), (RibbonCommand.LineSpacing250, "2.5"), (RibbonCommand.LineSpacing300, "3") })
 			Toggle(id, () => api.SetLineSpacing(spacing), Keys.None, M("SetLineSpacing", spacing));
-		Button(RibbonCommand.LineSpacingOptions, LineSpacingCommand);
+		Button(RibbonCommand.LineSpacingOptions, ParagraphCommand);
+		Button(RibbonCommand.ParagraphDialog, ParagraphCommand);
 		// (Word's Add / Remove Space Before / After Paragraph: 12 points, or none)
 		Toggle(RibbonCommand.SpaceBefore, () => { float points = api.SpaceBefore > 0 ? 0 : 12; api.SpaceBefore = points; Record(M("SpaceBefore", points)); });
 		Toggle(RibbonCommand.SpaceAfter, () => { float points = api.SpaceAfter > 0 ? 0 : 12; api.SpaceAfter = points; Record(M("SpaceAfter", points)); });
@@ -1325,17 +1337,19 @@ class WriterForm : Form
 			int i = sheet.Styles.IndexOf(style);
 			sheet.Styles[i] = StyleEngine.Capture(doc, start, style.Name, style.Level, style.Next);
 		}
-		// (styledLook: the paragraphs with a style other than Normal get its look: HTML's readers give headings sizes of
-		// their own; Normal paragraphs keep the file's)
+		// (styledLook: the paragraphs with a style other than Normal get its characters' look: HTML's readers give
+		// headings sizes of their own; their paragraph formats are the file's, and so are Normal paragraphs)
 		if (styledLook && !takeLook) {
+			doc.Freeze();
 			doc.BeginEditCollection();
 			try {
 				foreach (var (start, _) in StyleEngine.Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength)) {
 					var style = StyleEngine.StyleAt(doc, sheet, start);
-					if (style != sheet.Normal) StyleEngine.Apply(doc, sheet, style, start, start);
+					if (style != sheet.Normal) StyleEngine.ApplyCharacters(doc, sheet, style, start);
 				}
 			} finally {
 				doc.EndEditCollection();
+				doc.Unfreeze();
 			}
 		}
 		if (takeLook) {
@@ -1846,17 +1860,37 @@ class WriterForm : Form
 
 	// ---- line spacing (iteration 22)
 
-	void LineSpacingCommand() {
-		using var dlg = new LineSpacingDialog(api.LineSpacing, api.SpaceBefore, api.SpaceAfter);
+	// ---- the Paragraph dialog (iteration 33; Line Spacing Options opens it too)
+
+	void ParagraphCommand() {
+		var doc = Editor.TextDocument;
+		var selection = doc.Selection2;
+		int start = selection.Start, end = selection.End;
+		var format = global::ParagraphFormat.Read(doc, Styles, start, end);
+		var style = StyleEngine.StyleAt(doc, Styles, start);
+		var font = doc.Range2(start, Math.Min(start + 1, doc.Range2(0, 0).StoryLength)).Font;
+		using var dlg = new ParagraphDialog(format, forStyle: false, style.Name, font.Name ?? style.Font, font.Size > 0 ? font.Size : style.Size, doc.DefaultTabStop);
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
-		Editor.TextDocument.BeginEditCollection();    // (one undo step)
+		string settings = dlg.Result.Describe();
+		doc.BeginEditCollection();    // (one undo step)
 		try {
-			api.SetLineSpacing(dlg.Result);
-			Record(M("SetLineSpacing", dlg.Result));
-			if (dlg.BeforeChanged || api.SpaceBefore >= 0) { api.SpaceBefore = dlg.SpaceBefore; Record(M("SpaceBefore", dlg.SpaceBefore)); }
-			if (dlg.AfterChanged || api.SpaceAfter >= 0) { api.SpaceAfter = dlg.SpaceAfter; Record(M("SpaceAfter", dlg.SpaceAfter)); }
+			if (settings != "") { api.SetParagraphFormat(settings); Record(M("SetParagraphFormat", settings)); }
+			if (dlg.DefaultTabStop is float spacing) { api.DefaultTabStop = spacing; Record(M("DefaultTabStop", spacing)); }
 		} finally {
-			Editor.TextDocument.EndEditCollection();
+			doc.EndEditCollection();
+		}
+		if (dlg.SetAsDefault) {
+			// the style gets what the dialog showed (what the paragraphs share, with the changes)
+			var shown = format.Copy();
+			var result = dlg.Result;
+			foreach (var field in typeof(global::ParagraphFormat).GetFields()) if (field.GetValue(result) is { } value) field.SetValue(shown, value);
+			var updated = style.Copy();
+			shown.ToStyle(updated);
+			string styleSettings = StyleSettings(updated);
+			api.ModifyStyle(style.Name, styleSettings);
+			Record(M("ModifyStyle", style.Name, styleSettings));
+			if (dlg.NewDocumentsToo) { api.SaveStylesAsDefault(); Record(M("SaveStylesAsDefault")); }
+			SetStatus($"The {style.Name} style has these paragraph settings now" + (dlg.NewDocumentsToo ? ", in new documents too." : " (Styles > Save Styles as My Default keeps them for new documents)."));
 		}
 	}
 
@@ -2605,6 +2639,9 @@ class WriterForm : Form
 		// Enter at the end of a paragraph whose style is followed by another (a heading by Normal): the new paragraph gets it
 		if (keyData == Keys.Enter && Editor.IsHandleCreated && msg.HWnd == Editor.Handle && NextStyleAfterEnter() is { } nextStyle)
 			BeginInvoke(() => ApplyStyleAtCaret(nextStyle));
+		// (Enter in a style without space between its paragraphs: the two halves get it)
+		else if (keyData == Keys.Enter && Editor.IsHandleCreated && msg.HWnd == Editor.Handle && Styles.Styles.Any(s => s.Contextual))
+			BeginInvoke(() => { int caret = Editor.TextDocument.Selection2.Start; StyleEngine.Contextual(Editor.TextDocument, Styles, caret, caret); });
 		// Tab / Shift+Tab in a table: the next or previous cell (RichEdit's own Tab doesn't in every table, such as
 		// some from Word), and a new row from the last cell
 		if ((keyData == Keys.Tab || keyData == (Keys.Shift | Keys.Tab)) && Editor.IsHandleCreated && msg.HWnd == Editor.Handle && CaretInTable() && api.InTable()) {
@@ -3722,7 +3759,8 @@ public class EditorApi
 	}
 
 	// A style's settings changed: "Name=Value" lines (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent,
-	// RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, Level, Next).
+	// RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore,
+	// Contextual, Level, Next).
 	static ParagraphStyle WithSettings(ParagraphStyle style, string settings) {
 		var result = style.Copy();
 		foreach (var line in settings.Split('\n', StringSplitOptions.RemoveEmptyEntries)) {
@@ -3730,7 +3768,7 @@ public class EditorApi
 			if (equals <= 0) continue;
 			string key = line[..equals].Trim(), value = line[(equals + 1)..].Trim();
 			var property = typeof(ParagraphStyle).GetProperty(key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)
-				?? throw new ArgumentException($"A style has no \"{key}\" (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent, RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, Level, Next).");
+				?? throw new ArgumentException($"A style has no \"{key}\" (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent, RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore, Contextual, Level, Next).");
 			if (property.Name == "Name") continue;
 			object converted = property.PropertyType == typeof(bool) ? value is "1" or "true" or "True" or "yes"
 				: property.PropertyType == typeof(float) ? float.Parse(value, CultureInfo.InvariantCulture)
@@ -3962,9 +4000,15 @@ public class EditorApi
 
 	/// Replaces the document with HTML (a whole page or a part of one), including the list numbering and tables GetHtml writes.
 	public void SetHtml(string html) {
-		RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(StyleHtml.MarkHtml(html))))), HtmlLists.Load, HtmlLists.Load, TableWidth());
-		StyleHtml.FromMarkers(ed);    // (headings and styles from their tags, not their fonts)
-		if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) + global::LineSpacing.FromMarkers(ed) > 0) ed.ClearUndo();
+		// (frozen: the markers put into the text, and taken out one by one, aren't shown)
+		ed.TextDocument.Freeze();
+		try {
+			RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(StyleHtml.MarkHtml(html))))), HtmlLists.Load, HtmlLists.Load, TableWidth());
+			StyleHtml.FromMarkers(ed);    // (headings and styles from their tags, not their fonts)
+			if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) + global::LineSpacing.FromMarkers(ed) > 0) ed.ClearUndo();
+		} finally {
+			ed.TextDocument.Unfreeze();
+		}
 	}
 
 	// A link's hidden field instruction (HYPERLINK "...") in its text's font: RTF from Word and LibreOffice gives it the
@@ -4034,7 +4078,7 @@ public class EditorApi
 	string RawRtf => ((RichTextBox)ed).Rtf ?? "";
 
 	// RTF with the document's styles: the style sheet and each paragraph's (RichEdit keeps only the headings').
-	string StyledRtf(string rtf) => RtfStyles.Inject(rtf, StyleEngine.Names(ed.TextDocument, form.Styles), form.Styles);
+	string StyledRtf(string rtf) => RtfStyles.Inject(rtf, StyleEngine.Names(ed.TextDocument, form.Styles), form.Styles, StyleEngine.WidowControls(ed.TextDocument));
 
 	// The styles an RTF just loaded has (Word's, LibreOffice's, RTE Writer's): each paragraph's set from its \sN; returns
 	// RTE Writer's own definitions (null if the file has none). An RTF without any styles (written by RTE Writer before it
@@ -4064,7 +4108,8 @@ public class EditorApi
 		get => OfficeConverters.WithAltTexts(RawRtf, AltTexts());
 		set {
 			value = OfficeConverters.SimplePictures(value);    // (Word's picture wrappers, which RichEdit can drop)
-			value = PageBreaks.FromPageBreakBefore(value);       // (LibreOffice's and Word's "page break before" paragraphs)
+			// (LibreOffice's and Word's "page break before" paragraphs, which are their page breaks; RTE Writer's own keep it)
+			if (!value.Contains(@"{\*\rtewriterstyles")) value = PageBreaks.FromPageBreakBefore(value);
 			value = HeaderFooter.StripFromRtf(value);             // (the header and footer are the document's Bands)
 			value = RtfTables.WordShading(value);                 // (Word's cell backgrounds, which RichEdit ignores)
 			((RichTextBox)ed).Rtf = OfficeConverters.WithoutAltTexts(value);    // (RichEdit would put their accents into the text)
@@ -4238,6 +4283,52 @@ public class EditorApi
 	public float SpaceAfter {
 		get => global::LineSpacing.SpaceOf(SelectionRange(), false);
 		set { global::LineSpacing.ApplySpace(SelectionRange(), false, value); form.LineGutter.DocumentChanged(); }
+	}
+
+	// ---- The Paragraph dialog's formats (iteration 33)
+
+	/// The selected paragraphs' format as "Key=Value" lines, what they share (a key they differ in is left out): Align,
+	/// LeftIndent, RightIndent, FirstLine (negative: hanging), Before, After (points), LineSpacing, KeepWithNext,
+	/// KeepTogether, WidowControl, PageBreakBefore, NoLineNumber (1 or 0), Tabs (72/right/dots,...), and their style's
+	/// Contextual (no space between paragraphs of the same style) and Level (0: body text, 1-6: a heading).
+	public string ParagraphFormat() {
+		var selection = ed.TextDocument.Selection2;
+		return global::ParagraphFormat.Read(ed.TextDocument, form.Styles, selection.Start, selection.End).Describe();
+	}
+
+	/// Gives the selected paragraphs a format: "Key=Value" lines as ParagraphFormat gives them (or with ; between them),
+	/// measures in points or with a unit: Rte.SetParagraphFormat("LeftIndent=0.5in; FirstLine=-0.5in; KeepTogether=1").
+	/// What isn't given stays as each paragraph has it. One undo step.
+	public void SetParagraphFormat(string settings) {
+		var format = global::ParagraphFormat.Parse(settings);
+		if (format.Contextual != null) throw new ArgumentException("Contextual is a style's: Rte.ModifyStyle(name, \"Contextual=1\").");
+		var doc = ed.TextDocument;
+		var selection = doc.Selection2;
+		doc.BeginEditCollection();
+		try { format.Apply(doc, selection.Start, selection.End); } finally { doc.EndEditCollection(); }
+		form.LineGutter.DocumentChanged();
+	}
+
+	/// The selected paragraphs' tab stops: "72/left/none,216/right/dots" (positions in points from the left indent's edge;
+	/// "" none; "mixed" if the paragraphs differ).
+	public string Tabs {
+		get {
+			var format = global::ParagraphFormat.Read(ed.TextDocument, form.Styles, ed.TextDocument.Selection2.Start, ed.TextDocument.Selection2.End);
+			return format.Tabs == null ? "mixed" : string.Join(",", format.Tabs);
+		}
+	}
+
+	/// Gives the selected paragraphs these tab stops (and no others): "72/right/dots,3in/decimal" ("" clears them).
+	public void SetTabs(string tabs) => SetParagraphFormat("Tabs=" + tabs);
+
+	/// The spacing of the document's default tab stops (where Tab goes past the paragraph's own), in points.
+	public float DefaultTabStop {
+		get => ed.TextDocument.DefaultTabStop;
+		set {
+			if (value < 1 || value > 1584) throw new ArgumentException("Default tab stops are 1 to 1584 points apart.");
+			ed.TextDocument.DefaultTabStop = value;
+			ed.Modified = true;
+		}
 	}
 
 	// ---- Line numbers (iteration 19)
@@ -6111,6 +6202,7 @@ sealed class DocumentPrinter : IDisposable
 	readonly PageBands bands;
 	readonly LineNumbering numbering;
 	List<List<PrintedLineNumbers.Mark>>? numberMarks;    // each page's line numbers (worked out with the page count)
+	List<int>? pageStarts;                                  // where each page starts (worked out with the page count)
 	int nextChar, page, pageCount;
 
 	const int EM_FORMATRANGE = 0x0400 + 57;
@@ -6133,7 +6225,7 @@ sealed class DocumentPrinter : IDisposable
 		if (!string.IsNullOrEmpty(printerName)) Document.PrinterSettings.PrinterName = printerName;    // before the page settings
 		Document.DefaultPageSettings.Landscape = settings.Landscape;
 		if (settings.Margins is { Length: 4 } m) Document.DefaultPageSettings.Margins = new Margins(m[0], m[1], m[2], m[3]);
-		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; };
+		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; pageStarts = null; };
 		Document.PrintPage += PrintPage;
 		Document.EndPrint += (s, e) => SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // frees RichEdit's cache
 	}
@@ -6153,11 +6245,13 @@ sealed class DocumentPrinter : IDisposable
 				chrg = new CHARRANGE { cpMin = nextChar, cpMax = -1 }
 			};
 			if (pageCount == 0) {
-				var starts = new List<int>();
-				pageCount = CountPages(range, end, starts);    // for {pages}
-				numberMarks = Marks(starts, range, e.PageSettings);
+				pageStarts = new List<int>();
+				pageCount = CountPages(range, end, pageStarts);    // for {pages}, and where each page ends
+				numberMarks = Marks(pageStarts, range, e.PageSettings);
 			}
 			range.chrg.cpMin = nextChar;
+			// (the page ends where the paragraphs' rules have it: page break before, keep together, widow control, keep with next)
+			range.chrg.cpMax = pageStarts != null && page < pageStarts.Count ? pageStarts[page] : -1;
 			if (Document.PrintController?.IsPreview == true) nextChar = PreviewPage(range, e.PageBounds, out preview);
 			else nextChar = (int)SendMessage(editor.Handle, EM_FORMATRANGE, (IntPtr)1, ref range);
 			nextChar = PageBreaks.AfterBreak(editor.TextDocument, nextChar);    // (a page break's paragraph mark stays with it)
@@ -6275,16 +6369,29 @@ sealed class DocumentPrinter : IDisposable
 	}
 
 	// Lays out the whole document without drawing (EM_FORMATRANGE with wParam 0) to count the pages (and list where
-	// they start).
+	// they start), each page ending where the paragraphs' rules have it (PageKeeping).
 	int CountPages(FORMATRANGE range, int end, List<int>? starts = null) {
 		int count = 0, position = 0;
-		while (true) {
-			count++;
-			starts?.Add(position);
-			range.chrg.cpMin = position;
-			int next = PageBreaks.AfterBreak(editor.TextDocument, (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range));
-			if (next <= position || next >= end) break;
-			position = next;
+		var doc = editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		PrintedLines? lines = null;
+		IReadOnlyList<int>? Lines(int from, int to) {
+			lines ??= new PrintedLines(editor, Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings), range.rc.Right - range.rc.Left);
+			return lines.Starts(from, to);
+		}
+		try {
+			while (true) {
+				count++;
+				starts?.Add(position);
+				range.chrg.cpMin = position;
+				range.chrg.cpMax = -1;
+				int laidOut = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
+				int next = PageBreaks.AfterBreak(doc, PageKeeping.Adjust(doc, story, position, laidOut, Lines));
+				if (next <= position || next >= end) break;
+				position = next;
+			}
+		} finally {
+			lines?.Dispose();
 		}
 		SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);
 		return count;

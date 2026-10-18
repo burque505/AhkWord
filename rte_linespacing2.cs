@@ -1,4 +1,4 @@
-// Line and paragraph spacing for RTE Writer (rte_writer32.cs, through #load): the selected paragraphs' line spacing,
+// Line and paragraph spacing for RTE Writer (rte_writer33.cs, through #load): the selected paragraphs' line spacing,
 // as in Word's Line and Paragraph Spacing button (1.0, 1.15, 1.5, 2.0 ... lines, or at least / exactly so many points),
 // and (version 2) their space before and after. They are paragraph formats (TOM's SetLineSpacing, SpaceBefore,
 // SpaceAfter), kept by RichEdit in RTF (\sl \slmult \sb \sa) and so in Word and OpenDocument files made by Word or
@@ -127,20 +127,33 @@ public static class LineSpacing
 			// indents and tab stops (not list items: their indents are the list's)
 			string tabs = "";
 			var block = blocks[k];
+			// the line and page breaks: for RTE Writer (data-rte-breaks) and as CSS, which browsers keep when printing
+			string breaks = Breaks(para);
+			foreach (char flag in breaks)
+				parts.Add(flag switch {
+					'n' => "page-break-after: avoid; break-after: avoid",
+					't' => "page-break-inside: avoid; break-inside: avoid",
+					'p' => "page-break-before: always; break-before: page",
+					'o' => "widows: 1; orphans: 1",
+					_ => ""
+				});
+			parts.RemoveAll(p => p == "");
 			if ((para.ListType & 0xFFFF) == tomConstants.tomListNone && !block.Value.StartsWith("<li", StringComparison.OrdinalIgnoreCase)) {
 				if (Math.Abs(para.LeftIndent) > 0.05f) parts.Add("margin-left: " + Points(para.LeftIndent));
 				if (Math.Abs(para.RightIndent) > 0.05f) parts.Add("margin-right: " + Points(para.RightIndent));
 				if (Math.Abs(para.FirstLineIndent) > 0.05f) parts.Add("text-indent: " + Points(para.FirstLineIndent));
 				tabs = TabStops(para);
 			}
-			if (parts.Count == 0 && tabs == "") continue;
+			if (parts.Count == 0 && tabs == "" && breaks == "") continue;
 			string css = string.Join("; ", parts);
 			output.Append(html, position, block.Index - position);
 			var style = Regex.Match(block.Value, "\\sstyle=\"([^\"]*)\"", RegexOptions.IgnoreCase);
 			string tag = css == "" ? block.Value : style.Success
 				? block.Value.Insert(style.Groups[1].Index + style.Groups[1].Length, (style.Groups[1].Value.TrimEnd().EndsWith(";") || style.Groups[1].Value.Trim() == "" ? " " : "; ") + css)
 				: block.Value.Insert(block.Value.Length - 1, $" style=\"{css}\"");
-			output.Append(tabs == "" ? tag : tag.Insert(tag.Length - 1, $" data-rte-tabs=\"{tabs}\""));
+			if (tabs != "") tag = tag.Insert(tag.Length - 1, $" data-rte-tabs=\"{tabs}\"");
+			if (breaks != "") tag = tag.Insert(tag.Length - 1, $" data-rte-breaks=\"{breaks}\"");
+			output.Append(tag);
 			position = block.Index + block.Length;
 			any = true;
 		}
@@ -189,6 +202,7 @@ public static class LineSpacing
 			string attributes = m.Groups[3].Value;
 			string css = Regex.Match(attributes, "\\sstyle=\"([^\"]*)\"", RegexOptions.IgnoreCase) is { Success: true } s ? WebUtilityDecode(s.Groups[1].Value) : "";
 			string tabs = Regex.Match(attributes, "\\sdata-rte-tabs=\"([^\"]*)\"", RegexOptions.IgnoreCase) is { Success: true } t ? t.Groups[1].Value : "";
+			string breaks = Regex.Match(attributes, "\\sdata-rte-breaks=\"([ntpxo]*)\"", RegexOptions.IgnoreCase) is { Success: true } k ? k.Groups[1].Value : "";
 			string markers = "";
 			// line spacing (any block)
 			var height = Regex.Match(css, @"line-height\s*:\s*([\d.]+)\s*(%|pt|px|em)?", RegexOptions.IgnoreCase);
@@ -207,6 +221,7 @@ public static class LineSpacing
 				bottom = Length(css, "margin-bottom") ?? bottom;
 				var fields = new List<string>();
 				if (top is float b && b > 0.05f) fields.Add("b" + b.ToString("0.##", Invariant));
+				if (breaks != "") fields.Add("k" + breaks);
 				if (bottom is float a && a > 0.05f) fields.Add("a" + a.ToString("0.##", Invariant));
 				if (name != "li" && lists == 0) {
 					left = Length(css, "margin-left") ?? left;
@@ -227,6 +242,13 @@ public static class LineSpacing
 		output.Append(html, position, html.Length - position);
 		return output.ToString();
 	}
+
+	/// A paragraph's line and page breaks as data-rte-breaks has them: n keep with next, t keep lines together, p page
+	/// break before, x no line numbers, o no widow and orphan control ("": none of them, widow control on).
+	public static string Breaks(ITextPara para) =>
+		(para.KeepWithNext == tomConstants.tomTrue ? "n" : "") + (para.KeepTogether == tomConstants.tomTrue ? "t" : "")
+		+ (para.PageBreakBefore == tomConstants.tomTrue ? "p" : "") + (para.NoLineNumber == tomConstants.tomTrue ? "x" : "")
+		+ (StyleEngine.WidowControlOf(para) ? "" : "o");
 
 	/// A paragraph's tab stops as data-rte-tabs has them: position (points) / TOM alignment / TOM leader, ... ("": none).
 	public static string TabStops(ITextPara para) {
@@ -260,14 +282,22 @@ public static class LineSpacing
 		return count;
 	}
 
-	// "b12;a0;l36;r0;f-18;t45/0/0,468/2/0": before, after, left, right, first-line indent (points), tab stops
-	// (position / alignment / leader, TOM's values)
+	// "b12;a0;l36;r0;f-18;t45/0/0,468/2/0;knt": before, after, left, right, first-line indent (points), tab stops
+	// (position / alignment / leader, TOM's values), the line and page breaks (as Breaks gives them)
 	static void ApplyFormat(ITextRange2 at, string fields) {
 		var para = at.Para;
 		float? left = null, right = null, first = null;
 		foreach (string field in fields.Split(';', StringSplitOptions.RemoveEmptyEntries)) {
 			char kind = field[0];
 			string value = field[1..];
+			if (kind == 'k') {
+				para.KeepWithNext = value.Contains('n') ? tomConstants.tomTrue : tomConstants.tomFalse;
+				para.KeepTogether = value.Contains('t') ? tomConstants.tomTrue : tomConstants.tomFalse;
+				para.PageBreakBefore = value.Contains('p') ? tomConstants.tomTrue : tomConstants.tomFalse;
+				para.NoLineNumber = value.Contains('x') ? tomConstants.tomTrue : tomConstants.tomFalse;
+				StyleEngine.SetWidowControl(para, !value.Contains('o'));
+				continue;
+			}
 			if (kind == 't') {
 				para.ClearAllTabs();
 				foreach (var tab in value.Split(',')) {
@@ -579,94 +609,4 @@ public static class DocxLineSpacing
 		using var stream = update.CreateEntry("word/document.xml", CompressionLevel.Optimal).Open();
 		document.Save(stream, SaveOptions.DisableFormatting);
 	}
-}
-
-// Home > Paragraph > Line Spacing > Line Spacing Options: the line spacing and the space before and after, as in
-// Word's Paragraph dialog.
-sealed class LineSpacingDialog : Form
-{
-	readonly ComboBox rule = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 120 };
-	readonly NumericUpDown value = new() { DecimalPlaces = 2, Increment = 0.25m, Minimum = 0.25m, Maximum = 132, Width = 80 };
-	readonly NumericUpDown before = new() { DecimalPlaces = 1, Increment = 6, Minimum = 0, Maximum = 1584, Width = 80 };
-	readonly NumericUpDown after = new() { DecimalPlaces = 1, Increment = 6, Minimum = 0, Maximum = 1584, Width = 80 };
-	readonly Label unit = new() { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 3, 3) };
-	static readonly string[] Rules = { "Single", "1.5 lines", "Double", "At least", "Exactly", "Multiple" };
-
-	/// current: the line spacing as LineSpacing.Describe gives it; spaceBefore, spaceAfter: points (-1: they differ).
-	public LineSpacingDialog(string current, float spaceBefore = 0, float spaceAfter = 0) {
-		Text = "Line and Paragraph Spacing";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = false;
-		ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Font = SystemFonts.MessageBoxFont;
-		Padding = new Padding(10);
-		rule.Items.AddRange(Rules);
-		(int r, float v) = current == "mixed" ? (LineSpacing.Single, 0f) : LineSpacing.Parse(current);
-		if (r == LineSpacing.Multiple && Math.Abs(v - 1.5f) < 0.001) r = LineSpacing.OneAndHalf;
-		else if (r == LineSpacing.Multiple && Math.Abs(v - 2) < 0.001) r = LineSpacing.Double;
-		rule.SelectedIndex = r;
-		value.Value = (decimal)Math.Clamp(r is LineSpacing.AtLeast or LineSpacing.Exactly or LineSpacing.Multiple ? v : 1, 0.25f, 132f);
-		before.Value = (decimal)Math.Clamp(Math.Max(0, spaceBefore), 0, 1584);
-		after.Value = (decimal)Math.Clamp(Math.Max(0, spaceAfter), 0, 1584);
-		BeforeChanged = AfterChanged = false;
-		before.ValueChanged += (s, e) => BeforeChanged = true;
-		after.ValueChanged += (s, e) => AfterChanged = true;
-		rule.SelectedIndexChanged += (s, e) => Fit(changed: true);
-		Fit(changed: false);
-
-		var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, Dock = DockStyle.Fill };
-		Controls.Add(layout);
-		var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-		row.Controls.AddRange(new Control[] { Label("Line &spacing:"), rule, Label("&At:"), value, unit });
-		layout.Controls.Add(row);
-		var spacing = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-		spacing.Controls.AddRange(new Control[] { Label("Space &before:"), before, Label("pt    Space a&fter:"), after, Label("pt") });
-		layout.Controls.Add(spacing);
-		layout.Controls.Add(new Label {
-			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(420), 0), ForeColor = SystemColors.GrayText, Margin = new Padding(3, 8, 3, 3),
-			Text = "For the selected paragraphs. Multiple: a number of lines, such as 1.15. At least and Exactly: points. "
-				+ "Kept in RTF, Word, OpenDocument and HTML files; Markdown has no spacing."
-		});
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Anchor = AnchorStyles.Right };
-		buttons.Controls.AddRange(new Control[] { ok, cancel });
-		layout.Controls.Add(buttons);
-		AcceptButton = ok;
-		CancelButton = cancel;
-	}
-
-	static Label Label(string text) => new() { Text = text, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 3, 3) };
-
-	// The value box for the rule: lines for Multiple, points for At least and Exactly, nothing for the fixed ones.
-	void Fit(bool changed) {
-		int r = rule.SelectedIndex;
-		bool points = r is LineSpacing.AtLeast or LineSpacing.Exactly;
-		value.Enabled = r is LineSpacing.AtLeast or LineSpacing.Exactly or LineSpacing.Multiple;
-		value.Maximum = points ? 1584 : 132;
-		value.Increment = points ? 1 : 0.25m;
-		unit.Text = points ? "pt" : r == LineSpacing.Multiple ? "lines" : "";
-		if (changed && points && value.Value < 6) value.Value = 12;
-		if (changed && r == LineSpacing.Multiple && value.Value > 10) value.Value = 1.15m;
-	}
-
-	/// The chosen spacing as SetLineSpacing takes it ("1.5", "exactly 14pt" ...).
-	public string Result => rule.SelectedIndex switch {
-		LineSpacing.Single => "1",
-		LineSpacing.OneAndHalf => "1.5",
-		LineSpacing.Double => "2",
-		LineSpacing.AtLeast => "at least " + value.Value.ToString("0.##", CultureInfo.InvariantCulture) + "pt",
-		LineSpacing.Exactly => "exactly " + value.Value.ToString("0.##", CultureInfo.InvariantCulture) + "pt",
-		_ => value.Value.ToString("0.##", CultureInfo.InvariantCulture)
-	};
-
-	/// The space before and after, in points; changed: whether it was changed in the dialog (selected paragraphs that
-	/// differ keep theirs otherwise).
-	public float SpaceBefore => (float)before.Value;
-	public float SpaceAfter => (float)after.Value;
-	public bool BeforeChanged { get; private set; }
-	public bool AfterChanged { get; private set; }
 }

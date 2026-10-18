@@ -1,6 +1,7 @@
-// Paragraph styles for RTE Writer (rte_writer32.cs, through #load).
+// Paragraph styles for RTE Writer (rte_writer33.cs, through #load).
 //   - ParagraphStyle: a named set of formatting: the font (name, size, bold, italic, underline, colour) and the
-//     paragraph's (alignment, indents, space before and after, line spacing, keep with next), a heading level (0 for
+//     paragraph's (alignment, indents, space before and after, line spacing, keep with next, keep lines together, widow
+//     and orphan control, page break before, no space between paragraphs of the same style), a heading level (0 for
 //     body text; 1 to 6 for headings: the outline, Markdown's #, HTML's h1-h6) and the style that follows it after Enter.
 //   - StyleSheet: a document's styles; StyleSets: the three that come with the editor (Classic, the default; Plain, the
 //     editor's look before styles; Modern), none of them Word's.
@@ -44,6 +45,10 @@ public sealed class ParagraphStyle
 	public float After { get; set; }
 	public string LineSpacing { get; set; } = "1";     // as Rte.SetLineSpacing: "1.15", "exactly 14pt" ...
 	public bool KeepWithNext { get; set; }
+	public bool KeepTogether { get; set; }
+	public bool WidowControl { get; set; } = true;     // (Word's default too)
+	public bool PageBreakBefore { get; set; }
+	public bool Contextual { get; set; }               // no space before or after it next to a paragraph of the same style
 
 	public ParagraphStyle Copy() => (ParagraphStyle)MemberwiseClone();
 
@@ -268,6 +273,7 @@ public static class StyleEngine
 			SetParagraph(para, style, keepIndents: (para.ListType & 0xFFFF) != tomConstants.tomListNone);    // (a list item keeps its list's indents)
 			SetCharacters(doc, pStart, pEnd, old, style, whole: true);
 		}
+		Contextual(doc, sheet, start, end);
 	}
 
 	/// Gives the paragraph at a position a style, as Apply, but only its character formatting (its indents and spacing
@@ -289,16 +295,39 @@ public static class StyleEngine
 			if (para.Style != id) continue;
 			if (!string.Equals(old.Name, updated.Name, StringComparison.OrdinalIgnoreCase)) Tag(para, IdOf(updated.Name));
 			if ((AlignText(para.Alignment)) == old.Align) para.Alignment = AlignOf(updated.Align);
-			if (Same(para.SpaceBefore, old.Before)) para.SpaceBefore = updated.Before;
-			if (Same(para.SpaceAfter, old.After)) para.SpaceAfter = updated.After;
+			if (Same(para.SpaceBefore, old.Before) || (old.Contextual && Same(para.SpaceBefore, 0))) para.SpaceBefore = updated.Before;
+			if (Same(para.SpaceAfter, old.After) || (old.Contextual && Same(para.SpaceAfter, 0))) para.SpaceAfter = updated.After;
 			if (Same(para.LeftIndent, old.LeftIndent) && Same(para.FirstLineIndent, old.FirstLine) && Same(para.RightIndent, old.RightIndent))
 				para.SetIndents(updated.FirstLine, updated.LeftIndent, updated.RightIndent);
 			if (global::LineSpacing.Of(doc.Range2(pStart, pStart)) == Normalize(old.LineSpacing)) SetLine(para, updated.LineSpacing);
 			if (Is(para.KeepWithNext) == old.KeepWithNext) para.KeepWithNext = Tom(updated.KeepWithNext);
+			if (Is(para.KeepTogether) == old.KeepTogether) para.KeepTogether = Tom(updated.KeepTogether);
+			if (WidowControlOf(para) == old.WidowControl) SetWidowControl(para, updated.WidowControl);
+			if (Is(para.PageBreakBefore) == old.PageBreakBefore) para.PageBreakBefore = Tom(updated.PageBreakBefore);
 			SetCharacters(doc, pStart, pEnd, old, updated, whole: false);
 			count++;
 		}
+		if (old.Contextual || updated.Contextual) Contextual(doc, sheet, 0, doc.Range2(0, 0).StoryLength);
 		return count;
+	}
+
+	/// "Don't add space between paragraphs of the same style": the paragraphs from start to end (and the one on either
+	/// side) whose style has it get no space before (after) where the paragraph before (after) has the same style, and
+	/// their style's space elsewhere. RichEdit has no such setting, so the paragraphs get the space itself, which then
+	/// reads the same in every format; space of a paragraph's own (neither the style's nor none) stays.
+	public static void Contextual(ITextDocument2 doc, StyleSheet sheet, int start, int end) {
+		if (!sheet.Styles.Any(s => s.Contextual)) return;
+		int storyEnd = doc.Range2(0, 0).StoryLength;
+		int from = Paragraphs(doc, start, start)[0].Start;
+		var paragraphs = Paragraphs(doc, Math.Max(0, from - 1), Math.Min(storyEnd, Math.Max(end, start) + 1));
+		int Id(int at) => at < 0 || at >= storyEnd ? int.MinValue : doc.Range2(at, at).Para.Style;
+		foreach (var (pStart, pEnd) in paragraphs) {
+			var para = doc.Range2(pStart, pStart).Para;
+			if (sheet.ById(para.Style) is not { Contextual: true } style || (para.ListType & 0xFFFF) != tomConstants.tomListNone) continue;
+			bool sameBefore = pStart > 0 && Id(pStart - 1) == para.Style, sameAfter = pEnd < storyEnd && Id(pEnd) == para.Style;
+			if (Same(para.SpaceBefore, style.Before) || Same(para.SpaceBefore, 0)) para.SpaceBefore = sameBefore ? 0 : style.Before;
+			if (Same(para.SpaceAfter, style.After) || Same(para.SpaceAfter, 0)) para.SpaceAfter = sameAfter ? 0 : style.After;
+		}
 	}
 
 	static string Normalize(string spacing) {
@@ -317,7 +346,15 @@ public static class StyleEngine
 		para.SpaceAfter = style.After;
 		SetLine(para, style.LineSpacing);
 		para.KeepWithNext = Tom(style.KeepWithNext);
+		para.KeepTogether = Tom(style.KeepTogether);
+		SetWidowControl(para, style.WidowControl);
+		para.PageBreakBefore = Tom(style.PageBreakBefore);
 	}
+
+	/// Widow and orphan control. RichEdit's flag is "no widow control" (TOM's WidowControl true is RTF's \nowidctlpar,
+	/// and false, its default, is control on), so these say what it means.
+	public static bool WidowControlOf(ITextPara para) => para.WidowControl != tomConstants.tomTrue;
+	public static void SetWidowControl(ITextPara para, bool on) => para.WidowControl = on ? tomConstants.tomFalse : tomConstants.tomTrue;
 
 	// The paragraph's characters from the old style's formatting to the new's: what was the old style's becomes the new
 	// style's; formatting of their own stays, unless (whole: a style applied, as Word does) it covers more than half the
@@ -381,7 +418,8 @@ public static class StyleEngine
 			Align = AlignText(para.Alignment), LeftIndent = para.LeftIndent, RightIndent = para.RightIndent, FirstLine = para.FirstLineIndent,
 			Before = Math.Max(0, para.SpaceBefore), After = Math.Max(0, para.SpaceAfter),
 			LineSpacing = global::LineSpacing.Of(doc.Range2(start, start)) is var line && line != "mixed" ? line : "1",
-			KeepWithNext = Is(para.KeepWithNext)
+			KeepWithNext = Is(para.KeepWithNext), KeepTogether = Is(para.KeepTogether), WidowControl = WidowControlOf(para),
+			PageBreakBefore = Is(para.PageBreakBefore)
 		};
 	}
 
@@ -399,6 +437,20 @@ public static class StyleEngine
 			start = i + 1;
 		}
 		return names;
+	}
+
+	/// Whether each paragraph (counted as Names counts them) has widow and orphan control.
+	public static List<bool> WidowControls(ITextDocument2 doc) {
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		var widows = new List<bool>();
+		int start = 0;
+		for (int i = 0; i < story.Length; i++) {
+			if (story[i] is not ('\r' or '\u0007')) continue;
+			string piece = story[start..i];
+			if (!(story[i] == '\r' && piece.Length > 0 && piece.Trim('￹', '￻') == "")) widows.Add(WidowControlOf(doc.Range2(start, start).Para));
+			start = i + 1;
+		}
+		return widows;
 	}
 
 	/// Gives the paragraphs (counted as Names counts them) the styles named; returns false if the counts don't match.
@@ -455,8 +507,10 @@ public static class RtfStyles
 	/// The RTF (RichEdit's) with the styles: the style sheet (each style's whole definition, so that Word and LibreOffice
 	/// have them as RTE Writer has them, and RTE Writer's own copy), and each paragraph's \sN at its start, before its
 	/// own formatting (which a reader that applies the style's then puts back). names: the paragraphs' styles in order
-	/// (StyleEngine.Names). If the paragraphs don't match in number, only the style sheet is written.
-	public static string Inject(string rtf, IReadOnlyList<string> names, StyleSheet sheet) {
+	/// (StyleEngine.Names). If the paragraphs don't match in number, only the style sheet is written. widows: whether each
+	/// paragraph has widow and orphan control (StyleEngine.WidowControls), written as Word reads it (\widctlpar: RichEdit
+	/// writes only \nowidctlpar, and a paragraph with neither has none in Word and LibreOffice).
+	public static string Inject(string rtf, IReadOnlyList<string> names, StyleSheet sheet, IReadOnlyList<bool>? widows = null) {
 		var numbers = Numbers(sheet);
 		// where each paragraph starts and ends in the body, and its \pard (its own formatting begins after the last one)
 		var marks = new List<(string Word, int At, int After)>();
@@ -468,7 +522,8 @@ public static class RtfStyles
 			// a paragraph's end: its style after its last \pard, or at its start
 			if (paragraph < names.Count) {
 				int place = lastPard > start ? lastPard : start >= 0 ? start : -1;
-				if (place >= 0) inserts.Add((place, "\\s" + (numbers.TryGetValue(names[paragraph], out int n) ? n : 0) + " "));
+				if (place >= 0) inserts.Add((place, "\\s" + (numbers.TryGetValue(names[paragraph], out int n) ? n : 0)
+					+ (widows != null && paragraph < widows.Count && widows[paragraph] ? "\\widctlpar" : "") + " "));
 			}
 			paragraph++;
 			start = after;
@@ -513,6 +568,10 @@ public static class RtfStyles
 			});
 		} catch (ArgumentException) { }
 		if (style.KeepWithNext) sb.Append("\\keepn");
+		if (style.KeepTogether) sb.Append("\\keep");
+		sb.Append(style.WidowControl ? "\\widctlpar" : "\\nowidctlpar");
+		if (style.PageBreakBefore) sb.Append("\\pagebb");
+		if (style.Contextual) sb.Append("\\contextualspace");
 		sb.Append("\\f").Append(FontNumber(ref rtf, style.Font)).Append("\\fs").Append((int)Math.Round(style.Size * 2));
 		if (style.Bold) sb.Append("\\b");
 		if (style.Italic) sb.Append("\\i");
@@ -740,6 +799,7 @@ public static class StyleClipboard
 			}
 			StyleEngine.Tag(doc.Range2(marked[i], marked[i]).Para, StyleEngine.IdOf(name));
 		}
+		StyleEngine.Contextual(doc, sheet, start, end);
 		return added;
 	}
 }
@@ -858,10 +918,11 @@ public static class StyleHtml
 	}
 
 	/// HTML to load, with a marker after each heading's and styled paragraph's start tag: its style.
-	public static string MarkHtml(string html) => Regex.Replace(html, @"<(h[1-6]|p)\b([^>]*)>", m => {
+	public static string MarkHtml(string html) => Regex.Replace(html, @"<(h[1-6]|p|pre)\b([^>]*)>", m => {
 		string tag = m.Groups[1].Value.ToLowerInvariant();
 		string? name = tag[0] == 'h' ? "Heading " + tag[1]
-			: Regex.Match(m.Groups[2].Value, @"\sdata-rte-style=""([^""]+)""", RegexOptions.IgnoreCase) is { Success: true } s ? System.Net.WebUtility.HtmlDecode(s.Groups[1].Value) : null;
+			: Regex.Match(m.Groups[2].Value, @"\sdata-rte-style=""([^""]+)""", RegexOptions.IgnoreCase) is { Success: true } s ? System.Net.WebUtility.HtmlDecode(s.Groups[1].Value)
+			: tag == "pre" ? "Code" : null;    // (preformatted text: the Code style, as Markdown's code blocks)
 		return name == null ? m.Value : m.Value + MarkerStart + System.Net.WebUtility.HtmlEncode(name).Replace("@", "&#64;") + MarkerEnd;
 	}, RegexOptions.IgnoreCase);
 
@@ -901,6 +962,7 @@ sealed class StyleDialog : Form
 	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
 	Color color = Color.Black;
 	readonly ParagraphStyle original;
+	readonly ParagraphStyle breaks;    // (what the Paragraph dialog sets that this one doesn't show: line and page breaks)
 	readonly StyleSheet sheet;
 	readonly bool isNew;
 
@@ -910,6 +972,7 @@ sealed class StyleDialog : Form
 	/// style: the style to change (or the new one's first settings); isNew: a new style (its name to give).
 	public StyleDialog(ParagraphStyle style, StyleSheet sheet, bool isNew) {
 		original = style;
+		breaks = style.Copy();
 		this.sheet = sheet;
 		this.isNew = isNew;
 		Text = isNew ? "New Style" : "Modify Style: " + style.Name;
@@ -974,7 +1037,9 @@ sealed class StyleDialog : Form
 		Row("Indent left (pt):", left, "Right (pt):", right);
 		Row("First line (pt):", first, "", new Label { Text = "(negative: hanging)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
 		Row("Space before (pt):", before, "After (pt):", after);
-		Row("", keep);
+		var paragraphButton = new Button { Text = "&Paragraph...", AutoSize = true };
+		paragraphButton.Click += (s, e) => ParagraphCommand();
+		Row("", keep, "", paragraphButton);
 		int pr = table.RowCount++;
 		table.Controls.Add(preview, 0, pr);
 		table.SetColumnSpan(preview, 4);
@@ -997,6 +1062,26 @@ sealed class StyleDialog : Form
 		AutoSizeMode = AutoSizeMode.GrowAndShrink;
 	}
 
+	// The Paragraph dialog for the style: everything about its paragraphs (the line and page breaks too).
+	void ParagraphCommand() {
+		var current = Result;
+		float shownSize = (float)size.Value;
+		using var dlg = new ParagraphDialog(ParagraphFormat.Of(current), forStyle: true, current.Name == "" ? "New Style" : current.Name, current.Font, shownSize);
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		var format = dlg.Result;
+		format.ToStyle(breaks);
+		format.ToStyle(current);
+		align.SelectedIndex = Math.Max(0, Array.IndexOf(Aligns, current.Align));
+		left.Value = (decimal)Math.Clamp(current.LeftIndent, 0, 1584);
+		right.Value = (decimal)Math.Clamp(current.RightIndent, 0, 1584);
+		first.Value = (decimal)Math.Clamp(current.FirstLine, -1584, 1584);
+		before.Value = (decimal)Math.Clamp(current.Before, 0, 1584);
+		after.Value = (decimal)Math.Clamp(current.After, 0, 1584);
+		line.Text = current.LineSpacing;
+		keep.Checked = current.KeepWithNext;
+		preview.Invalidate();
+	}
+
 	bool Validate(out string message) {
 		message = "";
 		string n = name.Text.Trim();
@@ -1016,7 +1101,8 @@ sealed class StyleDialog : Form
 		Font = font.Text.Trim(), Size = (float)size.Value, Bold = bold.Checked, Italic = italic.Checked, Underline = underline.Checked,
 		Color = automatic.Checked ? "" : $"#{color.R:X2}{color.G:X2}{color.B:X2}",
 		Align = Aligns[Math.Max(0, align.SelectedIndex)], LeftIndent = (float)left.Value, RightIndent = (float)right.Value, FirstLine = (float)first.Value,
-		Before = (float)before.Value, After = (float)after.Value, LineSpacing = line.Text.Trim(), KeepWithNext = keep.Checked
+		Before = (float)before.Value, After = (float)after.Value, LineSpacing = line.Text.Trim(), KeepWithNext = keep.Checked,
+		KeepTogether = breaks.KeepTogether, WidowControl = breaks.WidowControl, PageBreakBefore = breaks.PageBreakBefore, Contextual = breaks.Contextual
 	};
 
 	// A sample paragraph in the style, with grey text before and after it (the space and indents to scale).
