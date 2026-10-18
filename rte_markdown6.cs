@@ -1,4 +1,4 @@
-// Markdown for RichEditBox: a replacement for its Markdown property, used by RTE Writer (rte_writer31.cs, through #load).
+// Markdown for RichEditBox: a replacement for its Markdown property, used by RTE Writer (rte_writer32.cs, through #load).
 // Version 6: line breaks (Shift+Enter) where Markdown has no "\" + newline for them are written as <br>, as GitHub
 // does: in table cells and headings (they were written as spaces); and a list item line that ends in two spaces before
 // another line is read as a line break (it was read as a space). Tables are written with their columns lined up
@@ -169,8 +169,10 @@ public static class MarkdownConverter
 				case Kind.Heading:
 					whole.Font.Bold = tomConstants.tomTrue;
 					whole.Font.Size = HeadingSize(block.Level);
+					StyleEngine.Tag(para, -(Math.Clamp(block.Level, 1, 6) + 1));    // (the paragraph's style: Heading N)
 					break;
 				case Kind.Code:
+					StyleEngine.Tag(para, StyleEngine.IdOf("Code"));
 					whole.Font.Name = BlockConstant("PreformattedFontName", "Courier New");
 					whole.Font.Size = BlockConstant("PreformattedPointSize", 10f);
 					break;
@@ -1301,8 +1303,11 @@ public static class MarkdownConverter
 					info.Text = text[skip..];
 				}
 			}
-			else if (block == BlockStyle.Preformatted) info.Kind = "code";
-			else if (block is >= BlockStyle.Heading1 and <= BlockStyle.Heading6) { info.Kind = "heading"; info.Level = (int)block; }
+			// (what the paragraph is: its style, when the editor says (BlockOf), else its font)
+			int kind = BlockOf?.Invoke(doc, start) ?? (block is BlockStyle b ? (int)b : 0);
+			if (listType != tomConstants.tomListNone || info.Kind is "pagebreak" or "empty") { }
+			else if (kind == (int)BlockStyle.Preformatted) info.Kind = "code";
+			else if (kind is >= 1 and <= 6) { info.Kind = "heading"; info.Level = kind; }
 			else if (text.Trim().Length >= 3 && text.Trim().All(ch => ch == '─')) info.Kind = "rule";
 			else if (text.Contains('\t')) info.Kind = "table";
 			info.Align = para.Alignment is >= 1 and <= 3 ? para.Alignment : 0;
@@ -1536,6 +1541,10 @@ public static class MarkdownConverter
 		blockStyleHelper?.GetField(name, BindingFlags.NonPublic | BindingFlags.Static)?.GetValue(null) is T value ? value : fallback;
 
 	internal static float HeadingSize(int level) => BlockConstant("HeadingPointSizes", new[] { 0f, 24f, 18f, 14f, 12f, 10f, 8f })[Math.Clamp(level, 1, 6)];
+
+	/// What a paragraph is, when the editor knows (its style): 0 body text, 1-6 a heading, 7 code (BlockStyle.Preformatted);
+	/// null: as its font says.
+	public static Func<ITextDocument2, int, int?>? BlockOf;
 
 	static BlockStyle? BlockStyleOf(float size, bool bold, string? name) {
 		if (blockStyleFromFont != null) return (BlockStyle)blockStyleFromFont.Invoke(null, new object?[] { size, bold, name })!;

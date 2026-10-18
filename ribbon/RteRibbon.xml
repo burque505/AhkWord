@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer31.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer31.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer32.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer32.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -999,7 +999,108 @@
         <Image Source="icons/numbering_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
-    <Command Name="cmdBlockStyle" Id="275" LabelTitle="Style" Keytip="Y" TooltipTitle="Block style (Ctrl+0 to Ctrl+7)" TooltipDescription="Normal text, headings and preformatted text. Structured documents only (View &gt; Structured)." />
+    <Command Name="cmdBlockStyle" Id="275" LabelTitle="Style" Keytip="Y" TooltipTitle="Paragraph style (Ctrl+0 Normal, Ctrl+1 to Ctrl+6 headings, Ctrl+7 Code)" TooltipDescription="The style of the paragraphs the selection is in: Normal, Title, the headings, Quote, Code and your own (the Styles menu changes them)." />
+    <Command Name="cmdStylesMenu" Id="380" LabelTitle="Styles" Keytip="YS" TooltipTitle="Styles" TooltipDescription="Change a style, make a new one from the paragraph at the caret, choose a style set, or keep the styles as your default for new documents.">
+      <Command.LargeImages>
+        <Image Source="icons/stylesmenu_32.bmp" MinDPI="96" />
+        <Image Source="icons/stylesmenu_40.bmp" MinDPI="120" />
+        <Image Source="icons/stylesmenu_48.bmp" MinDPI="144" />
+        <Image Source="icons/stylesmenu_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/stylesmenu_16.bmp" MinDPI="96" />
+        <Image Source="icons/stylesmenu_20.bmp" MinDPI="120" />
+        <Image Source="icons/stylesmenu_24.bmp" MinDPI="144" />
+        <Image Source="icons/stylesmenu_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdModifyStyle" Id="381" LabelTitle="&amp;Modify Style..." Keytip="M" TooltipTitle="Modify Style" TooltipDescription="Change the style of the paragraph at the caret (font, spacing, indents ...); every paragraph with it changes too.">
+      <Command.LargeImages>
+        <Image Source="icons/modifystyle_32.bmp" MinDPI="96" />
+        <Image Source="icons/modifystyle_40.bmp" MinDPI="120" />
+        <Image Source="icons/modifystyle_48.bmp" MinDPI="144" />
+        <Image Source="icons/modifystyle_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/modifystyle_16.bmp" MinDPI="96" />
+        <Image Source="icons/modifystyle_20.bmp" MinDPI="120" />
+        <Image Source="icons/modifystyle_24.bmp" MinDPI="144" />
+        <Image Source="icons/modifystyle_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdNewStyle" Id="382" LabelTitle="&amp;New Style..." Keytip="N" TooltipTitle="New Style" TooltipDescription="A new style, from the paragraph at the caret, given to it.">
+      <Command.LargeImages>
+        <Image Source="icons/newstyle_32.bmp" MinDPI="96" />
+        <Image Source="icons/newstyle_40.bmp" MinDPI="120" />
+        <Image Source="icons/newstyle_48.bmp" MinDPI="144" />
+        <Image Source="icons/newstyle_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/newstyle_16.bmp" MinDPI="96" />
+        <Image Source="icons/newstyle_20.bmp" MinDPI="120" />
+        <Image Source="icons/newstyle_24.bmp" MinDPI="144" />
+        <Image Source="icons/newstyle_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdUpdateStyle" Id="383" LabelTitle="&amp;Update Style to Match" Keytip="U" TooltipTitle="Update Style to Match" TooltipDescription="Make the caret paragraph's style look like the paragraph (format one paragraph as wanted, then this); every paragraph with the style changes too.">
+      <Command.LargeImages>
+        <Image Source="icons/updatestyle_32.bmp" MinDPI="96" />
+        <Image Source="icons/updatestyle_40.bmp" MinDPI="120" />
+        <Image Source="icons/updatestyle_48.bmp" MinDPI="144" />
+        <Image Source="icons/updatestyle_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/updatestyle_16.bmp" MinDPI="96" />
+        <Image Source="icons/updatestyle_20.bmp" MinDPI="120" />
+        <Image Source="icons/updatestyle_24.bmp" MinDPI="144" />
+        <Image Source="icons/updatestyle_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdClearFormatting" Id="389" LabelTitle="&amp;Clear Formatting" Keytip="C" TooltipTitle="Clear Formatting (Ctrl+Space)" TooltipDescription="The selected text back to its paragraph's style (formatting of its own goes); with no selection, the whole paragraph, its spacing and indents too.">
+      <Command.LargeImages>
+        <Image Source="icons/clearformatting_32.bmp" MinDPI="96" />
+        <Image Source="icons/clearformatting_40.bmp" MinDPI="120" />
+        <Image Source="icons/clearformatting_48.bmp" MinDPI="144" />
+        <Image Source="icons/clearformatting_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/clearformatting_16.bmp" MinDPI="96" />
+        <Image Source="icons/clearformatting_20.bmp" MinDPI="120" />
+        <Image Source="icons/clearformatting_24.bmp" MinDPI="144" />
+        <Image Source="icons/clearformatting_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdDeleteStyle" Id="384" LabelTitle="&amp;Delete Style..." Keytip="D" TooltipTitle="Delete Style" TooltipDescription="Delete a style of your own; its paragraphs become Normal.">
+      <Command.LargeImages>
+        <Image Source="icons/deletestyle_32.bmp" MinDPI="96" />
+        <Image Source="icons/deletestyle_40.bmp" MinDPI="120" />
+        <Image Source="icons/deletestyle_48.bmp" MinDPI="144" />
+        <Image Source="icons/deletestyle_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/deletestyle_16.bmp" MinDPI="96" />
+        <Image Source="icons/deletestyle_20.bmp" MinDPI="120" />
+        <Image Source="icons/deletestyle_24.bmp" MinDPI="144" />
+        <Image Source="icons/deletestyle_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdStyleSetClassic" Id="385" LabelTitle="C&amp;lassic" Keytip="L" TooltipTitle="Classic styles" TooltipDescription="Times New Roman 12, black headings: court papers, contracts, letters." />
+    <Command Name="cmdStyleSetPlain" Id="386" LabelTitle="&amp;Plain" Keytip="P" TooltipTitle="Plain styles" TooltipDescription="Segoe UI 11, bold headings: the editor's look before styles." />
+    <Command Name="cmdStyleSetModern" Id="387" LabelTitle="M&amp;odern" Keytip="O" TooltipTitle="Modern styles" TooltipDescription="Georgia text with Segoe UI headings in dark grey, a little more air between lines." />
+    <Command Name="cmdSaveStyles" Id="388" LabelTitle="&amp;Save Styles as My Default" Keytip="S" TooltipTitle="Save Styles as My Default" TooltipDescription="New documents get this document's styles (your changes included).">
+      <Command.LargeImages>
+        <Image Source="icons/savestyles_32.bmp" MinDPI="96" />
+        <Image Source="icons/savestyles_40.bmp" MinDPI="120" />
+        <Image Source="icons/savestyles_48.bmp" MinDPI="144" />
+        <Image Source="icons/savestyles_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/savestyles_16.bmp" MinDPI="96" />
+        <Image Source="icons/savestyles_20.bmp" MinDPI="120" />
+        <Image Source="icons/savestyles_24.bmp" MinDPI="144" />
+        <Image Source="icons/savestyles_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdPageBreak" Id="280" LabelTitle="Page Break" Keytip="B" TooltipTitle="Page break (Ctrl+Enter)" TooltipDescription="Start a new page here.">
       <Command.LargeImages>
         <Image Source="icons/pagebreak_32.bmp" MinDPI="96" />
@@ -1957,6 +2058,23 @@
           </Group>
           <Group CommandName="cmdGroupStyles">
             <ComboBox CommandName="cmdBlockStyle" IsEditable="false" IsAutoCompleteEnabled="false" ResizeType="NoResize" />
+            <DropDownButton CommandName="cmdStylesMenu">
+              <MenuGroup>
+                <Button CommandName="cmdModifyStyle" />
+                <Button CommandName="cmdNewStyle" />
+                <Button CommandName="cmdUpdateStyle" />
+                <Button CommandName="cmdClearFormatting" />
+                <Button CommandName="cmdDeleteStyle" />
+              </MenuGroup>
+              <MenuGroup>
+                <ToggleButton CommandName="cmdStyleSetClassic" />
+                <ToggleButton CommandName="cmdStyleSetPlain" />
+                <ToggleButton CommandName="cmdStyleSetModern" />
+              </MenuGroup>
+              <MenuGroup>
+                <Button CommandName="cmdSaveStyles" />
+              </MenuGroup>
+            </DropDownButton>
           </Group>
           <!-- A column of small buttons, as in Word. -->
           <Group CommandName="cmdGroupEditing">

@@ -1,5 +1,5 @@
 // Where RTE Writer keeps its files (AppFolders: portable mode), and the recovery copies it autosaves (Recovery), for
-// RTE Writer (rte_writer31.cs, through #load).
+// RTE Writer (rte_writer32.cs, through #load).
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;

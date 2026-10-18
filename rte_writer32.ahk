@@ -2,8 +2,11 @@
 #SingleInstance Off    ; (File > New Window starts this script again: one instance for each window)
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
-; RTE Writer, iteration 31: a word processor built on RichEditorNET (rte_writer31.cs), hosted in this AHK process.
-; Adds to iteration 30:
+; RTE Writer, iteration 32: a word processor built on RichEditorNET (rte_writer32.cs), hosted in this AHK process.
+; Adds to iteration 31:
+;   - Paragraph styles: the Style box and Home > Styles (Modify, New, Update to Match, Delete; the Classic, Plain and
+;     Modern style sets; Save Styles as My Default). Headings are what their style says. Scripts: Rte.Style := "Heading 1".
+; Iteration 31 added to iteration 30:
 ;   - Several windows: File > New Window and Open in New Window start this script again (so it allows more than one
 ;     instance); the windows share the settings without undoing each other's. Scripts: Rte.NewWindow().
 ; Iteration 30 added to iteration 29:
@@ -103,7 +106,7 @@
 ; spelling suggestions, the outline, macro recording and hotkeys, and real Markdown. Settings are kept in
 ; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile), or data\settings.json here in portable mode; set
 ; RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
-; Optionally pass a document to open:  rte_writer31.ahk "C:\path\document.md"
+; Optionally pass a document to open:  rte_writer32.ahk "C:\path\document.md"
 ;
 ; AHK automation: other scripts #Include "RteClient2.ahk" and call Rte.<Name>(...), react to events with
 ; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Tools > Automation API lists everything that can be called,
@@ -125,7 +128,7 @@ SubscribeToSaved() {
 }
 
 StartFile := A_Args.Length ? A_Args[1] : ""
-RunCSharpFile(A_ScriptDir "\rte_writer31.cs", A_AhkPath, A_ScriptDir, StartFile, A_ScriptFullPath)
+RunCSharpFile(A_ScriptDir "\rte_writer32.cs", A_AhkPath, A_ScriptDir, StartFile, A_ScriptFullPath)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
     MsgBox("RTE Writer stopped because of an error (" CSExitCode "):`n`n" CSOutput, "RTE Writer", "Iconx")
 ExitApp

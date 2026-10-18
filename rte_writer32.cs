@@ -16,8 +16,22 @@
 #load "rte_pageview.cs"
 #load "rte_recovery.cs"
 #load "rte_templates.cs"
+#load "rte_styles.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer31.ahk. Iteration 31 adds to iteration 30:
+// Run it with rte_writer32.ahk. Iteration 32 adds to iteration 31:
+//   - Paragraph styles (rte_styles.cs): each paragraph has a style (Normal, Title, Subtitle, Heading 1 to 6, Quote,
+//     Code, and your own), chosen in the Style box (Ctrl+0 Normal, Ctrl+1 to Ctrl+6 the headings, Ctrl+7 Code). Home >
+//     Styles: Modify Style (font, size, colour, alignment, indents, spacing, line spacing, keep with next, heading level,
+//     the style after Enter), New Style (from the paragraph at the caret), Update Style to Match (the style made like the
+//     paragraph), Delete Style, Clear Formatting (Ctrl+Space); changing a style changes its paragraphs (formatting of their own stays, unless it covers most of a paragraph, as in Word). Copy and paste keep the paragraphs' styles. Three style
+//     sets, none of them Word's: Classic (Times New Roman 12, black headings: the default), Plain (the look before
+//     styles), Modern; Save Styles as My Default gives new documents this document's styles.
+//   - Headings are what their style says, not guessed from fonts: the outline, Markdown's #, HTML's h1-h6 (a bold 12 pt
+//     line is no longer Heading 4). Styles are kept in RTF as Word and LibreOffice read them (a style sheet), so Word
+//     files written through Word or LibreOffice have them too; a document's own look is kept when it is opened (its
+//     styles are defined from its own paragraphs). Scripts: Rte.Style := "Heading 1", Rte.Styles(), Rte.ModifyStyle(...),
+//     Rte.NewStyle(...), Rte.StyleSet := "Modern", Rte.SaveStylesAsDefault().
+// Iteration 31 added to iteration 30:
 //   - Several windows: File > New Window and File > Open in New Window start another RTE Writer (a little down and to
 //     the right of this one), to work on two documents at once; each window is a whole editor of its own (its recovery
 //     copies, its macros, its automation). The windows share the settings file: each saves only what it changed, so a
@@ -299,17 +313,18 @@ enum RibbonCommand : uint
 	LineSpacing200 = 364, LineSpacing250 = 365, LineSpacing300 = 366, LineSpacingOptions = 367, SpaceBefore = 368, SpaceAfter = 369,
 	ListOptions = 259, ListStyle = 260, ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264,
 	ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270,
-	ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, PageBreak = 280,
-	Table = 281, Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290,
-	NextSpelling = 295, AddToDictionary = 296, SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302,
-	PrintLayout = 370, ZoomPageWidth = 371, ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303,
-	Outline = 304, ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331,
-	ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311,
-	MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320,
-	InsertBelow = 321, InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326,
-	TableProperties = 340, TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345,
-	TableShading = 346, LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354,
-	LineNumberOptions = 355,
+	ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, StylesMenu = 380,
+	ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384, StyleSetClassic = 385,
+	StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, PageBreak = 280, Table = 281, Picture = 282,
+	Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295, AddToDictionary = 296,
+	SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371,
+	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
+	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313,
+	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
+	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
+	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
+	LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -464,6 +479,8 @@ class WriterForm : Form
 		StartPosition = FormStartPosition.CenterScreen;
 		Size = new Size(LogicalToDeviceUnits(1150), LogicalToDeviceUnits(820));
 		Editor.EnableHtmlFontSizing = Settings.Structured;    // structured documents (headings) by default; View menu switches
+		// Markdown: what a paragraph is, by its style (Code; a heading's level; else body text), not by its font
+		MarkdownConverter.BlockOf = (doc, position) => string.Equals(StyleEngine.StyleAt(doc, Styles, position).Name, "Code", StringComparison.OrdinalIgnoreCase) ? (int)BlockStyle.Preformatted : StyleEngine.LevelAt(doc, Styles, position);
 		Editor.WordWrap = Settings.WordWrap;
 		Editor.EnableSpellCheck = Settings.SpellCheck;
 		AutoLevelStyles = Settings.AutoLevelStyles;
@@ -662,9 +679,15 @@ class WriterForm : Form
 		// (these act on the source editor while it is the one in use; in it, their keys are its own)
 		undoButton = Button(RibbonCommand.Undo, OnText(() => { skipLegalCheck = true; Editor.Undo(); }, sourceBox.Undo), Keys.Control | Keys.Z, M("Undo"));
 		redoButton = Button(RibbonCommand.Redo, OnText(() => { skipLegalCheck = true; Editor.Redo(); }, sourceBox.Redo), Keys.Control | Keys.Y, M("Redo"));
-		cutButton = Button(RibbonCommand.Cut, OnText(Editor.Cut, sourceBox.Cut), Keys.Control | Keys.X, M("Cut"));
-		copyButton = Button(RibbonCommand.Copy, OnText(Editor.Copy, sourceBox.Copy), Keys.Control | Keys.C, M("Copy"));
-		Button(RibbonCommand.Paste, OnText(Editor.Paste, () => sourceBox.Paste(DataFormats.GetFormat(DataFormats.UnicodeText))), Keys.Control | Keys.V, M("Paste"));
+		// (copy and paste keep the paragraphs' styles: StyleClipboard)
+		Action cut = OnText(() => StyleClipboard.Copy(Editor, Styles, Editor.Cut), sourceBox.Cut), copy = OnText(() => StyleClipboard.Copy(Editor, Styles, Editor.Copy), sourceBox.Copy),
+			paste = OnText(() => { if (StyleClipboard.Paste(Editor, Styles, Editor.Paste)) FillStyleBox(); RefreshOutline(); }, () => sourceBox.Paste(DataFormats.GetFormat(DataFormats.UnicodeText)));
+		cutButton = Button(RibbonCommand.Cut, cut, Keys.Control | Keys.X, M("Cut"));
+		copyButton = Button(RibbonCommand.Copy, copy, Keys.Control | Keys.C, M("Copy"));
+		Button(RibbonCommand.Paste, paste, Keys.Control | Keys.V, M("Paste"));
+		Shortcut(Keys.Shift | Keys.Delete, "Cut", cut, M("Cut"));
+		Shortcut(Keys.Control | Keys.Insert, "Copy", copy, M("Copy"));
+		Shortcut(Keys.Shift | Keys.Insert, "Paste", paste, M("Paste"));
 		Button(RibbonCommand.SelectAll, OnText(Editor.SelectAll, sourceBox.SelectAll), Keys.Control | Keys.A, M("SelectAll"));
 		Button(RibbonCommand.Find, () => ShowFind(false), Keys.Control | Keys.F);
 		Button(RibbonCommand.Replace, () => ShowFind(true), Keys.Control | Keys.H);
@@ -724,32 +747,37 @@ class WriterForm : Form
 		// Home: block styles (structured documents)
 		blockCombo = new RibbonComboBox(ribbon, (uint)RibbonCommand.BlockStyle);
 		// The ribbon sizes a combo box by this string, not by its items: the widest style name, and a letter to spare.
-		blockCombo.RepresentativeString = Enum.GetValues<BlockStyle>().Select(BlockName)
-			.MaxBy(name => TextRenderer.MeasureText(name, SystemFonts.MessageBoxFont).Width) + "W";
-		blockCombo.ItemsSourceReady += (s, e) => {
-			var items = blockCombo.ItemsSource;
-			items.Clear();
-			foreach (var style in Enum.GetValues<BlockStyle>())
-				items.Add(new GalleryItemPropertySet { Label = BlockName(style), CategoryID = Constants.UI_Collection_InvalidIndex });
-		};
+		blockCombo.RepresentativeString = "Heading 6 (your style)W";    // (the ribbon sizes the box by this, not by its items)
+		blockCombo.ItemsSourceReady += (s, e) => FillStyleBox(force: true);
 		blockCombo.ExecuteEvent += (s, e) => {
-			if (updatingUi || GalleryItemEventArgs.Create(blockCombo, e).SelectedItem is not { SelectedItemIndex: >= 0 and <= (int)BlockStyle.Preformatted } item) return;
-			var style = (BlockStyle)item.SelectedItemIndex;
+			if (updatingUi || GalleryItemEventArgs.Create(blockCombo, e).SelectedItem is not { SelectedItemIndex: >= 0 } item || item.SelectedItemIndex >= styleBoxNames.Count) return;
+			string name = styleBoxNames[item.SelectedItemIndex];
 			BeginInvoke(() => {
 				LeaveOverlays();
-				if (SourceActive) { RunSource(() => SourceBlockStyle(style)); return; }
-				Run(() => api.SetBlockStyle(style), M("SetBlockStyle", style));
+				if (SourceActive) {
+					if (SourceBlockOf(name) is BlockStyle block) RunSource(() => SourceBlockStyle(block));
+					else SetStatus($"The {name} style works in the Rich Text view (View > Rich Text); Markdown and HTML have headings, normal text and code.");
+					return;
+				}
+				Run(() => api.SetStyle(name), M("SetStyle", name));
 				Editor.Focus();
 			});
 		};
-		foreach (var style in Enum.GetValues<BlockStyle>()) {
-			Keys keys = style switch {
-				BlockStyle.Paragraph => Keys.Control | Keys.D0,
-				BlockStyle.Preformatted => Keys.Control | Keys.D7,
-				_ => Keys.Control | (Keys.D0 + (int)style)
-			};
-			Shortcut(keys, BlockName(style), () => api.SetBlockStyle(style), M("SetBlockStyle", style));
+		// Ctrl+0 Normal, Ctrl+1 to Ctrl+6 the headings, Ctrl+7 Code
+		for (int key = 0; key <= 7; key++) {
+			string name = key == 0 ? "Normal" : key == 7 ? "Code" : "Heading " + key;
+			Shortcut(Keys.Control | (Keys.D0 + key), name, () => api.SetStyle(name), M("SetStyle", name));
 		}
+		// Home > Styles (its label: the document's style set)
+		stylesMenu = new RibbonDropDownButton(ribbon, (uint)RibbonCommand.StylesMenu);
+		Button(RibbonCommand.ModifyStyle, ModifyStyleCommand);
+		Button(RibbonCommand.NewStyle, NewStyleCommand);
+		Button(RibbonCommand.UpdateStyle, UpdateStyleCommand);
+		Button(RibbonCommand.DeleteStyle, DeleteStyleCommand);
+		Button(RibbonCommand.ClearFormatting, () => api.ClearFormatting(), Keys.Control | Keys.Space, M("ClearFormatting"));
+		foreach (var (id, set) in new[] { (RibbonCommand.StyleSetClassic, "Classic"), (RibbonCommand.StyleSetPlain, "Plain"), (RibbonCommand.StyleSetModern, "Modern") })
+			Toggle(id, () => { api.StyleSet = set; Record(M("StyleSet", set)); });
+		Button(RibbonCommand.SaveStyles, () => { api.SaveStylesAsDefault(); SetStatus("New documents get these styles now (Styles > Classic, Plain or Modern, then this, to change them again)."); });
 
 		// Insert
 		Button(RibbonCommand.PageBreak, () => api.InsertPageBreak(), Keys.None, M("InsertPageBreak"));    // Ctrl+Enter: ProcessCmdKey
@@ -886,7 +914,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 31: several windows)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 32: paragraph styles)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1259,6 +1287,237 @@ class WriterForm : Form
 		Settings.Save();
 		UpdateRecentItems();
 	}
+
+	// ---- Paragraph styles (iteration 32)
+
+	/// The document's styles.
+	internal StyleSheet Styles = StyleSets.Get("Classic");
+
+	/// The styles new documents get: yours (Save Styles as My Default), else your style set's.
+	internal StyleSheet DefaultStyles() => Settings.MyStyles?.Copy() is { Styles.Count: > 0 } mine ? mine : StyleSets.Get(Settings.StyleSetName);
+
+	/// The editor's base font (text without a font of its own: a new document's, HTML's and Markdown's): Normal's. Set
+	/// before a document is loaded (it applies to all the text there is).
+	internal void UseNormalFont() {
+		var normal = Styles.Normal;
+		try { Editor.Font = new Font(normal.Font, normal.Size); } catch (ArgumentException) { }
+	}
+
+	/// After a document is loaded (its paragraphs' styles set): its style sheet. defined: the styles the file defined
+	/// (RTE Writer's own RTF), else the default ones. The styles its paragraphs use that weren't defined are defined from
+	/// the first paragraph with each (the document keeps its look), or, with takeLook (Markdown, plain text, which have
+	/// no look of their own), its paragraphs are given the styles' look.
+	internal void StylesAfterLoad(StyleSheet? defined, bool takeLook, bool styledLook = false) {
+		var sheet = defined?.Copy() ?? DefaultStyles();
+		foreach (var usual in DefaultStyles().Styles) if (sheet.Find(usual.Name) == null) sheet.Styles.Add(usual.Copy());    // (the usual styles are always there)
+		Styles = sheet;
+		var doc = Editor.TextDocument;
+		var firsts = new Dictionary<int, int>();
+		foreach (var (start, _) in StyleEngine.Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength)) {
+			var para = doc.Range2(start, start).Para;
+			if (StyleEngine.NameOf(para.Style) == null) StyleEngine.Tag(para, -1);    // (a number no style has: Normal)
+			firsts.TryAdd(para.Style, start);
+		}
+		foreach (var (id, start) in firsts) {
+			var style = sheet.Ensure(StyleEngine.NameOf(id)!);
+			if (takeLook) continue;
+			if (defined?.Find(style.Name) != null) continue;
+			int i = sheet.Styles.IndexOf(style);
+			sheet.Styles[i] = StyleEngine.Capture(doc, start, style.Name, style.Level, style.Next);
+		}
+		// (styledLook: the paragraphs with a style other than Normal get its look: HTML's readers give headings sizes of
+		// their own; Normal paragraphs keep the file's)
+		if (styledLook && !takeLook) {
+			doc.BeginEditCollection();
+			try {
+				foreach (var (start, _) in StyleEngine.Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength)) {
+					var style = StyleEngine.StyleAt(doc, sheet, start);
+					if (style != sheet.Normal) StyleEngine.Apply(doc, sheet, style, start, start);
+				}
+			} finally {
+				doc.EndEditCollection();
+			}
+		}
+		if (takeLook) {
+			doc.BeginEditCollection();
+			try {
+				foreach (var (start, _) in StyleEngine.Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength)) {
+					var style = StyleEngine.StyleAt(doc, sheet, start);
+					var para = doc.Range2(start, start).Para;
+					// (Normal paragraphs: their characters; lists and quotes keep their indents)
+					if (style == sheet.Normal || (para.ListType & 0xFFFF) != tomConstants.tomListNone) StyleEngine.ApplyCharacters(doc, sheet, style, start);
+					else StyleEngine.Apply(doc, sheet, style, start, start);
+				}
+			} finally {
+				doc.EndEditCollection();
+			}
+		}
+		FillStyleBox(force: true);
+		styleSetShown = null;
+		ShowStyleSet();
+	}
+
+	List<string> styleBoxNames = new();
+	RibbonDropDownButton? stylesMenu;
+	string? styleSetShown;
+
+	/// The Styles drop-down's label: the document's style set, and whether its styles have been changed from the set's.
+	internal string StyleSetLabel() {
+		var set = StyleSets.Get(Styles.Set);
+		bool changed = set.Styles.Any(s => Styles.Find(s.Name) is not { } mine || System.Text.Json.JsonSerializer.Serialize(mine) != System.Text.Json.JsonSerializer.Serialize(s));
+		return "Styles: " + set.Set + (changed ? " (changed)" : "");
+	}
+
+	// (only when the styles may have changed: StylesChanged, a document loaded, a set chosen)
+	void ShowStyleSet(bool force = false) {
+		if (stylesMenu == null || !ribbon.Initialized) return;
+		if (!force && styleSetShown != null) return;
+		string label = StyleSetLabel();
+		if (label == styleSetShown) return;
+		styleSetShown = label;
+		try { stylesMenu.Label = label; } catch (COMException) { }
+	}
+
+	// The Style box's list: the document's styles, in the sheet's order.
+	internal void FillStyleBox(bool force = false) {
+		if (blockCombo == null || !ribbon.Initialized || blockCombo.ItemsSource is not { } items) return;
+		var names = Styles.Styles.Select(s => s.Name).ToList();
+		if (!force && names.SequenceEqual(styleBoxNames)) return;
+		styleBoxNames = names;
+		items.Clear();
+		foreach (var name in names) items.Add(new GalleryItemPropertySet { Label = name, CategoryID = Constants.UI_Collection_InvalidIndex });
+	}
+
+	/// The style of the paragraph at the caret ("" if the selection has several).
+	internal string CaretStyleName() {
+		var doc = Editor.TextDocument;
+		var selection = doc.Selection2;
+		var paragraphs = StyleEngine.Paragraphs(doc, selection.Start, selection.End);
+		var names = paragraphs.Select(p => StyleEngine.StyleAt(doc, Styles, p.Start).Name).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+		return names.Count == 1 ? names[0] : "";
+	}
+
+	// The style the source views have for a style: the headings, Normal and Code (null: none).
+	static BlockStyle? SourceBlockOf(string name) =>
+		string.Equals(name, "Normal", StringComparison.OrdinalIgnoreCase) ? BlockStyle.Paragraph
+		: string.Equals(name, "Code", StringComparison.OrdinalIgnoreCase) ? BlockStyle.Preformatted
+		: ParagraphStyle.HeadingNumber(name) is int n and > 0 ? (BlockStyle)n : null;
+
+	// Enter at the end of a paragraph: the style the new paragraph is to get (null: the same, which RichEdit gives it).
+	string? NextStyleAfterEnter() {
+		var doc = Editor.TextDocument;
+		var selection = doc.Selection2;
+		if (selection.Start != selection.End) return null;
+		var (start, end) = StyleEngine.Paragraphs(doc, selection.Start, selection.Start)[0];
+		if (selection.Start != end - 1) return null;    // (not at the paragraph's end)
+		var style = StyleEngine.StyleAt(doc, Styles, start);
+		return style.Next != "" && !string.Equals(style.Next, style.Name, StringComparison.OrdinalIgnoreCase) && Styles.Find(style.Next) != null ? style.Next : null;
+	}
+
+	void ApplyStyleAtCaret(string name) {
+		if (Styles.Find(name) is not { } style) return;
+		var doc = Editor.TextDocument;
+		int caret = doc.Selection2.Start;
+		StyleEngine.Apply(doc, Styles, style, caret, caret);
+		StyleEngine.SetTyping(doc.Selection2.Font, style);
+		UpdateUi();
+	}
+
+	internal void StyleSetMayHaveChanged() { styleSetShown = null; ShowStyleSet(); }
+
+	// Styles changed: the box, the outline, the line numbers.
+	internal void StylesChanged() {
+		Editor.Modified = true;
+		styleSetShown = null;    // (the label shows the set again, below)
+		// (the caret in an empty paragraph: what is typed next in its style, which RichEdit keeps apart from the paragraph)
+		var doc = Editor.TextDocument;
+		var selection = doc.Selection2;
+		if (selection.Start == selection.End && StyleEngine.Paragraphs(doc, selection.Start, selection.Start)[0] is var (start, end) && end - start <= 1)
+			StyleEngine.SetTyping(selection.Font, StyleEngine.StyleAt(doc, Styles, start));
+		FillStyleBox();
+		RefreshOutline();
+		lineGutter.DocumentChanged();
+		UpdateUi();
+	}
+
+	/// Changes a style (old to updated) in the sheet and in its paragraphs, in one undo step; returns how many paragraphs
+	/// have it.
+	internal int ChangeStyle(ParagraphStyle old, ParagraphStyle updated) {
+		int index = Styles.Styles.FindIndex(s => string.Equals(s.Name, old.Name, StringComparison.OrdinalIgnoreCase));
+		if (index < 0) throw new ArgumentException($"There is no style \"{old.Name}\".");
+		if (!string.Equals(old.Name, updated.Name, StringComparison.OrdinalIgnoreCase))
+			foreach (var other in Styles.Styles) if (string.Equals(other.Next, old.Name, StringComparison.OrdinalIgnoreCase)) other.Next = updated.Name;
+		Styles.Styles[index] = updated;
+		var doc = Editor.TextDocument;
+		doc.BeginEditCollection();
+		int count;
+		try { count = StyleEngine.Restyle(doc, Styles, old, updated); } finally { doc.EndEditCollection(); }
+		StylesChanged();
+		return count;
+	}
+
+	/// Gives the document a style set: each of its styles becomes the set's (its paragraphs with it); your own styles stay.
+	internal void UseStyleSet(string name) {
+		var set = StyleSets.Get(name);
+		var doc = Editor.TextDocument;
+		doc.BeginEditCollection();
+		try {
+			foreach (var style in set.Styles) {
+				var old = Styles.Find(style.Name);
+				if (old == null) { Styles.Styles.Add(style.Copy()); continue; }
+				Styles.Styles[Styles.Styles.IndexOf(old)] = style.Copy();
+				StyleEngine.Restyle(doc, Styles, old, style);
+			}
+			Styles.Set = set.Set;
+		} finally {
+			doc.EndEditCollection();
+		}
+		StylesChanged();
+	}
+
+	// Home > Styles > Modify Style: the caret paragraph's style.
+	void ModifyStyleCommand() {
+		var style = StyleEngine.StyleAt(Editor.TextDocument, Styles, Editor.TextDocument.Selection2.Start);
+		using var dlg = new StyleDialog(style.Copy(), Styles, isNew: false);
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		int count = ChangeStyle(style, dlg.Result);
+		Record(M("ModifyStyle", style.Name, StyleSettings(dlg.Result)));
+		SetStatus($"The {dlg.Result.Name} style changed ({count} paragraph{(count == 1 ? "" : "s")}). Styles > Save Styles as My Default keeps it for new documents.");
+	}
+
+	// Home > Styles > New Style: from the caret paragraph, which gets it.
+	void NewStyleCommand() {
+		var doc = Editor.TextDocument;
+		int n = 1;
+		while (Styles.Find("Style " + n) != null) n++;
+		var start = StyleEngine.Capture(doc, doc.Selection2.Start, "Style " + n, 0, "");
+		using var dlg = new StyleDialog(start, Styles, isNew: true);
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		api.NewStyle(dlg.Result.Name, StyleSettings(dlg.Result));
+		Record(M("NewStyle", dlg.Result.Name, StyleSettings(dlg.Result)));
+		SetStatus($"New style {dlg.Result.Name}, given to the paragraph{(StyleEngine.Paragraphs(doc, doc.Selection2.Start, doc.Selection2.End).Count == 1 ? "" : "s")} at the caret.");
+	}
+
+	// Home > Styles > Update Style to Match: the caret paragraph's style becomes like it.
+	void UpdateStyleCommand() {
+		string name = api.UpdateStyleToMatch();
+		Record(M("UpdateStyleToMatch"));
+		SetStatus($"The {name} style now looks like the paragraph at the caret, and so do its other paragraphs.");
+	}
+
+	// Home > Styles > Delete Style: the caret paragraph's style, if it is one of the user's.
+	void DeleteStyleCommand() {
+		string name = CaretStyleName();
+		if (name == "" || Styles.Find(name) is not { } style) { SetStatus("Put the caret in a paragraph with the style to delete."); return; }
+		if (StyleSets.Get("Classic").Find(name) != null) { SetStatus($"{name} is one of the usual styles, which stay (Modify Style changes it)."); return; }
+		if (MessageBox.Show(this, $"Delete the {name} style? Its paragraphs become Normal.", AppName, MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+		api.DeleteStyle(name);
+		Record(M("DeleteStyle", name));
+	}
+
+	// A style's settings as Rte.ModifyStyle takes them ("Font=Georgia\nSize=12 ...").
+	internal static string StyleSettings(ParagraphStyle style) => string.Join("\n",
+		typeof(ParagraphStyle).GetProperties().Where(p => p.Name != "Name").Select(p => p.Name + "=" + Convert.ToString(p.GetValue(style), CultureInfo.InvariantCulture)));
 
 	// ---- Several windows (iteration 31)
 
@@ -2343,6 +2602,9 @@ class WriterForm : Form
 				M("Key", keyData switch { Keys.Enter => "Enter", Keys.Back => "Backspace", _ => "Delete" }));
 			if (handled) return true;
 		}
+		// Enter at the end of a paragraph whose style is followed by another (a heading by Normal): the new paragraph gets it
+		if (keyData == Keys.Enter && Editor.IsHandleCreated && msg.HWnd == Editor.Handle && NextStyleAfterEnter() is { } nextStyle)
+			BeginInvoke(() => ApplyStyleAtCaret(nextStyle));
 		// Tab / Shift+Tab in a table: the next or previous cell (RichEdit's own Tab doesn't in every table, such as
 		// some from Word), and a new row from the last cell
 		if ((keyData == Keys.Tab || keyData == (Keys.Shift | Keys.Tab)) && Editor.IsHandleCreated && msg.HWnd == Editor.Handle && CaretInTable() && api.InTable()) {
@@ -2664,8 +2926,12 @@ class WriterForm : Form
 		toggleButtons[RibbonCommand.LineNumbersEachPage].BooleanValue = Numbering.Mode == LineNumbering.Modes.EachPage;
 		toggleButtons[RibbonCommand.SuppressLineNumbers].BooleanValue = para.NoLineNumber == tomConstants.tomTrue;
 
-		blockCombo.Enabled = Editor.EnableHtmlFontSizing;
-		blockCombo.SelectedItem = Editor.EnableHtmlFontSizing && api.GetBlockStyle() is BlockStyle block ? (uint)block : Constants.UI_Collection_InvalidIndex;
+		FillStyleBox();
+		int styleIndex = styleBoxNames.FindIndex(n => string.Equals(n, CaretStyleName(), StringComparison.OrdinalIgnoreCase));
+		blockCombo.SelectedItem = styleIndex >= 0 ? (uint)styleIndex : Constants.UI_Collection_InvalidIndex;
+		foreach (var (id, set) in new[] { (RibbonCommand.StyleSetClassic, "Classic"), (RibbonCommand.StyleSetPlain, "Plain"), (RibbonCommand.StyleSetModern, "Modern") })
+			toggleButtons[id].BooleanValue = string.Equals(Styles.Set, set, StringComparison.OrdinalIgnoreCase);
+		ShowStyleSet();
 		toggleButtons[RibbonCommand.Structured].BooleanValue = Editor.EnableHtmlFontSizing;
 		toggleButtons[RibbonCommand.FreeForm].BooleanValue = !Editor.EnableHtmlFontSizing;
 		toggleButtons[RibbonCommand.RecordMacro].BooleanValue = recorder.Recording;
@@ -3315,7 +3581,13 @@ public class EditorApi
 
 	/// Starts a new, empty document (unsaved changes are discarded).
 	public void New() {
+		form.Styles = form.DefaultStyles();
+		form.UseNormalFont();
 		ed.Html = "";
+		StyleEngine.Apply(ed.TextDocument, form.Styles, form.Styles.Normal, 0, 0);
+		StyleEngine.SetTyping(ed.TextDocument.Selection2.Font, form.Styles.Normal);
+		form.FillStyleBox(force: true);
+		form.StyleSetMayHaveChanged();
 		form.Bands = form.DefaultBands();
 		form.SetLineNumbering(new LineNumbering(), changesDocument: false);
 		ed.Modified = false;
@@ -3345,13 +3617,15 @@ public class EditorApi
 	public bool Portable => AppFolders.Portable;
 
 	// The recovery copy's content: the document as RTF, with its header, footer and line numbering.
-	internal string RecoveryRtf() => WithBands(OfficeConverters.ListIndentsRtf(RawRtf), form.FileName ?? "");
+	internal string RecoveryRtf() => WithBands(OfficeConverters.ListIndentsRtf(StyledRtf(RawRtf)), form.FileName ?? "");
 
 	// A recovery copy back in the editor: as unsaved changes to the document it was (fileName; null: a new one).
 	internal void Recover(string rtf, string? fileName) {
 		var bands = HeaderFooter.FromRtf(rtf);
 		var numbering = LineNumberFormats.FromRtf(rtf);
+		form.Styles = form.DefaultStyles();
 		Rtf = rtf;
+		form.StylesAfterLoad(StylesFromRtf(rtf), takeLook: false);
 		form.Bands = bands ?? form.DefaultBands();
 		form.SetLineNumbering(numbering ?? new LineNumbering(), changesDocument: false);
 		MarksFollowText();
@@ -3418,6 +3692,130 @@ public class EditorApi
 		ed.Modified = false;
 	}
 
+	/// The document's styles' names, one a line (the Style box's list).
+	public string Styles() => string.Join("\n", form.Styles.Styles.Select(s => s.Name));
+
+	/// The style of the paragraphs the selection is in ("" if they differ); setting it gives them the style.
+	public string Style {
+		get => form.CaretStyleName();
+		set => SetStyle(value);
+	}
+
+	/// Gives the paragraphs the selection is in a style (by name: Rte.Styles() lists them), in one undo step: their
+	/// formatting becomes the style's, except formatting given to part of a paragraph (a bold word).
+	public void SetStyle(string name) {
+		var style = form.Styles.Find(name)
+			?? (ParagraphStyle.BuiltIn(name) || StyleSets.Get("Classic").Find(name) != null ? form.Styles.Ensure(name) : throw new ArgumentException($"There is no style \"{name}\" (Rte.Styles() lists them)."));
+		var doc = ed.TextDocument;
+		var selection = doc.Selection2;
+		doc.BeginEditCollection();
+		try {
+			StyleEngine.Apply(doc, form.Styles, style, selection.Start, selection.End);
+			// (an empty paragraph: what is typed next gets the style)
+			var paragraph = doc.Range2(selection.Start, selection.Start);
+			paragraph.Expand(tomConstants.tomParagraph);
+			if (selection.Start == selection.End && (paragraph.Text ?? "").Trim('\r', '\n') == "") StyleEngine.SetTyping(selection.Font, style);
+		} finally {
+			doc.EndEditCollection();
+		}
+		form.StylesChanged();
+	}
+
+	// A style's settings changed: "Name=Value" lines (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent,
+	// RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, Level, Next).
+	static ParagraphStyle WithSettings(ParagraphStyle style, string settings) {
+		var result = style.Copy();
+		foreach (var line in settings.Split('\n', StringSplitOptions.RemoveEmptyEntries)) {
+			int equals = line.IndexOf('=');
+			if (equals <= 0) continue;
+			string key = line[..equals].Trim(), value = line[(equals + 1)..].Trim();
+			var property = typeof(ParagraphStyle).GetProperty(key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)
+				?? throw new ArgumentException($"A style has no \"{key}\" (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent, RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, Level, Next).");
+			if (property.Name == "Name") continue;
+			object converted = property.PropertyType == typeof(bool) ? value is "1" or "true" or "True" or "yes"
+				: property.PropertyType == typeof(float) ? float.Parse(value, CultureInfo.InvariantCulture)
+				: property.PropertyType == typeof(int) ? int.Parse(value, CultureInfo.InvariantCulture) : value;
+			property.SetValue(result, converted);
+		}
+		if (ParagraphStyle.BuiltIn(style.Name)) result.Level = style.Level;
+		global::LineSpacing.Parse(result.LineSpacing);    // (throws for one that isn't)
+		return result;
+	}
+
+	/// Changes a style: settings as "Name=Value" lines ("Font=Georgia\nSize=12\nBefore=6"); its paragraphs change too
+	/// (one undo step). Returns how many paragraphs have it.
+	public int ModifyStyle(string name, string settings) {
+		var style = form.Styles.Find(name) ?? throw new ArgumentException($"There is no style \"{name}\" (Rte.Styles() lists them).");
+		return form.ChangeStyle(style, WithSettings(style, settings));
+	}
+
+	/// A new style, from the paragraph at the caret (with settings, as ModifyStyle takes them, on top), given to the
+	/// paragraphs the selection is in.
+	public void NewStyle(string name, string settings = "") {
+		name = name.Trim();
+		if (name == "" || name.Contains('@') || name.Contains(';') || name.Contains('{') || name.Contains('}')) throw new ArgumentException("A style's name can't be empty, nor have @ ; { } in it.");
+		if (form.Styles.Find(name) != null) throw new ArgumentException($"There is a style \"{name}\" already.");
+		var doc = ed.TextDocument;
+		var style = WithSettings(StyleEngine.Capture(doc, doc.Selection2.Start, name, 0, ""), settings);
+		style.Name = name;
+		form.Styles.Styles.Add(style);
+		SetStyle(name);
+	}
+
+	/// The caret paragraph's style made to look like the paragraph; its other paragraphs change too. Returns its name.
+	public string UpdateStyleToMatch() {
+		var doc = ed.TextDocument;
+		var style = StyleEngine.StyleAt(doc, form.Styles, doc.Selection2.Start);
+		form.ChangeStyle(style, StyleEngine.Capture(doc, doc.Selection2.Start, style.Name, style.Level, style.Next));
+		return style.Name;
+	}
+
+	/// Clear Formatting (Ctrl+Space): the selected text back to its paragraphs' style (all formatting of its own goes); with
+	/// no selection, the caret's whole paragraph, its paragraph formatting (spacing, indents ...) too. One undo step.
+	public void ClearFormatting() {
+		var doc = ed.TextDocument;
+		var selection = doc.Selection2;
+		doc.BeginEditCollection();
+		try { StyleEngine.ResetFormatting(doc, form.Styles, selection.Start, selection.End, paragraphs: selection.Start == selection.End); }
+		finally { doc.EndEditCollection(); }
+		form.StylesChanged();
+	}
+
+	/// Deletes one of your own styles; its paragraphs become Normal (one undo step).
+	public void DeleteStyle(string name) {
+		var style = form.Styles.Find(name) ?? throw new ArgumentException($"There is no style \"{name}\".");
+		if (StyleSets.Get("Classic").Find(style.Name) != null) throw new ArgumentException($"{style.Name} is one of the usual styles, which stay.");
+		var doc = ed.TextDocument;
+		int id = StyleEngine.IdOf(style.Name);
+		doc.BeginEditCollection();
+		try {
+			foreach (var (start, _) in StyleEngine.Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength))
+				if (doc.Range2(start, start).Para.Style == id) StyleEngine.Apply(doc, form.Styles, form.Styles.Normal, start, start);
+			foreach (var other in form.Styles.Styles) if (string.Equals(other.Next, style.Name, StringComparison.OrdinalIgnoreCase)) other.Next = "";
+			form.Styles.Styles.Remove(style);
+		} finally {
+			doc.EndEditCollection();
+		}
+		form.StylesChanged();
+	}
+
+	/// The document's style set ("Classic", "Plain", "Modern"); setting it gives the document that set's styles (your
+	/// own styles stay). New documents keep theirs: SaveStylesAsDefault.
+	public string StyleSet {
+		get => form.Styles.Set;
+		set {
+			if (!StyleSets.Names.Contains(value.Trim(), StringComparer.OrdinalIgnoreCase)) throw new ArgumentException("The style sets are Classic, Plain and Modern.");
+			form.UseStyleSet(value.Trim());
+		}
+	}
+
+	/// New documents get this document's styles (your changes included).
+	public void SaveStylesAsDefault() {
+		form.Settings.MyStyles = form.Styles.Copy();
+		form.Settings.StyleSetName = form.Styles.Set;
+		form.Settings.Save();
+	}
+
 	/// Opens another RTE Writer window (File > New Window), with a new document or the file given. The new window is a
 	/// separate editor: scripts reach it once it is the RTE Writer used last (or with its RTE_WRITER_HWND).
 	public void NewWindow(string path = "") => form.StartWindow(path == "" ? null : path);
@@ -3438,20 +3836,26 @@ public class EditorApi
 		LineNumbering? numbering = null;
 		bool canHaveBands = extension is ".rtf" or ".docx" or ".doc" or ".odt";
 		string? sourceText = null;    // a .md / .html file's own text, for the source view (and saving it as it was)
+		form.Styles = form.DefaultStyles();
+		form.UseNormalFont();    // (text without a font of its own, as HTML's and Markdown's: Normal's)
+		StyleSheet? fileStyles = null;
+		bool takeLook = false, styledLook = false;
 		switch (extension) {
 			case ".md": case ".markdown": {
 				string markdown = sourceText = File.ReadAllText(full);
 				bands = HeaderFooter.FromMarkdown(markdown);
 				numbering = LineNumberFormats.FromMarkdown(markdown);
 				MarkdownConverter.Load(ed, markdown, Path.GetDirectoryName(full));
+				takeLook = true;    // (Markdown has no look of its own: its styles')
 				break;
 			}
-			case ".txt": ed.Text = File.ReadAllText(full).Replace("\r\n", "\n"); break;
+			case ".txt": ed.Text = File.ReadAllText(full).Replace("\r\n", "\n"); takeLook = true; break;
 			case ".rtf": {
 				string rtf = File.ReadAllText(full, Encoding.Latin1);
 				bands = HeaderFooter.FromRtf(rtf);
 				numbering = LineNumberFormats.FromRtf(rtf);
 				Rtf = rtf;
+				fileStyles = StylesFromRtf(rtf);
 				LegalLists.AdoptTypedNumbers(ed);
 				LinkFonts(ed);
 				break;
@@ -3460,7 +3864,7 @@ public class EditorApi
 				var (kind, content, converter) = OfficeConverters.Import(full, via);
 				bands = extension == ".docx" ? HeaderFooter.FromDocx(full) : extension == ".odt" ? HeaderFooter.FromOdt(full) : kind == "rtf" ? HeaderFooter.FromRtf(content) : null;
 				numbering = extension == ".docx" ? LineNumberFormats.FromDocx(full) : extension == ".odt" ? LineNumberFormats.FromOdt(full) : kind == "rtf" ? LineNumberFormats.FromRtf(content) : null;
-				if (kind == "rtf") Rtf = content; else SetHtml(content);
+				if (kind == "rtf") { Rtf = content; fileStyles = StylesFromRtf(content); } else SetHtml(content);
 				LegalLists.ConvertTypedLists(ed, 0, ed.TextDocument.Range2(0, 0).StoryLength, requireTab: true,
 					converter == OfficeConverters.OpenXml || kind == "html" ? OfficeConverters.TypedIndents : null);    // numbers a converter left as text
 				LastConverter = converter;
@@ -3479,11 +3883,14 @@ public class EditorApi
 				bands = HeaderFooter.FromHtml(html);
 				numbering = LineNumberFormats.FromHtml(html);
 				SetHtml(html);
+				fileStyles = StyleHtml.FromMeta(html);    // (RTE Writer's HTML: its styles, which its styled paragraphs are given again)
+				styledLook = fileStyles != null;
 				break;
 			}
 		}
 		form.Bands = bands ?? (canHaveBands ? new PageBands() : form.DefaultBands());
 		form.SetLineNumbering(numbering ?? new LineNumbering(), changesDocument: false);
+		form.StylesAfterLoad(fileStyles, takeLook, styledLook);
 		PageBreaks.Normalize(ed);    // (form feeds in plain text, for one)
 		MarksFollowText();
 		if (LegalLists.AnyLegal(ed.TextDocument)) LegalLists.Renumber(ed);    // (legal items' indents fitted to their numbers' size)
@@ -3524,7 +3931,7 @@ public class EditorApi
 		// (ordinary lists with hanging indents that fit their numbers: RichEdit's own RTF indents them so that Word and
 		// LibreOffice put the numbers too far in)
 		else if (extension == ".rtf")    // (and pictures as PNG, and the header and footer)
-			File.WriteAllText(full, WithBands(OfficeConverters.PngPictures(OfficeConverters.WithAltTexts(OfficeConverters.ListIndentsRtf(RawRtf), AltTexts())), full), Encoding.Latin1);
+			File.WriteAllText(full, WithBands(OfficeConverters.PngPictures(OfficeConverters.WithAltTexts(OfficeConverters.ListIndentsRtf(StyledRtf(RawRtf)), AltTexts())), full), Encoding.Latin1);
 		else {
 			string content = extension switch {
 				".md" or ".markdown" => MarkdownConverter.ToMarkdown(ed, ImageFiles(full)) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering),
@@ -3555,7 +3962,8 @@ public class EditorApi
 
 	/// Replaces the document with HTML (a whole page or a part of one), including the list numbering and tables GetHtml writes.
 	public void SetHtml(string html) {
-		RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(html)))), HtmlLists.Load, HtmlLists.Load, TableWidth());
+		RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(StyleHtml.MarkHtml(html))))), HtmlLists.Load, HtmlLists.Load, TableWidth());
+		StyleHtml.FromMarkers(ed);    // (headings and styles from their tags, not their fonts)
 		if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) + global::LineSpacing.FromMarkers(ed) > 0) ed.ClearUndo();
 	}
 
@@ -3576,7 +3984,7 @@ public class EditorApi
 
 	// The library's HTML, with page breaks, real tables (it writes their cells as paragraphs) and list numbering.
 	string HtmlBody(out string css) {
-		string body = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, global::LineSpacing.ExportHtml(ed, LineBreaks.ExportHtml(ed, ed.Html)))), out css);
+		string body = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, global::LineSpacing.ExportHtml(ed, StyleHtml.Export(ed, form.Styles, LineBreaks.ExportHtml(ed, ed.Html))))), out css);
 		css = ParagraphCss + css;
 		return body;
 	}
@@ -3595,7 +4003,7 @@ public class EditorApi
 	// conversions use it as it comes).
 	string HtmlFile(string title, bool pretty = false) {
 		string body = HtmlBody(out string css);
-		return HtmlDocument(pretty ? PrettyHtml.Format(body) : body, title, css, (OwnBands ? HeaderFooter.HtmlMeta(form.Bands) : "") + LineNumberFormats.HtmlMeta(form.Numbering));
+		return HtmlDocument(pretty ? PrettyHtml.Format(body) : body, title, css, (OwnBands ? HeaderFooter.HtmlMeta(form.Bands) : "") + LineNumberFormats.HtmlMeta(form.Numbering) + StyleHtml.Meta(form.Styles));
 	}
 
 	/// The "via" for an HTML file that keeps its pictures inside it.
@@ -3624,6 +4032,32 @@ public class EditorApi
 
 	// RichEdit's own RTF (without the pictures' alt texts, for changes that go through a RichEdit).
 	string RawRtf => ((RichTextBox)ed).Rtf ?? "";
+
+	// RTF with the document's styles: the style sheet and each paragraph's (RichEdit keeps only the headings').
+	string StyledRtf(string rtf) => RtfStyles.Inject(rtf, StyleEngine.Names(ed.TextDocument, form.Styles), form.Styles);
+
+	// The styles an RTF just loaded has (Word's, LibreOffice's, RTE Writer's): each paragraph's set from its \sN; returns
+	// RTE Writer's own definitions (null if the file has none). An RTF without any styles (written by RTE Writer before it
+	// had them, or by WordPad) gets its headings from their fonts, as before, the large ones only (bold 24, 18 and 14 pt:
+	// a bold 12 pt line is a heading's look only by chance).
+	StyleSheet? StylesFromRtf(string rtf) {
+		var (sheet, names, paragraphs, any) = RtfStyles.Read(rtf);
+		var doc = ed.TextDocument;
+		if (any) {
+			string Name(int number) => names.TryGetValue(number, out var name) ? (ParagraphStyle.HeadingNumber(name) is int n and > 0 ? "Heading " + n : name) : "Normal";
+			StyleEngine.SetNames(doc, paragraphs.Select(Name).ToList());
+			return sheet;
+		}
+		ForEachParagraph((start, text) => {
+			if (text.Trim() == "" || text.IndexOfAny(new[] { '\u0007', '\uFFF9', '\uFFFB' }) >= 0) return;
+			var font = doc.Range2(start, start + 1).Font;
+			bool bold = font.Bold == tomConstants.tomTrue;
+			int level = !bold ? 0 : Math.Abs(font.Size - 24) < 0.1 ? 1 : Math.Abs(font.Size - 18) < 0.1 ? 2 : Math.Abs(font.Size - 14) < 0.1 ? 3 : 0;
+			if (level > 0) StyleEngine.Tag(doc.Range2(start, start).Para, -(level + 1));
+			else if (!bold && Math.Abs(font.Size - 10) < 0.1 && string.Equals(font.Name, "Courier New", StringComparison.OrdinalIgnoreCase)) StyleEngine.Tag(doc.Range2(start, start).Para, StyleEngine.IdOf("Code"));
+		});
+		return null;
+	}
 
 	/// The document as RTF (get), or replaced by RTF (set). RTF keeps everything the editor has.
 	public string Rtf {
@@ -3718,7 +4152,7 @@ public class EditorApi
 		OfficeConverters.DefaultFont = (ed.Font.Name, ed.Font.SizeInPoints);
 		var alts = AltTexts();
 		LastConverter = OfficeConverters.Export(full, RawRtf, () => HtmlFile(Path.GetFileNameWithoutExtension(full)), via,
-			rtf => WithBands(OfficeConverters.WithAltTexts(rtf, alts), full));    // (alt texts last: RichEdit, which some changes go through, mangles them)
+			rtf => WithBands(OfficeConverters.WithAltTexts(StyledRtf(rtf), alts), full));    // (alt texts last: RichEdit, which some changes go through, mangles them; styles too)
 		// the header and footer: parts of their own if the converter had no RTF to make them from, and the exact copy
 		try {
 			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase)) HeaderFooter.AddToDocx(full, form.Bands, form.PageLayout(), Path.GetFileName(full), full, parts: true);
@@ -4335,8 +4769,10 @@ public class EditorApi
 		MarkdownConverter.ToMarkdown(ed, embedImages ? null : (number, data, extension) => $"image{number}.{extension}");
 
 	/// Replaces the document with Markdown. Relative image paths are resolved from the current file's folder.
-	public void SetMarkdown(string markdown) =>
+	public void SetMarkdown(string markdown) {
 		MarkdownConverter.Load(ed, markdown, form.FileName != null ? Path.GetDirectoryName(form.FileName) : Environment.CurrentDirectory);
+		form.StylesAfterLoad(form.Styles, takeLook: true);
+	}
 
 	/// The document view: "Rich" (the formatted text), "Markdown" or "HTML" (the source view, see SideBySide).
 	public string View {
@@ -4500,7 +4936,11 @@ public class EditorApi
 
 	/// Sets the block style of the selected paragraphs (needs the structured mode, EnableHtmlFontSizing = 1).
 	public void SetBlockStyle(BlockStyle style) {
-		if (!ed.EnableHtmlFontSizing) throw new InvalidOperationException("Block styles need a structured document (View > Structured, or EnableHtmlFontSizing = 1).");
+		SetStyle(style switch { BlockStyle.Paragraph => "Normal", BlockStyle.Preformatted => "Code", _ => "Heading " + (int)style });
+	}
+
+	// (the block styles as RichEditorNET had them, before styles)
+	void SetBlockStyleAsBefore(BlockStyle style) {
 		ed.SetBlockStyle(style);
 		// RichEditorNET formats only the paragraph's text, so on an empty paragraph the style would be lost: apply it to
 		// the paragraph mark and the caret too, so that what is typed next gets it.
@@ -5152,10 +5592,8 @@ public class EditorApi
 			text = text.Replace("￼", "").Trim();    // (a picture in a heading is an object character)
 			// table cells are not headings, though a header row's bold text has a heading's font (cells end in U+0007)
 			if (text == "" || text.IndexOfAny(new[] { '\u0007', '￹', '￻' }) >= 0) return;
-			var font = doc.Range2(start, start + 1).Font;
-			if (BlockStyleOf(font.Size, font.Bold == tomConstants.tomTrue, font.Name) is BlockStyle style
-				&& style >= BlockStyle.Heading1 && style <= BlockStyle.Heading6)
-				headings.Add(((int)style, start, text));
+			int level = StyleEngine.LevelAt(doc, form.Styles, start);    // (by the paragraph's style, not its font)
+			if (level is >= 1 and <= 6) headings.Add((level, start, text));
 		});
 		return headings;
 	}
@@ -5534,7 +5972,9 @@ public sealed class Settings
 	public int OutlineWidth { get; set; } = 220;    // at 96 dpi
 	public int? PrinterModeToRestore { get; set; }
 	public int AutosaveSeconds { get; set; } = 60;
-	public bool ShowStartPage { get; set; } = true;    // the start page at the start (without a file to open)
+	public bool ShowStartPage { get; set; } = true;
+	public string StyleSetName { get; set; } = "Classic";    // the style set new documents get (unless MyStyles)
+	public StyleSheet? MyStyles { get; set; }                 // Save Styles as My Default: new documents get these    // the start page at the start (without a file to open)
 	public Dictionary<string, string> TemplateValues {    // a "Your ..." template field's name -> the value typed last
 		get => templateValues;
 		set => templateValues = new(value ?? new(), StringComparer.OrdinalIgnoreCase);    // (names ignoring case, also when read back)
