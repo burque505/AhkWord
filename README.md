@@ -126,7 +126,7 @@ Fields in the header and footer are not filled in (they have their own fields, s
 
 So the .NET 10 Desktop Runtime and AutoHotkey are all you need to install. Csharp-in-AHK finds .NET by itself.
 
-The first start downloads what the editor needs, and so takes longer: the NuGet packages (RichEditorNET, WindowsRibbon, the Open XML libraries, SkiaSharp and others) and, when no compiler is installed, the C# compiler (about 22 MB).
+The first start downloads what the editor needs, and so takes longer: the NuGet packages (RichEditorNET, WindowsRibbon, the Open XML libraries, SkiaSharp and others) and, when no compiler is installed, the C# compiler (about 22 MB). The packages are not in the repository: they come from nuget.org into the computer's NuGet folder (`%USERPROFILE%\.nuget\packages`), as for any .NET program, and are used from there afterwards. If NuGet is set up with no package source (a NuGet.Config without nuget.org), nuget.org is used anyway; if the start fails with `NU1100` or `NU1301`, check that the computer can reach nuget.org (a proxy or firewall), and the sources the message lists.
 
 ### The C# compiler
 
