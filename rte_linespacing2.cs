@@ -1,4 +1,4 @@
-// Line and paragraph spacing for RTE Writer (rte_writer33.cs, through #load): the selected paragraphs' line spacing,
+// Line and paragraph spacing for RTE Writer (rte_writer34.cs, through #load): the selected paragraphs' line spacing,
 // as in Word's Line and Paragraph Spacing button (1.0, 1.15, 1.5, 2.0 ... lines, or at least / exactly so many points),
 // and (version 2) their space before and after. They are paragraph formats (TOM's SetLineSpacing, SpaceBefore,
 // SpaceAfter), kept by RichEdit in RTF (\sl \slmult \sb \sa) and so in Word and OpenDocument files made by Word or
@@ -230,7 +230,8 @@ public static class LineSpacing
 					if (left is float l && Math.Abs(l) > 0.05f) fields.Add("l" + l.ToString("0.##", Invariant));
 					if (right is float rr && Math.Abs(rr) > 0.05f) fields.Add("r" + rr.ToString("0.##", Invariant));
 					if (first is float f && Math.Abs(f) > 0.05f) fields.Add("f" + f.ToString("0.##", Invariant));
-					if (Regex.IsMatch(tabs, @"^[\d.]+/\d/\d(,[\d.]+/\d/\d)*$")) fields.Add("t" + tabs);
+					// (positions left of the paragraph's edge too, LibreOffice's: AddTab leaves those out, and keeps the rest)
+					if (Regex.IsMatch(tabs, @"^-?[\d.]+/\d/\d(,-?[\d.]+/\d/\d)*$")) fields.Add("t" + tabs);
 				}
 				if (fields.Count > 0 || attributes.Contains("data-rte-keep=", StringComparison.OrdinalIgnoreCase)) markers += ParaStart + string.Join(";", fields) + MarkerEnd;
 			}
@@ -250,6 +251,14 @@ public static class LineSpacing
 		+ (para.PageBreakBefore == tomConstants.tomTrue ? "p" : "") + (para.NoLineNumber == tomConstants.tomTrue ? "x" : "")
 		+ (StyleEngine.WidowControlOf(para) ? "" : "o");
 
+	/// Adds a tab stop, unless RichEdit can't have it (at or left of the paragraph's edge: LibreOffice's, relative to the
+	/// paragraph's indent, can be): returns whether it was added.
+	public static bool AddTab(ITextPara para, float position, int alignment, int leader) {
+		if (position <= 0 || position > 1584) return false;
+		try { para.AddTab(position, alignment, leader); return true; }
+		catch (ArgumentException) { return false; }
+	}
+
 	/// A paragraph's tab stops as data-rte-tabs has them: position (points) / TOM alignment / TOM leader, ... ("": none).
 	public static string TabStops(ITextPara para) {
 		var tabs = new List<string>();
@@ -266,20 +275,20 @@ public static class LineSpacing
 	/// markers; returns how many there were.
 	public static int FromMarkers(RichEditBox editor) {
 		var doc = editor.TextDocument;
-		int count = 0;
-		while (true) {
-			string story = Story(doc);
-			var line = Marker.Matches(story).LastOrDefault();
-			var para = ParaMarker.Matches(story).LastOrDefault();
-			var m = line == null ? para : para == null ? line : line.Index > para.Index ? line : para;
-			if (m == null) break;
+		// (all of them found once, and taken out from the last: the text before each stays where it was)
+		string story = Story(doc);
+		var markers = Marker.Matches(story).Select(m => (Match: m, Line: true)).Concat(ParaMarker.Matches(story).Select(m => (Match: m, Line: false)))
+			.OrderByDescending(m => m.Match.Index).ToList();
+		foreach (var (m, line) in markers) {
 			doc.Range2(m.Index, m.Index + m.Length).Text = "";
 			var at = doc.Range2(m.Index, m.Index);
-			if (m == line) Apply(at, m.Groups[1].Value[0] - '0', float.Parse(m.Groups[2].Value, Invariant));
-			else ApplyFormat(at, m.Groups[1].Value);
-			count++;
+			// (a format the editor can't take is left out, not the rest of the document's)
+			try {
+				if (line) Apply(at, m.Groups[1].Value[0] - '0', float.Parse(m.Groups[2].Value, Invariant));
+				else ApplyFormat(at, m.Groups[1].Value);
+			} catch (Exception ex) when (ex is ArgumentException or FormatException or System.Runtime.InteropServices.COMException) { }
 		}
-		return count;
+		return markers.Count;
 	}
 
 	// "b12;a0;l36;r0;f-18;t45/0/0,468/2/0;knt": before, after, left, right, first-line indent (points), tab stops
@@ -291,25 +300,27 @@ public static class LineSpacing
 			char kind = field[0];
 			string value = field[1..];
 			if (kind == 'k') {
-				para.KeepWithNext = value.Contains('n') ? tomConstants.tomTrue : tomConstants.tomFalse;
-				para.KeepTogether = value.Contains('t') ? tomConstants.tomTrue : tomConstants.tomFalse;
-				para.PageBreakBefore = value.Contains('p') ? tomConstants.tomTrue : tomConstants.tomFalse;
-				para.NoLineNumber = value.Contains('x') ? tomConstants.tomTrue : tomConstants.tomFalse;
-				StyleEngine.SetWidowControl(para, !value.Contains('o'));
+				// (each set only if it differs: each change makes RichEdit format the paragraph again)
+				void Flag(int now, bool on, Action<int> set) { int want = on ? tomConstants.tomTrue : tomConstants.tomFalse; if (now != want) set(want); }
+				Flag(para.KeepWithNext, value.Contains('n'), v => para.KeepWithNext = v);
+				Flag(para.KeepTogether, value.Contains('t'), v => para.KeepTogether = v);
+				Flag(para.PageBreakBefore, value.Contains('p'), v => para.PageBreakBefore = v);
+				Flag(para.NoLineNumber, value.Contains('x'), v => para.NoLineNumber = v);
+				if (StyleEngine.WidowControlOf(para) == value.Contains('o')) StyleEngine.SetWidowControl(para, !value.Contains('o'));
 				continue;
 			}
 			if (kind == 't') {
 				para.ClearAllTabs();
 				foreach (var tab in value.Split(',')) {
 					var p = tab.Split('/');
-					para.AddTab(float.Parse(p[0], Invariant), int.Parse(p[1]), int.Parse(p[2]));
+					AddTab(para, float.Parse(p[0], Invariant), int.Parse(p[1]), int.Parse(p[2]));
 				}
 				continue;
 			}
 			if (!float.TryParse(value, NumberStyles.Float, Invariant, out float points)) continue;
 			switch (kind) {
-				case 'b': para.SpaceBefore = points; break;
-				case 'a': para.SpaceAfter = points; break;
+				case 'b': if (Math.Abs(para.SpaceBefore - points) > 0.01f) para.SpaceBefore = points; break;
+				case 'a': if (Math.Abs(para.SpaceAfter - points) > 0.01f) para.SpaceAfter = points; break;
 				case 'l': left = points; break;
 				case 'r': right = points; break;
 				case 'f': first = points; break;
@@ -317,7 +328,8 @@ public static class LineSpacing
 		}
 		if (left != null || right != null || first != null) {
 			// (SetIndents: the first line's indent relative to the left one, the left and the right indent)
-			para.SetIndents(first ?? para.FirstLineIndent, left ?? para.LeftIndent, right ?? para.RightIndent);
+			float f = first ?? para.FirstLineIndent, l = left ?? para.LeftIndent, r = right ?? para.RightIndent;
+			if (Math.Abs(f - para.FirstLineIndent) > 0.01f || Math.Abs(l - para.LeftIndent) > 0.01f || Math.Abs(r - para.RightIndent) > 0.01f) para.SetIndents(f, l, r);
 		}
 	}
 }
@@ -343,6 +355,7 @@ public static class DocxLineSpacing
 		public int? Left, Right, FirstLine;    // (FirstLine: negative for a hanging indent)
 		public List<(int Position, string Alignment, string Leader)> Tabs = new();
 		public bool TabsSet, List;
+		public bool KeepNext, KeepLines, PageBreakBefore, WidowControl;    // (the line and page breaks)
 		public string Style = "";
 		public XElement? Container;            // the body or the table cell the paragraph is in
 		public bool InTable;
@@ -375,7 +388,20 @@ public static class DocxLineSpacing
 			}
 		}
 		if (pPr.Element(W + "numPr") != null) format.List = true;
+		if (pPr.Element(W + "keepNext") is { } keepNext) format.KeepNext = On(keepNext);
+		if (pPr.Element(W + "keepLines") is { } keepLines) format.KeepLines = On(keepLines);
+		if (pPr.Element(W + "pageBreakBefore") is { } breakBefore) format.PageBreakBefore = On(breakBefore);
+		if (pPr.Element(W + "widowControl") is { } widow) format.WidowControl = On(widow);
 	}
+
+	/// A WordprocessingML on/off element: on unless its val says off.
+	public static bool On(XElement element) => (string?)element.Attribute(W + "val") is not ("0" or "false" or "off");
+
+	/// A paragraph's (or style's) pPr over a format (DocxStyles works out styles with it).
+	public static void MergeFormat(Format format, XElement pPr) => Merge(format, pPr);
+
+	/// Puts a child into a w:pPr in its place, in the schema's order.
+	public static void PlaceIn(XElement pPr, XElement child) => Place(pPr, child);
 
 	static int? Int(XElement element, string name) => int.TryParse((string?)element.Attribute(W + name), NumberStyles.Integer, Invariant, out int value) ? value : null;
 
@@ -473,6 +499,8 @@ public static class DocxLineSpacing
 			// (Word's empty paragraphs are blank lines; the editor's HTML import drops a paragraph with only a space)
 			if (block.Value.Trim() == "" && !block.Descendants(x + "img").Any()) block.SetAttributeValue("data-rte-keep", "1");
 		}
+		// (and the paragraphs' styles, and their line and page breaks)
+		if (paired) DocxStyles.IntoHtml(path, html, blocks, formats!);
 	}
 
 	/// A document opened from a .docx through RTF (Word, LibreOffice): its paragraphs' spacing as Word has it (their
@@ -536,14 +564,9 @@ public static class DocxLineSpacing
 
 	static int Twips(float points) => (int)Math.Round(points * 20);
 
-	/// Gives a .docx made by the built-in converter the editor's paragraph formats: line spacing, space before and after,
-	/// indents and tab stops (HtmlToOpenXml writes "at least" as exactly, and has no tab stops). Paired up in order with
-	/// all the document's paragraphs, the tables' included; failing that with those outside tables; left as the converter
-	/// wrote them if neither pairs up.
-	public static void FromEditor(string path, RichEditBox editor) {
-		var doc = editor.TextDocument;
-		XDocument document;
-		using (var zip = ZipFile.OpenRead(path)) using (var s = zip.GetEntry("word/document.xml")!.Open()) document = XDocument.Load(s);
+	/// A .docx's paragraphs (its document.xml's w:p) paired up in order with the editor's (their starts): all the
+	/// document's paragraphs, the tables' included; failing that, those outside tables; null if neither pairs up.
+	public static (List<XElement> Paragraphs, List<int> Starts)? Pair(ITextDocument2 doc, XDocument document) {
 		var body = document.Root!.Element(W + "body")!;
 		var paragraphs = body.Descendants(W + "p").Where(p => !p.Ancestors(W + "txbxContent").Any()).ToList();
 		var starts = Pieces(doc, paragraphs.Count);
@@ -561,9 +584,22 @@ public static class DocxLineSpacing
 			paragraphs = body.Elements(W + "p").ToList();
 			// (RichEdit keeps an empty paragraph after a table that ends the document; the converter leaves it out)
 			while (starts.Count > paragraphs.Count && story.IndexOf('\r', starts[^1]) == starts[^1]) starts.RemoveAt(starts.Count - 1);
-			if (paragraphs.Count != starts.Count) return;
+			if (paragraphs.Count != starts.Count) return null;
 		}
-		if (paragraphs.Count == 0) return;
+		if (paragraphs.Count == 0) return null;
+		return (paragraphs, starts);
+	}
+
+	/// Gives a .docx made by the built-in converter the editor's paragraph formats: line spacing, space before and after,
+	/// indents and tab stops (HtmlToOpenXml writes "at least" as exactly, and has no tab stops). Paired up in order with
+	/// all the document's paragraphs, the tables' included; failing that with those outside tables; left as the converter
+	/// wrote them if neither pairs up.
+	public static void FromEditor(string path, RichEditBox editor) {
+		var doc = editor.TextDocument;
+		XDocument document;
+		using (var zip = ZipFile.OpenRead(path)) using (var s = zip.GetEntry("word/document.xml")!.Open()) document = XDocument.Load(s);
+		if (Pair(doc, document) is not { } pair) return;
+		var (paragraphs, starts) = pair;
 		for (int i = 0; i < paragraphs.Count; i++) {
 			var para = doc.Range2(starts[i], starts[i]).Para;
 			var pPr = paragraphs[i].Element(W + "pPr");

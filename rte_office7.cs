@@ -5,7 +5,7 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer33.cs, through #load).
+// Word and OpenDocument conversions for RTE Writer (rte_writer34.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
 // without spacing of its own as 1.08 lines, and "at least" as exactly. All of a paragraph's tabs come back as tabs (the
@@ -139,7 +139,8 @@ public static class OfficeConverters {
 	// with the converter's name.
 	public static (string Kind, string Content, string Converter) Import(string input, string? via = null) {
 		string format = Path.GetExtension(input).ToLowerInvariant().TrimStart('.');
-		var order = Order(format == "docx" ? new[] { Word, OpenXml, LibreOffice, Pandoc } : new[] { Word, LibreOffice, Pandoc }, via);
+		// (.odt: LibreOffice first, as for writing: Word's RTF of an .odt leaves its text's font to whichever paragraph set one last)
+		var order = Order(format == "docx" ? new[] { Word, OpenXml, LibreOffice, Pandoc } : format == "odt" ? new[] { LibreOffice, Word, Pandoc } : new[] { Word, LibreOffice, Pandoc }, via);
 		if (format == "doc") order.Remove(Pandoc);    // pandoc can't read the old binary format
 		string temp = TempFolder();
 		var errors = new List<string>();
@@ -384,6 +385,12 @@ public static class OfficeConverters {
 			HeadingFonts(main);
 			RepairNumbering(main, html);
 			MarksFromRuns(main);
+			// (a styles part, which the document's styles go into: DocxStyles.IntoDocx)
+			if (main.StyleDefinitionsPart == null) {
+				var part = main.AddNewPart<StyleDefinitionsPart>();
+				part.Styles = new W.Styles();
+				part.Styles.Save();
+			}
 			// the editor's HTML has no font for ordinary text: the document's default font is the editor's
 			if (DefaultFont is { } font && main.StyleDefinitionsPart?.Styles is { } styles) {
 				var defaults = styles.DocDefaults ??= new W.DocDefaults();

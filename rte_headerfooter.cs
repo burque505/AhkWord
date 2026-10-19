@@ -569,12 +569,17 @@ public static class HeaderFooter
 			string[]? Read(string band) {
 				var element = page?.Element(Style + band);
 				if (element == null || (string?)element.Attribute(Style + "display") == "false") return null;
+				// (the band is one line of three parts: a paragraph's parts go where the paragraphs before left room)
+				string[]? result = null;
 				foreach (var paragraph in element.Descendants(Text + "p")) {
 					string styleName = (string?)paragraph.Attribute(Text + "style-name") ?? "";
 					string? align = paragraphStyles.TryGetValue(styleName, out var s) ? (string?)s.Element(Style + "paragraph-properties")?.Attribute(Fo + "text-align") : null;
-					if (PartsOf(OdtText(paragraph), align is "center" ? 1 : align is "end" or "right" ? 2 : 0) is { } parts) return parts;
+					if (PartsOf(OdtText(paragraph), align is "center" ? 1 : align is "end" or "right" ? 2 : 0) is not { } parts) continue;
+					if (result == null) { result = parts; continue; }
+					for (int i = 0; i < 3 && i < parts.Length && i < result.Length; i++)
+						if (result[i].Trim() == "" && parts[i].Trim() != "") result[i] = parts[i];
 				}
-				return null;
+				return result;
 			}
 			bool haveReal = page?.Element(Style + "header") != null || page?.Element(Style + "footer") != null;
 			return Decide(exact, Read("header"), Read("footer"), haveReal);

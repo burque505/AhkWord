@@ -18,8 +18,16 @@
 #load "rte_templates.cs"
 #load "rte_styles.cs"
 #load "rte_paragraph.cs"
+#load "rte_docxstyles.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer33.ahk. Iteration 33 adds to iteration 32:
+// Run it with rte_writer34.ahk. Iteration 34 adds to iteration 33:
+//   - Styles in Word and OpenDocument files, whichever converter: the built-in one (rte_docxstyles.cs) writes the
+//     document's styles (whole definitions) and each paragraph's style and line and page breaks into the .docx, and
+//     reads a .docx's styles (as Word works them out) into the editor; LibreOffice reads .odt files that way too (and
+//     goes first for .odt); Word's RTF style names are read right. A document's own styles show as "Styles: The
+//     document's"; Home > Styles > Apply My Styles gives it yours (Rte.ApplyMyStyles()).
+//   - View > Structured / Free-form retired: any font size, always; headings and the like are styles.
+// Iteration 33 added to iteration 32:
 //   - The Paragraph dialog (rte_paragraph.cs; Home > Paragraph's Paragraph settings button, and Line Spacing
 //     Options), as Word's: Indents and Spacing (alignment, left and right indents, a first-line or hanging indent, the space
 //     before and after, line spacing) and Line and Page Breaks (widow/orphan control, keep with next, keep lines
@@ -309,33 +317,33 @@ enum RibbonCommand : uint
 	TabHome = 100, TabInsert = 101, TabLayout = 102, TabReview = 103, TabView = 104, TabTools = 105,
 	TableTools = 106, TabTableLayout = 107, GroupClipboard = 110, GroupFont = 111, GroupText = 112, GroupParagraph = 113,
 	GroupStyles = 114, GroupEditing = 115, GroupPages = 116, GroupTables = 117, GroupIllustrations = 118, GroupLinks = 119,
-	GroupInsertText = 120, GroupPage = 121, GroupProofing = 122, GroupDocument = 123, GroupShow = 124, GroupZoom = 125,
-	GroupDocumentView = 126, GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupRowsColumns = 130, GroupDelete = 131,
-	GroupTableFormat = 132, AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144,
-	PrintMenu = 145, New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204,
-	PrintPreview = 205, PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210,
-	NewFromTemplate = 212, NewWindow = 216, OpenInNewWindow = 217, StartPage = 215, InsertFromTemplate = 214, FillInFields = 213,
-	GroupTemplates = 133, GroupHomeMacros = 134, Close = 211, Undo = 220, Redo = 221, Paste = 222,
-	Cut = 223, Copy = 224, SelectAll = 225, Find = 226, Replace = 227, Font = 230,
-	FontDialog = 231, ChangeCase = 232, CaseUpper = 233, CaseLower = 234, CaseTitle = 235, UnderlineStyle = 236,
-	UnderlineSingle = 237, UnderlineDouble = 238, UnderlineDotted = 239, UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250,
-	Numbering = 251, Legal = 252, Outdent = 253, Indent = 254, AlignLeft = 255, AlignCenter = 256,
-	AlignRight = 257, Justify = 258, LineSpacing = 360, LineSpacing10 = 361, LineSpacing115 = 362, LineSpacing150 = 363,
-	LineSpacing200 = 364, LineSpacing250 = 365, LineSpacing300 = 366, LineSpacingOptions = 367, ParagraphDialog = 390, SpaceBefore = 368,
-	SpaceAfter = 369, ListOptions = 259, ListStyle = 260, ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263,
-	ListUpperAlpha = 264, ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269,
-	ContinueNumbering = 270, ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275,
-	StylesMenu = 380, ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384,
-	StyleSetClassic = 385, StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, PageBreak = 280, Table = 281,
+	GroupInsertText = 120, GroupPage = 121, GroupProofing = 122, GroupShow = 124, GroupZoom = 125, GroupDocumentView = 126,
+	GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupRowsColumns = 130, GroupDelete = 131, GroupTableFormat = 132,
+	AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144, PrintMenu = 145,
+	New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204, PrintPreview = 205,
+	PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210, NewFromTemplate = 212,
+	NewWindow = 216, OpenInNewWindow = 217, StartPage = 215, InsertFromTemplate = 214, FillInFields = 213, GroupTemplates = 133,
+	GroupHomeMacros = 134, Close = 211, Undo = 220, Redo = 221, Paste = 222, Cut = 223,
+	Copy = 224, SelectAll = 225, Find = 226, Replace = 227, Font = 230, FontDialog = 231,
+	ChangeCase = 232, CaseUpper = 233, CaseLower = 234, CaseTitle = 235, UnderlineStyle = 236, UnderlineSingle = 237,
+	UnderlineDouble = 238, UnderlineDotted = 239, UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250, Numbering = 251,
+	Legal = 252, Outdent = 253, Indent = 254, AlignLeft = 255, AlignCenter = 256, AlignRight = 257,
+	Justify = 258, LineSpacing = 360, LineSpacing10 = 361, LineSpacing115 = 362, LineSpacing150 = 363, LineSpacing200 = 364,
+	LineSpacing250 = 365, LineSpacing300 = 366, LineSpacingOptions = 367, ParagraphDialog = 390, SpaceBefore = 368, SpaceAfter = 369,
+	ListOptions = 259, ListStyle = 260, ListBullet = 261, ListDecimal = 262, ListLowerAlpha = 263, ListUpperAlpha = 264,
+	ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270,
+	ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, StylesMenu = 380,
+	ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384, StyleSetClassic = 385,
+	StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, ApplyMyStyles = 391, PageBreak = 280, Table = 281,
 	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295,
-	AddToDictionary = 296, SpellCheck = 297, Structured = 300, FreeForm = 301, WordWrap = 302, PrintLayout = 370,
-	ZoomPageWidth = 371, ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304,
-	ZoomIn = 305, ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332,
-	SideBySide = 333, SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312,
-	RunScript = 313, MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321,
-	InsertLeft = 322, InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340,
-	TableBorders = 341, BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346,
-	LineNumbers = 350, LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
+	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371, ZoomOnePage = 372,
+	ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305, ZoomOut = 306,
+	Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334,
+	SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314,
+	AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322, InsertRight = 323,
+	DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341, BordersAll = 342,
+	BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350, LineNumbersNone = 351,
+	LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -489,7 +497,7 @@ class WriterForm : Form
 		Text = AppName;
 		StartPosition = FormStartPosition.CenterScreen;
 		Size = new Size(LogicalToDeviceUnits(1150), LogicalToDeviceUnits(820));
-		Editor.EnableHtmlFontSizing = Settings.Structured;    // structured documents (headings) by default; View menu switches
+		Editor.EnableHtmlFontSizing = false;    // (any font size: styles do what "structured documents" did, iteration 34)
 		// Markdown: what a paragraph is, by its style (Code; a heading's level; else body text), not by its font
 		MarkdownConverter.BlockOf = (doc, position) => string.Equals(StyleEngine.StyleAt(doc, Styles, position).Name, "Code", StringComparison.OrdinalIgnoreCase) ? (int)BlockStyle.Preformatted : StyleEngine.LevelAt(doc, Styles, position);
 		Editor.WordWrap = Settings.WordWrap;
@@ -715,8 +723,8 @@ class WriterForm : Form
 		Shortcut(Keys.Control | Keys.U, "Underline", () => api.ToggleUnderline(), M("ToggleUnderline"));
 		Shortcut(Keys.Control | Keys.Shift | Keys.Oemplus, "Superscript", api.ToggleSuperscript, M("ToggleSuperscript"));
 		Shortcut(Keys.Control | Keys.Oemplus, "Subscript", api.ToggleSubscript, M("ToggleSubscript"));
-		Shortcut(Keys.Control | Keys.OemCloseBrackets, "Increase font size", () => { if (FreeFormForSizes()) api.IncreaseFontSize(); }, M("IncreaseFontSize"));
-		Shortcut(Keys.Control | Keys.OemOpenBrackets, "Decrease font size", () => { if (FreeFormForSizes()) api.DecreaseFontSize(); }, M("DecreaseFontSize"));
+		Shortcut(Keys.Control | Keys.OemCloseBrackets, "Increase font size", () => api.IncreaseFontSize(), M("IncreaseFontSize"));
+		Shortcut(Keys.Control | Keys.OemOpenBrackets, "Decrease font size", () => api.DecreaseFontSize(), M("DecreaseFontSize"));
 		Button(RibbonCommand.FontDialog, FontDialogCommand);
 		foreach (var (id, mode) in new[] { (RibbonCommand.CaseUpper, "upper"), (RibbonCommand.CaseLower, "lower"), (RibbonCommand.CaseTitle, "title") })
 			Button(id, () => api.ChangeCase(mode), Keys.None, M("ChangeCase", mode));
@@ -789,6 +797,7 @@ class WriterForm : Form
 		Button(RibbonCommand.ClearFormatting, () => api.ClearFormatting(), Keys.Control | Keys.Space, M("ClearFormatting"));
 		foreach (var (id, set) in new[] { (RibbonCommand.StyleSetClassic, "Classic"), (RibbonCommand.StyleSetPlain, "Plain"), (RibbonCommand.StyleSetModern, "Modern") })
 			Toggle(id, () => { api.StyleSet = set; Record(M("StyleSet", set)); });
+		Button(RibbonCommand.ApplyMyStyles, () => { int count = api.ApplyMyStyles(); Record(M("ApplyMyStyles")); SetStatus($"Your styles are this document's now ({count} paragraph{(count == 1 ? "" : "s")} restyled; formatting of their own stayed)."); });
 		Button(RibbonCommand.SaveStyles, () => { api.SaveStylesAsDefault(); SetStatus("New documents get these styles now (Styles > Classic, Plain or Modern, then this, to change them again)."); });
 
 		// Insert
@@ -816,10 +825,8 @@ class WriterForm : Form
 		Check(RibbonCommand.SpellCheck, () => Editor.EnableSpellCheck = !Editor.EnableSpellCheck);
 
 		// View
-		Toggle(RibbonCommand.Structured, () => SetStructured(true));
-		Toggle(RibbonCommand.FreeForm, () => SetStructured(false));
 		Check(RibbonCommand.WordWrap, () => Editor.WordWrap = !Editor.WordWrap);
-		Toggle(RibbonCommand.PrintLayout, () => api.PrintLayout = !Settings.PrintLayout, Keys.None, null);
+		Check(RibbonCommand.PrintLayout, () => api.PrintLayout = !Settings.PrintLayout);    // (a check box: the ribbon showed the toggle button's state wrongly)
 		Check(RibbonCommand.ShowBands, () => api.HeaderFooterVisible = !Settings.ShowBands);
 		Check(RibbonCommand.Outline, () => api.OutlineVisible = outlineSplit.Panel1Collapsed, Keys.Control | Keys.Shift | Keys.O);
 		Button(RibbonCommand.ZoomIn, () => { if (PagesShown) pageView!.Zoom(1.1f); else ManualZoom(Math.Min(5f, EditorZoom() + 0.1f)); });
@@ -898,7 +905,10 @@ class WriterForm : Form
 
 	// A ribbon command. While the source editor is in use, formatting commands insert Markdown or HTML there (or say
 	// that they need the rich text view) instead of changing the formatted text out of sight.
+	bool zoomClicked = true;    // (Print Layout, Page Width, One Page or Multiple Pages clicked, or the ribbon new: UpdateRibbon pushes their states to it)
+
 	void Command(RibbonCommand id, Action action, string? macro) {
+		if (id is RibbonCommand.PrintLayout or RibbonCommand.ZoomPageWidth or RibbonCommand.ZoomOnePage or RibbonCommand.ZoomMultiplePages) zoomClicked = true;
 		if (PagesShown && !PageViewCommands.Contains(id)) ShowPages(false);
 		if (StartShown && id != RibbonCommand.StartPage) ShowStart(false);
 		if (SourceActive && !SourceDocumentCommands.Contains(id)) {
@@ -941,8 +951,8 @@ class WriterForm : Form
 		if (Has(FontPropertiesEnum.Family) && changes[FontPropertiesEnum.Family] is string name && name.Trim() != "")
 			Run(() => api.SetFontName(name.Trim()), M("SetFontName", name.Trim()));
 		if (Has(FontPropertiesEnum.Size) && changes[FontPropertiesEnum.Size] is decimal size && size > 0) {
-			if (FreeFormForSizes()) Run(() => api.SetFontSize((float)size), M("SetFontSize", (float)size));
-		} else if (Has(FontPropertiesEnum.DeltaSize) && FreeFormForSizes()) {
+			Run(() => api.SetFontSize((float)size), M("SetFontSize", (float)size));
+		} else if (Has(FontPropertiesEnum.DeltaSize)) {
 			if ((FontDeltaSize)Number(FontPropertiesEnum.DeltaSize) == FontDeltaSize.Grow) Run(() => api.IncreaseFontSize(), M("IncreaseFontSize"));
 			else Run(() => api.DecreaseFontSize(), M("DecreaseFontSize"));
 		}
@@ -978,16 +988,6 @@ class WriterForm : Form
 	void SetHighlight(Color c) {
 		api.SetBackgroundColor(c);
 		Record(M("SetBackgroundColor", c));
-	}
-
-	// Font sizes need free-form mode (structured documents have block styles instead): asks to switch to it.
-	bool FreeFormForSizes() {
-		if (Editor.EnableFontSize) return true;
-		var answer = MessageBox.Show(this, "Font sizes can be changed in free-form mode only; structured documents (headings, block styles) set sizes by block style.\n\nSwitch to free-form fonts (View > Free-form)?",
-			AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-		if (answer != DialogResult.Yes) { UpdateUi(); return false; }
-		SetStructured(false);
-		return true;
 	}
 
 	// The recent documents in the File menu (Settings.RecentFiles, newest first).
@@ -1066,11 +1066,6 @@ class WriterForm : Form
 	internal void SetFileName(string? path) {
 		FileName = path;
 		UpdateTitle();
-	}
-
-	void SetStructured(bool structured) {
-		Editor.EnableHtmlFontSizing = structured;
-		SetStatus(structured ? "Structured document: block styles (Ctrl+0..7) instead of font sizes." : "Free-form fonts: any font size; block styles are off.");
 	}
 
 	// ---- Autosave and recovery (iteration 29)
@@ -1330,13 +1325,17 @@ class WriterForm : Form
 			if (StyleEngine.NameOf(para.Style) == null) StyleEngine.Tag(para, -1);    // (a number no style has: Normal)
 			firsts.TryAdd(para.Style, start);
 		}
+		bool own = defined is { Set: "" };    // (the built-in reader's: a .docx's own styles)
 		foreach (var (id, start) in firsts) {
 			var style = sheet.Ensure(StyleEngine.NameOf(id)!);
 			if (takeLook) continue;
 			if (defined?.Find(style.Name) != null) continue;
 			int i = sheet.Styles.IndexOf(style);
 			sheet.Styles[i] = StyleEngine.Capture(doc, start, style.Name, style.Level, style.Next);
+			own = true;
 		}
+		// (styles taken from the document's look: they are the document's own, not a set's)
+		if (own && !takeLook) sheet.Set = "";
 		// (styledLook: the paragraphs with a style other than Normal get its characters' look: HTML's readers give
 		// headings sizes of their own; their paragraph formats are the file's, and so are Normal paragraphs)
 		if (styledLook && !takeLook) {
@@ -1377,6 +1376,7 @@ class WriterForm : Form
 
 	/// The Styles drop-down's label: the document's style set, and whether its styles have been changed from the set's.
 	internal string StyleSetLabel() {
+		if (Styles.Set == "") return "Styles: The document's";    // (its own, from the file: Apply My Styles gives it yours)
 		var set = StyleSets.Get(Styles.Set);
 		bool changed = set.Styles.Any(s => Styles.Find(s.Name) is not { } mine || System.Text.Json.JsonSerializer.Serialize(mine) != System.Text.Json.JsonSerializer.Serialize(s));
 		return "Styles: " + set.Set + (changed ? " (changed)" : "");
@@ -1471,22 +1471,28 @@ class WriterForm : Form
 	}
 
 	/// Gives the document a style set: each of its styles becomes the set's (its paragraphs with it); your own styles stay.
-	internal void UseStyleSet(string name) {
-		var set = StyleSets.Get(name);
+	internal void UseStyleSet(string name) => UseStyles(StyleSets.Get(name));
+
+	/// Gives the document a sheet's styles (a style set, or your own): each of its styles becomes the sheet's (its
+	/// paragraphs with it; formatting of their own stays); styles the sheet hasn't got stay. Returns how many
+	/// paragraphs were restyled.
+	internal int UseStyles(StyleSheet set) {
 		var doc = Editor.TextDocument;
+		int count = 0;
 		doc.BeginEditCollection();
 		try {
 			foreach (var style in set.Styles) {
 				var old = Styles.Find(style.Name);
 				if (old == null) { Styles.Styles.Add(style.Copy()); continue; }
 				Styles.Styles[Styles.Styles.IndexOf(old)] = style.Copy();
-				StyleEngine.Restyle(doc, Styles, old, style);
+				count += StyleEngine.Restyle(doc, Styles, old, style);
 			}
 			Styles.Set = set.Set;
 		} finally {
 			doc.EndEditCollection();
 		}
 		StylesChanged();
+		return count;
 	}
 
 	// Home > Styles > Modify Style: the caret paragraph's style.
@@ -1695,7 +1701,6 @@ class WriterForm : Form
 		var bounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
 		Settings.Window = new[] { bounds.X, bounds.Y, bounds.Width, bounds.Height };
 		Settings.Maximized = WindowState == FormWindowState.Maximized;
-		Settings.Structured = Editor.EnableHtmlFontSizing;
 		Settings.WordWrap = Editor.WordWrap;
 		Settings.SpellCheck = Editor.EnableSpellCheck;
 		Settings.AutoLevelStyles = AutoLevelStyles;
@@ -1778,22 +1783,30 @@ class WriterForm : Form
 
 	readonly BandStrip headerStrip = new(true), footerStrip = new(false);
 	readonly System.Windows.Forms.Timer bandTimer = new() { Interval = 500 };
-	int? bandPages;                 // the number of pages, for {pages}; null: not known
+	List<int>? bandStarts;          // where the printed pages start, for {page} (the page in view) and {pages}; null: not known
 	bool bandPagesStale = true;     // the text changed since it was counted
 	DateTime lastEdit = DateTime.MinValue;
 	string bandsShown = "";
 
 	// Shows the strips as the document's header and footer are now (twice a second: cheap unless something changed). The
-	// number of pages is counted again (with the printer's layout) once typing has paused for a second.
+	// pages are laid out again (with the printer's layout) once typing has paused for a second; {page} is the page in
+	// view (the one in the middle of the window), so it changes as the document is scrolled.
 	void UpdateBands() {
 		bool visible = Settings.ShowBands;
 		var bands = Bands;
-		bool needPages = visible && ((bands.ShowHeader && PageBands.Parts(bands.Header).Any(p => p.Contains("{pages}", StringComparison.OrdinalIgnoreCase)))
-			|| (bands.ShowFooter && PageBands.Parts(bands.Footer).Any(p => p.Contains("{pages}", StringComparison.OrdinalIgnoreCase))));
+		static bool Numbered(string[] parts) => PageBands.Parts(parts).Any(p => p.Contains("{page", StringComparison.OrdinalIgnoreCase));
+		bool needPages = (visible && ((bands.ShowHeader && Numbered(bands.Header)) || (bands.ShowFooter && Numbered(bands.Footer))))
+			|| (Settings.PrintLayout && !PagesShown);    // (and Print Layout's page boundaries)
 		if (needPages && bandPagesStale && (DateTime.Now - lastEdit).TotalMilliseconds > 1000) {
 			bandPagesStale = false;
-			try { using var printer = CreatePrinter(); bandPages = printer.PageCount(); }
-			catch (Exception) { bandPages = null; }
+			try { using var printer = CreatePrinter(); bandStarts = printer.PageStarts(); }
+			catch (Exception) { bandStarts = null; }
+		}
+		Editor.PageStarts = Settings.PrintLayout ? bandStarts : null;    // (until they are worked out again: the ones before)
+		int viewPage = 1;
+		if (needPages && bandStarts is { Count: > 0 } starts && Editor.IsHandleCreated) {
+			int middle = Editor.GetCharIndexFromPosition(new Point(Editor.ClientSize.Width / 2, Editor.ClientSize.Height / 2));
+			viewPage = Math.Max(1, starts.FindLastIndex(s => s <= middle) + 1);
 		}
 		if (Numbering.Mode == LineNumbering.Modes.EachPage && pageStartsStale && (DateTime.Now - lastEdit).TotalMilliseconds > 1000) {
 			pageStartsStale = false;
@@ -1804,8 +1817,8 @@ class WriterForm : Form
 		string Fill(string text) => Regex.Replace(text, @"\{(title|file|page|pages|date|time)\}", m => m.Groups[1].Value.ToLowerInvariant() switch {
 			"title" => DocumentName,
 			"file" => FileName ?? DocumentName,
-			"page" => "1",
-			"pages" => bandPages?.ToString(CultureInfo.CurrentCulture) ?? "?",
+			"page" => viewPage.ToString(CultureInfo.CurrentCulture),
+			"pages" => bandStarts?.Count.ToString(CultureInfo.CurrentCulture) ?? "?",
 			"date" => DateTime.Now.ToShortDateString(),
 			_ => DateTime.Now.ToShortTimeString()
 		}, RegexOptions.IgnoreCase);
@@ -2044,7 +2057,7 @@ class WriterForm : Form
 		overhangStale = true;
 		FitPagePadding();
 		lineGutter.DocumentChanged();
-		pageStartsStale = true;
+		pageStartsStale = bandPagesStale = true;
 		if (PagesShown) RefreshPages();
 		UpdateUi();
 	}
@@ -2916,7 +2929,7 @@ class WriterForm : Form
 				column = Editor.SelectionStart - Editor.GetFirstCharIndexFromLine(line);
 			}
 			positionLabel.Text = $"Ln {line + 1}, Col {column + 1}";
-			modeLabel.Text = (view != SourceKind.None ? ViewName(view) + (sideBySide ? " | " : ", ") : "") + (Editor.EnableHtmlFontSizing ? "Structured" : "Free-form");
+			modeLabel.Text = view != SourceKind.None ? ViewName(view) + (sideBySide ? " | side by side" : "") : "";
 		} catch (COMException) {
 			// The document can be briefly unavailable while it is being replaced.
 		} finally {
@@ -2969,8 +2982,6 @@ class WriterForm : Form
 		foreach (var (id, set) in new[] { (RibbonCommand.StyleSetClassic, "Classic"), (RibbonCommand.StyleSetPlain, "Plain"), (RibbonCommand.StyleSetModern, "Modern") })
 			toggleButtons[id].BooleanValue = string.Equals(Styles.Set, set, StringComparison.OrdinalIgnoreCase);
 		ShowStyleSet();
-		toggleButtons[RibbonCommand.Structured].BooleanValue = Editor.EnableHtmlFontSizing;
-		toggleButtons[RibbonCommand.FreeForm].BooleanValue = !Editor.EnableHtmlFontSizing;
 		toggleButtons[RibbonCommand.RecordMacro].BooleanValue = recorder.Recording;
 		toggleButtons[RibbonCommand.ViewRich].BooleanValue = view == SourceKind.None;
 		toggleButtons[RibbonCommand.ViewMarkdown].BooleanValue = view == SourceKind.Markdown;
@@ -2980,11 +2991,15 @@ class WriterForm : Form
 		checkBoxes[RibbonCommand.SourceLineNumbers].BooleanValue = sourceBox.LineNumbers;
 		checkBoxes[RibbonCommand.WordWrap].BooleanValue = Editor.WordWrap;
 		checkBoxes[RibbonCommand.WordWrap].Enabled = !Settings.PrintLayout;    // (Print Layout breaks lines as on paper)
-		toggleButtons[RibbonCommand.PrintLayout].BooleanValue = Settings.PrintLayout;
-		toggleButtons[RibbonCommand.ZoomPageWidth].BooleanValue = Settings.PrintLayout && Settings.ZoomMode == "PageWidth";
-		toggleButtons[RibbonCommand.ZoomOnePage].BooleanValue = Settings.PrintLayout && Settings.ZoomMode == "OnePage";
+		checkBoxes[RibbonCommand.PrintLayout].BooleanValue = Settings.PrintLayout;
+		// (Page Width, One Page and Multiple Pages: one of them at a time; each pushed to the ribbon even when it seems to
+		// have it already, as a click checks a button in the ribbon before the command has run)
+		void Show(RibbonCommand id, bool on) { var button = toggleButtons[id]; if (zoomClicked && button.BooleanValue == on) button.BooleanValue = !on; button.BooleanValue = on; }
+		Show(RibbonCommand.ZoomPageWidth, Settings.PrintLayout && Settings.ZoomMode == "PageWidth" && !PagesShown);
+		Show(RibbonCommand.ZoomOnePage, Settings.PrintLayout && Settings.ZoomMode == "OnePage" && !PagesShown);
 		toggleButtons[RibbonCommand.ZoomPageWidth].Enabled = toggleButtons[RibbonCommand.ZoomOnePage].Enabled = Settings.PrintLayout;
-		toggleButtons[RibbonCommand.ZoomMultiplePages].BooleanValue = PagesShown;
+		Show(RibbonCommand.ZoomMultiplePages, PagesShown);
+		zoomClicked = false;
 		checkBoxes[RibbonCommand.ShowBands].BooleanValue = Settings.ShowBands;
 		checkBoxes[RibbonCommand.Outline].BooleanValue = !outlineSplit.Panel1Collapsed;
 		checkBoxes[RibbonCommand.SpellCheck].BooleanValue = Editor.EnableSpellCheck;
@@ -3012,7 +3027,7 @@ class WriterForm : Form
 		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys,
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
-		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.Structured, RibbonCommand.FreeForm, RibbonCommand.WordWrap, RibbonCommand.PrintLayout, RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage,
+		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.WordWrap, RibbonCommand.PrintLayout, RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage,
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
 		RibbonCommand.HeaderFooter, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
 		RibbonCommand.LineNumberOptions, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
@@ -3118,6 +3133,9 @@ class WriterForm : Form
 	/// After New or Open: the source the document came from (a .md or .html file's text), if any.
 	internal void DocumentLoaded(SourceKind kind, string? text) {
 		ClearRecovery();    // (the document before it went, as the user wanted)
+		bandStarts = null;    // (the pages before were the document before's)
+		bandPagesStale = true;
+		Editor.PageStarts = null;
 		sourceTimer.Stop();
 		richToSourceTimer.Stop();
 		embeddedData.Clear();
@@ -3837,7 +3855,8 @@ public class EditorApi
 		form.StylesChanged();
 	}
 
-	/// The document's style set ("Classic", "Plain", "Modern"); setting it gives the document that set's styles (your
+	/// The document's style set ("Classic", "Plain", "Modern"; "" for a document's own styles, from a file made
+	/// elsewhere: ApplyMyStyles gives it yours); setting it gives the document that set's styles (your
 	/// own styles stay). New documents keep theirs: SaveStylesAsDefault.
 	public string StyleSet {
 		get => form.Styles.Set;
@@ -3850,9 +3869,15 @@ public class EditorApi
 	/// New documents get this document's styles (your changes included).
 	public void SaveStylesAsDefault() {
 		form.Settings.MyStyles = form.Styles.Copy();
-		form.Settings.StyleSetName = form.Styles.Set;
+		if (form.Styles.Set != "") form.Settings.StyleSetName = form.Styles.Set;
 		form.Settings.Save();
 	}
+
+	/// Apply My Styles: the document gets your styles, the ones new documents get (saved with SaveStylesAsDefault, else
+	/// your style set's): each of its styles that you have takes your definition, and its paragraphs your look
+	/// (formatting of their own stays); styles of the document's own that you haven't got stay. One undo step. Returns
+	/// how many paragraphs were restyled.
+	public int ApplyMyStyles() => form.UseStyles(form.DefaultStyles());
 
 	/// Opens another RTE Writer window (File > New Window), with a new document or the file given. The new window is a
 	/// separate editor: scripts reach it once it is the RTE Writer used last (or with its RTE_WRITER_HWND).
@@ -3878,6 +3903,7 @@ public class EditorApi
 		form.UseNormalFont();    // (text without a font of its own, as HTML's and Markdown's: Normal's)
 		StyleSheet? fileStyles = null;
 		bool takeLook = false, styledLook = false;
+		using (Quietly()) {
 		switch (extension) {
 			case ".md": case ".markdown": {
 				string markdown = sourceText = File.ReadAllText(full);
@@ -3902,7 +3928,13 @@ public class EditorApi
 				var (kind, content, converter) = OfficeConverters.Import(full, via);
 				bands = extension == ".docx" ? HeaderFooter.FromDocx(full) : extension == ".odt" ? HeaderFooter.FromOdt(full) : kind == "rtf" ? HeaderFooter.FromRtf(content) : null;
 				numbering = extension == ".docx" ? LineNumberFormats.FromDocx(full) : extension == ".odt" ? LineNumberFormats.FromOdt(full) : kind == "rtf" ? LineNumberFormats.FromRtf(content) : null;
-				if (kind == "rtf") { Rtf = content; fileStyles = StylesFromRtf(content); } else SetHtml(content);
+				if (kind == "rtf") { Rtf = content; fileStyles = StylesFromRtf(content); }
+				else {
+					SetHtml(content);
+					// (the built-in reader's: the .docx's styles, DocxStyles; its text has its own look already, every run's
+					// font as the file has it, which a style's look mustn't take over)
+					fileStyles = StyleHtml.FromMeta(content);
+				}
 				LegalLists.ConvertTypedLists(ed, 0, ed.TextDocument.Range2(0, 0).StoryLength, requireTab: true,
 					converter == OfficeConverters.OpenXml || kind == "html" ? OfficeConverters.TypedIndents : null);    // numbers a converter left as text
 				LastConverter = converter;
@@ -3932,6 +3964,7 @@ public class EditorApi
 		PageBreaks.Normalize(ed);    // (form feeds in plain text, for one)
 		MarksFollowText();
 		if (LegalLists.AnyLegal(ed.TextDocument)) LegalLists.Renumber(ed);    // (legal items' indents fitted to their numbers' size)
+		}
 		ed.ClearUndo();
 		ed.Select(0, 0);
 		ed.Modified = false;
@@ -3943,6 +3976,24 @@ public class EditorApi
 		form.DocumentLoaded(sourceText == null ? WriterForm.SourceKind.None : extension is ".md" or ".markdown" ? WriterForm.SourceKind.Markdown : WriterForm.SourceKind.Html, sourceText);
 		form.Events.Raise(EditorEvent.Opened);
 	}
+
+	// While a document is loaded: no undo steps (they are cleared once it is), and no change notifications, which would
+	// update the window (the word count, the outline, the line numbers ...) after each of the many changes a file's
+	// formats are put in with; one notification for the whole once it is loaded.
+	IDisposable Quietly() {
+		var doc = ed.TextDocument;
+		doc.Undo(-9999995);    // tomSuspend
+		IntPtr mask = SendQuiet(ed.Handle, EM_SETEVENTMASK, IntPtr.Zero, IntPtr.Zero);
+		return new Restore(() => {
+			SendQuiet(ed.Handle, EM_SETEVENTMASK, IntPtr.Zero, mask);
+			doc.Undo(-9999994);    // tomResume
+			typeof(Control).GetMethod("OnTextChanged", BindingFlags.NonPublic | BindingFlags.Instance)?.Invoke(ed, new object[] { EventArgs.Empty });
+		});
+	}
+
+	sealed class Restore(Action restore) : IDisposable { public void Dispose() => restore(); }
+	const int EM_SETEVENTMASK = 0x0445;
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendQuiet(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
 	/// Saves to the current file and returns its path.
 	public string Save() =>
@@ -4210,6 +4261,7 @@ public class EditorApi
 			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase) && LastConverter is OfficeConverters.OpenXml or OfficeConverters.Pandoc) {
 				RtfTables.TablesToDocx(full, RtfTables.Find(ed.TextDocument).Select(t => RtfTables.Formats(ed, t)).ToList());
 				DocxLineSpacing.FromEditor(full, ed);    // (HtmlToOpenXml writes "at least" as exactly)
+				DocxStyles.IntoDocx(full, ed, form.Styles);    // (the styles, and each paragraph's)
 			}
 		} catch (Exception ex) {
 			form.SetStatus("⚠ The header and footer could not be added to " + Path.GetFileName(full) + ": " + ex.Message);
@@ -4683,7 +4735,6 @@ public class EditorApi
 	public void DecreaseFontSize(float points = 1) => ChangeFontSize(size => size - points);
 
 	void ChangeFontSize(Func<float, float> change) {
-		if (!ed.EnableFontSize) throw new InvalidOperationException("Font sizes need free-form mode (View > Free-form). Structured documents use block styles.");
 		var doc = ed.TextDocument;
 		var selection = doc.Selection2;
 		int start = selection.Start, end = selection.End;
@@ -5025,7 +5076,7 @@ public class EditorApi
 		if (style != ListStyle.Bullet && (para.ListType & 0xFFFF) == (int)style && para.ListStart == 0) para.ListStart = 1;
 	}
 
-	/// Sets the block style of the selected paragraphs (needs the structured mode, EnableHtmlFontSizing = 1).
+	/// Sets the block style of the selected paragraphs: their style (Normal, Heading 1 to 6, Code), as SetStyle.
 	public void SetBlockStyle(BlockStyle style) {
 		SetStyle(style switch { BlockStyle.Paragraph => "Normal", BlockStyle.Preformatted => "Code", _ => "Heading " + (int)style });
 	}
@@ -6034,7 +6085,7 @@ public sealed class Settings
 	public bool Maximized { get; set; }
 	public List<string> RecentFiles { get; set; } = new();
 	public string? LastFolder { get; set; }
-	public bool Structured { get; set; } = true;
+	public bool Structured { get; set; } = true;    // (no longer used: View > Structured / Free-form were retired in iteration 34)
 	public bool WordWrap { get; set; } = true;
 	public bool PrintLayout { get; set; } = true;    // View > Print Layout: lines as on the printed page
 	public string ZoomMode { get; set; } = "PageWidth";    // Print Layout's zoom: PageWidth, OnePage or Manual (View > Zoom)
@@ -6379,10 +6430,12 @@ sealed class DocumentPrinter : IDisposable
 			lines ??= new PrintedLines(editor, Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings), range.rc.Right - range.rc.Left);
 			return lines.Starts(from, to);
 		}
+		var area = range.rc;    // (EM_FORMATRANGE gives back the height it used in rc: each page gets the whole area again)
 		try {
 			while (true) {
 				count++;
 				starts?.Add(position);
+				range.rc = area;
 				range.chrg.cpMin = position;
 				range.chrg.cpMax = -1;
 				int laidOut = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
@@ -6830,6 +6883,44 @@ sealed class WriterEditBox : RichEditBox
 		}
 	}
 
+	/// Where the printed pages start (character positions; null: none shown): Print Layout draws a line where each
+	/// page begins, with its number (the editor's lines are the printed ones there, but RichEdit has no pages).
+	public List<int>? PageStarts {
+		get => pageStarts;
+		set { if (value == null ? pageStarts == null : pageStarts != null && value.SequenceEqual(pageStarts)) return; pageStarts = value; Invalidate(); }
+	}
+	List<int>? pageStarts;
+
+	/// Draws the boundaries of the printed pages in view: a thin line above each page's first line, and "Page N" at
+	/// the right (a page that starts after a page break has that break's line already, and gets only its number).
+	public void DrawPageBoundaries(Graphics g) {
+		if (pageStarts is not { Count: > 1 } starts) return;
+		var client = ClientRectangle;
+		int storyEnd = TextDocument.Range2(0, 0).StoryLength;
+		string story = "";
+		using var pen = new Pen(Color.FromArgb(150, 170, 200)) { DashStyle = DashStyle.Dot };
+		using var label = new Font("Segoe UI", 7.5f);
+		using var brush = new SolidBrush(Color.FromArgb(110, 130, 160));
+		using var back = new SolidBrush(BackColor);
+		for (int n = 1; n < starts.Count; n++) {
+			int at = starts[n];
+			if (at <= 0 || at >= storyEnd - 1) continue;
+			int y = GetPositionFromCharIndex(at).Y;
+			if (y > client.Bottom) break;
+			if (y < client.Top - 2) continue;
+			if (story == "") story = TextDocument.Range2(0, storyEnd).Text ?? "";
+			bool afterBreak = at >= 2 && story[at - 2] == PageBreaks.Break;    // (the page break's own line is there)
+			int line = Math.Max(client.Top, y - 1);
+			if (!afterBreak) g.DrawLine(pen, client.Left + 4, line, client.Right - 4, line);
+			string text = "Page " + (n + 1);
+			var size = g.MeasureString(text, label);
+			float x = client.Right - size.Width - 8;
+			float top = Math.Max(client.Top, line - size.Height / 2);
+			g.FillRectangle(back, x - 3, top, size.Width + 6, size.Height);
+			g.DrawString(text, label, brush, x, top);
+		}
+	}
+
 	/// After the editor painted (and so scrolled, changed or zoomed): the line numbers follow.
 	public Action? Painted;
 
@@ -6854,9 +6945,10 @@ sealed class WriterEditBox : RichEditBox
 		}
 		if (m.Msg == WM_PAINT) {
 			base.WndProc(ref m);
-			if ((pageBreaks == null || pageBreaks.Count > 0) && IsHandleCreated) {
+			if (((pageBreaks == null || pageBreaks.Count > 0) || PageStarts is { Count: > 1 }) && IsHandleCreated) {
 				using var g = CreateGraphics();
 				DrawPageBreaks(g);
+				DrawPageBoundaries(g);
 			}
 			Painted?.Invoke();
 			return;

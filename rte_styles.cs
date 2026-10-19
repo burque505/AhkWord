@@ -1,4 +1,4 @@
-// Paragraph styles for RTE Writer (rte_writer33.cs, through #load).
+// Paragraph styles for RTE Writer (rte_writer34.cs, through #load).
 //   - ParagraphStyle: a named set of formatting: the font (name, size, bold, italic, underline, colour) and the
 //     paragraph's (alignment, indents, space before and after, line spacing, keep with next, keep lines together, widow
 //     and orphan control, page break before, no space between paragraphs of the same style), a heading level (0 for
@@ -191,25 +191,31 @@ public static class StyleEngine
 		var tabs = new List<(float, int, int)>();
 		for (int i = 0; i < para.TabCount; i++) { para.GetTab(i, out float position, out int alignment, out int leader); tabs.Add((position, alignment, leader)); }
 		para.Style = id;
+		// (only what changed is put back: reading is cheap, and each change makes RichEdit format the paragraph again)
+		static bool Differ(float a, float b) => Math.Abs(a - b) > 0.01f;
 		if (para.Alignment != align) para.Alignment = align;
-		para.SetIndents(first, left, right);
-		para.SpaceBefore = before;
-		para.SpaceAfter = after;
-		if (rule >= 0) para.SetLineSpacing(rule, line);
-		para.KeepWithNext = keepWith;
-		para.KeepTogether = keepTogether;
-		para.WidowControl = widow;
-		para.PageBreakBefore = breakBefore;
-		para.NoLineNumber = noNumber;
+		if (Differ(para.FirstLineIndent, first) || Differ(para.LeftIndent, left) || Differ(para.RightIndent, right)) para.SetIndents(first, left, right);
+		if (Differ(para.SpaceBefore, before)) para.SpaceBefore = before;
+		if (Differ(para.SpaceAfter, after)) para.SpaceAfter = after;
+		if (rule >= 0 && (para.LineSpacingRule != rule || Differ(para.LineSpacing, line))) para.SetLineSpacing(rule, line);
+		if (para.KeepWithNext != keepWith) para.KeepWithNext = keepWith;
+		if (para.KeepTogether != keepTogether) para.KeepTogether = keepTogether;
+		if (para.WidowControl != widow) para.WidowControl = widow;
+		if (para.PageBreakBefore != breakBefore) para.PageBreakBefore = breakBefore;
+		if (para.NoLineNumber != noNumber) para.NoLineNumber = noNumber;
 		if (para.ListType != listType) para.ListType = listType;
 		if (listType != tomConstants.tomListNone) {
-			para.ListLevelIndex = listLevel;
-			para.ListStart = listStart;
-			para.ListAlignment = listAlign;
-			para.ListTab = listTab;
+			if (para.ListLevelIndex != listLevel) para.ListLevelIndex = listLevel;
+			if (para.ListStart != listStart) para.ListStart = listStart;
+			if (para.ListAlignment != listAlign) para.ListAlignment = listAlign;
+			if (Differ(para.ListTab, listTab)) para.ListTab = listTab;
 		}
-		para.ClearAllTabs();
-		foreach (var (position, alignment, leader) in tabs) para.AddTab(position, alignment, leader);
+		var now = new List<(float, int, int)>();
+		for (int i = 0; i < para.TabCount; i++) { para.GetTab(i, out float position, out int alignment, out int leader); now.Add((position, alignment, leader)); }
+		if (!now.SequenceEqual(tabs)) {
+			para.ClearAllTabs();
+			foreach (var (position, alignment, leader) in tabs) global::LineSpacing.AddTab(para, position, alignment, leader);
+		}
 	}
 
 	/// The paragraphs (start, end, with the mark) that a range touches.
@@ -373,13 +379,14 @@ public static class StyleEngine
 		bool OwnUnderline(ITextFont f) => (f.Underline != 0) != old.Underline;
 		bool OwnColor(ITextFont f) => !(f.ForeColor == oldColor || (oldColor == AutoColor && f.ForeColor < 0));
 		bool name = Over(OwnName), size = Over(OwnSize), bold = Over(OwnBold), italic = Over(OwnItalic), underline = Over(OwnUnderline), color = Over(OwnColor);
+		// (each set only if it differs: reading is cheap, and each change makes RichEdit format the run again)
 		foreach (var (font, _) in fonts) {
-			if (name || !OwnName(font)) font.Name = style.Font;
-			if (size || !OwnSize(font)) font.Size = style.Size;
-			if (bold || !OwnBold(font)) font.Bold = Tom(style.Bold);
-			if (italic || !OwnItalic(font)) font.Italic = Tom(style.Italic);
-			if (underline || !OwnUnderline(font)) font.Underline = style.Underline ? tomConstants.tomSingle : tomConstants.tomNone;
-			if (color || !OwnColor(font)) font.ForeColor = newColor;
+			if ((name || !OwnName(font)) && !string.Equals(font.Name, style.Font, StringComparison.OrdinalIgnoreCase)) font.Name = style.Font;
+			if ((size || !OwnSize(font)) && !Same(font.Size, style.Size)) font.Size = style.Size;
+			if ((bold || !OwnBold(font)) && Is(font.Bold) != style.Bold) font.Bold = Tom(style.Bold);
+			if ((italic || !OwnItalic(font)) && Is(font.Italic) != style.Italic) font.Italic = Tom(style.Italic);
+			if ((underline || !OwnUnderline(font)) && (font.Underline != 0) != style.Underline) font.Underline = style.Underline ? tomConstants.tomSingle : tomConstants.tomNone;
+			if ((color || !OwnColor(font)) && font.ForeColor != newColor && !(newColor == AutoColor && font.ForeColor < 0)) font.ForeColor = newColor;
 		}
 	}
 
@@ -622,8 +629,27 @@ public static class RtfStyles
 		int sheetAt = rtf.IndexOf("{\\stylesheet", StringComparison.Ordinal);
 		if (sheetAt >= 0) {
 			int end = GroupEnd(rtf, sheetAt);
-			foreach (Match m in Regex.Matches(rtf[sheetAt..end], @"\{(?:\\\*)?\\s(\d+)\b[^{};]*?(?:\{[^{}]*\}[^{};]*?)*\s([^\\{};][^{};]*?);\}"))
-				names[int.Parse(m.Groups[1].Value)] = Unescape(m.Groups[2].Value.Trim());
+			// each style: a group of its own in the style sheet, its number (\sN; none: Normal's 0) among the control
+			// words, its name the text before the ; (Word's have many control words, and groups of their own, before it)
+			string table = rtf[sheetAt..end];
+			int depth = 0, entry = -1;
+			for (int i = 0; i < table.Length; i++) {
+				char c = table[i];
+				if (c == '\\') { i++; continue; }
+				if (c == '{' && ++depth == 2) entry = i;
+				else if (c == '}' && depth-- == 2 && entry >= 0) {
+					string group = table[entry..(i + 1)];
+					if (Regex.IsMatch(group, @"^\{\\\*?\\?(cs|ts|ds)\d")) continue;    // (character, table and section styles)
+					var number = Regex.Match(group, @"\\s(\d+)(?![a-z])");
+					string text = Regex.Replace(group[1..^1], @"\{[^{}]*\}", "");                  // (groups inside it)
+					text = Regex.Replace(Unescape(text), @"\\\*|\\[a-zA-Z]+-?\d* ?|\\[^a-zA-Z]", "");    // (control words)
+					string name = text.Split(';')[0].Trim();
+					if (name == "") continue;
+					int n = number.Success ? int.Parse(number.Groups[1].Value) : 0;
+					if (!number.Success && !string.Equals(name, "Normal", StringComparison.OrdinalIgnoreCase)) continue;
+					names[n] = name;
+				}
+			}
 		}
 		var paragraphs = ParagraphStyles(rtf);
 		return (sheet, names, paragraphs, sheet != null || names.Count > 1 || paragraphs.Any(p => p > 0));
@@ -920,9 +946,10 @@ public static class StyleHtml
 	/// HTML to load, with a marker after each heading's and styled paragraph's start tag: its style.
 	public static string MarkHtml(string html) => Regex.Replace(html, @"<(h[1-6]|p|pre)\b([^>]*)>", m => {
 		string tag = m.Groups[1].Value.ToLowerInvariant();
-		string? name = tag[0] == 'h' ? "Heading " + tag[1]
-			: Regex.Match(m.Groups[2].Value, @"\sdata-rte-style=""([^""]+)""", RegexOptions.IgnoreCase) is { Success: true } s ? System.Net.WebUtility.HtmlDecode(s.Groups[1].Value)
-			: tag == "pre" ? "Code" : null;    // (preformatted text: the Code style, as Markdown's code blocks)
+		// (a style named, else a heading's level, else preformatted text: the Code style, as Markdown's code blocks)
+		string? name = Regex.Match(m.Groups[2].Value, @"\sdata-rte-style=""([^""]+)""", RegexOptions.IgnoreCase) is { Success: true } s ? System.Net.WebUtility.HtmlDecode(s.Groups[1].Value)
+			: tag[0] == 'h' ? "Heading " + tag[1]
+			: tag == "pre" ? "Code" : null;
 		return name == null ? m.Value : m.Value + MarkerStart + System.Net.WebUtility.HtmlEncode(name).Replace("@", "&#64;") + MarkerEnd;
 	}, RegexOptions.IgnoreCase);
 
@@ -930,10 +957,9 @@ public static class StyleHtml
 	public static HashSet<string> FromMarkers(RichEditBox editor) {
 		var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		var doc = editor.TextDocument;
-		while (true) {
-			string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
-			var m = Marker.Matches(story).LastOrDefault();
-			if (m == null) break;
+		// (all of them found once, and taken out from the last: the text before each stays where it was)
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		foreach (var m in Marker.Matches(story).Reverse()) {
 			doc.Range2(m.Index, m.Index + m.Length).Text = "";
 			string name = System.Net.WebUtility.HtmlDecode(m.Groups[1].Value);
 			StyleEngine.Tag(doc.Range2(m.Index, m.Index).Para, StyleEngine.IdOf(name));

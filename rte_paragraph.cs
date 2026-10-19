@@ -1,4 +1,4 @@
-// The Paragraph dialog, tab stops and the page-keeping rules for RTE Writer (rte_writer33.cs, through #load).
+// The Paragraph dialog, tab stops and the page-keeping rules for RTE Writer (rte_writer34.cs, through #load).
 //   - ParagraphFormat: what the Paragraph dialog sets (alignment, indents, spacing, line spacing, the line and page
 //     break rules, suppressed line numbers, tab stops), read from the selected paragraphs (a value they don't share is
 //     left empty) and given to them (only what was set), or to a style; as "Key=Value" lines for scripts.
@@ -133,7 +133,7 @@ public sealed class ParagraphFormat
 			if (Tabs != null) {
 				para.ClearAllTabs();
 				foreach (var tab in Tabs.OrderBy(t => t.Position))
-					para.AddTab(tab.Position, Array.IndexOf(ParagraphTab.Alignments, tab.Alignment), Math.Max(0, Array.IndexOf(ParagraphTab.Leaders, tab.Leader)));
+					global::LineSpacing.AddTab(para, tab.Position, Array.IndexOf(ParagraphTab.Alignments, tab.Alignment), Math.Max(0, Array.IndexOf(ParagraphTab.Leaders, tab.Leader)));
 			}
 		}
 	}

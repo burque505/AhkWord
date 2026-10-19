@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer33.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer33.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer34.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer34.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -191,20 +191,6 @@
         <Image Source="icons/nextspelling_20.bmp" MinDPI="120" />
         <Image Source="icons/nextspelling_24.bmp" MinDPI="144" />
         <Image Source="icons/nextspelling_32.bmp" MinDPI="192" />
-      </Command.SmallImages>
-    </Command>
-    <Command Name="cmdGroupDocument" Id="123" LabelTitle="Document">
-      <Command.LargeImages>
-        <Image Source="icons/structured_32.bmp" MinDPI="96" />
-        <Image Source="icons/structured_40.bmp" MinDPI="120" />
-        <Image Source="icons/structured_48.bmp" MinDPI="144" />
-        <Image Source="icons/structured_64.bmp" MinDPI="192" />
-      </Command.LargeImages>
-      <Command.SmallImages>
-        <Image Source="icons/structured_16.bmp" MinDPI="96" />
-        <Image Source="icons/structured_20.bmp" MinDPI="120" />
-        <Image Source="icons/structured_24.bmp" MinDPI="144" />
-        <Image Source="icons/structured_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
     <Command Name="cmdGroupShow" Id="124" LabelTitle="Show">
@@ -1115,6 +1101,20 @@
         <Image Source="icons/savestyles_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdApplyMyStyles" Id="391" LabelTitle="&amp;Apply My Styles" Keytip="A" TooltipTitle="Apply My Styles" TooltipDescription="Give this document your styles (the ones new documents get): its headings, Normal text and other styles take your look; formatting of a paragraph's own stays.">
+      <Command.LargeImages>
+        <Image Source="icons/applystyles_32.bmp" MinDPI="96" />
+        <Image Source="icons/applystyles_40.bmp" MinDPI="120" />
+        <Image Source="icons/applystyles_48.bmp" MinDPI="144" />
+        <Image Source="icons/applystyles_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/applystyles_16.bmp" MinDPI="96" />
+        <Image Source="icons/applystyles_20.bmp" MinDPI="120" />
+        <Image Source="icons/applystyles_24.bmp" MinDPI="144" />
+        <Image Source="icons/applystyles_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdPageBreak" Id="280" LabelTitle="Page Break" Keytip="B" TooltipTitle="Page break (Ctrl+Enter)" TooltipDescription="Start a new page here.">
       <Command.LargeImages>
         <Image Source="icons/pagebreak_32.bmp" MinDPI="96" />
@@ -1242,35 +1242,7 @@
       </Command.SmallImages>
     </Command>
     <Command Name="cmdSpellCheck" Id="297" LabelTitle="Check spelling as you type" Keytip="C" />
-    <Command Name="cmdStructured" Id="300" LabelTitle="Structured" Keytip="S" TooltipTitle="Structured document" TooltipDescription="Headings and block styles (Ctrl+0 to Ctrl+7) instead of font sizes.">
-      <Command.LargeImages>
-        <Image Source="icons/structured_32.bmp" MinDPI="96" />
-        <Image Source="icons/structured_40.bmp" MinDPI="120" />
-        <Image Source="icons/structured_48.bmp" MinDPI="144" />
-        <Image Source="icons/structured_64.bmp" MinDPI="192" />
-      </Command.LargeImages>
-      <Command.SmallImages>
-        <Image Source="icons/structured_16.bmp" MinDPI="96" />
-        <Image Source="icons/structured_20.bmp" MinDPI="120" />
-        <Image Source="icons/structured_24.bmp" MinDPI="144" />
-        <Image Source="icons/structured_32.bmp" MinDPI="192" />
-      </Command.SmallImages>
-    </Command>
-    <Command Name="cmdFreeForm" Id="301" LabelTitle="Free-form" Keytip="F" TooltipTitle="Free-form fonts" TooltipDescription="Any font size; block styles are off.">
-      <Command.LargeImages>
-        <Image Source="icons/freeform_32.bmp" MinDPI="96" />
-        <Image Source="icons/freeform_40.bmp" MinDPI="120" />
-        <Image Source="icons/freeform_48.bmp" MinDPI="144" />
-        <Image Source="icons/freeform_64.bmp" MinDPI="192" />
-      </Command.LargeImages>
-      <Command.SmallImages>
-        <Image Source="icons/freeform_16.bmp" MinDPI="96" />
-        <Image Source="icons/freeform_20.bmp" MinDPI="120" />
-        <Image Source="icons/freeform_24.bmp" MinDPI="144" />
-        <Image Source="icons/freeform_32.bmp" MinDPI="192" />
-      </Command.SmallImages>
-    </Command>
-    <Command Name="cmdWordWrap" Id="302" LabelTitle="Word wrap" Keytip="W" TooltipDescription="Without Print Layout: lines wrap at the window's edge (or not at all)." />
+    <Command Name="cmdWordWrap" Id="302" LabelTitle="Wrap to window" Keytip="W" TooltipTitle="Wrap to window" TooltipDescription="Without Print Layout: lines wrap at the window's edge (unchecked: they don't wrap at all, and the window scrolls sideways). With Print Layout, lines break as on the printed page, so this waits until Print Layout is off." />
     <Command Name="cmdPrintLayout" Id="370" LabelTitle="Print Layout" Keytip="L" TooltipTitle="Print layout" TooltipDescription="Lines break where they will on the printed page (Page Setup's paper and margins), as in Word and LibreOffice, with the page shown on grey. Off: lines wrap at the window's edge.">
       <Command.LargeImages>
         <Image Source="icons/printlayout_32.bmp" MinDPI="96" />
@@ -2091,6 +2063,7 @@
                 <ToggleButton CommandName="cmdStyleSetModern" />
               </MenuGroup>
               <MenuGroup>
+                <Button CommandName="cmdApplyMyStyles" />
                 <Button CommandName="cmdSaveStyles" />
               </MenuGroup>
             </DropDownButton>
@@ -2190,12 +2163,8 @@
             <CheckBox CommandName="cmdSourceWordWrap" />
             <CheckBox CommandName="cmdSourceLineNumbers" />
           </Group>
-          <Group CommandName="cmdGroupDocument" SizeDefinition="TwoButtons">
-            <ToggleButton CommandName="cmdStructured" />
-            <ToggleButton CommandName="cmdFreeForm" />
-          </Group>
           <Group CommandName="cmdGroupShow">
-            <ToggleButton CommandName="cmdPrintLayout" />
+            <CheckBox CommandName="cmdPrintLayout" />
             <CheckBox CommandName="cmdWordWrap" />
             <CheckBox CommandName="cmdShowBands" />
             <CheckBox CommandName="cmdOutline" />
