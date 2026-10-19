@@ -8,7 +8,7 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
 
 *[`examples/Showcase.rtf`](examples/Showcase.rtf), made entirely with the editor's own commands. The file has line numbers turned on (Layout > Line Numbers), which this picture doesn't show.*
 
-> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer34.*`). Renaming them to AhkWord is planned.
+> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer35.*`). Renaming them to AhkWord is planned.
 
 ## Features
 
@@ -22,7 +22,7 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
 - **Lists:** numbered and bulleted lists nested with Tab and Shift+Tab, a numbering style per level, restart and continue numbering, and legal numbering (1., 1.1, 1.1.1). Typed numbers in documents from elsewhere can be turned into real lists.
 - **Tables:** insert tables, add and delete rows and columns, set column widths, borders (none, all, outside, inside ..., with line width and color), shading, row height, vertical alignment, cell padding and the table's alignment on the page, move between cells with Tab and Shift+Tab (Tab in the last cell adds a row, as in Word), also in tables from Word and other programs.
 - **Pages:** manual page breaks (Ctrl+Enter), headers and footers with page-number and date fields, Page Setup, Print Preview (fitted to the screen, with page buttons and zoom), printing, and View > Multiple Pages, which shows the printed pages side by side (read-only: double-click a page to edit it there). Headers and footers are shown in the editor and saved in the document.
-- **Print Layout** (on by default, View > Print Layout): lines break where they will on the printed page, as in Word and LibreOffice, and the page is shown on grey, its margins as on paper. A dotted line with "Page 2", "Page 3"… marks where each printed page begins (RichEdit shows the text as one long page, so there is no gap for the header and footer between pages: View > Multiple Pages and Print Preview show the pages as printed), and the header and footer strips number the page in view. Word and OpenDocument files open looking as they do there, not as lines across the whole window. Its zoom, as in Word: **Page Width** (the default: the page fills the window's width, and follows it when the window is resized), **One Page** (a page's height fits the window), or your own (Zoom In, Zoom Out, 100%, Ctrl+mouse wheel), kept when you open another document. Turned off, lines wrap at the window's edge.
+- **Print Layout** (on by default, View > Print Layout): lines break where they will on the printed page, as in Word and LibreOffice, and the page is shown on grey, its margins as on paper. **Show Pages** (View > Show Pages, on by default) shows each printed page as a sheet of its own, as in Word: its header and footer in its margins, a grey band between the sheets, while you edit the text as before. The sheets are only the view's: saving, copying, printing and the other formats see the document as it is. With Show Pages off, a dotted line with "Page 2", "Page 3"… marks where each printed page begins, and the header and footer strips number the page in view. Word and OpenDocument files open looking as they do there, not as lines across the whole window. Its zoom, as in Word: **Page Width** (the default: the page fills the window's width, and follows it when the window is resized), **One Page** (a page's height fits the window), or your own (Zoom In, Zoom Out, 100%, Ctrl+mouse wheel), kept when you open another document. Turned off, lines wrap at the window's edge.
 - **Line numbers:** as in Word, numbers in the left margin, continuous or restarting on each page, with a first number, every line's number or every 5th (count by), and the distance from the text. Lines in tables and page breaks aren't counted, and you can leave out paragraphs such as headings (Suppress for Current Paragraph). They are printed (also in Print Preview and PDF), numbering the printed lines, and saved in RTF, Word and OpenDocument files, where Word and LibreOffice show and print them. Scripts can ask where a passage is printed: `Rte.PrintedLineAt(position)` gives its page and line, such as `3:12`.
 - **Pictures:** insert from a file or by drag and drop, resize, and give them alt text (shown when the mouse rests on a picture).
 - **Markdown and HTML views:** edit the document as Markdown or HTML, alone or side by side with the formatted text (see [Markdown and HTML views](#markdown-and-html-views)).
@@ -36,11 +36,11 @@ The commands are on a ribbon, the one built into Windows (as in Paint and WordPa
 | Tab | Groups |
 |---|---|
 | **File** (menu) | New, New from Template, Start Page, Open, Open in New Window, New Window, Save, Save As, Close (Ctrl+W), Print (with Print Preview and Page Setup), Export (PDF, Word, OpenDocument), Exit, and the recent documents |
-| **Home** | Clipboard, Font, Text (change case, underline style, font dialog), Paragraph (lists, levels, alignment, Line Spacing, List Options), Styles, Editing (find, replace, select all) |
+| **Home** | Clipboard, Font, Text (change case, underline style, font dialog), Paragraph (lists, levels, No numbering, alignment, Line Spacing, List Options), Styles, Editing (find, replace, select all) |
 | **Insert** | Page Break, Table, Picture, Linked Thumbnail, Link, Date & Time |
 | **Layout** | Page Setup, Header & Footer, Line Numbers (None, Continuous, Restart Each Page, Suppress for Current Paragraph, Line Numbering Options), Print Preview, Export as PDF |
 | **Review** | Next Spelling Error, Add to Dictionary, Check spelling as you type |
-| **View** | Document View (Rich Text, Markdown, HTML, Side by Side, Wrap source lines, Source line numbers), Print Layout, Wrap to window, Header and footer, Outline, Zoom (Page Width, One Page, Multiple Pages, Zoom In, Zoom Out, 100%) |
+| **View** | Document View (Rich Text, Markdown, HTML, Side by Side, Wrap source lines, Source line numbers), Print Layout, Show Pages, Wrap to window, Header and footer, Outline, Zoom (Page Width, One Page, Multiple Pages, Zoom In, Zoom Out, 100%) |
 | **Tools** | Macros, Record Macro, Macro Hotkeys, Run Script, Macros Folder, Automation API, About |
 | **Table Tools** | Appears while the caret is in a table: insert rows and columns; Properties (column widths, alignment, padding, row height, borders, shading, vertical alignment), Borders and Shading for the selected cells; delete rows, columns or the table |
 
@@ -82,7 +82,7 @@ Rte.On("Saved", (e) => TrayTip(Rte.FileName, "Saved"))
 - **Calls** wait for the editor and return its result. `Rte.Post(...)` queues a call and returns at once. **Tools > Automation API** in the editor lists everything that can be called.
 - **Events** (`TextChanged`, `SelectionChanged`, `ModifiedChanged`, `Saved`, `Opened`, `Closed`, `AsyncError`) are delivered to callbacks registered with `Rte.On`.
 - **Macros:** the **Macros** button on the Tools tab runs the scripts in [`rte_macros`](rte_macros), and **Macro Hotkeys** gives any of them a hotkey. **Record Macro** (Ctrl+Shift+R) records typing and ribbon commands as a new macro script.
-- **Hotkeys in the host script:** `rte_writer34.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
+- **Hotkeys in the host script:** `rte_writer35.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
 
 The example macros include:
 
@@ -160,18 +160,18 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 1. Install the requirements above: the .NET 10 Desktop Runtime and 64-bit AutoHotkey v2 (the C# compiler is downloaded on the first start if none is installed).
 2. Clone this repository.
-3. Run `rte_writer34.ahk`. To open a document at start, pass its path: `rte_writer34.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`, and `examples\Styles Tutorial.rtf`, a tutorial on styles, style sets and paragraph settings that uses them itself.
+3. Run `rte_writer35.ahk`. To open a document at start, pass its path: `rte_writer35.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`, and `examples\Styles Tutorial.rtf`, a tutorial on styles, style sets and paragraph settings that uses them itself.
 
 Settings are kept in `%APPDATA%\RTE Writer\settings.json`, with the recovery copies beside them in `Recovery`. Set the environment variable `RTE_WRITER_SETTINGS` to a file path to keep them elsewhere.
 
-**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `rte_writer34.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
+**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `rte_writer35.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `rte_writer34.ahk` | Starts the editor and holds its in-process hotkeys |
-| `rte_writer34.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
+| `rte_writer35.ahk` | Starts the editor and holds its in-process hotkeys |
+| `rte_writer35.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
 | `rte_markdown6.cs` | Markdown reading and writing |
 | `rte_linebreaks.cs` | Line breaks (Shift+Enter) in HTML |
 | `rte_htmllists2.cs` | HTML list numbering (start numbers, restarts, styles) |
@@ -184,6 +184,7 @@ Settings are kept in `%APPDATA%\RTE Writer\settings.json`, with the recovery cop
 | `rte_office7.cs` | Word, OpenDocument and RTF conversion |
 | `rte_linespacing2.cs` | Line spacing and space before and after paragraphs: the ribbon's commands, keeping them in HTML and in the built-in converter's Word files, and giving Word files' paragraphs the spacing Word gives them |
 | `rte_printlayout.cs` | Print Layout: the editor's lines laid out as the printer lays them out |
+| `rte_pagegaps.cs` | Show Pages: the printed pages as sheets in Print Layout, with their headers and footers |
 | `rte_pageview.cs` | Multiple Pages (the printed pages side by side, read-only) and the Print Preview window |
 | `rte_styles.cs` | Paragraph styles: the style sets, applying and changing styles, styles in RTF and HTML, the Modify Style dialog |
 | `rte_paragraph.cs` | The Paragraph and Tabs dialogs, paragraph formats for scripts, and where printed pages end (keep with next, keep lines together, widow and orphan control, page break before) |
@@ -212,7 +213,7 @@ Settings are kept in `%APPDATA%\RTE Writer\settings.json`, with the recovery cop
 - **Markdown has no table formatting or paragraph spacing.** Column widths, borders, shading, line spacing and space before and after paragraphs are kept in RTF, Word, OpenDocument and HTML files, not in Markdown (see [Markdown and HTML views](#markdown-and-html-views)).
 - **Markdown table rows are single lines,** so tables whose cells hold paragraphs are best edited in the formatted view.
 - **On-screen line numbers match the printed ones in Print Layout only.** With View > Print Layout (the default), the editor's lines are the printed lines, at any zoom. With it off, lines wrap at the window's edge, so a line's number on screen can differ from its printed number; printing, Print Preview, PDF export and `Rte.PrintedLineAt` always number the printed lines.
-- **Print Layout shows the page's width, not separate pages.** The text runs on from page to page as one column (page breaks are shown as lines), and letters are drawn with the screen's fonts, so a line can look a little longer or shorter than on paper while breaking in the same place.
+- **Show Pages: a page that ends inside a table is not split into sheets.** RichEdit can't leave a gap inside a table row, so there the next page is marked with a "Page N" line instead. The sheets are worked out again a moment after you stop typing, so while you type they can lag behind for an instant. Letters are drawn with the screen's fonts, so a line can look a little longer or shorter than on paper while breaking in the same place.
 - **Suppressed line numbers need RTF, or Word or LibreOffice as the converter.** HTML, Markdown, pandoc and the built-in converter keep the line numbering but not which paragraphs are left out. OpenDocument files have no first number: their lines start at 1.
 
 ## License

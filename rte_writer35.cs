@@ -19,8 +19,21 @@
 #load "rte_styles.cs"
 #load "rte_paragraph.cs"
 #load "rte_docxstyles.cs"
+#load "rte_pagegaps.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer34.ahk. Iteration 34 adds to iteration 33:
+// Run it with rte_writer35.ahk. Iteration 35 adds to iteration 34:
+//   - Page view (rte_pagegaps.cs): in Print Layout, View > Show Pages shows each printed page as a sheet of its own,
+//     its header and footer in its margins and a grey band between the sheets, as in Word, while the text is edited as
+//     before (a page that ends inside a table gets a "Page N" line instead). The sheets are the view's alone: saving,
+//     copying, printing and the other formats see the document as it is. Scripts: Rte.PageView, and Rte.PageViewReport
+//     (the macro Page view report) for a bug report: where the pages and gaps are, none of the text.
+//   - Word's lists as Word numbers them: paragraphs in no list between numbered ones (a heading, a quotation) are no
+//     longer numbered (Word's RTF gives them an old-style "item without a number", which RichEdit numbered and the legal
+//     lists took for theirs), and the numbering goes on after them as in Word (OfficeConverters.WithoutUnlistedNumbering,
+//     ContinueWordLists).
+//   - No numbering (the Numbering menu, List Options > List style; Rte.RemoveList): the selected paragraphs' lists end,
+//     whatever their numbering, and the Numbering button ends a list numbered "1." as Word's are.
+// Iteration 34 added to iteration 33:
 //   - Styles in Word and OpenDocument files, whichever converter: the built-in one (rte_docxstyles.cs) writes the
 //     document's styles (whole definitions) and each paragraph's style and line and page breaks into the .docx, and
 //     reads a .docx's styles (as Word works them out) into the editor; LibreOffice reads .odt files that way too (and
@@ -336,14 +349,14 @@ enum RibbonCommand : uint
 	ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384, StyleSetClassic = 385,
 	StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, ApplyMyStyles = 391, PageBreak = 280, Table = 281,
 	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295,
-	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ZoomPageWidth = 371, ZoomOnePage = 372,
-	ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305, ZoomOut = 306,
-	Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333, SourceWordWrap = 334,
-	SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, MacrosFolder = 314,
-	AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322, InsertRight = 323,
-	DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341, BordersAll = 342,
-	BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350, LineNumbersNone = 351,
-	LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
+	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
+	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
+	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313,
+	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
+	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
+	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
+	LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
 
 // Iteration 17: HTML with line breaks and indentation where they don't change what it shows: between blocks
@@ -508,6 +521,11 @@ class WriterForm : Form
 		api = new EditorApi(this);
 		lineGutter = new LineNumberGutter(Editor);
 		var page = pagePanel = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
+		pageGaps = new PageGaps(Editor);
+		Editor.Gaps = pageGaps;
+		Editor.BandParts = GapBandParts;
+		pagePanel.Paint += (s, e) => PaintGapBands(e.Graphics);
+		Editor.Painted += () => { if (pageGaps.Applied) pagePanel.Invalidate(false); };
 		FitPagePadding();
 		page.Controls.Add(Editor);
 		page.Controls.Add(lineGutter);     // (docked before the editor, after the header and footer)
@@ -580,6 +598,7 @@ class WriterForm : Form
 		automationLabel.ToolTipText = $"AHK scripts can control this editor (RteClient2.ahk). Server window 0x{server.Handle.ToInt64():X}";
 
 		Editor.SelectionChanged += (s, e) => {
+			if (pageGaps.Applied && !quietGaps) PageGaps.PlainTyping(Editor.TextDocument);    // (what is typed at a gap's line isn't raised)
 			// the caret guard looks once the command that moved the caret has finished (commands move it on the way)
 			if (!guardPending && IsHandleCreated) { guardPending = true; BeginInvoke(() => { guardPending = false; GuardLegalCaret(); }); }
 			UpdateUi();
@@ -699,7 +718,7 @@ class WriterForm : Form
 		undoButton = Button(RibbonCommand.Undo, OnText(() => { skipLegalCheck = true; Editor.Undo(); }, sourceBox.Undo), Keys.Control | Keys.Z, M("Undo"));
 		redoButton = Button(RibbonCommand.Redo, OnText(() => { skipLegalCheck = true; Editor.Redo(); }, sourceBox.Redo), Keys.Control | Keys.Y, M("Redo"));
 		// (copy and paste keep the paragraphs' styles: StyleClipboard)
-		Action cut = OnText(() => StyleClipboard.Copy(Editor, Styles, Editor.Cut), sourceBox.Cut), copy = OnText(() => StyleClipboard.Copy(Editor, Styles, Editor.Copy), sourceBox.Copy),
+		Action cut = OnText(() => StyleClipboard.Copy(Editor, Styles, () => WithoutGapsChanging(Editor.Cut)), sourceBox.Cut), copy = OnText(() => StyleClipboard.Copy(Editor, Styles, () => WithoutGaps(Editor.Copy)), sourceBox.Copy),
 			paste = OnText(() => { if (StyleClipboard.Paste(Editor, Styles, Editor.Paste)) FillStyleBox(); RefreshOutline(); }, () => sourceBox.Paste(DataFormats.GetFormat(DataFormats.UnicodeText)));
 		cutButton = Button(RibbonCommand.Cut, cut, Keys.Control | Keys.X, M("Cut"));
 		copyButton = Button(RibbonCommand.Copy, copy, Keys.Control | Keys.C, M("Copy"));
@@ -752,6 +771,7 @@ class WriterForm : Form
 		foreach (var (id, style) in new[] { (RibbonCommand.ListBullet, ListStyle.Bullet), (RibbonCommand.ListDecimal, ListStyle.Decimal), (RibbonCommand.ListLowerAlpha, ListStyle.LowerAlpha),
 			(RibbonCommand.ListUpperAlpha, ListStyle.UpperAlpha), (RibbonCommand.ListLowerRoman, ListStyle.LowerRoman), (RibbonCommand.ListUpperRoman, ListStyle.UpperRoman) })
 			Button(id, () => api.ToggleList(style), Keys.None, M("ToggleList", style));
+		Button(RibbonCommand.ListNone, () => api.RemoveList(), Keys.None, M("RemoveList"));
 		Button(RibbonCommand.ListLevels, ListLevelsCommand);
 		Toggle(RibbonCommand.AutoLevel, () => AutoLevelStyles = !AutoLevelStyles);
 		Button(RibbonCommand.RestartNumbering, RestartNumberingCommand);
@@ -826,7 +846,8 @@ class WriterForm : Form
 
 		// View
 		Check(RibbonCommand.WordWrap, () => Editor.WordWrap = !Editor.WordWrap);
-		Check(RibbonCommand.PrintLayout, () => api.PrintLayout = !Settings.PrintLayout);    // (a check box: the ribbon showed the toggle button's state wrongly)
+		Check(RibbonCommand.PrintLayout, () => api.PrintLayout = !Settings.PrintLayout);
+		Check(RibbonCommand.ShowPages, () => api.PageView = !Settings.PageView);    // (a check box: the ribbon showed the toggle button's state wrongly)
 		Check(RibbonCommand.ShowBands, () => api.HeaderFooterVisible = !Settings.ShowBands);
 		Check(RibbonCommand.Outline, () => api.OutlineVisible = outlineSplit.Panel1Collapsed, Keys.Control | Keys.Shift | Keys.O);
 		Button(RibbonCommand.ZoomIn, () => { if (PagesShown) pageView!.Zoom(1.1f); else ManualZoom(Math.Min(5f, EditorZoom() + 0.1f)); });
@@ -1430,6 +1451,7 @@ class WriterForm : Form
 
 	void ApplyStyleAtCaret(string name) {
 		if (Styles.Find(name) is not { } style) return;
+		using var _ = FirstParagraphAsIs(changes: true);
 		var doc = Editor.TextDocument;
 		int caret = doc.Selection2.Start;
 		StyleEngine.Apply(doc, Styles, style, caret, caret);
@@ -1457,6 +1479,7 @@ class WriterForm : Form
 	/// Changes a style (old to updated) in the sheet and in its paragraphs, in one undo step; returns how many paragraphs
 	/// have it.
 	internal int ChangeStyle(ParagraphStyle old, ParagraphStyle updated) {
+		using var _ = FirstParagraphAsIs(changes: true, all: true);
 		int index = Styles.Styles.FindIndex(s => string.Equals(s.Name, old.Name, StringComparison.OrdinalIgnoreCase));
 		if (index < 0) throw new ArgumentException($"There is no style \"{old.Name}\".");
 		if (!string.Equals(old.Name, updated.Name, StringComparison.OrdinalIgnoreCase))
@@ -1477,6 +1500,7 @@ class WriterForm : Form
 	/// paragraphs with it; formatting of their own stays); styles the sheet hasn't got stay. Returns how many
 	/// paragraphs were restyled.
 	internal int UseStyles(StyleSheet set) {
+		using var _ = FirstParagraphAsIs(changes: true, all: true);
 		var doc = Editor.TextDocument;
 		int count = 0;
 		doc.BeginEditCollection();
@@ -1774,7 +1798,14 @@ class WriterForm : Form
 
 	// ---------------------------------------------------------------- Iteration 3: printing and PDF
 
-	internal DocumentPrinter CreatePrinter(string? printerName = null) => new(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName);
+	internal DocumentPrinter CreatePrinter(string? printerName = null) {
+		// (laid out and printed as the document is: the page view's gaps out while the printer is in use)
+		bool gaps = pageGaps.Applied && !gapsOut && !quietGaps;
+		if (gaps) { QuietGaps(pageGaps.Remove); gapsOut = true; }
+		var printer = new DocumentPrinter(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName);
+		if (gaps) printer.Disposed += () => { gapsOut = false; QuietGaps(pageGaps.Reapply); };
+		return printer;
+	}
 
 	/// The document's header and footer.
 	internal PageBands Bands = new();
@@ -1797,10 +1828,16 @@ class WriterForm : Form
 		static bool Numbered(string[] parts) => PageBands.Parts(parts).Any(p => p.Contains("{page", StringComparison.OrdinalIgnoreCase));
 		bool needPages = (visible && ((bands.ShowHeader && Numbered(bands.Header)) || (bands.ShowFooter && Numbered(bands.Footer))))
 			|| (Settings.PrintLayout && !PagesShown);    // (and Print Layout's page boundaries)
-		if (needPages && bandPagesStale && (DateTime.Now - lastEdit).TotalMilliseconds > 1000) {
+		bool pageView = PageViewActive;
+		if (!pageView && pageGaps.Applied && !gapsOut) { QuietGaps(pageGaps.Remove); pageGaps.Forget(); }
+		if (pageGaps.Lost) { pageGaps.Lost = false; bandPagesStale = true; }    // (gaps editing took apart: worked out again)
+		if (needPages && bandPagesStale && !gapsOut && (DateTime.Now - lastEdit).TotalMilliseconds > 1000) {
 			bandPagesStale = false;
-			try { using var printer = CreatePrinter(); bandStarts = printer.PageStarts(); }
-			catch (Exception) { bandStarts = null; }
+			if (pageView) RecomputeGaps();
+			else {
+				try { using var printer = CreatePrinter(); bandStarts = printer.PageStarts(); }
+				catch (Exception) { bandStarts = null; }
+			}
 		}
 		Editor.PageStarts = Settings.PrintLayout ? bandStarts : null;    // (until they are worked out again: the ones before)
 		int viewPage = 1;
@@ -1824,12 +1861,192 @@ class WriterForm : Form
 		}, RegexOptions.IgnoreCase);
 		var header = PageBands.Parts(bands.Header).Select(Fill).ToArray();
 		var footer = PageBands.Parts(bands.Footer).Select(Fill).ToArray();
-		string shown = $"{visible}|{bands.ShowHeader}|{string.Join("\t", header)}|{bands.ShowFooter}|{string.Join("\t", footer)}";
+		string shown = $"{visible}|{pageView}|{bands.ShowHeader}|{string.Join("\t", header)}|{bands.ShowFooter}|{string.Join("\t", footer)}";
 		if (shown == bandsShown) return;
 		bandsShown = shown;
-		headerStrip.Display(visible && bands.ShowHeader, header);
-		footerStrip.Display(visible && bands.ShowFooter, footer);
+		// (in page view each sheet has its own: not the strips)
+		headerStrip.Display(visible && bands.ShowHeader && !pageView, header);
+		footerStrip.Display(visible && bands.ShowFooter && !pageView, footer);
+		if (pageView) Editor.Invalidate();
 	}    // (the default, once the settings are loaded: in the constructor)
+
+	// ---- Page view (iteration 35): the printed pages as sheets of their own (rte_pagegaps.cs)
+
+	PageGaps pageGaps = null!;
+	bool quietGaps, gapsOut;
+
+	/// Whether the page view shows now: Print Layout, Show Pages, the text being edited (not Multiple Pages or a source view).
+	internal bool PageViewActive => Settings.PrintLayout && Settings.PageView && pageLayout != null && !PagesShown && !SourceActive && Editor.IsHandleCreated;
+
+	internal PageGaps Gaps => pageGaps;
+
+	const int EM_GETSCROLLPOS = 0x04DD, EM_SETSCROLLPOS = 0x04DE, EM_SETEVENTMASK_GAPS = 0x0445;
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendPoint(IntPtr hWnd, int msg, IntPtr wParam, ref Point lParam);
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendMask(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+	// Puts the gaps in or takes them out: without undo steps or change notifications, the document's modified flag as
+	// it was, the text at the top of the window where it was.
+	void QuietGaps(Action change) {
+		if (!Editor.IsHandleCreated) { pageGaps.Forget(); return; }    // (the window closing: the gaps go with its text)
+		if (quietGaps) { change(); return; }
+		quietGaps = true;
+		var doc = Editor.TextDocument;
+		bool modified = Editor.Modified;
+		int top = Editor.GetCharIndexFromPosition(new Point(1, 1));
+		int topY = Editor.GetPositionFromCharIndex(top).Y;
+		doc.Undo(-9999995);    // tomSuspend
+		IntPtr mask = SendMask(Editor.Handle, EM_SETEVENTMASK_GAPS, IntPtr.Zero, IntPtr.Zero);
+		doc.Freeze();
+		try {
+			change();
+		} finally {
+			doc.Unfreeze();
+			SendMask(Editor.Handle, EM_SETEVENTMASK_GAPS, IntPtr.Zero, mask);
+			doc.Undo(-9999994);    // tomResume
+			Editor.Modified = modified;
+			int moved = Editor.GetPositionFromCharIndex(top).Y - topY;
+			if (moved != 0) {
+				var scroll = new Point();
+				SendPoint(Editor.Handle, EM_GETSCROLLPOS, IntPtr.Zero, ref scroll);
+				scroll.Y += (int)Math.Round(moved / Math.Max(0.1f, Editor.ZoomFactor));    // (EM_SETSCROLLPOS takes the unzoomed position)
+				SendPoint(Editor.Handle, EM_SETSCROLLPOS, IntPtr.Zero, ref scroll);
+			}
+			quietGaps = false;
+			Editor.Invalidate();
+			pagePanel.Invalidate();
+		}
+	}
+
+	// Rte.PageViewReport: positions and sizes only.
+	internal string PageViewReport() {
+		var r = new StringBuilder();
+		var doc = Editor.TextDocument;
+		int storyEnd = doc.Range2(0, 0).StoryLength;
+		var paragraphs = StyleEngine.Paragraphs(doc, 0, storyEnd).Select(p => p.Start).ToList();
+		int ParagraphOf(int at) => paragraphs.FindLastIndex(s => s <= at) + 1;
+		r.AppendLine($"Program: {AppFolders.HostScript ?? "(not known)"}");
+		r.AppendLine($"Print Layout {Settings.PrintLayout}, Show Pages {Settings.PageView} (active {PageViewActive}), zoom {Editor.ZoomFactor:0.###} ({Settings.ZoomMode}), {Editor.PixelsPerPoint:0.###} px/pt, window {Editor.ClientSize.Width}x{Editor.ClientSize.Height}");
+		r.AppendLine($"Characters {storyEnd}, paragraphs {paragraphs.Count}, layout stale {bandPagesStale}, gaps out {gapsOut}");
+		try {
+			using var printer = CreatePrinter();
+			r.AppendLine($"Printer {printer.Document.PrinterSettings.PrinterName}; printed pages start at {string.Join(" ", printer.PageHeights().Select(p => $"{p.Start} (p{ParagraphOf(p.Start)}, {p.Height:0} pt)"))}");
+		} catch (Exception ex) { r.AppendLine("Printed pages: " + ex.Message); }
+		r.AppendLine($"Gaps {pageGaps.Gaps.Count} for {pageGaps.Pages} pages, page 1's top {pageGaps.TopExtra:0.#} pt");
+		int top = Editor.GetCharIndexFromPosition(new Point(1, 1));
+		foreach (var gap in pageGaps.Gaps) {
+			var para = doc.Range2(gap.LineStart, gap.LineStart).Para;
+			var (footer, band, header) = pageGaps.Areas(gap, Editor.ClientSize.Width, Editor.PixelsPerPoint);
+			r.AppendLine($"  page {gap.Page}: p{ParagraphOf(gap.LineStart)} line {gap.LineStart}-{gap.LineEnd}, next {gap.Next}, raise {gap.Raise:0.##} pt, height {gap.Height:0.#} pt, spacing rule {para.LineSpacingRule} {para.LineSpacing:0.##}; " +
+				$"line at y {Editor.GetPositionFromCharIndex(gap.LineStart).Y}, next at y {(gap.Next >= 0 ? Editor.GetPositionFromCharIndex(gap.Next).Y : -1)}, band {band.Top:0}-{band.Bottom:0}");
+		}
+		var run = doc.Range2(0, 0);
+		int untracked = 0;
+		while (run.Start < storyEnd) {
+			run.MoveEnd(13, 1);    // tomCharFormat
+			if (run.End <= run.Start) break;
+			float position = run.Font.Position;
+			if (Math.Abs(position) > 0.01f && !pageGaps.Gaps.Any(g => g.LineStart <= run.Start && run.Start < g.LineEnd)) {
+				untracked++;
+				r.AppendLine($"  raised but not a gap: {run.Start}-{run.End} (p{ParagraphOf(run.Start)}) by {position:0.##} pt");
+			}
+			if (run.End >= storyEnd) break;
+			run.SetRange(run.End, run.End);
+		}
+		r.AppendLine($"Raised text that isn't a gap's: {untracked}. In view from character {top} (p{ParagraphOf(top)}).");
+		return r.ToString();
+	}
+
+	// The pages laid out again (as printed: without gaps) and their gaps put in.
+	void RecomputeGaps() {
+		// (not now: the gaps are out for something else, or the page isn't laid out yet: a moment later, as after typing,
+		// rather than a page view left without its gaps)
+		if (pageLayout is not { } layout || gapsOut) { bandPagesStale = true; return; }
+		QuietGaps(() => {
+			pageGaps.Remove();
+			List<(int Start, float Height)>? pages = null;
+			try { using var printer = CreatePrinter(); pages = printer.PageHeights(); }
+			catch (Exception) { bandPagesStale = true; lastEdit = DateTime.Now; }    // (the printer busy: again in a second)
+			bandStarts = pages?.Select(p => p.Start).ToList();
+			if (pages != null && PageViewActive)
+				pageGaps.Apply(pages, (layout.Height - layout.Top - layout.Bottom) / 20f, layout.Bottom / 20f, layout.Top / 20f);
+		});
+	}
+
+	/// Runs read with the document as it is, without the page view's gaps, which are then put back as they were (read
+	/// mustn't change the text: see WithoutGapsChanging).
+	internal T WithoutGaps<T>(Func<T> read) {
+		if (gapsOut || quietGaps || !pageGaps.Applied) return read();
+		QuietGaps(pageGaps.Remove);
+		gapsOut = true;
+		try { return read(); }
+		finally { gapsOut = false; QuietGaps(pageGaps.Reapply); }
+	}
+
+	internal void WithoutGaps(Action read) => WithoutGaps(() => { read(); return 0; });
+
+	/// Runs change with the document as it is, without the page view's gaps, which are worked out again after it.
+	internal void WithoutGapsChanging(Action change) {
+		if (gapsOut || quietGaps || !pageGaps.Applied) { change(); return; }
+		QuietGaps(pageGaps.Remove);
+		gapsOut = true;
+		try { change(); }
+		finally { gapsOut = false; pageGaps.Forget(); RecomputeGaps(); }
+	}
+
+	/// For a command that reads or changes paragraph formats: page 1's top margin (space before the first paragraph)
+	/// taken out while it runs if the selection is in the first paragraph (or all: a style changed), and the gaps put
+	/// back after it (worked out again if it changed something).
+	internal IDisposable FirstParagraphAsIs(bool changes, bool all = false) {
+		if (gapsOut || quietGaps || pageGaps.TopExtra <= 0) return new OnDispose(() => { });
+		var doc = Editor.TextDocument;
+		if (!all && doc.Selection2.Start >= StyleEngine.Paragraphs(doc, 0, 0)[0].End) return new OnDispose(() => { });
+		QuietGaps(pageGaps.Remove);
+		gapsOut = true;
+		return new OnDispose(() => {
+			gapsOut = false;
+			if (changes) { pageGaps.Forget(); RecomputeGaps(); } else QuietGaps(pageGaps.Reapply);
+		});
+	}
+
+	/// Show Pages changed (or Print Layout): the gaps worked out again at once, or taken out.
+	internal void PageViewChanged() {
+		bandPagesStale = true;
+		lastEdit = DateTime.MinValue;
+		if (!PageViewActive && pageGaps.Applied) { QuietGaps(pageGaps.Remove); pageGaps.Forget(); }
+		bandsShown = "";
+		UpdateBands();
+		UpdateUi();
+	}
+
+	// The header's or footer's parts for a page, filled in (null: not shown).
+	string[]? GapBandParts(bool header, int page) {
+		var bands = Bands;
+		if (!Settings.ShowBands || (header ? !bands.ShowHeader : !bands.ShowFooter)) return null;
+		int pages = pageGaps.Pages > 0 ? pageGaps.Pages : bandStarts?.Count ?? 1;
+		string Fill(string text) => Regex.Replace(text, @"\{(title|file|page|pages|date|time)\}", m => m.Groups[1].Value.ToLowerInvariant() switch {
+			"title" => DocumentName,
+			"file" => FileName ?? DocumentName,
+			"page" => page.ToString(CultureInfo.CurrentCulture),
+			"pages" => pages.ToString(CultureInfo.CurrentCulture),
+			"date" => DateTime.Now.ToShortDateString(),
+			_ => DateTime.Now.ToShortTimeString()
+		}, RegexOptions.IgnoreCase);
+		return PageBands.Parts(header ? bands.Header : bands.Footer).Select(Fill).ToArray();
+	}
+
+	// The bands between the sheets where they cross the page's margins (outside the editor, which draws its part).
+	void PaintGapBands(Graphics g) {
+		if (!pageGaps.Applied || !Editor.IsHandleCreated) return;
+		using var grey = new SolidBrush(PrintLayoutPage.Surround);
+		float ppp = Editor.PixelsPerPoint;
+		foreach (var gap in pageGaps.Gaps) {
+			if (gap.Next < 0) continue;
+			var (_, band, _) = pageGaps.Areas(gap, Editor.ClientSize.Width, ppp);
+			float y = Editor.Top + band.Y;
+			if (y + band.Height < 0 || y > pagePanel.Height) continue;
+			g.FillRectangle(grey, 0, Math.Max(Editor.Top, y), pagePanel.Width, Math.Min(band.Bottom + Editor.Top, Editor.Bottom) - Math.Max(Editor.Top, y));
+		}
+	}
 
 	/// The header and footer new documents get (File > Header and Footer can make a document's the default).
 	internal PageBands DefaultBands() => new() {
@@ -1879,7 +2096,8 @@ class WriterForm : Form
 		var doc = Editor.TextDocument;
 		var selection = doc.Selection2;
 		int start = selection.Start, end = selection.End;
-		var format = global::ParagraphFormat.Read(doc, Styles, start, end);
+		ParagraphFormat format;
+		using (FirstParagraphAsIs(changes: false)) format = global::ParagraphFormat.Read(doc, Styles, start, end);
 		var style = StyleEngine.StyleAt(doc, Styles, start);
 		var font = doc.Range2(start, Math.Min(start + 1, doc.Range2(0, 0).StoryLength)).Font;
 		using var dlg = new ParagraphDialog(format, forStyle: false, style.Name, font.Name ?? style.Font, font.Size > 0 ? font.Size : style.Size, doc.DefaultTabStop);
@@ -2968,7 +3186,10 @@ class WriterForm : Form
 		foreach (var (id, value) in new[] { (RibbonCommand.LineSpacing10, "1"), (RibbonCommand.LineSpacing115, "1.15"), (RibbonCommand.LineSpacing150, "1.5"),
 			(RibbonCommand.LineSpacing200, "2"), (RibbonCommand.LineSpacing250, "2.5"), (RibbonCommand.LineSpacing300, "3") })
 			toggleButtons[id].BooleanValue = spacing == value;
-		toggleButtons[RibbonCommand.SpaceBefore].BooleanValue = LineSpacing.SpaceOf(range, true) > 0;
+		// (page 1's top margin, the page view's space before the first paragraph, isn't the paragraph's)
+		float before = LineSpacing.SpaceOf(range, true);
+		if (pageGaps.TopExtra > 0 && range.Start < StyleEngine.Paragraphs(Editor.TextDocument, 0, 0)[0].End) before -= pageGaps.TopExtra;
+		toggleButtons[RibbonCommand.SpaceBefore].BooleanValue = before > 0.05f;
 		toggleButtons[RibbonCommand.SpaceAfter].BooleanValue = LineSpacing.SpaceOf(range, false) > 0;
 		toggleButtons[RibbonCommand.AutoLevel].BooleanValue = AutoLevelStyles;
 		toggleButtons[RibbonCommand.LineNumbersNone].BooleanValue = !Numbering.On;
@@ -2992,6 +3213,8 @@ class WriterForm : Form
 		checkBoxes[RibbonCommand.WordWrap].BooleanValue = Editor.WordWrap;
 		checkBoxes[RibbonCommand.WordWrap].Enabled = !Settings.PrintLayout;    // (Print Layout breaks lines as on paper)
 		checkBoxes[RibbonCommand.PrintLayout].BooleanValue = Settings.PrintLayout;
+		checkBoxes[RibbonCommand.ShowPages].BooleanValue = Settings.PageView;
+		checkBoxes[RibbonCommand.ShowPages].Enabled = Settings.PrintLayout;
 		// (Page Width, One Page and Multiple Pages: one of them at a time; each pushed to the ribbon even when it seems to
 		// have it already, as a click checks a button in the ribbon before the command has run)
 		void Show(RibbonCommand id, bool on) { var button = toggleButtons[id]; if (zoomClicked && button.BooleanValue == on) button.BooleanValue = !on; button.BooleanValue = on; }
@@ -3134,6 +3357,7 @@ class WriterForm : Form
 	internal void DocumentLoaded(SourceKind kind, string? text) {
 		ClearRecovery();    // (the document before it went, as the user wanted)
 		bandStarts = null;    // (the pages before were the document before's)
+		pageGaps.Forget();
 		bandPagesStale = true;
 		Editor.PageStarts = null;
 		sourceTimer.Stop();
@@ -3759,6 +3983,7 @@ public class EditorApi
 	/// Gives the paragraphs the selection is in a style (by name: Rte.Styles() lists them), in one undo step: their
 	/// formatting becomes the style's, except formatting given to part of a paragraph (a bold word).
 	public void SetStyle(string name) {
+		using var _ = form.FirstParagraphAsIs(changes: true);
 		var style = form.Styles.Find(name)
 			?? (ParagraphStyle.BuiltIn(name) || StyleSets.Get("Classic").Find(name) != null ? form.Styles.Ensure(name) : throw new ArgumentException($"There is no style \"{name}\" (Rte.Styles() lists them)."));
 		var doc = ed.TextDocument;
@@ -3808,6 +4033,7 @@ public class EditorApi
 	/// A new style, from the paragraph at the caret (with settings, as ModifyStyle takes them, on top), given to the
 	/// paragraphs the selection is in.
 	public void NewStyle(string name, string settings = "") {
+		using var _ = form.FirstParagraphAsIs(changes: true);
 		name = name.Trim();
 		if (name == "" || name.Contains('@') || name.Contains(';') || name.Contains('{') || name.Contains('}')) throw new ArgumentException("A style's name can't be empty, nor have @ ; { } in it.");
 		if (form.Styles.Find(name) != null) throw new ArgumentException($"There is a style \"{name}\" already.");
@@ -3820,6 +4046,7 @@ public class EditorApi
 
 	/// The caret paragraph's style made to look like the paragraph; its other paragraphs change too. Returns its name.
 	public string UpdateStyleToMatch() {
+		using var _ = form.FirstParagraphAsIs(changes: true, all: true);
 		var doc = ed.TextDocument;
 		var style = StyleEngine.StyleAt(doc, form.Styles, doc.Selection2.Start);
 		form.ChangeStyle(style, StyleEngine.Capture(doc, doc.Selection2.Start, style.Name, style.Level, style.Next));
@@ -3829,6 +4056,7 @@ public class EditorApi
 	/// Clear Formatting (Ctrl+Space): the selected text back to its paragraphs' style (all formatting of its own goes); with
 	/// no selection, the caret's whole paragraph, its paragraph formatting (spacing, indents ...) too. One undo step.
 	public void ClearFormatting() {
+		using var _ = form.FirstParagraphAsIs(changes: true);
 		var doc = ed.TextDocument;
 		var selection = doc.Selection2;
 		doc.BeginEditCollection();
@@ -4023,7 +4251,7 @@ public class EditorApi
 			File.WriteAllText(full, WithBands(OfficeConverters.PngPictures(OfficeConverters.WithAltTexts(OfficeConverters.ListIndentsRtf(StyledRtf(RawRtf)), AltTexts())), full), Encoding.Latin1);
 		else {
 			string content = extension switch {
-				".md" or ".markdown" => MarkdownConverter.ToMarkdown(ed, ImageFiles(full)) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering),
+				".md" or ".markdown" => form.WithoutGaps(() => MarkdownConverter.ToMarkdown(ed, ImageFiles(full))) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering),
 				".txt" => ed.Text.Replace("\n", "\r\n"),
 				_ => picturesInside ? HtmlFile(Path.GetFileNameWithoutExtension(full), pretty: true)
 					: PicturesToFiles(HtmlFile(Path.GetFileNameWithoutExtension(full), pretty: true), full)
@@ -4079,7 +4307,7 @@ public class EditorApi
 
 	// The library's HTML, with page breaks, real tables (it writes their cells as paragraphs) and list numbering.
 	string HtmlBody(out string css) {
-		string body = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, global::LineSpacing.ExportHtml(ed, StyleHtml.Export(ed, form.Styles, LineBreaks.ExportHtml(ed, ed.Html))))), out css);
+		string body = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, global::LineSpacing.ExportHtml(ed, StyleHtml.Export(ed, form.Styles, LineBreaks.ExportHtml(ed, form.WithoutGaps(() => ed.Html)))))), out css);
 		css = ParagraphCss + css;
 		return body;
 	}
@@ -4126,7 +4354,7 @@ public class EditorApi
 	// ---- Rich Text Format, Word and OpenDocument
 
 	// RichEdit's own RTF (without the pictures' alt texts, for changes that go through a RichEdit).
-	string RawRtf => ((RichTextBox)ed).Rtf ?? "";
+	string RawRtf => form.WithoutGaps(() => ((RichTextBox)ed).Rtf ?? "");    // (the page view's gaps aren't the document's)
 
 	// RTF with the document's styles: the style sheet and each paragraph's (RichEdit keeps only the headings').
 	string StyledRtf(string rtf) => RtfStyles.Inject(rtf, StyleEngine.Names(ed.TextDocument, form.Styles), form.Styles, StyleEngine.WidowControls(ed.TextDocument));
@@ -4159,11 +4387,13 @@ public class EditorApi
 		get => OfficeConverters.WithAltTexts(RawRtf, AltTexts());
 		set {
 			value = OfficeConverters.SimplePictures(value);    // (Word's picture wrappers, which RichEdit can drop)
+			value = OfficeConverters.WithoutUnlistedNumbering(value, out var wordStarts);    // (Word's paragraphs in no list, which RichEdit would number)
 			// (LibreOffice's and Word's "page break before" paragraphs, which are their page breaks; RTE Writer's own keep it)
 			if (!value.Contains(@"{\*\rtewriterstyles")) value = PageBreaks.FromPageBreakBefore(value);
 			value = HeaderFooter.StripFromRtf(value);             // (the header and footer are the document's Bands)
 			value = RtfTables.WordShading(value);                 // (Word's cell backgrounds, which RichEdit ignores)
 			((RichTextBox)ed).Rtf = OfficeConverters.WithoutAltTexts(value);    // (RichEdit would put their accents into the text)
+			OfficeConverters.ContinueWordLists(ed.TextDocument, wordStarts);    // (the numbers after them, as Word has them)
 			PageBreaks.Normalize(ed);    // (Word's \page can be in the middle of a paragraph)
 			RestorePictures(value);       // (with the alt texts, from the RTF as it was)
 			LegalLists.LevelsFromNumbers(ed.TextDocument);    // (RichEdit's RTF loses the levels of legal items)
@@ -4289,6 +4519,17 @@ public class EditorApi
 		}
 	}
 
+	/// Page view (View > Show Pages): in Print Layout, each printed page as a sheet of its own, with its header and footer
+	/// and a band between the sheets (1); 0: one long page, a line where each page begins. Remembered.
+	public bool PageView {
+		get => form.Settings.PageView;
+		set { form.Settings.PageView = value; form.Settings.Save(); form.PageViewChanged(); }
+	}
+
+	/// The page view as it is now, for a bug report: the program's folder, the zoom, where the printed pages start,
+	/// each gap (positions, line spacing) and any raised text that isn't a gap's. Numbers only: none of the text.
+	public string PageViewReport() => form.PageViewReport();
+
 	/// Multiple Pages: the printed pages side by side, read-only, in the editor's place (true), or editing (false).
 	public bool MultiplePages {
 		get => form.PagesShown;
@@ -4327,8 +4568,8 @@ public class EditorApi
 
 	/// The space before the selected paragraphs, in points (-1 if they differ); setting it sets it for them (one undo step).
 	public float SpaceBefore {
-		get => global::LineSpacing.SpaceOf(SelectionRange(), true);
-		set { global::LineSpacing.ApplySpace(SelectionRange(), true, value); form.LineGutter.DocumentChanged(); }
+		get { using var _ = form.FirstParagraphAsIs(changes: false); return global::LineSpacing.SpaceOf(SelectionRange(), true); }
+		set { using var _ = form.FirstParagraphAsIs(changes: true); global::LineSpacing.ApplySpace(SelectionRange(), true, value); form.LineGutter.DocumentChanged(); }
 	}
 
 	/// The space after the selected paragraphs, in points (-1 if they differ), as SpaceBefore.
@@ -4344,6 +4585,7 @@ public class EditorApi
 	/// KeepTogether, WidowControl, PageBreakBefore, NoLineNumber (1 or 0), Tabs (72/right/dots,...), and their style's
 	/// Contextual (no space between paragraphs of the same style) and Level (0: body text, 1-6: a heading).
 	public string ParagraphFormat() {
+		using var _ = form.FirstParagraphAsIs(changes: false);
 		var selection = ed.TextDocument.Selection2;
 		return global::ParagraphFormat.Read(ed.TextDocument, form.Styles, selection.Start, selection.End).Describe();
 	}
@@ -4352,6 +4594,7 @@ public class EditorApi
 	/// measures in points or with a unit: Rte.SetParagraphFormat("LeftIndent=0.5in; FirstLine=-0.5in; KeepTogether=1").
 	/// What isn't given stays as each paragraph has it. One undo step.
 	public void SetParagraphFormat(string settings) {
+		using var _ = form.FirstParagraphAsIs(changes: true);
 		var format = global::ParagraphFormat.Parse(settings);
 		if (format.Contextual != null) throw new ArgumentException("Contextual is a style's: Rte.ModifyStyle(name, \"Contextual=1\").");
 		var doc = ed.TextDocument;
@@ -4908,7 +5151,7 @@ public class EditorApi
 	/// The document as Markdown. With embedImages = 1 (the default) images are data: URIs, so the text is complete on
 	/// its own; with 0 they are written as image1.png, image2.png ... (as when viewing the source).
 	public string GetMarkdown(bool embedImages = true) =>
-		MarkdownConverter.ToMarkdown(ed, embedImages ? null : (number, data, extension) => $"image{number}.{extension}");
+		form.WithoutGaps(() => MarkdownConverter.ToMarkdown(ed, embedImages ? null : (number, data, extension) => $"image{number}.{extension}"));
 
 	/// Replaces the document with Markdown. Relative image paths are resolved from the current file's folder.
 	public void SetMarkdown(string markdown) {
@@ -4945,7 +5188,7 @@ public class EditorApi
 	// The document as the source view shows it (and a .md / .html file gets it): Markdown with the header and footer
 	// line, or a whole HTML page; pictures as data: URIs.
 	internal string SourceOf(WriterForm.SourceKind kind) => kind == WriterForm.SourceKind.Markdown
-		? MarkdownConverter.ToMarkdown(ed, null) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering)
+		? form.WithoutGaps(() => MarkdownConverter.ToMarkdown(ed, null)) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering)
 		: HtmlFile(form.FileName != null ? Path.GetFileNameWithoutExtension(form.FileName) : "Untitled", pretty: true);
 
 	// Replaces the document with Markdown or HTML from the source view, as Open does with a file's.
@@ -5070,6 +5313,10 @@ public class EditorApi
 	public void ToggleList(ListStyle style) {
 		if (InLegalList()) {    // a legal list becomes a list of this style (its numbers go)
 			LegalLists.Remove(ed, SelectionRange().Start, SelectionRange().End);
+		}
+		else if ((SelectionRange().Para.ListType & 0xFFFF) == (int)style) {    // the same style again ends the list, whatever its punctuation
+			RemoveList();
+			return;
 		}
 		ToggleFromTopLevel(() => ed.ToggleList(style));
 		var para = SelectionRange().Para;
@@ -5300,6 +5547,18 @@ public class EditorApi
 
 	// ---- Iteration 8: list levels (Paragraph > List levels)
 
+	/// Ends the lists of the selected paragraphs, whatever their numbering (bullets, numbers, legal numbers, or a
+	/// Word document's numbered style): their numbers go, their text and indents stay. One undo step.
+	public void RemoveList() {
+		var range = SelectionRange();
+		if (TouchesLegalList()) LegalLists.Remove(ed, range.Start, range.End);
+		range = SelectionRange();
+		var doc = ed.TextDocument;
+		var paragraphs = doc.Range2(range.Start, range.End);
+		paragraphs.Expand(tomConstants.tomParagraph);
+		paragraphs.Para.ListType = tomConstants.tomListNone;
+	}
+
 	/// Makes the selected paragraphs a numbered list (or ends it), numbered as List levels sets for their levels.
 	public void NumberedList() {
 		if (InLegalList()) {    // a legal list becomes an ordinary numbered list, keeping its levels
@@ -5317,7 +5576,9 @@ public class EditorApi
 		}
 		int type = SelectionRange().Para.ListType & 0xFFFF;
 		if (type != tomConstants.tomListNone && type != tomConstants.tomListBullet) {
-			ed.ToggleList((ListStyle)type);    // the same style again ends the list
+			// numbered already: the list ends (RichEditorNET's toggle ends it only for its own plain style, so a list with
+			// "1." or "(1)", as Word's documents have, would only have changed its punctuation)
+			RemoveList();
 			return;
 		}
 		ToggleFromTopLevel(() => ed.ToggleList(ListStyle.Decimal));
@@ -6088,6 +6349,7 @@ public sealed class Settings
 	public bool Structured { get; set; } = true;    // (no longer used: View > Structured / Free-form were retired in iteration 34)
 	public bool WordWrap { get; set; } = true;
 	public bool PrintLayout { get; set; } = true;    // View > Print Layout: lines as on the printed page
+	public bool PageView { get; set; } = true;       // View > Show Pages: Print Layout's pages as sheets of their own
 	public string ZoomMode { get; set; } = "PageWidth";    // Print Layout's zoom: PageWidth, OnePage or Manual (View > Zoom)
 	public bool SpellCheck { get; set; } = true;
 	public bool AutoLevelStyles { get; set; } = true;
@@ -6378,6 +6640,14 @@ sealed class DocumentPrinter : IDisposable
 		return starts;
 	}
 
+	/// Where each printed page starts, and how tall its text is (points), laid out for the printer.
+	public List<(int Start, float Height)> PageHeights() {
+		var starts = new List<int>();
+		var heights = new List<float>();
+		Measuring(range => CountPages(range, editor.TextDocument.Range2(0, 0).StoryLength - 1, starts, heights));
+		return starts.Select((s, i) => (s, i < heights.Count ? heights[i] : 0f)).ToList();
+	}
+
 	/// Where a character is printed: its page (from 1) and its line's printed number (0: none, or line numbers are off).
 	public (int Page, int Line) PrintedLineAt(int position) {
 		var starts = PageStarts();
@@ -6421,7 +6691,7 @@ sealed class DocumentPrinter : IDisposable
 
 	// Lays out the whole document without drawing (EM_FORMATRANGE with wParam 0) to count the pages (and list where
 	// they start), each page ending where the paragraphs' rules have it (PageKeeping).
-	int CountPages(FORMATRANGE range, int end, List<int>? starts = null) {
+	int CountPages(FORMATRANGE range, int end, List<int>? starts = null, List<float>? heights = null) {
 		int count = 0, position = 0;
 		var doc = editor.TextDocument;
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
@@ -6439,7 +6709,18 @@ sealed class DocumentPrinter : IDisposable
 				range.chrg.cpMin = position;
 				range.chrg.cpMax = -1;
 				int laidOut = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
+				int used = range.rc.Bottom - area.Top;
 				int next = PageBreaks.AfterBreak(doc, PageKeeping.Adjust(doc, story, position, laidOut, Lines));
+				if (heights != null) {
+					// (the height of the text the page holds: measured again if a rule ended it earlier)
+					if (next < laidOut && next > position) {
+						range.rc = area;
+						range.chrg.cpMax = next;
+						SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
+						used = range.rc.Bottom - area.Top;
+					}
+					heights.Add(used / 20f);
+				}
 				if (next <= position || next >= end) break;
 				position = next;
 			}
@@ -6491,7 +6772,15 @@ sealed class DocumentPrinter : IDisposable
 		Right = (int)((r.Right - hardX) * 14.4f), Bottom = (int)((r.Bottom - hardY) * 14.4f)
 	};
 
-	public void Dispose() => Document.Dispose();
+	/// After the printer is done with the editor (the page view puts its gaps back).
+	public event Action? Disposed;
+
+	public void Dispose() {
+		Document.Dispose();
+		var done = Disposed;
+		Disposed = null;
+		done?.Invoke();
+	}
 }
 
 // Records editor actions as RteClient2 calls (one per line). Typed text is collected into InsertText calls, and
@@ -6852,6 +7141,44 @@ sealed class WriterEditBox : RichEditBox
 	protected override void OnTextChanged(EventArgs e) {
 		base.OnTextChanged(e);
 		pageBreaks = null;
+		RepaintDrawings();
+	}
+
+	protected override void OnSelectionChanged(EventArgs e) {
+		base.OnSelectionChanged(e);
+		RepaintDrawings();
+	}
+
+	// RichEdit redraws the lines it changes itself (typing, a format applied), not through WM_PAINT: what is drawn over
+	// them (a gap's footer, band and header, a page's line) would be gone until the next full paint. So once it has
+	// done that, the parts of the window with drawings are painted again, which draws them again.
+	bool repaintPending;
+	void RepaintDrawings() {
+		if (repaintPending || !IsHandleCreated) return;
+		repaintPending = true;
+		BeginInvoke(() => {
+			repaintPending = false;
+			if (!IsHandleCreated) return;
+			var client = ClientRectangle;
+			if (Gaps is { Applied: true } gaps) {
+				float ppp = PixelsPerPoint;
+				if (gaps.TopExtra > 0) {
+					int y0 = gaps.PositionOf(0).Y;
+					if (y0 + gaps.TopExtra * ppp > 0 && y0 < client.Bottom) Invalidate(new Rectangle(0, y0, client.Width, (int)Math.Ceiling(gaps.TopExtra * ppp) + 1), false);
+				}
+				foreach (var gap in gaps.Gaps) {
+					var (footer, _, header) = gaps.Areas(gap, client.Width, ppp);
+					if (header.Bottom < client.Top || footer.Top > client.Bottom) continue;
+					Invalidate(Rectangle.FromLTRB(0, (int)Math.Floor(footer.Top), client.Width, (int)Math.Ceiling(header.Bottom) + 1), false);
+				}
+			}
+			if (pageStarts is { Count: > 1 } starts)
+				foreach (int at in starts.Skip(1)) {
+					int y = GetPositionFromCharIndex(at).Y;
+					if (y > client.Bottom + 12) break;
+					if (y >= client.Top - 12) Invalidate(new Rectangle(0, y - 12, client.Width, 24), false);
+				}
+		});
 	}
 
 	/// Draws the page breaks in view (after RichEdit has painted).
@@ -6891,10 +7218,66 @@ sealed class WriterEditBox : RichEditBox
 	}
 	List<int>? pageStarts;
 
+	/// The page view's gaps (rte_pagegaps.cs), and the header's and footer's parts for a page (null: not shown).
+	public PageGaps? Gaps;
+	public Func<bool, int, string[]?>? BandParts;
+
+	/// Where a character is (its line's top), from RichEdit itself, in view or not. RichTextBox's own gives (0, 0) for
+	/// a character past its Text's length, which can be shorter than the document (a Word document's last page): what
+	/// is drawn there (a page's line, a footer) would then stay at the window's top while the text scrolls under it.
+	/// It also reads the whole text for each call.
+	public new Point GetPositionFromCharIndex(int index) {
+		if (!IsHandleCreated) return Point.Empty;
+		int storyEnd = TextDocument.Range2(0, 0).StoryLength;
+		var point = new Point();
+		SendPosition(Handle, 0x00D6, ref point, (IntPtr)Math.Clamp(index, 0, Math.Max(0, storyEnd - 1)));    // EM_POSFROMCHAR
+		return point;
+	}
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendPosition(IntPtr hWnd, int msg, ref Point point, IntPtr cp);
+	/// Screen pixels per point at the editor's zoom.
+	public float PixelsPerPoint => DeviceDpi / 72f * Math.Max(0.1f, ZoomFactor);
+
+	/// Draws the page view's gaps in view: the sheet's end with its footer, a grey band, the next sheet's top with its
+	/// header; page 1's header above the first line.
+	public void DrawGaps(Graphics g) {
+		if (Gaps is not { Applied: true } gaps) return;
+		var client = ClientRectangle;
+		float ppp = PixelsPerPoint, width = client.Width;
+		using var grey = new SolidBrush(PrintLayoutPage.Surround);
+		using var edge = new Pen(Color.FromArgb(200, 200, 200));
+		using var ink = new SolidBrush(Color.FromArgb(105, 105, 105));
+		using var font = new Font("Segoe UI", Math.Max(6f, 8.5f * ppp / (DeviceDpi / 72f)), GraphicsUnit.Point);
+		void Parts(string[]? parts, RectangleF area) {
+			if (parts is not { Length: 3 } || area.Height <= 0) return;
+			var format = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
+			foreach (var (text, align) in new[] { (parts[0], StringAlignment.Near), (parts[1], StringAlignment.Center), (parts[2], StringAlignment.Far) }) {
+				if (string.IsNullOrWhiteSpace(text)) continue;
+				format.Alignment = align;
+				g.DrawString(text, font, ink, area, format);
+			}
+		}
+		if (gaps.TopExtra > 0) {
+			float y0 = gaps.PositionOf(0).Y, height = gaps.TopExtra * ppp;    // (y0: the paragraph's top, its space before included)
+			if (y0 + height > client.Top) Parts(BandParts?.Invoke(true, 1), new RectangleF(0, y0, width, height));
+		}
+		foreach (var gap in gaps.Gaps) {
+			var (footer, band, header) = gaps.Areas(gap, width, ppp);
+			if (header.Bottom < client.Top || footer.Top > client.Bottom) continue;
+			Parts(BandParts?.Invoke(false, gap.Page), new RectangleF(0, band.Top - gap.Bottom * ppp, width, gap.Bottom * ppp));
+			if (gap.Next < 0) continue;
+			g.FillRectangle(grey, band);
+			g.DrawLine(edge, band.Left, band.Top, band.Right, band.Top);
+			g.DrawLine(edge, band.Left, band.Bottom - 1, band.Right, band.Bottom - 1);
+			Parts(BandParts?.Invoke(true, gap.Page + 1), header);
+		}
+	}
+
 	/// Draws the boundaries of the printed pages in view: a thin line above each page's first line, and "Page N" at
 	/// the right (a page that starts after a page break has that break's line already, and gets only its number).
+	/// Pages the page view has a gap before are left out.
 	public void DrawPageBoundaries(Graphics g) {
 		if (pageStarts is not { Count: > 1 } starts) return;
+		var covered = Gaps is { Applied: true } withGaps ? withGaps.Gaps.Select(x => x.Next).ToHashSet() : new HashSet<int>();
 		var client = ClientRectangle;
 		int storyEnd = TextDocument.Range2(0, 0).StoryLength;
 		string story = "";
@@ -6904,7 +7287,7 @@ sealed class WriterEditBox : RichEditBox
 		using var back = new SolidBrush(BackColor);
 		for (int n = 1; n < starts.Count; n++) {
 			int at = starts[n];
-			if (at <= 0 || at >= storyEnd - 1) continue;
+			if (at <= 0 || at >= storyEnd - 1 || covered.Contains(at)) continue;
 			int y = GetPositionFromCharIndex(at).Y;
 			if (y > client.Bottom) break;
 			if (y < client.Top - 2) continue;
@@ -6945,9 +7328,10 @@ sealed class WriterEditBox : RichEditBox
 		}
 		if (m.Msg == WM_PAINT) {
 			base.WndProc(ref m);
-			if (((pageBreaks == null || pageBreaks.Count > 0) || PageStarts is { Count: > 1 }) && IsHandleCreated) {
+			if (((pageBreaks == null || pageBreaks.Count > 0) || PageStarts is { Count: > 1 } || Gaps is { Applied: true }) && IsHandleCreated) {
 				using var g = CreateGraphics();
-				DrawPageBreaks(g);
+				if (Gaps is { Applied: true }) DrawGaps(g);
+				else DrawPageBreaks(g);
 				DrawPageBoundaries(g);
 			}
 			Painted?.Invoke();

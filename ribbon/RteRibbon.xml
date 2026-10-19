@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer34.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer34.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer35.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer35.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -978,6 +978,7 @@
     <Command Name="cmdListUpperAlpha" Id="264" LabelTitle="A, B, C" Keytip="U" />
     <Command Name="cmdListLowerRoman" Id="265" LabelTitle="i, ii, iii" Keytip="R" />
     <Command Name="cmdListUpperRoman" Id="266" LabelTitle="I, II, III" Keytip="O" />
+    <Command Name="cmdListNone" Id="393" LabelTitle="&amp;No numbering" Keytip="N" TooltipTitle="No numbering" TooltipDescription="The selected paragraphs are no longer list items: their numbers or bullets go, their text stays." />
     <Command Name="cmdListLevels" Id="267" LabelTitle="List &amp;Levels..." Keytip="L" TooltipTitle="List levels" TooltipDescription="The numbering style, punctuation and start number of each level (Tab and Shift+Tab change an item's level)." />
     <Command Name="cmdAutoLevel" Id="268" LabelTitle="&amp;Automatic numbering style per level" Keytip="A" />
     <Command Name="cmdRestartNumbering" Id="269" LabelTitle="&amp;Restart numbering..." Keytip="R" />
@@ -1257,6 +1258,7 @@
         <Image Source="icons/printlayout_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdShowPages" Id="392" LabelTitle="Show Pages" Keytip="SP" TooltipTitle="Show pages" TooltipDescription="Print Layout: each printed page as a sheet of its own, with its header and footer in its margins and a band between the sheets, as in Word. Off: one long page, with a line where each page begins." />
     <Command Name="cmdZoomPageWidth" Id="371" LabelTitle="Page Width" Keytip="P" TooltipTitle="Page width" TooltipDescription="Zoom so that the page's width fills the window, as the window is resized too (Print Layout).">
       <Command.LargeImages>
         <Image Source="icons/pagewidth_32.bmp" MinDPI="96" />
@@ -1990,6 +1992,9 @@
                   <Button CommandName="cmdListUpperRoman" />
                 </MenuGroup>
                 <MenuGroup>
+                  <Button CommandName="cmdListNone" />
+                </MenuGroup>
+                <MenuGroup>
                   <Button CommandName="cmdListLevels" />
                   <Button CommandName="cmdRestartNumbering" />
                   <Button CommandName="cmdContinueNumbering" />
@@ -2031,6 +2036,9 @@
                     <Button CommandName="cmdListUpperAlpha" />
                     <Button CommandName="cmdListLowerRoman" />
                     <Button CommandName="cmdListUpperRoman" />
+                  </MenuGroup>
+                  <MenuGroup>
+                    <Button CommandName="cmdListNone" />
                   </MenuGroup>
                 </DropDownButton>
                 <Button CommandName="cmdListLevels" />
@@ -2165,6 +2173,7 @@
           </Group>
           <Group CommandName="cmdGroupShow">
             <CheckBox CommandName="cmdPrintLayout" />
+            <CheckBox CommandName="cmdShowPages" />
             <CheckBox CommandName="cmdWordWrap" />
             <CheckBox CommandName="cmdShowBands" />
             <CheckBox CommandName="cmdOutline" />

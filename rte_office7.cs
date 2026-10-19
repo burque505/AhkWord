@@ -5,7 +5,7 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer34.cs, through #load).
+// Word and OpenDocument conversions for RTE Writer (rte_writer35.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
 // without spacing of its own as 1.08 lines, and "at least" as exactly. All of a paragraph's tabs come back as tabs (the
@@ -862,6 +862,93 @@ public static class OfficeConverters {
 		}
 		return list.Append($@"\listid{listId}}}").ToString();
 	}
+
+	// ---- paragraphs that are in no list
+
+	static readonly Regex UnlistedPn = new(@"\{\\\*\\pn\s*\\pnlvlcont(?:[^{}\\]|\\(?!ls\d))*\\ls0(?!\d)[^{}]*\}", RegexOptions.Compiled);
+
+	/// The RTF without Word's old-style numbering for paragraphs that are in no list ({\*\pn \pnlvlcont ... \ls0}: "in
+	/// no list" by the real list table's \ls0, "a list's paragraph without a number" for older readers). Word writes it
+	/// for paragraphs after a numbered style's ones (a heading or a quotation between numbered paragraphs); RichEdit
+	/// reads the old form, makes them list items, shows numbers on them all the same and gives them the list's indent.
+	/// The numbering then goes on after them as in Word: RichEdit would start again at the list's first number after any
+	/// paragraph in no list (and ignores a \pnstart where Word's list table numbers the list), so starts lists the
+	/// numbered items in order, each with the start of its run (the number in Word of the item that resumes a list after
+	/// such paragraphs, for that item and the ones after it on its level; 0: as RichEdit numbers it), for
+	/// ContinueWordLists once RichEdit has the text.
+	public static string WithoutUnlistedNumbering(string rtf, out List<int> starts) {
+		starts = new List<int>();
+		if (!rtf.Contains(@"\pnlvlcont", StringComparison.Ordinal)) return rtf;
+		rtf = UnlistedPn.Replace(rtf, "");
+		var counts = new Dictionary<int, int[]>();    // per list (\lsN): the items so far on each level
+		int previous = 0;    // the list of the paragraph before (0: none)
+		int runStart = 0, runLevel = 0;    // a resumed run's first number and level: RichEdit starts a new list where the start changes
+		int at = Math.Max(0, rtf.IndexOf(@"\sectd", StringComparison.Ordinal));    // (the text: not the style sheet's numbered styles)
+		var result = new System.Text.StringBuilder(rtf.Length).Append(rtf, 0, at);
+		foreach (Match end in ParagraphEnd.Matches(rtf, at)) {
+			string paragraph = rtf.Substring(at, end.Index + end.Length - at);
+			at = end.Index + end.Length;
+			var pn = NumberedPn.Match(paragraph);
+			if (!pn.Success) {
+				// (a paragraph in no list interrupts: its list's next item resumes it)
+				previous = 0;
+				result.Append(paragraph);
+				continue;
+			}
+			int list = int.Parse(pn.Groups["ls"].Value), level = Math.Clamp(int.Parse(pn.Groups["ilvl"].Success ? pn.Groups["ilvl"].Value : "0"), 0, 8);
+			if (!counts.TryGetValue(list, out var levels)) counts[list] = levels = new int[9];
+			bool resumes = previous != list && levels[level] > 0;
+			// an item resuming its list: without its number as text for older readers ({\pntext 10.\tab}), which RichEdit
+			// would keep as text there (a list's first item keeps it: RichEdit takes the list's punctuation from it)
+			if (resumes) paragraph = PnText.Replace(paragraph, "", 1);
+			if (resumes) (runStart, runLevel) = (levels[level] + 1, level);
+			else if (previous != list || level < runLevel) runStart = 0;
+			starts.Add(level == runLevel ? runStart : 0);
+			levels[level]++;
+			for (int deeper = level + 1; deeper < 9; deeper++) levels[deeper] = 0;
+			previous = list;
+			result.Append(paragraph);
+		}
+		return result.Append(rtf, at, rtf.Length - at).ToString();
+	}
+
+	static readonly Regex PnText = new(@"\{\\pntext(?:[^{}]|\{[^{}]*\})*\}", RegexOptions.Compiled);
+
+	/// Gives the numbered items that resume a Word list the numbers they have in Word (starts: WithoutUnlistedNumbering's).
+	/// A numbered item is one RichEdit shows a number for: such an item right after a paragraph in no list can have a
+	/// list type of none all the same (RichEdit numbers it from Word's list table), so that the Numbering button and No
+	/// numbering would take it for a paragraph in no list: it gets its list's type. Nothing changes if RichEdit's numbered
+	/// items aren't the RTF's (their count differs).
+	public static void ContinueWordLists(EllipticBit.RichEditorNET.TextObjectModel2.ITextDocument2 doc, List<int> starts) {
+		if (starts.Count == 0) return;
+		int storyEnd = doc.Range2(0, 0).StoryLength;
+		var numbered = new List<(int Start, int Type)>();    // (where each starts: a range's Para follows its range as it moves)
+		var range = doc.Range2(0, 0);
+		while (true) {
+			range.Expand(EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomParagraph);
+			int type = range.Para.ListType;
+			if ((type & 0xFFFF) != 1) {    // (not a bullet)
+				// (without the paragraph mark: with it, RichEdit leaves out the number of an item without its list type)
+				var text = doc.Range2(range.Start, Math.Max(range.Start, range.End - 1));
+				string shown = text.GetText2(EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomIncludeNumbering) ?? "";
+				if ((type & 0xFFFF) > 1 || shown.Length > (text.Text ?? "").Length) numbered.Add((range.Start, type));
+			}
+			if (range.End >= storyEnd || range.End <= range.Start) break;
+			range.SetRange(range.End, range.End);
+		}
+		if (numbered.Count != starts.Count) return;
+		int listType = 0;
+		for (int k = 0; k < starts.Count; k++) {
+			var para = doc.Range2(numbered[k].Start, numbered[k].Start).Para;
+			if ((numbered[k].Type & 0xFFFF) > 1) listType = numbered[k].Type;
+			else if (listType != 0) para.ListType = listType;    // (numbered, but without its type)
+			if (starts[k] > 0) para.ListStart = starts[k];
+		}
+	}
+
+	static readonly Regex ParagraphEnd = new(@"\\par(?![a-z])", RegexOptions.Compiled);
+	// a numbered item's old-style numbering, with its list and level: {\*\pn \pnlvlbody\ilvl0\ls13 ... {\pntxta .}}
+	static readonly Regex NumberedPn = new(@"\{\\\*\\pn\s*\\pnlvlbody(?=(?:[^{}]|\{[^{}]*\})*?\\ls(?<ls>[1-9]\d*))(?=(?:(?:[^{}]|\{[^{}]*\})*?\\ilvl(?<ilvl>\d+))?)(?:[^{}]|\{[^{}]*\})*\}", RegexOptions.Compiled);
 
 	// ---- pictures in RTF
 

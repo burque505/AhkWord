@@ -1,4 +1,4 @@
-// Paragraph styles for RTE Writer (rte_writer34.cs, through #load).
+// Paragraph styles for RTE Writer (rte_writer35.cs, through #load).
 //   - ParagraphStyle: a named set of formatting: the font (name, size, bold, italic, underline, colour) and the
 //     paragraph's (alignment, indents, space before and after, line spacing, keep with next, keep lines together, widow
 //     and orphan control, page break before, no space between paragraphs of the same style), a heading level (0 for
