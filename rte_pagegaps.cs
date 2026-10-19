@@ -1,4 +1,4 @@
-// Page view for RTE Writer's Print Layout (rte_writer35.cs, through #load): the printed pages as sheets of their own,
+// Page view for RTE Writer's Print Layout (rte_writer36.cs, through #load): the printed pages as sheets of their own,
 // with their headers and footers and a gap between them, as in Word, while the text is edited as before.
 // RichEdit shows a document as one long page and can't leave a gap between two of its lines, but a line whose text is
 // raised (ITextFont.Position, as for superscript) is that much taller, its text at its top (lowering is ignored): so
@@ -117,6 +117,7 @@ public sealed class PageGaps
 	/// Takes the gaps out: every raise of its own (wherever editing has moved it) and page 1's space (also in the
 	/// paragraphs that Enter made of the first, which have its format). Keeps what they were, for Reapply.
 	public void Remove() {
+		Unlift();    // (the lifted gap's raise back first, so that all the gaps are found)
 		var doc = editor.TextDocument;
 		int storyEnd = doc.Range2(0, 0).StoryLength;
 		var run = doc.Range2(0, 0);
@@ -155,6 +156,40 @@ public sealed class PageGaps
 
 	(List<Gap> Gaps, float Top) removed = (new(), 0);
 
+	/// The gap whose line has the caret (-1: none). Its raise is lifted while the caret is there: RichEdit draws the
+	/// caret at the end of a raised line at the line's bottom (the bottom of the gap), and what is typed there, which
+	/// isn't raised, there too, so that typing at a page's last line (a new document's only one) went to the bottom
+	/// of the page. Meanwhile that page has Print Layout's "Page N" line; the gap comes back when the caret leaves.
+	public int Lifted { get; private set; } = -1;
+	int liftedLength;
+
+	/// The gap whose line has a position (-1: none).
+	public int GapAt(int position) => Gaps.FindIndex(g => g.Track is { } line && position >= line.Start && position <= line.End);
+
+	/// Lifts a gap's raise (index -1: none), putting back the one lifted before.
+	public void Lift(int index) {
+		if (index == Lifted) return;
+		Unlift();
+		if (index < 0 || index >= Gaps.Count || Gaps[index].Track is not { } line || line.End <= line.Start) return;
+		editor.TextDocument.Range2(line.Start, line.End).Font.Position = 0;
+		Lifted = index;
+		liftedLength = line.End - line.Start;
+		liftedStory = editor.TextDocument.Range2(0, 0).StoryLength;
+	}
+	int liftedStory;
+
+	/// Puts the lifted gap's raise back, if the document is as it was; if anything was typed or deleted meanwhile (its
+	/// line may be longer, or no longer a page's last: Enter at a new document's only line), the gaps are worked out
+	/// again instead (Lost), the line left as it is.
+	public void Unlift() {
+		if (Lifted < 0) return;
+		if (Lifted < Gaps.Count && Gaps[Lifted].Track is { } line && line.End > line.Start && line.End - line.Start == liftedLength
+			&& editor.TextDocument.Range2(0, 0).StoryLength == liftedStory)
+			editor.TextDocument.Range2(line.Start, line.End).Font.Position = Gaps[Lifted].Raise;
+		else Lost = true;
+		Lifted = -1;
+	}
+
 	/// Remove found fewer or more raises than there were gaps (editing joined or deleted their lines), so Reapply can't
 	/// put them back: they are to be worked out again. The editor clears it when it has asked for that.
 	public bool Lost { get; set; }
@@ -177,6 +212,7 @@ public sealed class PageGaps
 				put.Add(gap with { Track = doc.Range2(gap.LineStart, gap.LineEnd) });
 			}
 		Gaps = put;
+		Lifted = -1;
 		if (top > 0 && storyEnd > 1) {
 			var para = doc.Range2(0, 0).Para;
 			topOriginal = Math.Max(0, para.SpaceBefore);
@@ -234,6 +270,7 @@ public sealed class PageGaps
 		Gaps = new();
 		TopExtra = 0;
 		removed = (new(), 0);
+		Lifted = -1;
 	}
 
 	/// The document has raises of RTE Writer's own (a gap's, moved by editing or left behind).

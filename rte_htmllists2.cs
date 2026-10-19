@@ -16,11 +16,13 @@ using EllipticBit.RichEditorNET.TextObjectModel2;
 
 public static class HtmlLists
 {
-	// Legal items: Top is the number of their top level (1 for 1.2.3), Series their numbering series (LegalLists.Numbers).
-	sealed record Item(int Level, int Style, int Punctuation, int Start, bool Legal, int Top = 1, int Series = 0, string MarkStyle = "");
+	// Legal items: Top is the number of their top level (1 for 1.2.3), Series their numbering series (LegalLists.Numbers),
+	// OwnNumber a numbered style's number in its own format ("(a)": not the counters browsers draw).
+	sealed record Item(int Level, int Style, int Punctuation, int Start, bool Legal, int Top = 1, int Series = 0, string MarkStyle = "", string? OwnNumber = null);
 
 	const string LegalClass = "rte-legal";
-	static readonly Regex LegalNumber = new(@"\G((?:<[^>]+>)*)\d+(?:\.\d+)*\.?(?:&#9;|\t)");
+	// a legal item's number in its text: "1.2.1", or a numbered style's "3.", "(b)", "iv)" (as LegalLists.Prefix)
+	static readonly Regex LegalNumber = new(@"\G((?:<[^>]+>)*)(?:\d+(?:\.\d+)*\.?|\((?:\d{1,4}|[a-z]{1,3}|[A-Z]{1,3}|[ivxlcdm]{1,7}|[IVXLCDM]{1,7})\)|(?:\d{1,4}|[a-z]{1,3}|[A-Z]{1,3}|[ivxlcdm]{1,7}|[IVXLCDM]{1,7})[.)])(?:&#9;|\t)");
 
 	static readonly Regex ListTag = new(@"<(/?)(ol|ul|li)\b([^>]*)>", RegexOptions.IgnoreCase);
 	static readonly Regex ClassAttribute = new(@"\bclass\s*=\s*""[^""]*\brte-([a-z]+(?:-[a-z]+)?)-(paren|parens|plain)\b[^""]*""", RegexOptions.IgnoreCase);
@@ -94,7 +96,8 @@ public static class HtmlLists
 					open[^1] = (list.Tag, list.Attributes, sb.Length - ("<ol" + list.Attributes + extra + ">").Length, item.Start, k - 1);
 				}
 				open[^1] = (list.Tag, list.Attributes, open[^1].OutputPosition, item.Start, k - 1);
-				sb.Append(liTag);
+				// (a numbered style's own format: its number for browsers to show instead of the counters)
+				sb.Append(item.OwnNumber == null ? liTag : liTag[..^1] + $" data-rte-number=\"{System.Net.WebUtility.HtmlEncode(item.OwnNumber)}\">");
 				if (LegalNumber.Match(html, position) is { Success: true } number) {
 					sb.Append(number.Groups[1].Value);
 					position += number.Length;
@@ -144,7 +147,8 @@ public static class HtmlLists
 			return $"ol.{LegalClass} {{ list-style-type: none; counter-reset: {LegalClass}; }}\r\n"
 				+ $"ol.{LegalClass} > li {{ counter-increment: {LegalClass}; }}\r\n"
 				+ $"ol.{LegalClass} > li::before {{ content: counters({LegalClass}, \".\") {top}; }}\r\n"
-				+ $"ol.{LegalClass} ol.{LegalClass} > li::before {{ content: counters({LegalClass}, \".\") {below}; }}\r\n";
+				+ $"ol.{LegalClass} ol.{LegalClass} > li::before {{ content: counters({LegalClass}, \".\") {below}; }}\r\n"
+				+ $"ol.{LegalClass} li[data-rte-number]::before, ol.{LegalClass} ol.{LegalClass} li[data-rte-number]::before {{ content: attr(data-rte-number) \" \"; }}\r\n";
 		}
 		var m = Regex.Match(name, @"^rte-(.+)-(paren|parens|plain)$");
 		string counter = $"counter(list-item, {m.Groups[1].Value})";
@@ -229,8 +233,9 @@ public static class HtmlLists
 		return ListParagraphs(doc).Select(start => {
 			var para = doc.Range2(start, start).Para;
 			bool isLegal = LegalLists.IsLegal(para.ListType) && legal.ContainsKey(start);
+			string? own = isLegal && LegalLists.StyleNumbering(para.Style)?.Format is { } format && format != NumberFormats.Legal ? legal[start].Number : null;
 			return new Item(para.ListLevelIndex, para.ListType & 0xFFFF, para.ListType & 0x70000, Math.Max(0, para.ListStart), isLegal,
-				isLegal ? legal[start].Counters[0] : 1, isLegal ? legal[start].Series : 0, MarkStyle(doc, start, pageFont));
+				isLegal ? legal[start].Counters[0] : 1, isLegal ? legal[start].Series : 0, MarkStyle(doc, start, pageFont), own);
 		}).ToList();
 	}
 

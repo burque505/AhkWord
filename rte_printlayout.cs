@@ -1,4 +1,4 @@
-// Print Layout for RTE Writer (rte_writer35.cs, through #load): lines break where they will on the printed page, as
+// Print Layout for RTE Writer (rte_writer36.cs, through #load): lines break where they will on the printed page, as
 // in Word's Print Layout and LibreOffice, not at the window's edge (which made Word and OpenDocument files open with very
 // long lines). RichEdit lays its lines out for a target device (EM_SETTARGETDEVICE, as WordPad's "wrap to ruler"):
 // the printer's information context and the text width of Page Setup's paper and margins, so the editor's lines are

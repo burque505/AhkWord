@@ -21,7 +21,22 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer35.ahk. Iteration 35 adds to iteration 34:
+// Run it with rte_writer36.ahk. Iteration 36 adds to iteration 35:
+//   - Numbered styles: a paragraph style can number its paragraphs (ParagraphStyle.Numbering "1.", "(a)", "i." ...
+//     or "1.1" legal, NumberLevel 1-9; Modify Style > Numbering; the built-in Numbered Paragraph). They are legal
+//     numbering's items (rte_legal.cs: numbers worked out from position, one numbering through the document, restarts
+//     only where asked), numbered in their style's format and keeping their style's indents. Pasted numbered
+//     paragraphs join the numbering where they land (StyleEngine.JoinPasted); a Word document's numbered style comes in
+//     as one (StyleEngine.NumberAfterLoad); exports give Word each level's own format; RTE Writer's RTF keeps where
+//     the numbering starts again ({\*\rtewriterlists}). A paragraph of a numbered style can have its numbering turned
+//     off (No numbering; a Word paragraph whose numbering is off): it stays so, its style the same. Items of numbered
+//     styles have no room for a RichEdit number (ListTab 0), so that their first lines show where their indents say.
+//   - Show Pages is off by default: a preview, not reliable while typing yet (to be redesigned). The line with the
+//     caret has no gap (PageGaps.Lift): the caret at the end of a raised line showed, and typed text went, at the
+//     bottom of the page.
+//   - Csharp-in-AHK and Csx-in-AHK restore from nuget.org when no NuGet source is enabled; the README says how to
+//     install .NET 10 (winget) and that the first start takes a while.
+// Iteration 35 added to iteration 34:
 //   - Page view (rte_pagegaps.cs): in Print Layout, View > Show Pages shows each printed page as a sheet of its own,
 //     its header and footer in its margins and a grey band between the sheets, as in Word, while the text is edited as
 //     before (a page that ends inside a table gets a "Page N" line instead). The sheets are the view's alone: saving,
@@ -599,6 +614,7 @@ class WriterForm : Form
 
 		Editor.SelectionChanged += (s, e) => {
 			if (pageGaps.Applied && !quietGaps) PageGaps.PlainTyping(Editor.TextDocument);    // (what is typed at a gap's line isn't raised)
+			if (pageGaps.Applied && !quietGaps) CaretGap();    // (nor is the line with the caret: its gap is lifted)
 			// the caret guard looks once the command that moved the caret has finished (commands move it on the way)
 			if (!guardPending && IsHandleCreated) { guardPending = true; BeginInvoke(() => { guardPending = false; GuardLegalCaret(); }); }
 			UpdateUi();
@@ -607,6 +623,7 @@ class WriterForm : Form
 		Editor.TextChanged += (s, e) => { wordCountTimer.Stop(); wordCountTimer.Start(); UpdateTitle(); Restart(textEventTimer); Restart(outlineTimer); Restart(legalTimer); };
 		legalTimer.Tick += (s, e) => { legalTimer.Stop(); CheckLegalNumbers(); };
 		LegalLists.Format = Enum.TryParse<LegalLists.Periods>(Settings.LegalFormat, true, out var legalFormat) ? legalFormat : LegalLists.Periods.Top;
+		LegalLists.StyleNumbering = id => Styles.ById(id) is { Numbered: true } numbered ? (numbered.Numbering, Math.Clamp(numbered.NumberLevel, 1, 9) - 1) : null;    // (numbered styles)
 		Editor.ContextMenuHook = ShowContextMenu;
 		Editor.OpenLink = OpenLinkCommand;
 		Editor.AltTextOf = position => api.PictureAltText(position);
@@ -719,7 +736,7 @@ class WriterForm : Form
 		redoButton = Button(RibbonCommand.Redo, OnText(() => { skipLegalCheck = true; Editor.Redo(); }, sourceBox.Redo), Keys.Control | Keys.Y, M("Redo"));
 		// (copy and paste keep the paragraphs' styles: StyleClipboard)
 		Action cut = OnText(() => StyleClipboard.Copy(Editor, Styles, () => WithoutGapsChanging(Editor.Cut)), sourceBox.Cut), copy = OnText(() => StyleClipboard.Copy(Editor, Styles, () => WithoutGaps(Editor.Copy)), sourceBox.Copy),
-			paste = OnText(() => { if (StyleClipboard.Paste(Editor, Styles, Editor.Paste)) FillStyleBox(); RefreshOutline(); }, () => sourceBox.Paste(DataFormats.GetFormat(DataFormats.UnicodeText)));
+			paste = OnText(PasteText, () => sourceBox.Paste(DataFormats.GetFormat(DataFormats.UnicodeText)));
 		cutButton = Button(RibbonCommand.Cut, cut, Keys.Control | Keys.X, M("Cut"));
 		copyButton = Button(RibbonCommand.Copy, copy, Keys.Control | Keys.C, M("Copy"));
 		Button(RibbonCommand.Paste, paste, Keys.Control | Keys.V, M("Paste"));
@@ -1335,6 +1352,9 @@ class WriterForm : Form
 	/// (RTE Writer's own RTF), else the default ones. The styles its paragraphs use that weren't defined are defined from
 	/// the first paragraph with each (the document keeps its look), or, with takeLook (Markdown, plain text, which have
 	/// no look of their own), its paragraphs are given the styles' look.
+	/// The numbered items' ListStart values the RTF being loaded kept (LegalLists.StartsFrom), for StylesAfterLoad.
+	internal List<int>? LoadedListStarts;
+
 	internal void StylesAfterLoad(StyleSheet? defined, bool takeLook, bool styledLook = false) {
 		var sheet = defined?.Copy() ?? DefaultStyles();
 		foreach (var usual in DefaultStyles().Styles) if (sheet.Find(usual.Name) == null) sheet.Styles.Add(usual.Copy());    // (the usual styles are always there)
@@ -1386,6 +1406,10 @@ class WriterForm : Form
 				doc.EndEditCollection();
 			}
 		}
+		// numbered styles: their paragraphs items of their numbering (a Word document's numbered styles become ones), and
+		// the items' restarts as RTE Writer's RTF kept them
+		if (StyleEngine.NumberAfterLoad(doc, sheet, LoadedListStarts)) Editor.ClearUndo();
+		LoadedListStarts = null;
 		FillStyleBox(force: true);
 		styleSetShown = null;
 		ShowStyleSet();
@@ -1899,6 +1923,14 @@ class WriterForm : Form
 		doc.Freeze();
 		try {
 			change();
+			// the line with the caret: its gap lifted before the editor shows anything (a raised line with the caret makes
+			// a focused editor scroll to the caret, drawn at the bottom of the gap, and stay there)
+			if (pageGaps.Applied) {
+				var selection = doc.Selection2;
+				int index = pageGaps.GapAt(selection.Start);
+				if (index < 0 && selection.End != selection.Start) index = pageGaps.GapAt(selection.End);
+				pageGaps.Lift(index);
+			}
 		} finally {
 			doc.Unfreeze();
 			SendMask(Editor.Handle, EM_SETEVENTMASK_GAPS, IntPtr.Zero, mask);
@@ -1917,6 +1949,16 @@ class WriterForm : Form
 		}
 	}
 
+	// The gap of the line with the caret lifted while it is there (PageGaps.Lift), and the one before put back.
+	void CaretGap() {
+		if (!pageGaps.Applied || quietGaps || gapsOut || !Editor.IsHandleCreated) return;
+		var selection = Editor.TextDocument.Selection2;
+		int index = pageGaps.GapAt(selection.Start);
+		if (index < 0 && selection.End != selection.Start) index = pageGaps.GapAt(selection.End);
+		if (index == pageGaps.Lifted) return;
+		QuietGaps(() => pageGaps.Lift(index));
+	}
+
 	// Rte.PageViewReport: positions and sizes only.
 	internal string PageViewReport() {
 		var r = new StringBuilder();
@@ -1931,7 +1973,7 @@ class WriterForm : Form
 			using var printer = CreatePrinter();
 			r.AppendLine($"Printer {printer.Document.PrinterSettings.PrinterName}; printed pages start at {string.Join(" ", printer.PageHeights().Select(p => $"{p.Start} (p{ParagraphOf(p.Start)}, {p.Height:0} pt)"))}");
 		} catch (Exception ex) { r.AppendLine("Printed pages: " + ex.Message); }
-		r.AppendLine($"Gaps {pageGaps.Gaps.Count} for {pageGaps.Pages} pages, page 1's top {pageGaps.TopExtra:0.#} pt");
+		r.AppendLine($"Gaps {pageGaps.Gaps.Count} for {pageGaps.Pages} pages, page 1's top {pageGaps.TopExtra:0.#} pt, lifted for the caret: {(pageGaps.Lifted >= 0 ? "page " + pageGaps.Gaps[pageGaps.Lifted].Page : "none")}");
 		int top = Editor.GetCharIndexFromPosition(new Point(1, 1));
 		foreach (var gap in pageGaps.Gaps) {
 			var para = doc.Range2(gap.LineStart, gap.LineStart).Para;
@@ -2040,7 +2082,7 @@ class WriterForm : Form
 		using var grey = new SolidBrush(PrintLayoutPage.Surround);
 		float ppp = Editor.PixelsPerPoint;
 		foreach (var gap in pageGaps.Gaps) {
-			if (gap.Next < 0) continue;
+			if (gap.Next < 0 || pageGaps.Gaps.IndexOf(gap) == pageGaps.Lifted) continue;    // (the caret's line's: lifted)
 			var (_, band, _) = pageGaps.Areas(gap, Editor.ClientSize.Width, ppp);
 			float y = Editor.Top + band.Y;
 			if (y + band.Height < 0 || y > pagePanel.Height) continue;
@@ -2415,6 +2457,26 @@ class WriterForm : Form
 		} catch (Exception ex) {
 			SetStatus("⚠ Could not open " + url + ": " + ex.Message);
 		}
+	}
+
+	// Paste: the text, its paragraphs' styles (StyleClipboard), and numbered paragraphs joining the numbering where they
+	// land (StyleEngine.JoinPasted), as one undo step. paste: RichEdit's own Paste (tests give one of their own, so as to
+	// leave the user's clipboard alone).
+	void PasteText() => PasteText(Editor.Paste);
+
+	internal void PasteText(Action paste) {
+		var doc = Editor.TextDocument;
+		bool added;
+		doc.BeginEditCollection();
+		try {
+			added = StyleClipboard.Paste(Editor, Styles, paste);
+			var (start, end) = StyleClipboard.Pasted;
+			StyleEngine.JoinPasted(doc, Styles, start, end);
+		} finally {
+			doc.EndEditCollection();
+		}
+		if (added) FillStyleBox();
+		RefreshOutline();
 	}
 
 	// ---------------------------------------------------------------- Iteration 10: legal numbering
@@ -4003,7 +4065,7 @@ public class EditorApi
 
 	// A style's settings changed: "Name=Value" lines (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent,
 	// RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore,
-	// Contextual, Level, Next).
+	// Contextual, Level, Next, Numbering ("1.", "(a)", "1.1" ...; nothing: none), NumberLevel (1-9)).
 	static ParagraphStyle WithSettings(ParagraphStyle style, string settings) {
 		var result = style.Copy();
 		foreach (var line in settings.Split('\n', StringSplitOptions.RemoveEmptyEntries)) {
@@ -4011,8 +4073,8 @@ public class EditorApi
 			if (equals <= 0) continue;
 			string key = line[..equals].Trim(), value = line[(equals + 1)..].Trim();
 			var property = typeof(ParagraphStyle).GetProperty(key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)
-				?? throw new ArgumentException($"A style has no \"{key}\" (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent, RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore, Contextual, Level, Next).");
-			if (property.Name == "Name") continue;
+				?? throw new ArgumentException($"A style has no \"{key}\" (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent, RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore, Contextual, Level, Next, Numbering, NumberLevel).");
+			if (property.Name == "Name" || !property.CanWrite) continue;
 			object converted = property.PropertyType == typeof(bool) ? value is "1" or "true" or "True" or "yes"
 				: property.PropertyType == typeof(float) ? float.Parse(value, CultureInfo.InvariantCulture)
 				: property.PropertyType == typeof(int) ? int.Parse(value, CultureInfo.InvariantCulture) : value;
@@ -4020,6 +4082,9 @@ public class EditorApi
 		}
 		if (ParagraphStyle.BuiltIn(style.Name)) result.Level = style.Level;
 		global::LineSpacing.Parse(result.LineSpacing);    // (throws for one that isn't)
+		if (result.Numbering != "" && !NumberFormats.Valid(result.Numbering))
+			throw new ArgumentException($"\"{result.Numbering}\" is not a numbering: {string.Join(", ", NumberFormats.All)}, or nothing for none.");
+		if (result.NumberLevel is < 1 or > 9) throw new ArgumentException("NumberLevel is 1 (the top level) to 9.");
 		return result;
 	}
 
@@ -4073,7 +4138,8 @@ public class EditorApi
 		int id = StyleEngine.IdOf(style.Name);
 		doc.BeginEditCollection();
 		try {
-			foreach (var (start, _) in StyleEngine.Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength))
+			// (from the last paragraph: a numbered style's numbers go with it, which moves the text after them)
+			foreach (var (start, _) in Enumerable.Reverse(StyleEngine.Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength)))
 				if (doc.Range2(start, start).Para.Style == id) StyleEngine.Apply(doc, form.Styles, form.Styles.Normal, start, start);
 			foreach (var other in form.Styles.Styles) if (string.Equals(other.Next, style.Name, StringComparison.OrdinalIgnoreCase)) other.Next = "";
 			form.Styles.Styles.Remove(style);
@@ -4357,13 +4423,20 @@ public class EditorApi
 	string RawRtf => form.WithoutGaps(() => ((RichTextBox)ed).Rtf ?? "");    // (the page view's gaps aren't the document's)
 
 	// RTF with the document's styles: the style sheet and each paragraph's (RichEdit keeps only the headings').
-	string StyledRtf(string rtf) => RtfStyles.Inject(rtf, StyleEngine.Names(ed.TextDocument, form.Styles), form.Styles, StyleEngine.WidowControls(ed.TextDocument));
+	// (and the numbered items' ListStart values: where their numbering starts again)
+	string StyledRtf(string rtf) {
+		string styled = RtfStyles.Inject(rtf, StyleEngine.Names(ed.TextDocument, form.Styles), form.Styles, StyleEngine.WidowControls(ed.TextDocument));
+		string starts = form.WithoutGaps(() => LegalLists.StartsGroup(ed.TextDocument));
+		int end = styled.LastIndexOf('}');
+		return starts == "" || end < 0 ? styled : styled.Insert(end, starts);
+	}
 
 	// The styles an RTF just loaded has (Word's, LibreOffice's, RTE Writer's): each paragraph's set from its \sN; returns
 	// RTE Writer's own definitions (null if the file has none). An RTF without any styles (written by RTE Writer before it
 	// had them, or by WordPad) gets its headings from their fonts, as before, the large ones only (bold 24, 18 and 14 pt:
 	// a bold 12 pt line is a heading's look only by chance).
 	StyleSheet? StylesFromRtf(string rtf) {
+		form.LoadedListStarts = LegalLists.StartsFrom(rtf);    // (StylesAfterLoad gives them back to the numbered items)
 		var (sheet, names, paragraphs, any) = RtfStyles.Read(rtf);
 		var doc = ed.TextDocument;
 		if (any) {
@@ -4396,6 +4469,7 @@ public class EditorApi
 			OfficeConverters.ContinueWordLists(ed.TextDocument, wordStarts);    // (the numbers after them, as Word has them)
 			PageBreaks.Normalize(ed);    // (Word's \page can be in the middle of a paragraph)
 			RestorePictures(value);       // (with the alt texts, from the RTF as it was)
+			LegalLists.LoadedIndents.Clear();
 			LegalLists.LevelsFromNumbers(ed.TextDocument);    // (RichEdit's RTF loses the levels of legal items)
 			ed.ClearUndo();
 			ed.Select(0, 0);
@@ -4477,8 +4551,13 @@ public class EditorApi
 	string Export(string full, string? via) {
 		OfficeConverters.DefaultFont = (ed.Font.Name, ed.Font.SizeInPoints);
 		var alts = AltTexts();
-		LastConverter = OfficeConverters.Export(full, RawRtf, () => HtmlFile(Path.GetFileNameWithoutExtension(full)), via,
-			rtf => WithBands(OfficeConverters.WithAltTexts(StyledRtf(rtf), alts), full));    // (alt texts last: RichEdit, which some changes go through, mangles them; styles too)
+		OfficeConverters.LegalItems = LegalLists.Items(ed.TextDocument);    // (numbered styles' formats and levels, which the RTF has lost)
+		try {
+			LastConverter = OfficeConverters.Export(full, RawRtf, () => HtmlFile(Path.GetFileNameWithoutExtension(full)), via,
+				rtf => WithBands(OfficeConverters.WithAltTexts(StyledRtf(rtf), alts), full));    // (alt texts last: RichEdit, which some changes go through, mangles them; styles too)
+		} finally {
+			OfficeConverters.LegalItems = null;
+		}
 		// the header and footer: parts of their own if the converter had no RTF to make them from, and the exact copy
 		try {
 			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase)) HeaderFooter.AddToDocx(full, form.Bands, form.PageLayout(), Path.GetFileName(full), full, parts: true);
@@ -5551,12 +5630,26 @@ public class EditorApi
 	/// Word document's numbered style): their numbers go, their text and indents stay. One undo step.
 	public void RemoveList() {
 		var range = SelectionRange();
-		if (TouchesLegalList()) LegalLists.Remove(ed, range.Start, range.End);
-		range = SelectionRange();
 		var doc = ed.TextDocument;
-		var paragraphs = doc.Range2(range.Start, range.End);
-		paragraphs.Expand(tomConstants.tomParagraph);
-		paragraphs.Para.ListType = tomConstants.tomListNone;
+		doc.BeginEditCollection();
+		try {
+			// a numbered style's items: their numbers go, their style and indents stay (as a Word paragraph's numbering
+			// turned off; they stay unnumbered when the document is opened again)
+			foreach (var p in Enumerable.Reverse(LegalLists.Touched(doc, range.Start, range.End)).Where(p => p.Legal && p.Styled)) {
+				if (p.PrefixLength > 0) doc.Range2(p.Start, p.Start + p.PrefixLength).Text = "";
+				doc.Range2(p.Start, p.Start).Para.ListType = tomConstants.tomListNone;
+			}
+			range = SelectionRange();
+			if (TouchesLegalList()) LegalLists.Remove(ed, range.Start, range.End);
+			range = SelectionRange();
+			var paragraphs = doc.Range2(range.Start, range.End);
+			paragraphs.Expand(tomConstants.tomParagraph);
+			paragraphs.Para.ListType = tomConstants.tomListNone;
+			StyleEngine.Renumber(doc);    // (the items after them)
+		} finally {
+			doc.EndEditCollection();
+		}
+		form.StylesChanged();
 	}
 
 	/// Makes the selected paragraphs a numbered list (or ends it), numbered as List levels sets for their levels.
@@ -6349,7 +6442,7 @@ public sealed class Settings
 	public bool Structured { get; set; } = true;    // (no longer used: View > Structured / Free-form were retired in iteration 34)
 	public bool WordWrap { get; set; } = true;
 	public bool PrintLayout { get; set; } = true;    // View > Print Layout: lines as on the printed page
-	public bool PageView { get; set; } = true;       // View > Show Pages: Print Layout's pages as sheets of their own
+	public bool PageView { get; set; }               // View > Show Pages: Print Layout's pages as sheets of their own (off: not reliable while typing yet)
 	public string ZoomMode { get; set; } = "PageWidth";    // Print Layout's zoom: PageWidth, OnePage or Manual (View > Zoom)
 	public bool SpellCheck { get; set; } = true;
 	public bool AutoLevelStyles { get; set; } = true;
@@ -7261,6 +7354,7 @@ sealed class WriterEditBox : RichEditBox
 			if (y0 + height > client.Top) Parts(BandParts?.Invoke(true, 1), new RectangleF(0, y0, width, height));
 		}
 		foreach (var gap in gaps.Gaps) {
+			if (gaps.Gaps.IndexOf(gap) == gaps.Lifted) continue;    // (the caret's line's: lifted while it is there)
 			var (footer, band, header) = gaps.Areas(gap, width, ppp);
 			if (header.Bottom < client.Top || footer.Top > client.Bottom) continue;
 			Parts(BandParts?.Invoke(false, gap.Page), new RectangleF(0, band.Top - gap.Bottom * ppp, width, gap.Bottom * ppp));
@@ -7277,7 +7371,7 @@ sealed class WriterEditBox : RichEditBox
 	/// Pages the page view has a gap before are left out.
 	public void DrawPageBoundaries(Graphics g) {
 		if (pageStarts is not { Count: > 1 } starts) return;
-		var covered = Gaps is { Applied: true } withGaps ? withGaps.Gaps.Select(x => x.Next).ToHashSet() : new HashSet<int>();
+		var covered = Gaps is { Applied: true } withGaps ? withGaps.Gaps.Where((x, i) => i != withGaps.Lifted).Select(x => x.Next).ToHashSet() : new HashSet<int>();
 		var client = ClientRectangle;
 		int storyEnd = TextDocument.Range2(0, 0).StoryLength;
 		string story = "";

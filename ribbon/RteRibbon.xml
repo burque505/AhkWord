@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer35.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer35.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer36.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer36.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -1258,7 +1258,7 @@
         <Image Source="icons/printlayout_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
-    <Command Name="cmdShowPages" Id="392" LabelTitle="Show Pages" Keytip="SP" TooltipTitle="Show pages" TooltipDescription="Print Layout: each printed page as a sheet of its own, with its header and footer in its margins and a band between the sheets, as in Word. Off: one long page, with a line where each page begins." />
+    <Command Name="cmdShowPages" Id="392" LabelTitle="Show Pages" Keytip="SP" TooltipTitle="Show pages" TooltipDescription="Print Layout: each printed page as a sheet of its own, with its header and footer in its margins, as in Word. A preview, not reliable while typing yet: the view can shift. Off: one long page, with a line where each page begins." />
     <Command Name="cmdZoomPageWidth" Id="371" LabelTitle="Page Width" Keytip="P" TooltipTitle="Page width" TooltipDescription="Zoom so that the page's width fills the window, as the window is resized too (Print Layout).">
       <Command.LargeImages>
         <Image Source="icons/pagewidth_32.bmp" MinDPI="96" />

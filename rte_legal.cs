@@ -27,8 +27,13 @@ public static class LegalLists
 	public enum Periods { Top, All, None }
 	public static Periods Format = Periods.Top;
 
-	/// A number already written in front of an item: digits and dots, then a tab.
-	public static readonly Regex Prefix = new(@"^\d+(?:\.\d+)*\.?\t");
+	/// A number already written in front of an item, then a tab: "1.2.1", or a numbered style's "3.", "(b)", "iv)" ...
+	public static readonly Regex Prefix = new(@"^(?:\d+(?:\.\d+)*\.?|\((?:\d{1,4}|[a-z]{1,3}|[A-Z]{1,3}|[ivxlcdm]{1,7}|[IVXLCDM]{1,7})\)|(?:\d{1,4}|[a-z]{1,3}|[A-Z]{1,3}|[ivxlcdm]{1,7}|[IVXLCDM]{1,7})[.)])\t");
+
+	/// Numbered styles (rte_styles.cs): the numbering of a paragraph style, by its TOM style number: its number's format
+	/// (NumberFormats) and level. null: none, and the item is a legal item ("1.2.1", indents of its own). The editor sets
+	/// it from its style sheet.
+	public static Func<int, (string Format, int Level)?> StyleNumbering = _ => null;
 
 	/// A number typed in front of a paragraph ("1.2.1 " or "1.2.1<tab>"), which Make takes as the item's level.
 	static readonly Regex Typed = new(@"^(\d+(?:\.\d+)*)\.?(?:\t| +)");
@@ -40,15 +45,20 @@ public static class LegalLists
 	/// The first number of a series from its ListStart.
 	public static int StartOf(int listStart) => listStart <= 0 ? 1 : (listStart - 1) % 1000 + 1;
 
-	public static string Number(IReadOnlyList<int> counters, int level) {
+	/// An item's number: a numbered style's format (NumberFormats: "1.", "(a)" ... of its own level's count), or the
+	/// legal number of the counts down to its level ("1.2.1"; format null or NumberFormats.Legal).
+	public static string Number(IReadOnlyList<int> counters, int level, string? format = null) {
+		if (!string.IsNullOrEmpty(format) && format != NumberFormats.Legal) return NumberFormats.Render(format, counters[level]);
 		string number = string.Join(".", counters.Take(level + 1));
 		return Format switch { Periods.All => number + ".", Periods.Top => level == 0 ? number + "." : number, _ => number };
 	}
 
-	public sealed record Paragraph(int Start, int End, int ListType, int Level, int ListStart, string Text)
+	public sealed record Paragraph(int Start, int End, int ListType, int Level, int ListStart, string Text, int Style = 0)
 	{
 		public bool Legal => IsLegal(ListType);
 		public int PrefixLength => Legal ? Prefix.Match(Text).Length : 0;
+		/// Numbered by its style (whose indents it keeps), not a legal item of its own.
+		public bool Styled => StyleNumbering(Style) != null;
 	}
 
 	public static List<Paragraph> Paragraphs(ITextDocument2 doc) {
@@ -58,7 +68,7 @@ public static class LegalLists
 		range.Expand(tomConstants.tomParagraph);
 		while (true) {
 			var para = range.Para;
-			list.Add(new Paragraph(range.Start, range.End, para.ListType, Math.Max(0, para.ListLevelIndex), para.ListStart, (range.Text ?? "").TrimEnd('\r')));
+			list.Add(new Paragraph(range.Start, range.End, para.ListType, Math.Max(0, para.ListLevelIndex), para.ListStart, (range.Text ?? "").TrimEnd('\r'), para.Style));
 			if (range.End >= storyEnd || range.End <= range.Start) break;
 			range.SetRange(range.End, range.End);
 			range.Expand(tomConstants.tomParagraph);
@@ -96,15 +106,28 @@ public static class LegalLists
 			counters[level]++;
 			for (int k = level + 1; k < counters.Length; k++) counters[k] = 0;
 			for (int k = 0; k < level; k++) if (counters[k] == 0) counters[k] = 1;    // a skipped level counts as 1
-			numbers[p.Start] = (Number(counters, level), series.Value, (int[])counters.Clone());
+			numbers[p.Start] = (Number(counters, level, StyleNumbering(p.Style)?.Format), series.Value, (int[])counters.Clone());
 		}
 		return numbers;
 	}
 
+	/// A numbered item as the editor numbers it: its level, its numbered style's format (null: a legal item's), its
+	/// number's text and its series (LegalLists.Numbers).
+	public sealed record Item(int Level, string? Format, string Number, int Series);
+
+	/// The document's numbered items, in order.
+	public static List<Item> Items(ITextDocument2 doc) {
+		var paragraphs = Paragraphs(doc);
+		var numbers = Numbers(paragraphs);
+		return paragraphs.Where(p => numbers.ContainsKey(p.Start))
+			.Select(p => new Item(Math.Min(p.Level, 9), StyleNumbering(p.Style)?.Format, numbers[p.Start].Number, numbers[p.Start].Series)).ToList();
+	}
+
 	/// Writes the right number in front of every legal item, and gives nested items their series' ListStart (Shift+Tab
 	/// can make them top-level items). Keeps the selection where it was in the text. Returns true if anything changed.
-	public static bool Renumber(RichEditBox editor) {
-		var doc = editor.TextDocument;
+	public static bool Renumber(RichEditBox editor) => Renumber(editor.TextDocument);
+
+	public static bool Renumber(ITextDocument2 doc) {
 		var paragraphs = Paragraphs(doc);
 		var numbers = Numbers(paragraphs);
 		var edits = new List<(int Start, int Length, string Text)>();
@@ -140,7 +163,7 @@ public static class LegalLists
 
 	// Measures the documents' legal numbers and gives every legal item its level's indents. Returns true if any changed.
 	static bool FitIndents(ITextDocument2 doc) {
-		var items = Paragraphs(doc).Where(p => p.Legal && p.PrefixLength > 0).ToList();
+		var items = Paragraphs(doc).Where(p => p.Legal && p.PrefixLength > 0 && !p.Styled).ToList();    // (a numbered style's items: its indents)
 		if (items.Count == 0) return false;
 		var needed = new float[10];
 		var sizes = new Dictionary<int, float>();
@@ -300,6 +323,26 @@ public static class LegalLists
 		para.SetIndents(first, left, para.RightIndent);
 	}
 
+	/// Makes a paragraph an item of its numbered style at a level (0-based): numbered as a legal item is, its indents
+	/// left as its style has them.
+	public static void SetStyled(ITextPara para, int level, int listStart = 0) {
+		// (RichEdit gives a paragraph that becomes a list item a list's indents of its own: the paragraph's are put back)
+		float first = para.FirstLineIndent, left = para.LeftIndent, right = para.RightIndent;
+		para.ListType = tomConstants.tomListNumberAsArabic | NoNumber;
+		para.ListLevelIndex = Math.Clamp(level, 0, 8);
+		para.ListStart = Math.Max(0, listStart);
+		if (Math.Abs(para.FirstLineIndent - first) > 0.01f || Math.Abs(para.LeftIndent - left) > 0.01f || Math.Abs(para.RightIndent - right) > 0.01f)
+			para.SetIndents(first, left, right);
+		NoNumberSpace(para);
+	}
+
+	/// A numbered style's item: no room for a number of RichEdit's own (it has none: its number is text). RichEdit
+	/// draws a list item's first line that far (ListTab, 18 points) to the right of its first-line indent, so a
+	/// hanging "-21" showed at "-3", and Numbered Paragraph's 36 at 54; legal items' indents count on it, so keep it.
+	public static void NoNumberSpace(ITextPara para) {
+		if (Math.Abs(para.ListTab) > 0.01f) para.ListTab = 0;
+	}
+
 	/// Ends legal numbering for the paragraphs from start to end: their numbers go and they become normal paragraphs.
 	public static void Remove(RichEditBox editor, int start, int end) => Grouped(editor, () => {
 		var doc = editor.TextDocument;
@@ -313,7 +356,7 @@ public static class LegalLists
 
 	/// After a legal item's level changed: the indent of its new level.
 	public static void Reindent(ITextDocument2 doc, int start, int end) {
-		foreach (var p in Touched(doc, start, end).Where(p => p.Legal)) {
+		foreach (var p in Touched(doc, start, end).Where(p => p.Legal && !p.Styled)) {
 			var para = doc.Range2(p.Start, p.Start).Para;
 			var (first, left) = Indents(p.Level);
 			para.SetIndents(first, left, para.RightIndent);
@@ -369,20 +412,58 @@ public static class LegalLists
 		});
 	}
 
+	// RichEdit's RTF doesn't keep a list paragraph's ListStart either where it has no number of its own, and with it goes
+	// where a numbering starts again: RTE Writer's RTF keeps the items' values, in order, in {\*\rtewriterlists 1,1,1001}.
+	static readonly Regex StartsGroupRx = new(@"\{\\\*\\rtewriterlists ([0-9,\-]*)\}");
+
+	/// The group with the items' ListStart values ("": no items).
+	public static string StartsGroup(ITextDocument2 doc) {
+		var starts = Paragraphs(doc).Where(p => p.Legal).Select(p => p.ListStart).ToList();
+		return starts.Count == 0 ? "" : @"{\*\rtewriterlists " + string.Join(",", starts) + "}";
+	}
+
+	/// The values an RTF has kept (null: none).
+	public static List<int>? StartsFrom(string rtf) {
+		var m = StartsGroupRx.Match(rtf);
+		if (!m.Success) return null;
+		try { return m.Groups[1].Value.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToList(); } catch (FormatException) { return null; }
+	}
+
+	/// Gives the items their kept values back, if there are as many items as values. Returns whether any changed.
+	public static bool RestoreStarts(ITextDocument2 doc, List<int>? starts) {
+		if (starts == null) return false;
+		var items = Paragraphs(doc).Where(p => p.Legal).ToList();
+		if (items.Count != starts.Count) return false;
+		bool changed = false;
+		for (int i = 0; i < items.Count; i++)
+			if (items[i].ListStart != starts[i]) { doc.Range2(items[i].Start, items[i].Start).Para.ListStart = starts[i]; changed = true; }
+		return changed;
+	}
+
+	/// The indents legal items had as loaded, by paragraph start, before LevelsFromNumbers gave them legal numbering's
+	/// (styles are read after it: a numbered style's items get theirs back). Cleared when a document is loaded.
+	public static readonly Dictionary<int, (float First, float Left)> LoadedIndents = new();
+
 	/// After loading RTF: RichEdit's RTF doesn't keep the level of a list paragraph without a number, so legal items take
 	/// it back from their numbers ("3.1.1" is the third level). Returns how many changed.
 	public static int LevelsFromNumbers(ITextDocument2 doc) {
 		int changed = 0;
 		foreach (var p in Paragraphs(doc)) {
 			if (!p.Legal || Prefix.Match(p.Text) is not { Success: true } m) continue;
-			int level = Math.Min(8, m.Value.TrimEnd('\t', '.').Count(c => c == '.'));
+			var styled = StyleNumbering(p.Style);    // (a numbered style's item: the level its style gives, its indents)
+			int level = styled?.Level ?? Math.Min(8, m.Value.TrimEnd('\t', '.').Count(c => c == '.'));
 			int type = tomConstants.tomListNumberAsArabic | NoNumber;    // (RichEdit reads them back as bullets without a number)
 			if (level == p.Level && p.ListType == type) continue;
 			var para = doc.Range2(p.Start, p.Start).Para;
 			if (p.ListType != type) para.ListType = type;
 			para.ListLevelIndex = level;
-			var (first, left) = Indents(level);
-			para.SetIndents(first, left, para.RightIndent);
+			if (styled == null) {
+				// (indents as loaded kept, for an item whose style turns out to be numbered once styles are read: its
+				// own; StyleEngine.NumberAfterLoad puts them back)
+				LoadedIndents[p.Start] = (para.FirstLineIndent, para.LeftIndent);
+				var (first, left) = Indents(level);
+				para.SetIndents(first, left, para.RightIndent);
+			}
 			changed++;
 		}
 		return changed;
@@ -557,5 +638,42 @@ public static class LegalLists
 			Normalize(doc);
 		});
 		return runs.Sum(r => r.Count);
+	}
+}
+
+/// The formats of a numbered style's numbers (ParagraphStyle.Numbering): the count of its own level as a number, a
+/// letter or a Roman numeral, with the punctuation around it ("1.", "(a)", "iv)"), or Legal: the counts down to its
+/// level, "1.2.1", as legal numbering writes them.
+public static class NumberFormats
+{
+	public const string Legal = "1.1";
+
+	public static readonly string[] All = { "1.", "1)", "(1)", "a.", "a)", "(a)", "A.", "A)", "(A)", "i.", "i)", "(i)", "I.", "I)", "(I)", Legal };
+
+	public static bool Valid(string format) => All.Contains(format);
+
+	/// The number n in a format: "(a)" and 2 give "(b)".
+	public static string Render(string format, int n) {
+		int at = format.IndexOfAny(new[] { '1', 'a', 'A', 'i', 'I' });
+		if (at < 0) return n.ToString();
+		string count = format[at] switch {
+			'a' => Letters(n).ToLowerInvariant(),
+			'A' => Letters(n),
+			'i' => Roman(n).ToLowerInvariant(),
+			'I' => Roman(n),
+			_ => n.ToString()
+		};
+		return format[..at] + count + format[(at + 1)..];
+	}
+
+	// A, B ... Z, AA, BB ... ZZ, AAA ... (as Word counts in letters); 0 and below as a number.
+	static string Letters(int n) => n <= 0 ? n.ToString() : new string((char)('A' + (n - 1) % 26), (n - 1) / 26 + 1);
+
+	static string Roman(int n) {
+		if (n <= 0 || n > 3999) return n.ToString();
+		var parts = new (int Value, string Text)[] { (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"), (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I") };
+		var text = new System.Text.StringBuilder();
+		foreach (var (value, roman) in parts) while (n >= value) { text.Append(roman); n -= value; }
+		return text.ToString();
 	}
 }

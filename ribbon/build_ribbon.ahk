@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "..\Csharp-in-AHK.ahk"
-; Builds RteRibbon.ribbon, the compiled ribbon that rte_writer35.cs loads, from RteRibbon.xml:
+; Builds RteRibbon.ribbon, the compiled ribbon that rte_writer36.cs loads, from RteRibbon.xml:
 ;   1. make_icons.cs draws the icons into build\icons (32-bit BMPs, 16 to 64 pixels for the DPI steps) from Microsoft's
 ;      Fluent UI System Icons (MIT license), whose font is downloaded once into build\fluent, at a fixed commit;
 ;   2. uicc.exe (Windows SDK) compiles the markup into a binary ribbon (.bml) and a resource script (.rc);

@@ -1,4 +1,4 @@
-// Paragraph styles for RTE Writer (rte_writer35.cs, through #load).
+// Paragraph styles for RTE Writer (rte_writer36.cs, through #load).
 //   - ParagraphStyle: a named set of formatting: the font (name, size, bold, italic, underline, colour) and the
 //     paragraph's (alignment, indents, space before and after, line spacing, keep with next, keep lines together, widow
 //     and orphan control, page break before, no space between paragraphs of the same style), a heading level (0 for
@@ -49,6 +49,12 @@ public sealed class ParagraphStyle
 	public bool WidowControl { get; set; } = true;     // (Word's default too)
 	public bool PageBreakBefore { get; set; }
 	public bool Contextual { get; set; }               // no space before or after it next to a paragraph of the same style
+	// Numbered styles: its paragraphs are numbered, one numbering through the document with the other numbered styles'
+	// (and legal items), going on over the paragraphs between them until restarted (rte_legal.cs)
+	public string Numbering { get; set; } = "";        // the number's format: NumberFormats ("1.", "(a)", "1.1" ...); "": none
+	public int NumberLevel { get; set; } = 1;          // its level in the numbering, 1-9 (1: the top level)
+
+	[System.Text.Json.Serialization.JsonIgnore] public bool Numbered => Numbering != "";
 
 	public ParagraphStyle Copy() => (ParagraphStyle)MemberwiseClone();
 
@@ -105,6 +111,12 @@ public static class StyleSets
 		new() { Name = name, Font = font, Size = size, Level = level, Bold = bold, Italic = italic, Underline = underline, Align = align,
 			Before = before, After = after, LeftIndent = left, RightIndent = right, FirstLine = first, LineSpacing = line, KeepWithNext = keep, Next = next, Color = color };
 
+	// A numbered style: running numbers, "1." at its first line (the number, a tab, the text).
+	static ParagraphStyle Numbered(ParagraphStyle style, string format = "1.") {
+		style.Numbering = format;
+		return style;
+	}
+
 	// Classic: Times New Roman 12, black headings in the same face, the conventions of court papers and contracts.
 	static StyleSheet Classic() {
 		const string F = "Times New Roman";
@@ -119,6 +131,7 @@ public static class StyleSets
 			S("Heading 5", F, 12, 5, underline: true, before: 6, after: 3, keep: true, next: "Normal"),
 			S("Heading 6", F, 12, 6, italic: true, underline: true, before: 6, after: 3, keep: true, next: "Normal"),
 			S("Quote", F, 12, left: 36, right: 36, after: 12),
+			Numbered(S("Numbered Paragraph", F, 12, first: 36, after: 12)),
 			S("Code", "Courier New", 10),
 		} };
 	}
@@ -130,6 +143,7 @@ public static class StyleSets
 		var sheet = new StyleSheet { Set = "Plain", Styles = { S("Normal", F, 11), S("Title", F, 28, align: "center", after: 12, next: "Normal"), S("Subtitle", F, 14, align: "center", after: 12, next: "Normal") } };
 		for (int level = 1; level <= 6; level++) sheet.Styles.Add(S("Heading " + level, F, sizes[level], level, bold: true, next: "Normal"));
 		sheet.Styles.Add(S("Quote", F, 11, italic: true, left: 36));
+		sheet.Styles.Add(Numbered(S("Numbered Paragraph", F, 11, first: 36)));
 		sheet.Styles.Add(S("Code", "Courier New", 10));
 		return sheet;
 	}
@@ -148,6 +162,7 @@ public static class StyleSets
 			S("Heading 5", "Segoe UI", 11, 5, italic: true, before: 10, after: 2, keep: true, next: "Normal", color: "#404040"),
 			S("Heading 6", "Segoe UI", 10, 6, italic: true, before: 8, after: 2, keep: true, next: "Normal", color: "#404040"),
 			S("Quote", T, 11, italic: true, left: 36, right: 36, line: "1.15", after: 8, color: "#404040"),
+			Numbered(S("Numbered Paragraph", T, 11, first: 36, line: "1.15", after: 8)),
 			S("Code", "Consolas", 10),
 		} };
 	}
@@ -272,14 +287,151 @@ public static class StyleEngine
 	/// the character formatting that was their style's or covers a whole paragraph (part of a paragraph formatted
 	/// otherwise, such as a bold word, stays as it is).
 	public static void Apply(ITextDocument2 doc, StyleSheet sheet, ParagraphStyle style, int start, int end) {
-		foreach (var (pStart, pEnd) in Paragraphs(doc, start, end)) {
+		bool numbering = false;
+		// (from the last paragraph: a number that goes changes the positions after it)
+		foreach (var (pStart, pEnd) in Enumerable.Reverse(Paragraphs(doc, start, end))) {
 			var para = doc.Range2(pStart, pStart).Para;
 			var old = sheet.ById(para.Style) ?? sheet.Normal;
 			Tag(para, IdOf(style.Name));
-			SetParagraph(para, style, keepIndents: (para.ListType & 0xFFFF) != tomConstants.tomListNone);    // (a list item keeps its list's indents)
+			// (a list item keeps its list's indents; a numbered style's item has the style's)
+			SetParagraph(para, style, keepIndents: (para.ListType & 0xFFFF) != tomConstants.tomListNone && !style.Numbered);
 			SetCharacters(doc, pStart, pEnd, old, style, whole: true);
+			numbering |= Number(doc, pStart, old, style);
 		}
-		Contextual(doc, sheet, start, end);
+		if (numbering) Renumber(doc);
+		Contextual(doc, sheet, start, Math.Min(end, doc.Range2(0, 0).StoryLength));
+	}
+
+	/// Numbered styles: a paragraph given a style (it had old) becomes an item of the style's numbering at its level, or
+	/// (from a numbered style to one without) an ordinary paragraph again, its number gone. Returns whether its numbering
+	/// changed; Renumber then writes the numbers. Callers go from the last paragraph (a number that goes moves the text).
+	public static bool Number(ITextDocument2 doc, int start, ParagraphStyle old, ParagraphStyle now) {
+		var para = doc.Range2(start, start).Para;
+		bool item = LegalLists.IsLegal(para.ListType);
+		if (now.Numbered) {
+			int level = Math.Clamp(now.NumberLevel, 1, 9) - 1;
+			if (item && para.ListLevelIndex == level) { LegalLists.NoNumberSpace(para); return false; }
+			LegalLists.SetStyled(para, level, item ? para.ListStart : 0);    // (an item already keeps its series; others go on)
+			return true;
+		}
+		if (!old.Numbered || !item) return false;    // (a legal item made with Legal numbering stays one)
+		int storyEnd = doc.Range2(0, 0).StoryLength;
+		var m = LegalLists.Prefix.Match(doc.Range2(start, Math.Min(storyEnd, start + 40)).Text ?? "");
+		if (m.Success) doc.Range2(start, start + m.Length).Text = "";
+		doc.Range2(start, start).Para.ListType = tomConstants.tomListNone;
+		return true;
+	}
+
+	/// The numbered styles' and legal items' numbers written again (series as Normalize makes them).
+	public static void Renumber(ITextDocument2 doc) {
+		LegalLists.Normalize(doc);
+		LegalLists.Renumber(doc);
+	}
+
+	/// After pasting (start, end: what was pasted): numbered paragraphs join the numbering where they land. Numbered items
+	/// (a numbered style's, legal items) go on from the items before them, as one list, at their levels; numbered list
+	/// items from elsewhere (Word's), where the document has numbered items, become items at their level, of the
+	/// numbered style of the nearest item of that level (or legal items, if none has a style). Returns whether any did.
+	public static bool JoinPasted(ITextDocument2 doc, StyleSheet sheet, int start, int end) {
+		var paragraphs = LegalLists.Paragraphs(doc);
+		var pasted = paragraphs.Where(p => p.End > start && p.Start < Math.Max(end, start + 1)).ToList();
+		if (pasted.Count == 0) return false;
+		var others = paragraphs.Where(p => p.Legal && !pasted.Contains(p)).ToList();
+		bool changed = false;
+		foreach (var p in Enumerable.Reverse(pasted)) {
+			var para = doc.Range2(p.Start, p.Start).Para;
+			if (p.Legal) {
+				if (p.ListStart != 0) { para.ListStart = 0; changed = true; }    // (goes on: no list of its own)
+				continue;
+			}
+			if (FormatOf(p.ListType) == null || others.Count == 0) continue;
+			// the nearest item of its level, before it, else after it: its numbered style
+			var near = others.LastOrDefault(o => o.Start < p.Start && o.Level == p.Level && o.Styled) ?? others.FirstOrDefault(o => o.Start > p.Start && o.Level == p.Level && o.Styled);
+			if (near != null && sheet.ById(near.Style) is { Numbered: true } style) Apply(doc, sheet, style, p.Start, p.Start);
+			else LegalLists.SetLegal(para, p.Level);
+			changed = true;
+		}
+		if (changed) Renumber(doc);
+		return changed;
+	}
+
+	/// A number typed in front of a paragraph with a tab after it (" 2.<tab>", "(b)<tab>"): its numbered style format
+	/// and the length to take out; null if it has none (or no tab: "2 apples" isn't a number of a list).
+	public static (string Format, int Length)? TypedFormat(string text) {
+		var m = LegalLists.TypedMarker.Match(text);
+		if (!m.Success || m.Groups["bullet"].Success || m.Groups["gap"].Value != "\t") return null;
+		string n = m.Groups["n"].Value;
+		bool open = m.Groups["open"].Success;
+		string close = m.Groups["close"].Value;
+		if (close == "" && !open) return null;    // ("2<tab>": no punctuation, no list's number)
+		if (open && close != ")") return null;
+		char kind = char.IsDigit(n[0]) ? '1'
+			: n.Length > 1 && n.All(c => "ivxlcdm".Contains(c)) ? 'i' : n.Length > 1 && n.All(c => "IVXLCDM".Contains(c)) ? 'I'
+			: n.Length == 1 && char.IsLower(n[0]) ? 'a' : n.Length == 1 ? 'A' : '\0';
+		if (kind == '\0') return null;
+		string format = open ? $"({kind})" : $"{kind}{close}";
+		return NumberFormats.Valid(format) ? (format, m.Length) : null;
+	}
+
+	/// A numbered style's format for a RichEdit list type ("1." for numbers with a period ...; null: not a numbered list).
+	public static string? FormatOf(int listType) {
+		char count = (listType & 0xFFFF) switch { 2 => '1', 3 => 'a', 4 => 'A', 5 => 'i', 6 => 'I', _ => '\0' };
+		if (count == '\0' || (listType & LegalLists.NoNumber) != 0) return null;
+		return (listType & 0x30000) switch { 0x10000 => $"({count})", 0x20000 or 0x30000 => $"{count}.", _ => $"{count})" };
+	}
+
+	/// After loading: a style all of whose paragraphs are items of the same kind of list (a Word document's numbered
+	/// style, such as its "List Number") becomes a numbered style of that format and level, and the paragraphs of every
+	/// numbered style become items of its numbering: one whose list went on after other paragraphs (Word's "10." after a
+	/// heading) goes on, one that started again at another number starts there. Returns whether any did.
+	public static bool NumberAfterLoad(ITextDocument2 doc, StyleSheet sheet, List<int>? starts = null) {
+		var paragraphs = LegalLists.Paragraphs(doc);
+		foreach (var group in paragraphs.GroupBy(p => p.Style)) {
+			if (sheet.ById(group.Key) is not { Numbered: false } style || style == sheet.Normal || style.Name == "Normal") continue;
+			// numbered: most of its paragraphs are items of one kind of list (Word's numbered style whose numbering some
+			// paragraphs have turned off, such as a quotation between them, is one; those paragraphs stay as they are).
+			// A number typed in front with a tab counts where there are list items too (a converter that writes some of
+			// a list's numbers as text); typed numbers alone are the text's own ("1.<tab>" typed by hand).
+			int count = group.Count(), items = group.Count(p => FormatOf(p.ListType) != null);
+			if (items == 0) continue;
+			var numbered = group.Where(p => FormatOf(p.ListType) != null || TypedFormat(p.Text) != null).ToList();
+			if (numbered.Count * 2 <= count) continue;
+			var kinds = numbered.Select(p => (Format: FormatOf(p.ListType) ?? TypedFormat(p.Text)?.Format, p.Level)).Distinct().ToList();
+			if (kinds.Count != 1 || kinds[0].Format is not { } format) continue;
+			style.Numbering = format;
+			style.NumberLevel = Math.Clamp(kinds[0].Level + 1, 1, 9);
+		}
+		bool any = false;
+		// (from the last paragraph: a typed number that goes moves the text after it)
+		for (int i = paragraphs.Count - 1; i >= 0; i--) {
+			var p = paragraphs[i];
+			if (sheet.ById(p.Style) is not { Numbered: true } style) continue;
+			int level = Math.Clamp(style.NumberLevel, 1, 9) - 1;
+			bool listItem = FormatOf(p.ListType) != null;
+			var typed = p.Legal || listItem ? null : TypedFormat(p.Text);
+			// (a paragraph of a numbered style that is no item, nor has a number typed in front, has its numbering
+			// turned off: it stays so, as Word's paragraphs whose numbering is turned off)
+			if (!p.Legal && !listItem && typed == null) continue;
+			// (a number typed in front: the paragraph's style was found numbered from its list items, so it is one of them)
+			if (typed is { } t) doc.Range2(p.Start, p.Start + t.Length).Text = "";
+			var para = doc.Range2(p.Start, p.Start).Para;
+			if (p.Legal) {
+				if (p.Level != level) para.ListLevelIndex = level;
+				// (its indents as loaded: legal numbering's were given it before its style was known)
+				if (LegalLists.LoadedIndents.TryGetValue(p.Start, out var loaded)) para.SetIndents(loaded.First, loaded.Left, para.RightIndent);
+				LegalLists.NoNumberSpace(para);
+			} else {
+				// (a list's first item, after a paragraph not in it or another list's: "a list starting at" its number,
+				// which Normalize makes go on if that is the next number, as Word's lists of one run each do)
+				bool runStart = listItem && (i == 0 || paragraphs[i - 1].ListType != p.ListType || paragraphs[i - 1].ListStart != p.ListStart);
+				LegalLists.SetStyled(para, level, runStart ? LegalLists.Loaded + Math.Max(1, p.ListStart) : 0);
+			}
+			any = true;
+		}
+		LegalLists.LoadedIndents.Clear();
+		any |= LegalLists.RestoreStarts(doc, starts);    // (RTE Writer's RTF: where the numbering starts again)
+		if (any) Renumber(doc);
+		return any;
 	}
 
 	/// Gives the paragraph at a position a style, as Apply, but only its character formatting (its indents and spacing
@@ -296,9 +448,19 @@ public static class StyleEngine
 	/// formatting of their own stays.
 	public static int Restyle(ITextDocument2 doc, StyleSheet sheet, ParagraphStyle old, ParagraphStyle updated) {
 		int id = IdOf(old.Name), count = 0;
-		foreach (var (pStart, pEnd) in Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength)) {
+		bool numbering = false;
+		// (from the last paragraph: a number that goes changes the positions after it)
+		foreach (var (pStart, pEnd) in Enumerable.Reverse(Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength))) {
 			var para = doc.Range2(pStart, pStart).Para;
 			if (para.Style != id) continue;
+			// numbering on or off, or another level (a number that goes moves the paragraph's end)
+			int end = pEnd;
+			if (old.Numbering != updated.Numbering || old.NumberLevel != updated.NumberLevel) {
+				int length = doc.Range2(0, 0).StoryLength;
+				numbering |= Number(doc, pStart, old, updated);
+				end -= length - doc.Range2(0, 0).StoryLength;
+				para = doc.Range2(pStart, pStart).Para;
+			}
 			if (!string.Equals(old.Name, updated.Name, StringComparison.OrdinalIgnoreCase)) Tag(para, IdOf(updated.Name));
 			if ((AlignText(para.Alignment)) == old.Align) para.Alignment = AlignOf(updated.Align);
 			if (Same(para.SpaceBefore, old.Before) || (old.Contextual && Same(para.SpaceBefore, 0))) para.SpaceBefore = updated.Before;
@@ -310,9 +472,10 @@ public static class StyleEngine
 			if (Is(para.KeepTogether) == old.KeepTogether) para.KeepTogether = Tom(updated.KeepTogether);
 			if (WidowControlOf(para) == old.WidowControl) SetWidowControl(para, updated.WidowControl);
 			if (Is(para.PageBreakBefore) == old.PageBreakBefore) para.PageBreakBefore = Tom(updated.PageBreakBefore);
-			SetCharacters(doc, pStart, pEnd, old, updated, whole: false);
+			SetCharacters(doc, pStart, end, old, updated, whole: false);
 			count++;
 		}
+		if (numbering || (updated.Numbered && old.Numbering != updated.Numbering)) Renumber(doc);    // (numbers in another format)
 		if (old.Contextual || updated.Contextual) Contextual(doc, sheet, 0, doc.Range2(0, 0).StoryLength);
 		return count;
 	}
@@ -804,6 +967,9 @@ public static class StyleClipboard
 
 	/// paste: RichEdit's own Paste; then the pasted paragraphs get their styles back (if the clipboard has RTE Writer's).
 	/// Returns whether the style sheet got styles it hadn't.
+	/// Where the last Paste put its text (start, end).
+	public static (int Start, int End) Pasted { get; private set; }
+
 	public static bool Paste(RichEditBox editor, StyleSheet sheet, Action paste) {
 		Data? data = null;
 		try {
@@ -812,8 +978,9 @@ public static class StyleClipboard
 		var doc = editor.TextDocument;
 		int start = doc.Selection2.Start, before = doc.Range2(0, 0).StoryLength - (doc.Selection2.End - doc.Selection2.Start);
 		paste();
-		if (data == null || data.Names.Count == 0) return false;
 		int end = start + (doc.Range2(0, 0).StoryLength - before);
+		Pasted = (start, Math.Max(start, end));
+		if (data == null || data.Names.Count == 0) return false;
 		var marked = Marked(doc, start, end);
 		if (marked.Count != data.Names.Count) return false;
 		bool added = false;
@@ -984,6 +1151,8 @@ sealed class StyleDialog : Form
 	readonly NumericUpDown left = Points(), right = Points(), first = Points(-1584), before = Points(), after = Points();
 	readonly ComboBox line = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 140 };
 	readonly CheckBox keep = new() { Text = "Keep with the next paragraph", AutoSize = true };
+	readonly ComboBox numbering = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
+	readonly ComboBox numberLevel = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 70 };
 	readonly Panel preview = new() { Height = 120, Dock = DockStyle.Fill, BackColor = SystemColors.Window, BorderStyle = BorderStyle.FixedSingle };
 	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
 	Color color = Color.Black;
@@ -1038,7 +1207,15 @@ sealed class StyleDialog : Form
 		line.Items.AddRange(new object[] { "1", "1.15", "1.5", "2", "exactly 12pt", "exactly 24pt", "at least 12pt" });
 		line.Text = style.LineSpacing;
 		keep.Checked = style.KeepWithNext;
-		foreach (Control c in new Control[] { font, size, bold, italic, underline, align, left, right, first, before, after, line })
+		// numbered styles: none, or a number format (Legal: 1., 1.1, 1.1.1 by level)
+		numbering.Items.Add("None");
+		foreach (string format in NumberFormats.All) numbering.Items.Add(format == NumberFormats.Legal ? "1.1 (legal: 1., 1.1, 1.1.1)" : format);
+		numbering.SelectedIndex = style.Numbered ? Math.Max(0, Array.IndexOf(NumberFormats.All, style.Numbering) + 1) : 0;
+		for (int n = 1; n <= 9; n++) numberLevel.Items.Add(n.ToString());
+		numberLevel.SelectedIndex = Math.Clamp(style.NumberLevel, 1, 9) - 1;
+		numberLevel.Enabled = numbering.SelectedIndex > 0;
+		numbering.SelectedIndexChanged += (s, e) => numberLevel.Enabled = numbering.SelectedIndex > 0;
+		foreach (Control c in new Control[] { font, size, bold, italic, underline, align, left, right, first, before, after, line, numbering, numberLevel })
 			switch (c) {
 				case ComboBox box: box.TextChanged += (s, e) => preview.Invalidate(); box.SelectedIndexChanged += (s, e) => preview.Invalidate(); break;
 				case NumericUpDown number: number.ValueChanged += (s, e) => preview.Invalidate(); break;
@@ -1063,6 +1240,7 @@ sealed class StyleDialog : Form
 		Row("Indent left (pt):", left, "Right (pt):", right);
 		Row("First line (pt):", first, "", new Label { Text = "(negative: hanging)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
 		Row("Space before (pt):", before, "After (pt):", after);
+		Row("Numbering:", numbering, "Level:", numberLevel);
 		var paragraphButton = new Button { Text = "&Paragraph...", AutoSize = true };
 		paragraphButton.Click += (s, e) => ParagraphCommand();
 		Row("", keep, "", paragraphButton);
@@ -1128,7 +1306,8 @@ sealed class StyleDialog : Form
 		Color = automatic.Checked ? "" : $"#{color.R:X2}{color.G:X2}{color.B:X2}",
 		Align = Aligns[Math.Max(0, align.SelectedIndex)], LeftIndent = (float)left.Value, RightIndent = (float)right.Value, FirstLine = (float)first.Value,
 		Before = (float)before.Value, After = (float)after.Value, LineSpacing = line.Text.Trim(), KeepWithNext = keep.Checked,
-		KeepTogether = breaks.KeepTogether, WidowControl = breaks.WidowControl, PageBreakBefore = breaks.PageBreakBefore, Contextual = breaks.Contextual
+		KeepTogether = breaks.KeepTogether, WidowControl = breaks.WidowControl, PageBreakBefore = breaks.PageBreakBefore, Contextual = breaks.Contextual,
+		Numbering = numbering.SelectedIndex > 0 ? NumberFormats.All[numbering.SelectedIndex - 1] : "", NumberLevel = numberLevel.SelectedIndex + 1
 	};
 
 	// A sample paragraph in the style, with grey text before and after it (the space and indents to scale).
@@ -1150,6 +1329,10 @@ sealed class StyleDialog : Form
 			float x = area.Left + (float)left.Value * scale, width = Math.Max(40, area.Width - (float)(left.Value + right.Value) * scale);
 			var format = new StringFormat { Alignment = align.SelectedIndex switch { 1 => StringAlignment.Center, 2 => StringAlignment.Far, _ => StringAlignment.Near } };
 			string text = "A sample of the style: the quick brown fox jumps over the lazy dog, and goes on to a second line.";
+			if (numbering.SelectedIndex > 0) {    // (its number: the first at its level)
+				var counts = Enumerable.Repeat(1, 9).ToArray();
+				text = LegalLists.Number(counts, numberLevel.SelectedIndex, NumberFormats.All[numbering.SelectedIndex - 1]) + "  " + text;
+			}
 			float firstLine = (float)first.Value * scale;
 			g.DrawString(text, sample, ink, new RectangleF(x + Math.Max(0, firstLine), y, width - Math.Max(0, firstLine), area.Bottom - y), format);
 			y += sample.Height * 2 + (float)after.Value * scale;

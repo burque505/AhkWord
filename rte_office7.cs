@@ -5,7 +5,7 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer35.cs, through #load).
+// Word and OpenDocument conversions for RTE Writer (rte_writer36.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
 // without spacing of its own as 1.08 lines, and "at least" as exactly. All of a paragraph's tabs come back as tabs (the
@@ -550,12 +550,13 @@ public static class OfficeConverters {
 			for (int level = 0; level < 9; level++) {
 				bool bullet = use.List.Format == "bullet";
 				string number = "%" + (level + 1);
-				string text = legal ? LegalText(level)
-					: bullet ? "\u2022" : use.List.Punctuation switch { "paren" => number + ")", "parens" => "(" + number + ")", "plain" => number, _ => number + "." };
+				var styled = legal ? StyledLevel(level) : null;    // (a numbered style's format at this level: "(%2)", lower letters)
+				string text = styled?.Text ?? (legal ? LegalText(level)
+					: bullet ? "\u2022" : use.List.Punctuation switch { "paren" => number + ")", "parens" => "(" + number + ")", "plain" => number, _ => number + "." });
 				var lvl = new W.Level { LevelIndex = level };
 				var (first, left) = legal ? LegalLists.Indents(level) : OrdinaryIndents(use.List, level, sizeOf.GetValueOrDefault(numId, 11));
 				lvl.Append(new W.StartNumberingValue { Val = level == use.Level ? use.List.Start : 1 },
-					new W.NumberingFormat { Val = FormatValue(legal ? "decimal" : use.List.Format) },
+					new W.NumberingFormat { Val = FormatValue(styled?.Format ?? (legal ? "decimal" : use.List.Format)) },
 					new W.LevelText { Val = text },
 					new W.LevelJustification { Val = W.LevelJustificationValues.Left },
 					new W.PreviousParagraphProperties(new W.Indentation { Left = ((int)(left * 20)).ToString(), Hanging = ((int)(-first * 20)).ToString() }));
@@ -577,6 +578,16 @@ public static class OfficeConverters {
 		sample = list.Format == "bullet" ? sample : list.Punctuation switch { "paren" => sample + ")", "parens" => "(" + sample + ")", "plain" => sample, _ => sample + "." };
 		float hang = MathF.Ceiling(Math.Max(18, LegalLists.TextWidth(sample, DefaultFont?.Name ?? "Segoe UI", size) + size * 0.5f));
 		return (-hang, 18 * (level + 1) + hang);
+	}
+
+	// A numbered style's level in Word's terms (LegalItems: the document's first item at that level that has a format of
+	// its own): "(a)" at the second level is "(%2)" in lower-case letters. null: legal numbering's.
+	static (string Text, string Format)? StyledLevel(int level) {
+		if (LegalItems?.FirstOrDefault(i => i.Level == level && i.Format != null)?.Format is not { } format || format == NumberFormats.Legal) return null;
+		int at = format.IndexOfAny(new[] { '1', 'a', 'A', 'i', 'I' });
+		if (at < 0) return null;
+		string kind = format[at] switch { 'a' => "lowerLetter", 'A' => "upperLetter", 'i' => "lowerRoman", 'I' => "upperRoman", _ => "decimal" };
+		return (format[..at] + "%" + (level + 1) + format[(at + 1)..], kind);
 	}
 
 	// Word's level text for legal numbering at a level: "%1.", "%1.%2", "%1.%2.%3" ... (periods as LegalLists.Format)
@@ -801,12 +812,18 @@ public static class OfficeConverters {
 		var paragraphs = LegalLists.Paragraphs(doc);
 		var numbers = LegalLists.Numbers(paragraphs);
 		if (numbers.Count == 0) return rtf;
-		var series = numbers.Values.Select(n => n.Series).Distinct().ToList();
-		var texts = new List<string>();    // each marker's number text, by marker index
-		foreach (var p in Enumerable.Reverse(paragraphs)) {
-			if (!numbers.TryGetValue(p.Start, out var number)) continue;
-			texts.Insert(0, number.Number);
-			doc.Range2(p.Start, p.Start + p.PrefixLength).Text = $"{Mark}{p.Level},{series.IndexOf(number.Series)}@@";
+		// the items as the editor numbers them, where it has said (numbered styles: their formats and levels)
+		var legal = paragraphs.Where(p => numbers.ContainsKey(p.Start)).ToList();
+		var items = LegalItems is { } given && given.Count == legal.Count ? given : null;
+		var series = (items != null ? items.Select(i => i.Series) : numbers.Values.Select(n => n.Series)).Distinct().ToList();
+		var formats = series.Select(_ => new string?[9]).ToList();    // each series' format for each level (its first item's)
+		var texts = new string[legal.Count];    // each marker's number text, by marker index
+		for (int i = legal.Count - 1; i >= 0; i--) {
+			var p = legal[i];
+			int level = items?[i].Level ?? p.Level, s = series.IndexOf(items?[i].Series ?? numbers[p.Start].Series);
+			texts[i] = items?[i].Number ?? numbers[p.Start].Number;
+			if (items?[i].Format is { } format) formats[s][Math.Clamp(level, 0, 8)] = format;    // (from the end: the first item's wins)
+			doc.Range2(p.Start, p.Start + p.PrefixLength).Text = $"{Mark}{level},{s}@@";
 		}
 		FitListIndents(doc);    // (the ordinary lists' indents too)
 		string marked = ((System.Windows.Forms.RichTextBox)scratch).Rtf ?? rtf;
@@ -815,11 +832,11 @@ public static class OfficeConverters {
 		int firstLs = Regex.Matches(marked, @"\\ls(\d+)").Select(m => int.Parse(m.Groups[1].Value)).DefaultIfEmpty(0).Max() + 1;
 		int index = 0;
 		string body = Regex.Replace(marked, Regex.Escape(Mark) + @"(\d),(\d+)@@", m => {
-			string text = index < texts.Count ? texts[index] : "";
+			string text = index < texts.Length ? texts[index] : "";
 			index++;
 			return $@"{{\listtext {text}\tab}}\ls{firstLs + int.Parse(m.Groups[2].Value)}\ilvl{m.Groups[1].Value} ";
 		});
-		if (index != texts.Count) return rtf;    // the markers did not all come through: leave the RTF as it was
+		if (index != texts.Length) return rtf;    // the markers did not all come through: leave the RTF as it was
 		body = Regex.Replace(body, @"\{\\\*\\pn\\pnlvlcont(?:[^{}]|\{[^{}]*\})*\}", "");    // RichEdit's continuation paragraphs
 
 		// the legal list: level k is "%1.%2...%k" with LegalLists.Format's periods, indented as in the editor
@@ -827,7 +844,7 @@ public static class OfficeConverters {
 		var lists = new System.Text.StringBuilder();
 		var overrides = new System.Text.StringBuilder();
 		for (int k = 0; k < series.Count; k++) {
-			lists.Append(LegalListRtf(listId + k, LegalLists.StartOf(series[k])));
+			lists.Append(LegalListRtf(listId + k, LegalLists.StartOf(series[k]), formats[k]));
 			overrides.Append($@"{{\listoverride\listid{listId + k}\listoverridecount0\ls{firstLs + k}}}");
 		}
 		int tableAt = body.IndexOf(@"{\*\listtable", StringComparison.Ordinal), overAt = body.IndexOf(@"{\*\listoverridetable", StringComparison.Ordinal);
@@ -843,25 +860,41 @@ public static class OfficeConverters {
 
 	// An RTF list definition for legal numbering: level k is "%1.%2...%k" with LegalLists.Format's periods, indented as
 	// in the editor; the top level starts at start.
-	static string LegalListRtf(int listId, int start) {
+	// formats: a numbered style's format for a level (NumberFormats: "(a)" is that level's count alone, as a lower-case
+	// letter in parentheses); null or Legal: "%1.%2...".
+	static string LegalListRtf(int listId, int start, IReadOnlyList<string?>? formats = null) {
 		var list = new System.Text.StringBuilder($@"{{\list\listtemplateid{listId}");
 		for (int level = 0; level < 9; level++) {
 			var text = new System.Text.StringBuilder();
 			var positions = new System.Text.StringBuilder();
-			int length = 0;
-			for (int k = 0; k <= level; k++) {
-				if (k > 0) { text.Append('.'); length++; }
-				positions.Append($@"\'{length + 1:x2}");
-				text.Append($@"\'{k:x2}");
-				length++;
+			int length = 0, nfc = 0;
+			string? format = formats != null && level < formats.Count ? formats[level] : null;
+			int at = format?.IndexOfAny(new[] { '1', 'a', 'A', 'i', 'I' }) ?? -1;
+			if (format != null && format != NumberFormats.Legal && at >= 0) {
+				// the level's own count, with its punctuation: "(" %k ")"
+				nfc = format[at] switch { 'I' => 1, 'i' => 2, 'A' => 3, 'a' => 4, _ => 0 };
+				text.Append(format[..at]).Append($@"\'{level:x2}").Append(format[(at + 1)..]);
+				positions.Append($@"\'{at + 1:x2}");
+				length = format.Length;
+			} else {
+				for (int k = 0; k <= level; k++) {
+					if (k > 0) { text.Append('.'); length++; }
+					positions.Append($@"\'{length + 1:x2}");
+					text.Append($@"\'{k:x2}");
+					length++;
+				}
+				bool period = LegalLists.Format == LegalLists.Periods.All || LegalLists.Format == LegalLists.Periods.Top && level == 0;
+				if (period) { text.Append('.'); length++; }
 			}
-			bool period = LegalLists.Format == LegalLists.Periods.All || LegalLists.Format == LegalLists.Periods.Top && level == 0;
-			if (period) { text.Append('.'); length++; }
 			var (first, left) = LegalLists.Indents(level);
-			list.Append($@"{{\listlevel\levelnfc0\leveljc0\levelfollow0\levelstartat{(level == 0 ? start : 1)}{{\leveltext\'{length:x2}{text};}}{{\levelnumbers{positions};}}\fi{(int)(first * 20)}\li{(int)(left * 20)}\jclisttab\tx{(int)(left * 20)}}}");
+			list.Append($@"{{\listlevel\levelnfc{nfc}\leveljc0\levelfollow0\levelstartat{(level == 0 ? start : 1)}{{\leveltext\'{length:x2}{text};}}{{\levelnumbers{positions};}}\fi{(int)(first * 20)}\li{(int)(left * 20)}\jclisttab\tx{(int)(left * 20)}}}");
 		}
 		return list.Append($@"\listid{listId}}}").ToString();
 	}
+
+	/// The numbered items as the editor numbers them (LegalLists.Items), for the next export: RichEdit's RTF has lost
+	/// their styles, and with them a numbered style's format and level. The editor sets it around an export.
+	public static List<LegalLists.Item>? LegalItems;
 
 	// ---- paragraphs that are in no list
 
