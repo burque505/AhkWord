@@ -1,18 +1,21 @@
 // Page view for AhkWord's Print Layout (AhkWord.cs, through #load): the printed pages as sheets of their own,
 // with their headers and footers and a gap between them, as in Word, while the text is edited as before.
-// RichEdit shows a document as one long page and can't leave a gap between two of its lines, but a line whose text is
-// raised (ITextFont.Position, as for superscript) is that much taller, its text at its top (lowering is ignored): so
-// each page's last printed line is raised by the rest of the sheet (what the page's lines leave of the text area), the
-// bottom margin, a band between the sheets and the next sheet's top margin, and the space shows after it, in the middle
-// of a paragraph too. The line breaks stay as they were, so the pages do too. Page 1's top margin is space before the
-// first paragraph, and the last page's bottom margin a raise of the document's last line.
-// The gaps are the view's, never the document's: they are put in with undo suspended (Modified as it was), raised by
-// a value of their own (whole points and 0.35: GapMark), so that they are found wherever editing has moved them, and
-// taken out before anything reads the document as a file does (saving, HTML, Markdown, copying, printing and counting
-// pages: the editor's WithoutGaps), then put back as they were. They are worked out again a moment after typing stops,
-// from where the printed pages start. A page that ends inside a table gets no gap (raising a cell's text would make
-// its row taller), and nor does one whose last line is spaced "exactly" (no raise makes it taller): Print Layout's
-// "Page N" line marks it. Where the line spacing multiplies a raise (1.5 lines, double), the raise is divided by it.
+// RichEdit shows a document as one long page and can't leave a gap between two of its lines. So (iteration 42):
+//   - where a page starts with a paragraph (most pages do), the gap is space before that paragraph: the rest of the
+//     sheet above, the bottom margin, a band between the sheets and the next sheet's top margin. Page 1's top margin
+//     is space before the first paragraph too. Space before is ordinary paragraph formatting: the caret and typing
+//     behave there as anywhere.
+//   - where a page starts in the middle of a paragraph, the line before it is raised (ITextFont.Position, as for
+//     superscript): a raised line is that much taller, its text at its top, so the gap shows after it. Text typed in
+//     that line is raised as the line is, so that it stays at the top, and the caret with it.
+//   - the last page has no gap after it: the end of the document, where typing goes on, is as it is.
+// The line breaks stay as they were, so the pages do too. The gaps are the view's, never the document's: they are put
+// in with undo suspended (Modified as it was), raised by a value of their own (whole points and 0.35: GapMark) and
+// spaced by a value known to them (each paragraph gap's Applied), so that they are found wherever editing has moved
+// them, and taken out before anything reads the document as a file does (saving, HTML, Markdown, copying, printing and
+// counting pages: the editor's WithoutGaps), then put back as they were. They are worked out again a moment after
+// typing stops, from where the printed pages start. A page that starts inside a table gets no gap (Print Layout's
+// "Page N" line marks it), and nor does a raised line spaced "exactly" (no raise makes it taller).
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -28,16 +31,18 @@ public sealed class OnDispose(Action action) : IDisposable
 
 public sealed class PageGaps
 {
-	/// A gap after a page: its last line (raised), where the next page starts (-1: the document's end), the raise and its
-	/// parts (points): the rest of the sheet, the bottom margin, the band, the next sheet's top margin. Page: the page
-	/// that ends there (1 for the first).
-	public sealed record Gap(int LineStart, int LineEnd, int Next, float Raise, float Slack, float Bottom, float Band, float Top, int Page)
+	/// A gap before a page. Paragraph: space before the paragraph at Next (its own space before is Original, as put in
+	/// Applied); else a raise of the line LineStart-LineEnd, the page starting at Next in the middle of a paragraph.
+	/// Its parts (points): the rest of the sheet above, the bottom margin, the band, the next sheet's top margin. Page:
+	/// the page that ends there (0: before page 1, its top margin alone).
+	public sealed record Gap(int LineStart, int LineEnd, int Next, float Raise, float Slack, float Bottom, float Band, float Top, int Page,
+		bool Paragraph = false, float Original = 0, float Applied = 0)
 	{
-		/// How tall the gap is (points): the raise is less where the paragraph's line spacing multiplies it.
+		/// How tall the gap is (points).
 		public float Height => Slack + Bottom + Band + Top;
 
-		/// Its line as it is now: a range RichEdit moves with the text edited before it (LineStart, LineEnd and Next
-		/// are where it was when it was put in, until the gaps are worked out again).
+		/// Where it is now: a paragraph gap's paragraph start, a raised line's line (RichEdit moves ranges with the text
+		/// edited before them; LineStart, LineEnd and Next are where it was when it was put in).
 		public ITextRange2? Track { get; init; }
 	}
 
@@ -75,14 +80,13 @@ public sealed class PageGaps
 	/// The gaps as they are now (empty: none).
 	public List<Gap> Gaps { get; private set; } = new();
 
-	/// Page 1's top margin, as space before the first paragraph (points; 0: none), and that paragraph's own space.
-	public float TopExtra { get; private set; }
-	float topOriginal;
+	/// Page 1's top margin, as space before the first paragraph (points; 0: none).
+	public float TopExtra => Gaps.FirstOrDefault(g => g.Page == 0)?.Top ?? 0;
 
 	/// The number of pages they were worked out for.
 	public int Pages { get; private set; }
 
-	public bool Applied => Gaps.Count > 0 || TopExtra > 0;
+	public bool Applied => Gaps.Count > 0;
 
 	const char RowStart = '￹', RowEnd = '￻', CellEnd = '\u0007';
 	static bool InTable(string story, int at) {
@@ -104,9 +108,9 @@ public sealed class PageGaps
 	[System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
 	static extern IntPtr SendPoint(IntPtr hWnd, int msg, ref Point point, IntPtr cp);
 
-	/// Where a character is in the editor (its line's top), whether or not it is in view. (RichTextBox's
-	/// GetPositionFromCharIndex gives (0, 0) past its Text's length, which is shorter than the document when it has
-	/// fields: a gap drawn there would stay put while the text scrolls.)
+	/// Where a character is in the editor (its line's top: a paragraph's, its space before included), whether or not it
+	/// is in view. (RichTextBox's GetPositionFromCharIndex gives (0, 0) past its Text's length, which is shorter than the
+	/// document when it has fields: a gap drawn there would stay put while the text scrolls.)
 	public Point PositionOf(int cp) {
 		int storyEnd = editor.TextDocument.Range2(0, 0).StoryLength;
 		var point = new Point();
@@ -114,114 +118,114 @@ public sealed class PageGaps
 		return point;
 	}
 
-	/// Takes the gaps out: every raise of its own (wherever editing has moved it) and page 1's space (also in the
-	/// paragraphs that Enter made of the first, which have its format). Keeps what they were, for Reapply.
-	public void Remove() {
-		Unlift();    // (the lifted gap's raise back first, so that all the gaps are found)
+	// The start of the paragraph a position is in, and of those before and after it.
+	int ParagraphStart(int at) {
+		var range = editor.TextDocument.Range2(at, at);
+		range.StartOf(4, 0);    // tomParagraph
+		return range.Start;
+	}
+
+	List<int> Neighbours(int start) {
 		var doc = editor.TextDocument;
 		int storyEnd = doc.Range2(0, 0).StoryLength;
+		var starts = new List<int>();
+		if (start > 0) starts.Add(ParagraphStart(start - 1));
+		starts.Add(start);
+		var own = doc.Range2(start, start);
+		own.Expand(4);
+		if (own.End < storyEnd - 1) starts.Add(own.End);
+		return starts;
+	}
+
+	static bool Spaced(ITextPara para, float applied) => Math.Abs(para.SpaceBefore - applied) < 0.03f;
+
+	/// Takes the gaps out: every raise of its own (wherever editing has moved it) and every paragraph's space that a gap
+	/// gave it (its own space before back), where editing has moved the paragraph, and in the paragraph Enter made of it.
+	/// Keeps what they were, for Reapply.
+	public void Remove() {
+		var doc = editor.TextDocument;
+		int storyEnd = doc.Range2(0, 0).StoryLength;
+		// the raised lines
 		var run = doc.Range2(0, 0);
 		var found = new List<(int Start, int End, float Raise)>();
-		while (run.Start < storyEnd) {    // (the final paragraph mark too: the last page's raise has it)
-			run.MoveEnd(13, 1);    // tomCharFormat
-			if (run.End <= run.Start) break;
-			var font = run.Font;
-			float position = font.Position;
-			if (Ours(position)) {
-				font.Position = 0;
-				// (a line with a bold word or a link is several runs: one gap)
-				if (found.Count > 0 && found[^1].End == run.Start && Math.Abs(found[^1].Raise - position) < 0.01f) found[^1] = (found[^1].Start, run.End, position);
-				else found.Add((run.Start, run.End, position));
+		if (Gaps.Any(g => !g.Paragraph))
+			while (run.Start < storyEnd) {
+				run.MoveEnd(13, 1);    // tomCharFormat
+				if (run.End <= run.Start) break;
+				var font = run.Font;
+				float position = font.Position;
+				if (Ours(position)) {
+					font.Position = 0;
+					// (a line with a bold word or a link is several runs: one gap)
+					if (found.Count > 0 && found[^1].End == run.Start && Math.Abs(found[^1].Raise - position) < 0.01f) found[^1] = (found[^1].Start, run.End, position);
+					else found.Add((run.Start, run.End, position));
+				}
+				if (run.End >= storyEnd) break;
+				run.SetRange(run.End, run.End);
 			}
-			if (run.End >= storyEnd) break;    // (RichEdit puts no range after the final paragraph mark)
-			run.SetRange(run.End, run.End);
-		}
-		// where the gaps are now (editing since they were worked out moves them): Reapply puts them back there
-		var gaps = Gaps;
-		if (found.Count == gaps.Count)
-			gaps = gaps.Select((gap, i) => gap with { LineStart = found[i].Start, LineEnd = found[i].End, Next = gap.Next < 0 ? -1 : found[i].End + (gap.Next - gap.LineEnd), Raise = found[i].Raise }).ToList();    // (the next line: after the paragraph mark the raise leaves out)
-		if (TopExtra > 0) {
-			float inflated = topOriginal + TopExtra;
-			foreach (var (start, _) in StyleEngine.Paragraphs(doc, 0, Math.Min(storyEnd, 4000))) {
+		var lines = Gaps.Where(g => !g.Paragraph).ToList();
+		bool linesKept = found.Count == lines.Count;
+		var kept = new List<Gap>();
+		int lineIndex = 0;
+		bool lost = !linesKept;
+		foreach (var gap in Gaps) {
+			if (!gap.Paragraph) {
+				if (linesKept) {
+					var (start, end, raise) = found[lineIndex];
+					kept.Add(gap with { LineStart = start, LineEnd = end, Next = end, Raise = raise, Track = null });    // (the next page: after the raised line)
+				}
+				lineIndex++;
+				continue;
+			}
+			// a paragraph's space: where its paragraph is now (and the one Enter made of it, and one joined to it)
+			int at = gap.Track is { } track ? Math.Min(track.Start, Math.Max(0, storyEnd - 1)) : gap.Next;
+			int own = ParagraphStart(at);
+			bool here = false;
+			foreach (int start in Neighbours(own)) {
 				var para = doc.Range2(start, start).Para;
-				if (Math.Abs(para.SpaceBefore - inflated) > 0.05f) break;
-				para.SpaceBefore = topOriginal;
+				if (!Spaced(para, gap.Applied)) continue;
+				para.SpaceBefore = gap.Original;
+				if (!here) { kept.Add(gap with { LineStart = start, LineEnd = start, Next = start, Track = null }); here = true; }
 			}
+			if (!here) lost = true;    // (joined to the paragraph before, which has its own spacing: worked out again)
 		}
-		removed = (found.Count == Gaps.Count ? gaps : new List<Gap>(), TopExtra);    // (gaps lost to editing: back when they are worked out again)
-		if (found.Count != Gaps.Count) Lost = true;
+		removed = lost ? new List<Gap>() : kept;
+		if (lost) Lost = true;
 		Gaps = new();
-		TopExtra = 0;
 	}
 
-	(List<Gap> Gaps, float Top) removed = (new(), 0);
+	List<Gap> removed = new();
 
-	/// The gap whose line has the caret (-1: none). Its raise is lifted while the caret is there: RichEdit draws the
-	/// caret at the end of a raised line at the line's bottom (the bottom of the gap), and what is typed there, which
-	/// isn't raised, there too, so that typing at a page's last line (a new document's only one) went to the bottom
-	/// of the page. Meanwhile that page has Print Layout's "Page N" line; the gap comes back when the caret leaves.
-	public int Lifted { get; private set; } = -1;
-	int liftedLength;
-
-	/// The gap whose line has a position (-1: none).
-	public int GapAt(int position) => Gaps.FindIndex(g => g.Track is { } line && position >= line.Start && position <= line.End);
-
-	/// Lifts a gap's raise (index -1: none), putting back the one lifted before.
-	public void Lift(int index) {
-		if (index == Lifted) return;
-		Unlift();
-		if (index < 0 || index >= Gaps.Count || Gaps[index].Track is not { } line || line.End <= line.Start) return;
-		editor.TextDocument.Range2(line.Start, line.End).Font.Position = 0;
-		Lifted = index;
-		liftedLength = line.End - line.Start;
-		liftedStory = editor.TextDocument.Range2(0, 0).StoryLength;
-	}
-	int liftedStory;
-
-	/// Puts the lifted gap's raise back, if the document is as it was; if anything was typed or deleted meanwhile (its
-	/// line may be longer, or no longer a page's last: Enter at a new document's only line), the gaps are worked out
-	/// again instead (Lost), the line left as it is.
-	public void Unlift() {
-		if (Lifted < 0) return;
-		if (Lifted < Gaps.Count && Gaps[Lifted].Track is { } line && line.End > line.Start && line.End - line.Start == liftedLength
-			&& editor.TextDocument.Range2(0, 0).StoryLength == liftedStory)
-			editor.TextDocument.Range2(line.Start, line.End).Font.Position = Gaps[Lifted].Raise;
-		else Lost = true;
-		Lifted = -1;
-	}
-
-	/// Remove found fewer or more raises than there were gaps (editing joined or deleted their lines), so Reapply can't
-	/// put them back: they are to be worked out again. The editor clears it when it has asked for that.
+	/// Remove couldn't find all the gaps (editing joined or deleted their lines or paragraphs), so Reapply can't put them
+	/// back: they are to be worked out again. The editor clears it when it has asked for that.
 	public bool Lost { get; set; }
 
 	/// Puts back the gaps Remove took out, as they were (the text in between unchanged).
-	public void Reapply() {
-		var (gaps, top) = removed;
-		Put(gaps, top);
-	}
+	public void Reapply() => Put(removed);
 
-	// Raises the gaps' lines and gives page 1 its space.
-	void Put(List<Gap> gaps, float top) {
+	// Raises the line gaps' lines and spaces the paragraph gaps' paragraphs.
+	void Put(List<Gap> gaps) {
 		var doc = editor.TextDocument;
 		int storyEnd = doc.Range2(0, 0).StoryLength;
 		string story = doc.Range2(0, storyEnd).Text ?? "";
 		var put = new List<Gap>();
-		foreach (var gap in gaps)
-			if (gap.LineEnd <= storyEnd && gap.LineEnd > gap.LineStart && !TouchesTable(story, gap.LineStart, gap.LineEnd)) {
+		foreach (var gap in gaps) {
+			if (gap.Paragraph) {
+				if (gap.Next >= storyEnd || (gap.Next > 0 && story[gap.Next - 1] != '\r')) continue;    // (no longer a paragraph's start)
+				var para = doc.Range2(gap.Next, gap.Next).Para;
+				float original = Math.Max(0, para.SpaceBefore);
+				para.SpaceBefore = original + gap.Height;
+				put.Add(gap with { Original = original, Applied = para.SpaceBefore, Track = doc.Range2(gap.Next, gap.Next) });
+			}
+			else if (gap.LineEnd <= storyEnd && gap.LineEnd > gap.LineStart && !TouchesTable(story, gap.LineStart, gap.LineEnd)) {
 				doc.Range2(gap.LineStart, gap.LineEnd).Font.Position = gap.Raise;
 				put.Add(gap with { Track = doc.Range2(gap.LineStart, gap.LineEnd) });
 			}
-		Gaps = put;
-		Lifted = -1;
-		if (top > 0 && storyEnd > 1) {
-			var para = doc.Range2(0, 0).Para;
-			topOriginal = Math.Max(0, para.SpaceBefore);
-			para.SpaceBefore = topOriginal + top;
-			TopExtra = top;
 		}
+		Gaps = put;
 	}
 
-	// A gap's line without the paragraph mark that ends it, unless that is all it has (an empty paragraph): where the
+	// A line without the paragraph mark that ends it, unless that is all it has (an empty paragraph): where the
 	// paragraph's line spacing is a multiple (double, 1.5 lines), RichEdit spaces every line of the paragraph by its
 	// mark's height, so a raised mark would make all of them as tall as the gap.
 	static void WithoutParagraphMark(ITextRange2 line, string story) {
@@ -237,40 +241,34 @@ public sealed class PageGaps
 		string story = doc.Range2(0, storyEnd).Text ?? "";
 		Pages = starts.Count;
 		var gaps = new List<Gap>();
-		if (starts.Count == 0 || story.Length < 2) { Put(gaps, 0); return; }
+		if (starts.Count == 0 || story.Length < 2) { Put(gaps); return; }
+		// page 1's top margin: space before the first paragraph (not before a table's first row)
+		if (!InTable(story, 0)) gaps.Add(new Gap(0, 0, 0, 0, 0, 0, 0, top, 0, Paragraph: true));
 		for (int k = 1; k < starts.Count; k++) {
 			int at = starts[k];
-			if (at <= 0 || at >= story.Length || InTable(story, at) || InTable(story, at - 1)) continue;
+			if (at <= 0 || at >= story.Length - 1 || InTable(story, at) || InTable(story, at - 1)) continue;
+			float slack = Math.Max(0, textArea - pages[k - 1].Height);
+			// a page that starts with a paragraph: space before it
+			if (story[at - 1] == '\r' && !(at >= 2 && story[at - 2] is RowEnd)) {
+				gaps.Add(new Gap(at, at, at, 0, slack, bottom, BandPoints, top, k, Paragraph: true));
+				continue;
+			}
+			// in the middle of a paragraph: the line before it raised
 			var line = doc.Range2(at - 1, at - 1);
 			line.Expand(5);    // tomLine
 			if (line.End > at) line.End = at;
 			if (TouchesTable(story, line.Start, line.End)) continue;
 			WithoutParagraphMark(line, story);
-			float slack = Math.Max(0, textArea - pages[k - 1].Height);
 			if (RaiseFor(line, slack + bottom + BandPoints + top) is not { } raise) continue;    // (spaced exactly: Print Layout's "Page N" line)
 			gaps.Add(new Gap(line.Start, line.End, at, raise, slack, bottom, BandPoints, top, k));
 		}
-		// the last page: the rest of its sheet and its bottom margin, after the document's last line
-		int lastChar = storyEnd - 2;    // (before the final paragraph mark)
-		if (lastChar >= 0 && !InTable(story, lastChar)) {
-			var line = doc.Range2(lastChar, lastChar);
-			line.Expand(5);
-			if (line.End > storyEnd - 1) line.End = storyEnd - 1;    // (not the story's final paragraph mark)
-			WithoutParagraphMark(line, story);
-			float slack = Math.Max(0, textArea - pages[^1].Height);
-			if (!TouchesTable(story, line.Start, Math.Max(line.End, line.Start + 1)))
-				if (RaiseFor(line, slack + bottom) is { } raise)
-					gaps.Add(new Gap(line.Start, Math.Max(line.End, line.Start + 1), -1, raise, slack, bottom, 0, 0, starts.Count));
-		}
-		Put(gaps, InTable(story, 0) ? 0 : top);
+		Put(gaps);
 	}
 
 	/// Forgets the gaps without touching the document (a new one was loaded, or they were taken out for good).
 	public void Forget() {
 		Gaps = new();
-		TopExtra = 0;
-		removed = (new(), 0);
-		Lifted = -1;
+		removed = new();
 	}
 
 	/// The document has raises of AhkWord's own (a gap's, moved by editing or left behind).
@@ -278,7 +276,7 @@ public sealed class PageGaps
 		var doc = editor.TextDocument;
 		int storyEnd = doc.Range2(0, 0).StoryLength;
 		var run = doc.Range2(0, 0);
-		while (run.Start < storyEnd) {    // (the final paragraph mark too: the last page's raise has it)
+		while (run.Start < storyEnd) {
 			run.MoveEnd(13, 1);
 			if (run.End <= run.Start) break;
 			if (Ours(run.Font.Position)) return true;
@@ -288,29 +286,78 @@ public sealed class PageGaps
 		return false;
 	}
 
-	/// What is typed at the caret isn't raised (on a gap's line, it would be).
-	public static void PlainTyping(ITextDocument2 doc) {
+	/// The space a gap adds before the paragraph a position is in (points; 0: none): formats read there leave it out.
+	public float ExtraAt(int position) {
+		if (!Applied) return 0;
+		int start = ParagraphStart(position);
+		foreach (var gap in Gaps)
+			if (gap.Paragraph && gap.Track is { } track && ParagraphStart(Math.Min(track.Start, Math.Max(0, editor.TextDocument.Range2(0, 0).StoryLength - 1))) == start)
+				return gap.Height;
+		return 0;
+	}
+
+	/// Whether any paragraph gap is in a paragraph from start to end.
+	public bool AnyParagraphGapIn(int start, int end) {
+		if (!Applied) return false;
+		int from = ParagraphStart(start);
+		return Gaps.Any(g => g.Paragraph && g.Track is { } track && track.Start >= from && track.Start <= Math.Max(end, start));
+	}
+
+	/// After an edit: Enter at a paragraph gap's paragraph start gives both paragraphs its space; only the first keeps it
+	/// (the page starts there), the other gets its own space back. Returns whether anything changed (check: whether
+	/// anything would, changing nothing: cheap, for after every keystroke).
+	public bool Tidy(bool check = false) {
+		if (!Applied) return false;
+		var doc = editor.TextDocument;
+		int storyEnd = doc.Range2(0, 0).StoryLength;
+		bool changed = false;
+		var gaps = Gaps.ToList();
+		for (int i = 0; i < gaps.Count; i++) {
+			var gap = gaps[i];
+			if (!gap.Paragraph || gap.Track is not { } track) continue;
+			int own = ParagraphStart(Math.Min(track.Start, Math.Max(0, storyEnd - 1)));
+			var spaced = Neighbours(own).Where(s => Spaced(doc.Range2(s, s).Para, gap.Applied)).ToList();
+			if (spaced.Count == 0) continue;
+			if (check) { if (spaced.Count > 1) return true; continue; }
+			foreach (int other in spaced.Skip(1)) { doc.Range2(other, other).Para.SpaceBefore = gap.Original; changed = true; }
+			if (spaced[0] != own) gaps[i] = gap with { Track = doc.Range2(spaced[0], spaced[0]) };
+		}
+		Gaps = gaps;
+		return changed;
+	}
+
+	/// What is typed at the caret: in a raised line, raised as it is (text that isn't would sit at the bottom of the
+	/// line, the gap's bottom); at its end (where the next page starts), as the text there.
+	public void TypingFormat() {
+		var doc = editor.TextDocument;
 		var selection = doc.Selection2;
-		if (selection.Start == selection.End && Ours(selection.Font.Position)) selection.Font.Position = 0;
+		if (selection.Start != selection.End) return;
+		int at = selection.Start;
+		foreach (var gap in Gaps) {
+			if (gap.Paragraph || gap.Track is not { } line) continue;
+			if (at >= line.Start && at < line.End) { if (Math.Abs(selection.Font.Position - gap.Raise) > 0.01f) selection.Font.Position = gap.Raise; return; }
+		}
+		if (Ours(selection.Font.Position)) selection.Font.Position = 0;
 	}
 
 	/// The rectangles (the editor's coordinates) of a gap: the rest of its sheet with the footer, the band, the next
-	/// sheet's top margin with its header. Bottom of the text above it: where the gap begins.
+	/// sheet's top margin with its header.
 	public (RectangleF Footer, RectangleF Band, RectangleF Header) Areas(Gap gap, float width, float pixelsPerPoint) {
-		float bottom;
-		int lineStart = gap.Track?.Start ?? gap.LineStart;    // (where editing has moved it)
-		if (gap.Next >= 0) {
-			// the next line: where the gap's line ends now (typing on it moves that)
-			var line = editor.TextDocument.Range2(lineStart, lineStart);
-			line.Expand(5);    // tomLine
-			bottom = PositionOf(gap.Track != null ? line.End : gap.Next).Y;
+		float topOfGap;
+		if (gap.Paragraph) {
+			// the paragraph's top: its space before begins with the gap
+			int at = gap.Track is { } track ? track.Start : gap.Next;
+			topOfGap = PositionOf(ParagraphStart(Math.Min(at, Math.Max(0, editor.TextDocument.Range2(0, 0).StoryLength - 1)))).Y;
 		}
 		else {
-			float lineHeight = Math.Max(1, editor.TextDocument.Range2(lineStart, lineStart + 1).Font.Size) * 1.2f * pixelsPerPoint;
-			bottom = PositionOf(lineStart).Y + lineHeight + gap.Height * pixelsPerPoint;
+			// the next line: where the raised line ends now (typing on it moves that)
+			int lineStart = gap.Track?.Start ?? gap.LineStart;
+			var line = editor.TextDocument.Range2(lineStart, lineStart);
+			line.Expand(5);    // tomLine
+			topOfGap = PositionOf(gap.Track != null ? line.End : gap.Next).Y - gap.Height * pixelsPerPoint;
 		}
-		float topOfGap = bottom - gap.Height * pixelsPerPoint;
-		float footerTop = topOfGap + gap.Slack * pixelsPerPoint, bandTop = footerTop + gap.Bottom * pixelsPerPoint, headerTop = bandTop + gap.Band * pixelsPerPoint;
-		return (new RectangleF(0, topOfGap, width, bandTop - topOfGap), new RectangleF(0, bandTop, width, gap.Band * pixelsPerPoint), new RectangleF(0, headerTop, width, bottom - headerTop));
+		float footerTop = topOfGap, bandTop = footerTop + (gap.Slack + gap.Bottom) * pixelsPerPoint, headerTop = bandTop + gap.Band * pixelsPerPoint;
+		float bottom = topOfGap + gap.Height * pixelsPerPoint;
+		return (new RectangleF(0, footerTop, width, bandTop - footerTop), new RectangleF(0, bandTop, width, gap.Band * pixelsPerPoint), new RectangleF(0, headerTop, width, bottom - headerTop));
 	}
 }

@@ -21,7 +21,14 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 41 adds to iteration 40:
+// Run it with AhkWord.ahk. Iteration 42 adds to iteration 41:
+//   - Show Pages redesigned (rte_pagegaps.cs): where a page starts with a paragraph, its gap is space before that
+//     paragraph (ordinary paragraph formatting: the caret and typing behave as anywhere); only where a page starts
+//     inside a paragraph is the line before it raised, and text typed in that line is raised with it (no more lifting
+//     the gap while the caret is on it, which moved the text by a page); no gap after the last page (where typing goes
+//     on). Enter at a page's first paragraph leaves the gap on one paragraph (PageGaps.Tidy); formats read and set
+//     there see the paragraph's own space before (FirstParagraphAsIs, ExtraAt).
+// Iteration 41 added to iteration 40:
 //   - AhkWord's icon (images\icon\ahkword.ico: a W whose strokes are A, H and K; the W alone at 16 to 24 pixels),
 //     drawn by images\icon\make_icon.py: the window's and the taskbar's (WriterForm.AppIcon), the tray's (AhkWord.ahk).
 //   - AhkWord is an app of its own on the taskbar (TaskbarIdentity): its app ID "AhkWord" for the process and its
@@ -475,7 +482,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 41;    // (the About box; make_version.ps1)
+	public const int Iteration = 42;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -677,14 +684,17 @@ class WriterForm : Form
 		automationLabel.ToolTipText = $"AHK scripts can control this editor (RteClient2.ahk). Server window 0x{server.Handle.ToInt64():X}";
 
 		Editor.SelectionChanged += (s, e) => {
-			if (pageGaps.Applied && !quietGaps) PageGaps.PlainTyping(Editor.TextDocument);    // (what is typed at a gap's line isn't raised)
-			if (pageGaps.Applied && !quietGaps) CaretGap();    // (nor is the line with the caret: its gap is lifted)
+			if (pageGaps.Applied && !quietGaps) pageGaps.TypingFormat();    // (typed in a raised line: raised as it is)
 			// the caret guard looks once the command that moved the caret has finished (commands move it on the way)
 			if (!guardPending && IsHandleCreated) { guardPending = true; BeginInvoke(() => { guardPending = false; GuardLegalCaret(); }); }
 			UpdateUi();
 			Restart(selectionEventTimer);
 		};
-		Editor.TextChanged += (s, e) => { wordCountTimer.Stop(); wordCountTimer.Start(); UpdateTitle(); Restart(textEventTimer); Restart(outlineTimer); Restart(legalTimer); };
+		Editor.TextChanged += (s, e) => {
+			wordCountTimer.Stop(); wordCountTimer.Start(); UpdateTitle(); Restart(textEventTimer); Restart(outlineTimer); Restart(legalTimer);
+			// (Enter at a page's first paragraph gave both paragraphs its gap: the first keeps it)
+			if (pageGaps.Applied && !quietGaps && !gapsOut && pageGaps.Tidy(check: true)) QuietGaps(() => pageGaps.Tidy());
+		};
 		legalTimer.Tick += (s, e) => { legalTimer.Stop(); CheckLegalNumbers(); };
 		LegalLists.Format = Enum.TryParse<LegalLists.Periods>(Settings.LegalFormat, true, out var legalFormat) ? legalFormat : LegalLists.Periods.Top;
 		LegalLists.StyleNumbering = id => Styles.ById(id) is { Numbered: true } numbered ? (numbered.Numbering, Math.Clamp(numbered.NumberLevel, 1, 9) - 1) : null;
@@ -2010,14 +2020,6 @@ class WriterForm : Form
 		doc.Freeze();
 		try {
 			change();
-			// the line with the caret: its gap lifted before the editor shows anything (a raised line with the caret makes
-			// a focused editor scroll to the caret, drawn at the bottom of the gap, and stay there)
-			if (pageGaps.Applied) {
-				var selection = doc.Selection2;
-				int index = pageGaps.GapAt(selection.Start);
-				if (index < 0 && selection.End != selection.Start) index = pageGaps.GapAt(selection.End);
-				pageGaps.Lift(index);
-			}
 		} finally {
 			doc.Unfreeze();
 			SendMask(Editor.Handle, EM_SETEVENTMASK_GAPS, IntPtr.Zero, mask);
@@ -2036,16 +2038,6 @@ class WriterForm : Form
 		}
 	}
 
-	// The gap of the line with the caret lifted while it is there (PageGaps.Lift), and the one before put back.
-	void CaretGap() {
-		if (!pageGaps.Applied || quietGaps || gapsOut || !Editor.IsHandleCreated) return;
-		var selection = Editor.TextDocument.Selection2;
-		int index = pageGaps.GapAt(selection.Start);
-		if (index < 0 && selection.End != selection.Start) index = pageGaps.GapAt(selection.End);
-		if (index == pageGaps.Lifted) return;
-		QuietGaps(() => pageGaps.Lift(index));
-	}
-
 	// Rte.PageViewReport: positions and sizes only.
 	internal string PageViewReport() {
 		var r = new StringBuilder();
@@ -2060,12 +2052,12 @@ class WriterForm : Form
 			using var printer = CreatePrinter();
 			r.AppendLine($"Printer {printer.Document.PrinterSettings.PrinterName}; printed pages start at {string.Join(" ", printer.PageHeights().Select(p => $"{p.Start} (p{ParagraphOf(p.Start)}, {p.Height:0} pt)"))}");
 		} catch (Exception ex) { r.AppendLine("Printed pages: " + ex.Message); }
-		r.AppendLine($"Gaps {pageGaps.Gaps.Count} for {pageGaps.Pages} pages, page 1's top {pageGaps.TopExtra:0.#} pt, lifted for the caret: {(pageGaps.Lifted >= 0 ? "page " + pageGaps.Gaps[pageGaps.Lifted].Page : "none")}");
+		r.AppendLine($"Gaps {pageGaps.Gaps.Count} for {pageGaps.Pages} pages ({pageGaps.Gaps.Count(g => g.Paragraph)} as space before a paragraph), page 1's top {pageGaps.TopExtra:0.#} pt");
 		int top = Editor.GetCharIndexFromPosition(new Point(1, 1));
 		foreach (var gap in pageGaps.Gaps) {
 			var para = doc.Range2(gap.LineStart, gap.LineStart).Para;
 			var (footer, band, header) = pageGaps.Areas(gap, Editor.ClientSize.Width, Editor.PixelsPerPoint);
-			r.AppendLine($"  page {gap.Page}: p{ParagraphOf(gap.LineStart)} line {gap.LineStart}-{gap.LineEnd}, next {gap.Next}, raise {gap.Raise:0.##} pt, height {gap.Height:0.#} pt, spacing rule {para.LineSpacingRule} {para.LineSpacing:0.##}; " +
+			r.AppendLine($"  page {gap.Page}: p{ParagraphOf(gap.LineStart)} {(gap.Paragraph ? $"space before (its own {gap.Original:0.#} pt, now {gap.Applied:0.#})" : $"line {gap.LineStart}-{gap.LineEnd} raised {gap.Raise:0.##} pt")}, next {gap.Next}, height {gap.Height:0.#} pt, spacing rule {para.LineSpacingRule} {para.LineSpacing:0.##}; " +
 				$"line at y {Editor.GetPositionFromCharIndex(gap.LineStart).Y}, next at y {(gap.Next >= 0 ? Editor.GetPositionFromCharIndex(gap.Next).Y : -1)}, band {band.Top:0}-{band.Bottom:0}");
 		}
 		var run = doc.Range2(0, 0);
@@ -2126,9 +2118,9 @@ class WriterForm : Form
 	/// taken out while it runs if the selection is in the first paragraph (or all: a style changed), and the gaps put
 	/// back after it (worked out again if it changed something).
 	internal IDisposable FirstParagraphAsIs(bool changes, bool all = false) {
-		if (gapsOut || quietGaps || pageGaps.TopExtra <= 0) return new OnDispose(() => { });
+		if (gapsOut || quietGaps || !pageGaps.Applied) return new OnDispose(() => { });
 		var doc = Editor.TextDocument;
-		if (!all && doc.Selection2.Start >= StyleEngine.Paragraphs(doc, 0, 0)[0].End) return new OnDispose(() => { });
+		if (!all && !pageGaps.AnyParagraphGapIn(doc.Selection2.Start, doc.Selection2.End)) return new OnDispose(() => { });
 		QuietGaps(pageGaps.Remove);
 		gapsOut = true;
 		return new OnDispose(() => {
@@ -2169,7 +2161,7 @@ class WriterForm : Form
 		using var grey = new SolidBrush(PrintLayoutPage.Surround);
 		float ppp = Editor.PixelsPerPoint;
 		foreach (var gap in pageGaps.Gaps) {
-			if (gap.Next < 0 || pageGaps.Gaps.IndexOf(gap) == pageGaps.Lifted) continue;    // (the caret's line's: lifted)
+			if (gap.Page == 0) continue;    // (page 1's top: no band)
 			var (_, band, _) = pageGaps.Areas(gap, Editor.ClientSize.Width, ppp);
 			float y = Editor.Top + band.Y;
 			if (y + band.Height < 0 || y > pagePanel.Height) continue;
@@ -2556,6 +2548,10 @@ class WriterForm : Form
 		bool added;
 		doc.BeginEditCollection();
 		try {
+			// whole paragraphs pasted at the start of a numbered paragraph's text (the caret can't go before its number):
+			// before the paragraph, as Word puts them, so that each is an item of its own; else a pasted paragraph's own
+			// number stayed in front of its text after the item's ("2.<tab>4.<tab>Delta")
+			BeforeNumber();
 			added = StyleClipboard.Paste(Editor, Styles, paste);
 			var (start, end) = StyleClipboard.Pasted;
 			StyleEngine.JoinPasted(doc, Styles, start, end);
@@ -2564,6 +2560,20 @@ class WriterForm : Form
 		}
 		if (added) FillStyleBox();
 		RefreshOutline();
+	}
+
+	// The selection's start at a numbered (legal or numbered style's) paragraph's text, and what is pasted whole
+	// paragraphs (its text ends with a paragraph mark): the start moved before the paragraph's number.
+	void BeforeNumber() {
+		var doc = Editor.TextDocument;
+		var selection = doc.Selection2;
+		if (LegalLists.Touched(doc, selection.Start, selection.Start).FirstOrDefault() is not { Legal: true, PrefixLength: > 0 } p) return;
+		if (selection.Start != p.Start + p.PrefixLength) return;
+		string text;
+		try { text = StyleClipboard.Read()?.GetData(DataFormats.UnicodeText) as string ?? ""; }
+		catch (ExternalException) { return; }
+		if (!text.EndsWith("\n") && !text.EndsWith("\r")) return;
+		selection.SetRange(p.Start, Math.Max(p.Start, selection.End));
 	}
 
 	// ---------------------------------------------------------------- Iteration 10: legal numbering
@@ -3379,7 +3389,7 @@ class WriterForm : Form
 			toggleButtons[id].BooleanValue = spacing == value;
 		// (page 1's top margin, the page view's space before the first paragraph, isn't the paragraph's)
 		float before = LineSpacing.SpaceOf(range, true);
-		if (pageGaps.TopExtra > 0 && range.Start < StyleEngine.Paragraphs(Editor.TextDocument, 0, 0)[0].End) before -= pageGaps.TopExtra;
+		if (pageGaps.Applied) before -= pageGaps.ExtraAt(range.Start);    // (a page's first paragraph: the gap isn't its own space)
 		toggleButtons[RibbonCommand.SpaceBefore].BooleanValue = before > 0.05f;
 		toggleButtons[RibbonCommand.SpaceAfter].BooleanValue = LineSpacing.SpaceOf(range, false) > 0;
 		toggleButtons[RibbonCommand.LineNumbersNone].BooleanValue = !Numbering.On;
@@ -7692,10 +7702,6 @@ sealed class WriterEditBox : RichEditBox
 			var client = ClientRectangle;
 			if (Gaps is { Applied: true } gaps) {
 				float ppp = PixelsPerPoint;
-				if (gaps.TopExtra > 0) {
-					int y0 = gaps.PositionOf(0).Y;
-					if (y0 + gaps.TopExtra * ppp > 0 && y0 < client.Bottom) Invalidate(new Rectangle(0, y0, client.Width, (int)Math.Ceiling(gaps.TopExtra * ppp) + 1), false);
-				}
 				foreach (var gap in gaps.Gaps) {
 					var (footer, _, header) = gaps.Areas(gap, client.Width, ppp);
 					if (header.Bottom < client.Top || footer.Top > client.Bottom) continue;
@@ -7786,16 +7792,11 @@ sealed class WriterEditBox : RichEditBox
 				g.DrawString(text, font, ink, area, format);
 			}
 		}
-		if (gaps.TopExtra > 0) {
-			float y0 = gaps.PositionOf(0).Y, height = gaps.TopExtra * ppp;    // (y0: the paragraph's top, its space before included)
-			if (y0 + height > client.Top) Parts(BandParts?.Invoke(true, 1), new RectangleF(0, y0, width, height));
-		}
 		foreach (var gap in gaps.Gaps) {
-			if (gaps.Gaps.IndexOf(gap) == gaps.Lifted) continue;    // (the caret's line's: lifted while it is there)
 			var (footer, band, header) = gaps.Areas(gap, width, ppp);
 			if (header.Bottom < client.Top || footer.Top > client.Bottom) continue;
+			if (gap.Page == 0) { Parts(BandParts?.Invoke(true, 1), header); continue; }    // (page 1's top margin: its header)
 			Parts(BandParts?.Invoke(false, gap.Page), new RectangleF(0, band.Top - gap.Bottom * ppp, width, gap.Bottom * ppp));
-			if (gap.Next < 0) continue;
 			g.FillRectangle(grey, band);
 			g.DrawLine(edge, band.Left, band.Top, band.Right, band.Top);
 			g.DrawLine(edge, band.Left, band.Bottom - 1, band.Right, band.Bottom - 1);
@@ -7808,7 +7809,7 @@ sealed class WriterEditBox : RichEditBox
 	/// Pages the page view has a gap before are left out.
 	public void DrawPageBoundaries(Graphics g) {
 		if (pageStarts is not { Count: > 1 } starts) return;
-		var covered = Gaps is { Applied: true } withGaps ? withGaps.Gaps.Where((x, i) => i != withGaps.Lifted).Select(x => x.Next).ToHashSet() : new HashSet<int>();
+		var covered = Gaps is { Applied: true } withGaps ? withGaps.Gaps.Where(x => x.Page > 0).Select(x => x.Next).ToHashSet() : new HashSet<int>();
 		var client = ClientRectangle;
 		int storyEnd = TextDocument.Range2(0, 0).StoryLength;
 		string story = "";
