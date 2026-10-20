@@ -168,6 +168,10 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 ## Getting started
 
+**Without AutoHotkey:** a release download (on the repository's Releases page) has `AhkWord.exe`, a copy of AutoHotkey v2 under AhkWord's name: install the .NET 10 Desktop Runtime, unzip it, and double-click `AhkWord.exe` (its `START HERE.txt` says the same). `make_release.ps1` makes such a download from the last commit.
+
+**From the repository:**
+
 1. Install the requirements above: the .NET 10 Desktop Runtime and 64-bit AutoHotkey v2 (the C# compiler is downloaded on the first start if none is installed).
 2. Clone this repository.
 3. Run `AhkWord.ahk`. To open a document at start, pass its path: `AhkWord.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`, and `examples\Styles Tutorial.rtf`, a tutorial on styles, style sets and paragraph settings that uses them itself.

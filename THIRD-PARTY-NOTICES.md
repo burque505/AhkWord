@@ -26,6 +26,14 @@ These are not included in this repository. Csharp-in-AHK downloads them from nug
 | [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (Microsoft) | The ribbon's icons in `ribbon/RteRibbon.ribbon`, drawn from the icon font by `ribbon/make_icons.cs`. The font itself is downloaded by `ribbon/build_ribbon.ahk` when the ribbon is rebuilt, and is not included. | MIT | [FluentUISystemIcons-MIT.txt](licenses/FluentUISystemIcons-MIT.txt) |
 | [Csharp-in-AHK](https://github.com/burque505/Csharp-in-AHK) | `Csharp-in-AHK.ahk`, `Csx-in-AHK.ahk`, `Csharp-in-AHK-Paths.ahk`, `Csharp-in-AHK.example.ini` | MIT, by the author of AhkWord | [LICENSE](LICENSE) |
 
+## In the release download only
+
+| Component | Where | License | Text |
+|---|---|---|---|
+| [AutoHotkey](https://www.autohotkey.com/) v2 (64-bit) | `AhkWord.exe`: AutoHotkey64.exe, unchanged, under AhkWord's name, so that AhkWord runs without AutoHotkey installed. Not in this repository; `make_release.ps1` copies it from an installed AutoHotkey into the download, with its license and `AhkWord.exe.txt`, which names its version and where its source code is (github.com/AutoHotkey/AutoHotkey, that version's tag). | GNU General Public License v2 | `licenses/AutoHotkey-GPL-2.0.txt`, in the download |
+
+AhkWord.exe is only bundled with AhkWord's files; AhkWord itself stays under the MIT license.
+
 ## Programs used if installed
 
 Microsoft Word, LibreOffice and pandoc convert Word and OpenDocument files when they are installed. They are separate programs under their own licenses, and are neither included nor required. The Windows SDK and the Visual Studio C++ tools are needed only to rebuild the ribbon.
