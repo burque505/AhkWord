@@ -17,6 +17,8 @@ Pick a style in the **Style** box on the Home tab, or press Ctrl+0 for Normal, C
 
 When a style changes, its paragraphs keep the formatting of their own (a bold word, for instance), as in Word.
 
+![Modify Style for Numbered Paragraph: name, font, alignment, indents, spacing, numbering 1. at level 1, sub-levels and sub-level indent, and a preview](../assets/modify-style.png)
+
 Copy and paste keep paragraphs' styles, also between AhkWord windows.
 
 ## Style sets
@@ -38,6 +40,8 @@ The Styles drop-down shows the document's set ("Styles: Classic"), with "(change
 
 !!! example "A firm's or court's paragraph style for all your new documents"
     Open a new document, choose **Home > Styles > Copy Styles from Document...**, pick a document that has the style (say *Law Paragraph*), tick only that style and **Also for new documents**, and press Copy. Every new document has it from then on.
+
+![Copy Styles from Document: a firm's styles listed, each marked new here or replacing this document's, Firm Paragraph ticked, its settings shown below the list](../assets/copy-styles.png)
 
 ## Documents from elsewhere
 

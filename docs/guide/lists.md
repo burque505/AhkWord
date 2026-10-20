@@ -28,6 +28,8 @@ Tick **Tab and Shift+Tab give an item its new level's numbering style** (on at f
 
 The levels belong to the document: they are saved in it, and in Word files as the lists' own levels, and a Word document you open brings its lists' indents. **Also for new documents** (ticked at first) makes them your levels for new documents too. **Apply to the current list** gives an existing list the new levels.
 
+![The List levels dialog: for each of nine levels its numbering, punctuation, start, Number at and Text at; the first three levels at 18 and 36, 54 and 72, 90 and 108 points; a preview beside them](../assets/list-levels.png)
+
 ## Legal numbering
 
 The **1.1** button (Ctrl+Shift+G) numbers the selected paragraphs 1., 1.1, 1.1.1 by level: Tab and Shift+Tab move an item a level in or out, and Enter, Backspace and Delete keep the numbers right. List Levels sets where each level's number and text start, and whether the numbers end in a period (1. 1.1 1.1.1, or 1. 1.1. 1.1.1., or none). Word and LibreOffice get real list numbering, which renumbers itself when the document is edited there.
@@ -48,6 +50,8 @@ Numbered styles are made so that **cutting and pasting never mangles the numberi
 **Tab** on a numbered paragraph makes it a point under the one before it (a., b. under 1.; i., ii. a level further in); **Shift+Tab** takes it back out. The sub-levels go 1. / a. / i. / (1) / (a) / (i) unless the style says otherwise: **Modify Style > Sub-levels** sets a style's own ("(a), (i)"), and **Sub-level indent** how much further in each sub-level is (36 points at first). The style's own indents (*Indent left*, *First line*) set where its numbers and lines start.
 
 Tab at the start of a numbered style's paragraph whose numbering is off (see below) makes it a sub-level item too, and removes a letter typed in front of it ("a. "). So does Tab over several such paragraphs selected together.
+
+![Numbered paragraphs 1. to 4. of a motion, with points a. to c. a level in under paragraph 2](../assets/motion-numbered.png)
 
 ### Numbering off
 

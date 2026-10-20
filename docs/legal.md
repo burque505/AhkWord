@@ -13,6 +13,8 @@ Court papers and contracts number their paragraphs, and the numbers must stay ri
 
 [Lists and numbering](guide/lists.md#numbered-styles) explains it all. For outlines numbered 1.1 and 1.1.1, use [legal numbering](guide/lists.md#legal-numbering).
 
+![A motion with numbered paragraphs 1. to 4., points (a) to (c) under paragraph 2, and line numbers 1 to 17 in the margin](assets/motion-numbered.png)
+
 ## Your firm's or the court's styles
 
 A firm or court often has its own paragraph style: a particular indent, double spacing, numbering. Use it in every new document with **Home > Styles > Copy Styles from Document**: pick a document that has the style, tick it and **Also for new documents**. See [Styles](guide/styles.md#your-own-styles-for-every-new-document).
@@ -24,6 +26,9 @@ A firm or court often has its own paragraph style: a particular indent, double s
 ## Court papers from templates
 
 **File > New from Template > Court Paper** makes a court paper with its caption and a certificate of service, asking for the court, the county or district, the parties, the case number and the paper's title. **Insert from Template** adds a Caption, a Signature Block or a Certificate of Service to a paper you are writing. Your own name, address, phone and e-mail are remembered; the case's details are asked for each time. Make your own templates from papers you have filed: see [Templates](guide/templates.md).
+
+!!! warning "Make Court Paper your court's"
+    The built-in Court Paper is a generic starting point, not any court's required format. Courts differ in their captions, margins, line numbering, signature blocks and certificates of service: adapt it to each court you file in, and check it against that court's local rules. [Adapting the built-in templates](guide/templates.md#adapting-the-built-in-templates) shows how, keeping one template for each court.
 
 ## Working with Word
 
