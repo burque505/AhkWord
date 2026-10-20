@@ -1,5 +1,6 @@
 # AhkWord's documentation (MkDocs with the Material theme). Build or preview it with make_docs.py.
 site_name: AhkWord
+site_url: https://burque505.github.io/AhkWord/
 site_description: A word processor for Windows that AutoHotkey scripts can drive while you type.
 repo_url: https://github.com/burque505/AhkWord
 repo_name: burque505/AhkWord

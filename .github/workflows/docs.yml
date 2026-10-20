@@ -1,0 +1,53 @@
+# AhkWord's documentation on GitHub Pages (https://burque505.github.io/AhkWord/): built with MkDocs and the Material
+# theme on each push that changes the pages or AhkWord.cs (whose EditorApi make_docs.py turns into the API reference),
+# and published. Run it by hand from the Actions tab too.
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "make_docs.py"
+      - "AhkWord.cs"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install MkDocs and Material (the versions docs/requirements.txt pins)
+        run: pip install -r docs/requirements.txt
+      - name: The API reference, from AhkWord.cs
+        run: python make_docs.py
+      - name: Build the site
+        run: python -m mkdocs build --strict
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
