@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer37.cs
-     loads. Command Ids must match the RibbonCommand enum in rte_writer37.cs. Images: build\icons, made by make_icons.cs. -->
+<!-- RTE Writer's ribbon (Windows Ribbon markup). build_ribbon.ahk compiles it into RteRibbon.ribbon, which rte_writer38.cs
+     loads. Command Ids must match the RibbonCommand enum in rte_writer38.cs. Images: build\icons, made by make_icons.cs. -->
 <Application xmlns="http://schemas.microsoft.com/windows/2009/Ribbon">
   <Application.Commands>
     <Command Name="cmdTabHome" Id="100" LabelTitle="Home" Keytip="H" />
@@ -979,7 +979,7 @@
     <Command Name="cmdListLowerRoman" Id="265" LabelTitle="i, ii, iii" Keytip="R" />
     <Command Name="cmdListUpperRoman" Id="266" LabelTitle="I, II, III" Keytip="O" />
     <Command Name="cmdListNone" Id="393" LabelTitle="&amp;No numbering" Keytip="N" TooltipTitle="No numbering" TooltipDescription="The selected paragraphs are no longer list items: their numbers or bullets go, their text stays." />
-    <Command Name="cmdListLevels" Id="267" LabelTitle="List &amp;Levels..." Keytip="L" TooltipTitle="List levels" TooltipDescription="The numbering style, punctuation and start number of each level (Tab and Shift+Tab change an item's level)." />
+    <Command Name="cmdListLevels" Id="267" LabelTitle="List &amp;Levels..." Keytip="L" TooltipTitle="List levels" TooltipDescription="Each level's numbering style, punctuation, start number, and where its number and text start (Tab and Shift+Tab change an item's level)." />
     <Command Name="cmdAutoLevel" Id="268" LabelTitle="&amp;Automatic numbering style per level" Keytip="A" />
     <Command Name="cmdRestartNumbering" Id="269" LabelTitle="&amp;Restart numbering..." Keytip="R" />
     <Command Name="cmdContinueNumbering" Id="270" LabelTitle="&amp;Continue numbering" Keytip="C" />
@@ -2042,7 +2042,6 @@
                   </MenuGroup>
                 </DropDownButton>
                 <Button CommandName="cmdListLevels" />
-                <ToggleButton CommandName="cmdAutoLevel" />
               </MenuGroup>
               <MenuGroup>
                 <Button CommandName="cmdRestartNumbering" />

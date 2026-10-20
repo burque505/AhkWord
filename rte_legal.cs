@@ -279,10 +279,22 @@ public static class LegalLists
 	// ---------------------------------------------------------------- making and removing legal lists
 
 	/// Indents for a legal item at a level, in points: (first line, left). The hanging part holds the number.
-	/// The number starts where an ordinary list's number at the same level does (18 points a level, from 18).
-	public static (float First, float Left) Indents(int level) {
-		float hang = Hang[Math.Clamp(level, 0, 9)];
-		return (-hang, 18 * (level + 1) + hang);
+	/// The number starts where an ordinary list's number at the same level does (IndentsFor).
+	public static (float First, float Left) Indents(int level) => IndentsFor(level, Hang[Math.Clamp(level, 0, 9)]);
+
+	/// The document's list levels' own indents (Paragraph > List levels: Number at, Text at, points from the margin;
+	/// null: automatic), set by the editor; null: none set.
+	public static Func<int, (float? NumberAt, float? TextAt)>? LevelIndents;
+
+	/// A list item's indents at a level, in points: (first line, left). The number at the level's Number at (automatic:
+	/// 18 points a level, from 18), the text at its Text at (automatic: after the number, hang: the level's widest
+	/// number and a gap). Lists, legal numbering and the Word and OpenDocument lists all take them from here.
+	public static (float First, float Left) IndentsFor(int level, float hang) {
+		level = Math.Clamp(level, 0, 8);
+		var (numberAt, textAt) = LevelIndents?.Invoke(level) ?? (null, null);
+		float number = numberAt ?? 18 * (level + 1);
+		float text = textAt ?? number + hang;
+		return (number - text, text);
 	}
 
 	/// The paragraphs from start to end (positions) that the selection touches.
@@ -646,7 +658,8 @@ public static class LegalLists
 					para.ListType = item.Type;
 					para.ListLevelIndex = item.Level;
 					para.ListStart = item.Start;
-					para.SetIndents(18, item.Level * 18, para.RightIndent);    // (as the Markdown converter sets list indents)
+					var (first, left) = IndentsFor(item.Level, 18);    // (its level's: the document's list levels, else automatic)
+					para.SetIndents(first, left, para.RightIndent);
 					count++;
 				}
 			}

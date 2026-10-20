@@ -21,7 +21,19 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer37.ahk. Iteration 37 adds to iteration 36:
+// Run it with rte_writer38.ahk. Iteration 38 adds to iteration 37:
+//   - List levels' indents: Paragraph > List levels has Number at and Text at for each level (points from the margin,
+//     Word's number position and text indent; empty: automatic, as before). The levels are the document's
+//     (WriterForm.Levels; {\*\rtewriterlevels} in its RTF; a .docx's from where its list paragraphs are drawn,
+//     OfficeConverters.ListLevelIndents), and new documents' unless "Also for new documents" is unticked. Lists made,
+//     nested or given their levels, legal numbering, typed numbers made lists, and the Word and OpenDocument lists all
+//     take them (LegalLists.IndentsFor). Scripts: Rte.SetListLevel(1, "Decimal", ".", 1, 36, 72).
+//   - Automatic numbering style per level is List levels' checkbox now, no longer a menu item right under List
+//     Levels (one click turned it off unnoticed). Scripts: Rte.AutomaticNumberingPerLevel := 0.
+//   - Fixes: ordinary lists lost their indents through Word (back at 18/0 through LibreOffice; through the built-in
+//     converter made a numbered style of Word's List Paragraph); new lists were drawn at the margin until saved;
+//     ending a list left its hanging indent.
+// Iteration 37 added to iteration 36:
 //   - Sub-levels in numbered styles: Tab and Shift+Tab move a numbered style's paragraph to a sub-level under the
 //     one before it, numbered by ParagraphStyle.FormatAt (1. / a. / i. / (1) / (a) / (i) ... from the style's own
 //     format, or ParagraphStyle.SubLevels, Modify Style > Sub-levels), its indent a level further in
@@ -639,6 +651,9 @@ class WriterForm : Form
 		LegalLists.Format = Enum.TryParse<LegalLists.Periods>(Settings.LegalFormat, true, out var legalFormat) ? legalFormat : LegalLists.Periods.Top;
 		LegalLists.StyleNumbering = id => Styles.ById(id) is { Numbered: true } numbered ? (numbered.Numbering, Math.Clamp(numbered.NumberLevel, 1, 9) - 1) : null;
 		LegalLists.StyleFormat = (id, level) => Styles.ById(id) is { Numbered: true } numbered ? numbered.FormatAt(level - (Math.Clamp(numbered.NumberLevel, 1, 9) - 1)) : null;    // (and its sub-levels)    // (numbered styles)
+		// (the document's list levels' indents, for lists, legal numbering and the exports' lists)
+		Levels = DefaultLevels();
+		LegalLists.LevelIndents = level => level < Levels.Count ? (Levels[level].NumberAt, Levels[level].TextAt) : (null, null);
 		Editor.ContextMenuHook = ShowContextMenu;
 		Editor.OpenLink = OpenLinkCommand;
 		Editor.AltTextOf = position => api.PictureAltText(position);
@@ -805,7 +820,7 @@ class WriterForm : Form
 			Button(id, () => api.ToggleList(style), Keys.None, M("ToggleList", style));
 		Button(RibbonCommand.ListNone, () => api.RemoveList(), Keys.None, M("RemoveList"));
 		Button(RibbonCommand.ListLevels, ListLevelsCommand);
-		Toggle(RibbonCommand.AutoLevel, () => AutoLevelStyles = !AutoLevelStyles);
+		// (iteration 38: automatic numbering style per level is List levels' checkbox, not a menu item one click from it)
 		Button(RibbonCommand.RestartNumbering, RestartNumberingCommand);
 		Button(RibbonCommand.ContinueNumbering, () => api.ContinueNumbering(), Keys.None, M("ContinueNumbering"));
 		Button(RibbonCommand.ConvertTyped, () => {
@@ -1367,6 +1382,24 @@ class WriterForm : Form
 	/// (RTE Writer's own RTF), else the default ones. The styles its paragraphs use that weren't defined are defined from
 	/// the first paragraph with each (the document keeps its look), or, with takeLook (Markdown, plain text, which have
 	/// no look of their own), its paragraphs are given the styles' look.
+	/// Iteration 38: the document's list levels (Paragraph > List levels): numbering, start and indents of each level,
+	/// saved in RTE Writer's RTF ({\*\rtewriterlevels}); a new document, or one from elsewhere, has the default ones
+	/// (Settings.ListLevels). Always 9.
+	internal List<ListLevel> Levels = new();
+	static bool LevelsSame(List<ListLevel> a, List<ListLevel> b) => a.Count == b.Count && a.Zip(b).All(p =>
+		p.First.Style == p.Second.Style && p.First.Punctuation == p.Second.Punctuation && p.First.Start == p.Second.Start
+		&& p.First.NumberAt == p.Second.NumberAt && p.First.TextAt == p.Second.TextAt);
+
+	/// The document's list levels changed: legal numbering's items take their levels' indents (they all follow them,
+	/// one numbering); the document has changed.
+	internal void LevelsChanged() {
+		var doc = Editor.TextDocument;
+		if (LegalLists.Paragraphs(doc).Any(p => p.Legal && !p.Styled)) LegalLists.Grouped(Editor, () => { });
+		Editor.Modified = true;
+	}
+
+	internal List<ListLevel> DefaultLevels() => Enumerable.Range(0, 9).Select(i => (i < Settings.ListLevels.Count ? Settings.ListLevels[i] : global::ListLevel.Defaults()[i]).Copy()).ToList();
+
 	/// The numbered items' ListStart values the RTF being loaded kept (LegalLists.StartsFrom), for StylesAfterLoad.
 	internal List<(int Start, int Level)>? LoadedListStarts;
 
@@ -2767,10 +2800,25 @@ class WriterForm : Form
 	// ---------------------------------------------------------------- Iteration 8: list levels
 
 	void ListLevelsCommand() {
-		using var dlg = new ListLevelsDialog(Settings.ListLevels, api.InList(), LegalLists.Format);
+		using var dlg = new ListLevelsDialog(Levels, api.InList(), LegalLists.Format, AutoLevelStyles);
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
-		Settings.ListLevels = dlg.Levels;
-		Settings.Save();
+		if (dlg.AutomaticPerLevel != AutoLevelStyles) {
+			AutoLevelStyles = Settings.AutoLevelStyles = dlg.AutomaticPerLevel;    // (an app setting, as before)
+			Settings.Save();
+			Record(M("AutomaticNumberingPerLevel", AutoLevelStyles));
+		}
+		// (the document's levels; and new documents' unless told otherwise)
+		bool changed = !LevelsSame(Levels, dlg.Levels);
+		Levels = dlg.Levels;
+		if (dlg.ForNewDocuments) {
+			Settings.ListLevels = dlg.Levels.Select(l => l.Copy()).ToList();
+			Settings.Save();
+		}
+		if (changed) LevelsChanged();
+		for (int i = 0; changed && i < 9; i++) {
+			var l = Levels[i];
+			Record(M("SetListLevel", i + 1, l.Style, l.Punctuation, l.Start, l.NumberAt ?? -1f, l.TextAt ?? -1f, dlg.ForNewDocuments));
+		}
 		if (dlg.LegalFormat != LegalLists.Format) {
 			api.LegalFormat = dlg.LegalFormat.ToString();
 			Record(M("LegalFormat", dlg.LegalFormat.ToString()));
@@ -3269,7 +3317,6 @@ class WriterForm : Form
 		if (pageGaps.TopExtra > 0 && range.Start < StyleEngine.Paragraphs(Editor.TextDocument, 0, 0)[0].End) before -= pageGaps.TopExtra;
 		toggleButtons[RibbonCommand.SpaceBefore].BooleanValue = before > 0.05f;
 		toggleButtons[RibbonCommand.SpaceAfter].BooleanValue = LineSpacing.SpaceOf(range, false) > 0;
-		toggleButtons[RibbonCommand.AutoLevel].BooleanValue = AutoLevelStyles;
 		toggleButtons[RibbonCommand.LineNumbersNone].BooleanValue = !Numbering.On;
 		toggleButtons[RibbonCommand.LineNumbersContinuous].BooleanValue = Numbering.Mode == LineNumbering.Modes.Continuous;
 		toggleButtons[RibbonCommand.LineNumbersEachPage].BooleanValue = Numbering.Mode == LineNumbering.Modes.EachPage;
@@ -3939,6 +3986,7 @@ public class EditorApi
 	/// Starts a new, empty document (unsaved changes are discarded).
 	public void New() {
 		form.Styles = form.DefaultStyles();
+		form.Levels = form.DefaultLevels();
 		form.UseNormalFont();
 		ed.Html = "";
 		StyleEngine.Apply(ed.TextDocument, form.Styles, form.Styles.Normal, 0, 0);
@@ -3981,6 +4029,7 @@ public class EditorApi
 		var bands = HeaderFooter.FromRtf(rtf);
 		var numbering = LineNumberFormats.FromRtf(rtf);
 		form.Styles = form.DefaultStyles();
+		form.Levels = form.DefaultLevels();
 		Rtf = rtf;
 		form.StylesAfterLoad(StylesFromRtf(rtf), takeLook: false);
 		form.Bands = bands ?? form.DefaultBands();
@@ -4215,6 +4264,7 @@ public class EditorApi
 		bool canHaveBands = extension is ".rtf" or ".docx" or ".doc" or ".odt";
 		string? sourceText = null;    // a .md / .html file's own text, for the source view (and saving it as it was)
 		form.Styles = form.DefaultStyles();
+		form.Levels = form.DefaultLevels();    // (RTE Writer's RTF: its own, as the Rtf setter finds them)
 		form.UseNormalFont();    // (text without a font of its own, as HTML's and Markdown's: Normal's)
 		StyleSheet? fileStyles = null;
 		bool takeLook = false, styledLook = false;
@@ -4276,6 +4326,13 @@ public class EditorApi
 				if (extension == ".docx" && kind == "rtf" && !DocxLineSpacing.IntoEditor(ed, full))
 					form.SetStatus("The paragraphs' spacing could not be matched to the file's; it is as the converter made it.");
 				if (kind == "rtf") LinkFonts(ed);
+				// (a .docx's list levels: where its lists put their numbers and text, from its most used list definition;
+				// the document's lists and legal numbering take them)
+				if (extension == ".docx" && OfficeConverters.ListLevelIndents(full) is { } indents) {
+					for (int i = 0; i < 9; i++) (form.Levels[i].NumberAt, form.Levels[i].TextAt) = indents[i];
+					OfficeConverters.FitListIndents(ed.TextDocument);
+					if (LegalLists.Paragraphs(ed.TextDocument).Any(p => p.Legal && !p.Styled)) LegalLists.Renumber(ed);
+				}
 				break;
 			}
 			default: {
@@ -4464,9 +4521,27 @@ public class EditorApi
 	string StyledRtf(string rtf) {
 		string styled = RtfStyles.Inject(rtf, StyleEngine.Names(ed.TextDocument, form.Styles), form.Styles, StyleEngine.WidowControls(ed.TextDocument));
 		// (and the paragraphs whose numbering is off: LegalLists.OffGroup)
-		string starts = form.WithoutGaps(() => LegalLists.StartsGroup(ed.TextDocument) + LegalLists.OffGroup(ed.TextDocument));
+		string starts = form.WithoutGaps(() => LegalLists.StartsGroup(ed.TextDocument) + LegalLists.OffGroup(ed.TextDocument)) + ListLevelsGroup();
 		int end = styled.LastIndexOf('}');
 		return starts == "" || end < 0 ? styled : styled.Insert(end, starts);
+	}
+
+	// Iteration 38: the document's list levels in its RTF, {\*\rtewriterlevels base64-JSON} (others ignore it).
+	string ListLevelsGroup() =>
+		@"{\*\rtewriterlevels " + Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(form.Levels))) + "}";
+
+	static readonly Regex ListLevelsGroupRx = new(@"\{\\\*\\rtewriterlevels\s+([A-Za-z0-9+/=]+)\}");
+
+	/// The list levels an RTF kept (null: none, or not readable); always 9.
+	static List<ListLevel>? ListLevelsFrom(string rtf) {
+		var m = ListLevelsGroupRx.Match(rtf);
+		if (!m.Success) return null;
+		try {
+			var levels = JsonSerializer.Deserialize<List<ListLevel>>(Encoding.UTF8.GetString(Convert.FromBase64String(m.Groups[1].Value)));
+			if (levels == null) return null;
+			while (levels.Count < 9) levels.Add(ListLevel.Defaults()[levels.Count]);
+			return levels.Take(9).ToList();
+		} catch (Exception ex) when (ex is FormatException or JsonException) { return null; }
 	}
 
 	// The styles an RTF just loaded has (Word's, LibreOffice's, RTE Writer's): each paragraph's set from its \sN; returns
@@ -4498,6 +4573,7 @@ public class EditorApi
 	public string Rtf {
 		get => OfficeConverters.WithAltTexts(RawRtf, AltTexts());
 		set {
+			if (ListLevelsFrom(value) is { } levels) form.Levels = levels;    // (the document's list levels, as RTE Writer's RTF kept them)
 			value = OfficeConverters.SimplePictures(value);    // (Word's picture wrappers, which RichEdit can drop)
 			value = OfficeConverters.WithoutUnlistedNumbering(value, out var wordStarts);    // (Word's paragraphs in no list, which RichEdit would number)
 			// (LibreOffice's and Word's "page break before" paragraphs, which are their page breaks; RTE Writer's own keep it)
@@ -5436,9 +5512,24 @@ public class EditorApi
 			RemoveList();
 			return;
 		}
-		ToggleFromTopLevel(() => ed.ToggleList(style));
-		var para = SelectionRange().Para;
-		if (style != ListStyle.Bullet && (para.ListType & 0xFFFF) == (int)style && para.ListStart == 0) para.ListStart = 1;
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try {
+			ToggleFromTopLevel(() => ed.ToggleList(style));
+			var para = SelectionRange().Para;
+			if (style != ListStyle.Bullet && (para.ListType & 0xFFFF) == (int)style && para.ListStart == 0) para.ListStart = 1;
+			FitLists();    // (the items' indents: their level's, Paragraph > List levels)
+		} finally {
+			doc.EndEditCollection();
+		}
+	}
+
+	/// Iteration 38: the selected list items get their level's indents (the document's list levels: Number at, Text at).
+	void FitLists() {
+		var range = SelectionRange();
+		var paragraphs = ed.TextDocument.Range2(range.Start, range.End);
+		paragraphs.Expand(tomConstants.tomParagraph);
+		OfficeConverters.FitListIndents(ed.TextDocument, paragraphs.Start, Math.Max(paragraphs.Start, paragraphs.End - 1));
 	}
 
 	/// Sets the block style of the selected paragraphs: their style (Normal, Heading 1 to 6, Code), as SetStyle.
@@ -5536,7 +5627,14 @@ public class EditorApi
 			});
 			return;
 		}
-		for (int i = 0; i < Math.Abs(levels); i++) NestOnce(Math.Sign(levels));
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try {
+			for (int i = 0; i < Math.Abs(levels); i++) NestOnce(Math.Sign(levels));
+			FitLists();    // (their new level's indents)
+		} finally {
+			doc.EndEditCollection();
+		}
 	}
 
 
@@ -5744,6 +5842,15 @@ public class EditorApi
 			range = SelectionRange();
 			if (TouchesLegalList()) LegalLists.Remove(ed, range.Start, range.End);
 			range = SelectionRange();
+			// (ordinary items with their level's indents, the number where the level has it: their style's again, as
+			// before they were in the list)
+			foreach (var p in LegalLists.Touched(doc, range.Start, range.End).Where(p => (p.ListType & 0xFFFF) != tomConstants.tomListNone && !LegalLists.IsLegal(p.ListType))) {
+				var para = doc.Range2(p.Start, p.Start).Para;
+				var (first, left) = LegalLists.IndentsFor(p.Level, 18);
+				if (Math.Abs(para.LeftIndent + para.FirstLineIndent - (left + first)) > 0.5f) continue;    // (the number's place)
+				var style = StyleEngine.StyleAt(doc, form.Styles, p.Start);
+				para.SetIndents(style.FirstLine, style.LeftIndent, para.RightIndent);
+			}
 			var paragraphs = doc.Range2(range.Start, range.End);
 			paragraphs.Expand(tomConstants.tomParagraph);
 			paragraphs.Para.ListType = tomConstants.tomListNone;
@@ -5793,9 +5900,21 @@ public class EditorApi
 		});
 	}
 
-	/// Applies List levels to the whole list the caret is in: each item gets the numbering of its level.
+	/// Applies List levels to the whole list the caret is in: each item gets the numbering and indents of its level
+	/// (legal numbering's items, all of them: one numbering).
 	public void ApplyListLevels() {
 		if (!InList()) throw new InvalidOperationException("Put the caret in a list first.");
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try {
+			ApplyListLevelsHere();
+			if (LegalLists.Paragraphs(doc).Any(p => p.Legal)) LegalLists.Renumber(ed);    // (their indents)
+		} finally {
+			doc.EndEditCollection();
+		}
+	}
+
+	void ApplyListLevelsHere() {
 		var doc = ed.TextDocument;
 		int storyEnd = doc.Range2(0, 0).StoryLength;
 		// from the caret's paragraph back and forward over the neighbouring list paragraphs
@@ -5816,6 +5935,7 @@ public class EditorApi
 			range.SetRange(range.End, range.End);
 			range.Expand(tomConstants.tomParagraph);
 		}
+		OfficeConverters.FitListIndents(doc, first.Start, Math.Max(first.Start, range.Start));    // (their indents)
 	}
 
 	/// Starts the numbering again at start, from the list item with the caret (that item and the rest of its level).
@@ -5973,26 +6093,44 @@ public class EditorApi
 		return startValue + count;
 	}
 
-	/// The list levels, one per line: level (1-9), style, punctuation and start number, separated by tabs.
-	public string ListLevels => string.Join("\n", form.Settings.ListLevels.Select((l, i) => $"{i + 1}\t{l.Style}\t{l.Punctuation}\t{l.Start}"));
+	/// The document's list levels, one per line: level (1-9), style, punctuation, start number, and where the number
+	/// and the text start (points from the margin, or "auto"), separated by tabs.
+	public string ListLevels => string.Join("\n", form.Levels.Select((l, i) =>
+		$"{i + 1}\t{l.Style}\t{l.Punctuation}\t{l.Start}\t{Points(l.NumberAt)}\t{Points(l.TextAt)}"));
+	static string Points(float? value) => value is float v ? v.ToString("0.##", CultureInfo.InvariantCulture) : "auto";
 
-	/// Sets a list level (1-9): style Decimal, LowerAlpha, UpperAlpha, LowerRoman, UpperRoman or Bullet; punctuation
-	/// ".", ")", "()" or ""; and the start number.
-	public void SetListLevel(int level, string style, string punctuation = ".", int start = 1) {
+	/// Whether Tab and Shift+Tab give a list item its new level's numbering style (List levels' "automatic numbering
+	/// style per level"; 0: items keep theirs). Remembered.
+	public bool AutomaticNumberingPerLevel {
+		get => form.AutoLevelStyles;
+		set { form.AutoLevelStyles = form.Settings.AutoLevelStyles = value; form.Settings.Save(); }
+	}
+
+	/// Sets a list level (1-9) of the document, and of new documents too unless forNewDocuments is 0: style Decimal,
+	/// LowerAlpha, UpperAlpha, LowerRoman, UpperRoman or Bullet; punctuation ".", ")", "()" or ""; the start number;
+	/// where the number and the text start (points from the margin; -1: automatic). New items and nested ones get the
+	/// level; ApplyListLevels gives it to the list with the caret.
+	public void SetListLevel(int level, string style, string punctuation = ".", int start = 1, float numberAt = -1, float textAt = -1, bool forNewDocuments = true) {
 		if (level < 1 || level > 9) throw new ArgumentOutOfRangeException(nameof(level), "Levels are 1 to 9.");
 		var parsed = Enum.Parse<ListStyle>(style, ignoreCase: true);
 		if (!ListLevel.Punctuations.Contains(punctuation)) throw new ArgumentException("Punctuation must be \".\", \")\", \"()\" or \"\".");
+		if (numberAt > 1584 || textAt > 1584 || numberAt is < 0 and not -1 || textAt is < 0 and not -1) throw new ArgumentException("numberAt and textAt are 0 to 1584 points, or -1 for automatic.");
+		var value = new ListLevel { Style = parsed.ToString(), Punctuation = punctuation, Start = Math.Max(0, start),
+			NumberAt = numberAt < 0 ? null : numberAt, TextAt = textAt < 0 ? null : textAt };
+		form.Levels[level - 1] = value.Copy();
+		form.LevelsChanged();
+		if (!forNewDocuments) return;
 		var levels = form.Settings.ListLevels.ToList();
 		while (levels.Count < 9) levels.Add(ListLevel.Defaults()[levels.Count]);
-		levels[level - 1] = new ListLevel { Style = parsed.ToString(), Punctuation = punctuation, Start = Math.Max(0, start) };
+		levels[level - 1] = value;
 		form.Settings.ListLevels = levels;
 		form.Settings.Save();
 	}
 
-	// One list paragraph gets the numbering of a level from the scheme.
+	// One list paragraph gets the numbering of a level from the document's list levels.
 	void ApplyLevel(ITextPara para, int level) {
 		if (LegalLists.IsLegal(para.ListType)) return;    // legal items keep their numbering
-		var levels = form.Settings.ListLevels;
+		var levels = form.Levels;
 		var scheme = level < levels.Count ? levels[level] : ListLevel.Defaults()[Math.Min(level, 8)];
 		para.ListType = scheme.ListType;
 		para.ListStart = scheme.Start;
@@ -7645,8 +7783,14 @@ public sealed class ListLevel
 	public string Style { get; set; } = "Decimal";      // a ListStyle name: Decimal, LowerAlpha, UpperAlpha, LowerRoman, UpperRoman, Bullet
 	public string Punctuation { get; set; } = ".";      // ".", ")", "()" or ""
 	public int Start { get; set; } = 1;
+	// Iteration 38: where the level's number and text start, points from the margin (Word's number position and text
+	// indent); null: automatic (the number at 18 points a level, from 18, the text after the level's widest number)
+	public float? NumberAt { get; set; }
+	public float? TextAt { get; set; }
 
 	public static readonly string[] Punctuations = { ".", ")", "()", "" };
+
+	public ListLevel Copy() => (ListLevel)MemberwiseClone();
 
 	// 1. a. i. 1. a. i. ...
 	public static List<ListLevel> Defaults() => Enumerable.Range(0, 9)
@@ -7698,7 +7842,13 @@ sealed class ListLevelsDialog : Form
 {
 	readonly ComboBox[] styles = new ComboBox[9], punctuations = new ComboBox[9];
 	readonly NumericUpDown[] starts = new NumericUpDown[9];
-	readonly Label preview = new() { AutoSize = true, Font = new Font("Segoe UI", 9.5f), Padding = new Padding(8, 4, 8, 4), BackColor = SystemColors.Window };
+	// Iteration 38: where each level's number and text start (points from the margin; empty: automatic)
+	readonly TextBox[] numberAts = new TextBox[9], textAts = new TextBox[9];
+	readonly CheckBox forNew = new() { Text = "Also for new documents", AutoSize = true, Checked = true };
+	readonly CheckBox autoLevel = new() { Text = "Tab and Shift+Tab give an item its new level's numbering style (automatic numbering style per level)", AutoSize = true };
+	public bool AutomaticPerLevel => autoLevel.Checked;
+	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
+	readonly Label preview = new() { AutoSize = true, Font = new Font("Consolas", 9.5f), Padding = new Padding(8, 4, 8, 4), BackColor = SystemColors.Window };
 	readonly CheckBox apply = new() { Text = "Apply to the current list", AutoSize = true };
 
 	static readonly (string Name, string Label)[] Styles = {
@@ -7707,17 +7857,33 @@ sealed class ListLevelsDialog : Form
 	static readonly string[] PunctuationLabels = { "1.", "1)", "(1)", "1" };
 
 	public List<ListLevel> Levels => Enumerable.Range(0, 9).Select(i => new ListLevel {
-		Style = Styles[styles[i].SelectedIndex].Name, Punctuation = ListLevel.Punctuations[punctuations[i].SelectedIndex], Start = (int)starts[i].Value
+		Style = Styles[styles[i].SelectedIndex].Name, Punctuation = ListLevel.Punctuations[punctuations[i].SelectedIndex], Start = (int)starts[i].Value,
+		NumberAt = PointsIn(numberAts[i]), TextAt = PointsIn(textAts[i])
 	}).ToList();
 	public bool ApplyToCurrentList => apply.Checked;
+	public bool ForNewDocuments => forNew.Checked;
+
+	// A box's points (empty or not a number: automatic; Validate says which aren't)
+	static float? PointsIn(TextBox box) =>
+		float.TryParse(box.Text.Trim().TrimEnd('t', 'p').Trim(), NumberStyles.Float, CultureInfo.CurrentCulture, out float v)
+		|| float.TryParse(box.Text.Trim().TrimEnd('t', 'p').Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out v) ? Math.Clamp(v, 0, 1584) : null;
+
+	bool Validate(out string message) {
+		message = "";
+		for (int i = 0; i < 9; i++)
+			foreach (var (box, what) in new[] { (numberAts[i], "Number at"), (textAts[i], "Text at") })
+				if (box.Text.Trim() != "" && (PointsIn(box) is not float v || v < 0 || v > 1584)) { message = $"Level {i + 1}, {what}: points from the margin, 0 to 1584 (empty: automatic)."; return false; }
+		return true;
+	}
 
 	readonly ComboBox legalFormat = new() { DropDownStyle = ComboBoxStyle.DropDownList };
 	static readonly (LegalLists.Periods Format, string Label)[] LegalFormats = {
 		(LegalLists.Periods.Top, "1.   1.1   1.1.1"), (LegalLists.Periods.All, "1.   1.1.   1.1.1."), (LegalLists.Periods.None, "1   1.1   1.1.1") };
 	public LegalLists.Periods LegalFormat => LegalFormats[Math.Max(0, legalFormat.SelectedIndex)].Format;
 
-	public ListLevelsDialog(List<ListLevel> levels, bool inList, LegalLists.Periods legal = LegalLists.Periods.Top) {
+	public ListLevelsDialog(List<ListLevel> levels, bool inList, LegalLists.Periods legal = LegalLists.Periods.Top, bool automaticPerLevel = true) {
 		Text = "List levels";
+		autoLevel.Checked = automaticPerLevel;
 		FormBorderStyle = FormBorderStyle.FixedDialog;
 		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
 		StartPosition = FormStartPosition.CenterParent;
@@ -7725,8 +7891,8 @@ sealed class ListLevelsDialog : Form
 		AutoSizeMode = AutoSizeMode.GrowAndShrink;
 		Padding = new Padding(10);
 
-		var table = new TableLayoutPanel { ColumnCount = 4, AutoSize = true };
-		foreach (var heading in new[] { "Level", "Numbering", "Punctuation", "Start at" })
+		var table = new TableLayoutPanel { ColumnCount = 6, AutoSize = true };
+		foreach (var heading in new[] { "Level", "Numbering", "Punctuation", "Start at", "Number at (pt)", "Text at (pt)" })
 			table.Controls.Add(new Label { Text = heading, AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(3, 3, 3, 6) });
 		for (int i = 0; i < 9; i++) {
 			var level = i < levels.Count ? levels[i] : ListLevel.Defaults()[i];
@@ -7746,6 +7912,13 @@ sealed class ListLevelsDialog : Form
 			table.Controls.Add(punctuations[i]);
 			table.Controls.Add(starts[i]);
 			punctuations[i].Enabled = starts[i].Enabled = styles[i].SelectedIndex != Styles.Length - 1;
+			// (where the number and the text start; empty: automatic, the number at 18 points a level, the text after it)
+			numberAts[i] = new TextBox { Width = LogicalToDeviceUnits(70), PlaceholderText = $"auto ({18 * (i + 1)})", Text = Shown(level.NumberAt) };
+			textAts[i] = new TextBox { Width = LogicalToDeviceUnits(70), PlaceholderText = "auto", Text = Shown(level.TextAt) };
+			numberAts[i].TextChanged += (s, e) => UpdatePreview();
+			textAts[i].TextChanged += (s, e) => UpdatePreview();
+			table.Controls.Add(numberAts[i]);
+			table.Controls.Add(textAts[i]);
 		}
 
 		var defaults = new Button { Text = "Defaults", AutoSize = true };
@@ -7755,9 +7928,11 @@ sealed class ListLevelsDialog : Form
 				styles[i].SelectedIndex = Array.FindIndex(Styles, st => st.Name == d[i].Style);
 				punctuations[i].SelectedIndex = 0;
 				starts[i].Value = 1;
+				numberAts[i].Text = textAts[i].Text = "";
 			}
 		};
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
+		var ok = new Button { Text = "OK", AutoSize = true };
+		ok.Click += (s, e) => { if (Validate(out string message)) { DialogResult = DialogResult.OK; Close(); } else error.Text = message; };
 		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
 		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
 		buttons.Controls.AddRange(new Control[] { cancel, ok, defaults });
@@ -7772,8 +7947,12 @@ sealed class ListLevelsDialog : Form
 		top.Controls.Add(right);
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
 		layout.Controls.Add(top);
-		layout.Controls.Add(new Label { AutoSize = true, Margin = new Padding(3, 8, 3, 3), MaximumSize = new Size(LogicalToDeviceUnits(520), 0),
-			Text = "New numbered lists use level 1; Tab and Shift+Tab give items the numbering of their new level (with List options > Automatic numbering style per level)." });
+		autoLevel.Margin = new Padding(3, 8, 3, 0);
+		layout.Controls.Add(autoLevel);
+		layout.Controls.Add(new Label { AutoSize = true, Margin = new Padding(3, 8, 3, 3), MaximumSize = new Size(LogicalToDeviceUnits(640), 0),
+			Text = "New numbered lists use level 1; with the box above ticked, Tab and Shift+Tab give items the numbering of their new level (unticked, they keep theirs). " +
+				"Number at and Text at are where a level's number and its text (and the lines after the first) start, in points from the margin (72 points an inch); " +
+				"empty: automatic. They are the document's, saved in it, for its lists and legal numbering; numbered styles have their own (Modify Style)." });
 		var legalRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 0) };
 		legalFormat.Items.AddRange(LegalFormats.Select(f => (object)f.Label).ToArray());
 		legalFormat.SelectedIndex = Math.Max(0, Array.FindIndex(LegalFormats, f => f.Format == legal));
@@ -7782,6 +7961,8 @@ sealed class ListLevelsDialog : Form
 		legalRow.Controls.Add(legalFormat);
 		layout.Controls.Add(legalRow);
 		layout.Controls.Add(apply);
+		layout.Controls.Add(forNew);
+		layout.Controls.Add(error);
 		layout.Controls.Add(buttons);
 		Controls.Add(layout);
 		AcceptButton = ok;
@@ -7789,12 +7970,21 @@ sealed class ListLevelsDialog : Form
 		UpdatePreview();
 	}
 
+	static string Shown(float? points) => points is float v ? v.ToString("0.##", CultureInfo.CurrentCulture) : "";
+
+	// (the first four levels, each indented as set: the number where it starts, its text where it starts, roughly to
+	// scale, a character for 6 points)
 	void UpdatePreview() {
 		var levels = Levels;
 		var sb = new StringBuilder();
-		for (int i = 0; i < 4; i++)
-			for (int n = 0; n < (i < 3 ? 2 : 1); n++)
-				sb.Append(new string(' ', i * 6)).Append(levels[i].Sample(levels[i].Start + n)).Append("  Level ").Append(i + 1).Append('\n');
+		for (int i = 0; i < 4; i++) {
+			float number = levels[i].NumberAt ?? 18 * (i + 1), text = levels[i].TextAt ?? number + 18;
+			for (int n = 0; n < (i < 3 ? 2 : 1); n++) {
+				string sample = levels[i].Sample(levels[i].Start + n);
+				int lead = (int)Math.Round(number / 6), gap = Math.Max(1, (int)Math.Round((text - number) / 6) - sample.Length);
+				sb.Append(new string(' ', Math.Min(60, lead))).Append(sample).Append(new string(' ', Math.Min(40, gap))).Append("Level ").Append(i + 1).Append('\n');
+			}
+		}
 		preview.Text = sb.ToString().TrimEnd();
 	}
 }

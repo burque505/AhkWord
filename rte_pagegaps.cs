@@ -1,4 +1,4 @@
-// Page view for RTE Writer's Print Layout (rte_writer37.cs, through #load): the printed pages as sheets of their own,
+// Page view for RTE Writer's Print Layout (rte_writer38.cs, through #load): the printed pages as sheets of their own,
 // with their headers and footers and a gap between them, as in Word, while the text is edited as before.
 // RichEdit shows a document as one long page and can't leave a gap between two of its lines, but a line whose text is
 // raised (ITextFont.Position, as for superscript) is that much taller, its text at its top (lowering is ignored): so

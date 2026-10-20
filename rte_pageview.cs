@@ -1,4 +1,4 @@
-// The Multiple Pages view and Print Preview for RTE Writer (rte_writer37.cs, through #load). PageOverview: the printed
+// The Multiple Pages view and Print Preview for RTE Writer (rte_writer38.cs, through #load). PageOverview: the printed
 // pages side by side, as many as fit across the window, read-only; PagePreviewForm puts it in a window of its own, with
 // a toolbar (Print, the pages, zoom), sized to the screen's working area. The pages are the printer's own (DocumentPrinter through a PreviewPrintController:
 // the same page breaks, header, footer and line numbers as printing), each drawn once at the size shown. Ctrl+wheel,

@@ -5,7 +5,7 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer37.cs, through #load).
+// Word and OpenDocument conversions for RTE Writer (rte_writer38.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
 // without spacing of its own as 1.08 lines, and "at least" as exactly. All of a paragraph's tabs come back as tabs (the
@@ -571,13 +571,13 @@ public static class OfficeConverters {
 		foreach (var unused in numbering.Elements<W.AbstractNum>().Where(a => !used.Contains(a.AbstractNumberId?.Value)).ToList()) unused.Remove();
 	}
 
-	// An ordinary list level's indents (points): the number where the editor draws it (18 points a level, from 18), the
-	// text after the widest number the level is likely to show, in the list's font size, and a gap.
+	// An ordinary list level's indents (points): its list level's (LegalLists.IndentsFor), the automatic text after the
+	// widest number the level is likely to show, in the list's font size, and a gap.
 	static (float First, float Left) OrdinaryIndents(HtmlList list, int level, float size) {
 		string sample = list.Format switch { "bullet" => "\u2022", "lowerLetter" => "m", "upperLetter" => "M", "lowerRoman" => "viii", "upperRoman" => "VIII", _ => "88" };
 		sample = list.Format == "bullet" ? sample : list.Punctuation switch { "paren" => sample + ")", "parens" => "(" + sample + ")", "plain" => sample, _ => sample + "." };
 		float hang = MathF.Ceiling(Math.Max(18, LegalLists.TextWidth(sample, DefaultFont?.Name ?? "Segoe UI", size) + size * 0.5f));
-		return (-hang, 18 * (level + 1) + hang);
+		return LegalLists.IndentsFor(level, hang);
 	}
 
 	// A numbered style's level in Word's terms (LegalItems: the document's first item at that level that has a format of
@@ -1266,6 +1266,49 @@ public static class OfficeConverters {
 	[DllImport("gdi32.dll")]
 	static extern IntPtr SetWinMetaFileBits(uint size, byte[] data, IntPtr hdcRef, ref MetafilePict pict);
 
+	/// Iteration 38: where a .docx's list levels put their numbers and text (points from the margin): for each level,
+	/// where Word draws most of its list paragraphs at that level, their own indents or else their list definition's
+	/// (Word's number position, left minus hanging, and text indent, left). LibreOffice gives its list definitions no
+	/// indents and each paragraph its own; Word and the built-in writer, the definitions. null: no lists; a level
+	/// without paragraphs: (null, null), automatic.
+	public static (float? NumberAt, float? TextAt)[]? ListLevelIndents(string docx) {
+		try {
+			using var zip = System.IO.Compression.ZipFile.OpenRead(docx);
+			string Read(string name) { var e = zip.GetEntry(name); if (e == null) return ""; using var s = new StreamReader(e.Open()); return s.ReadToEnd(); }
+			string document = Read("word/document.xml"), numbering = Read("word/numbering.xml");
+			if (numbering == "") return null;
+			static (float Number, float Text)? IndentOf(string xml) {
+				var ind = Regex.Match(xml, @"<w:ind\b[^>]*/>");
+				if (!ind.Success) return null;
+				float Twips(string name) => Regex.Match(ind.Value, @"w:" + name + @"=""(-?\d+)""") is { Success: true } m ? int.Parse(m.Groups[1].Value) / 20f : float.NaN;
+				float left = Twips("left") is var l && !float.IsNaN(l) ? l : Twips("start") is var s && !float.IsNaN(s) ? s : 0;
+				float hanging = Twips("hanging") is var h && !float.IsNaN(h) ? h : Twips("firstLine") is var f && !float.IsNaN(f) ? -f : 0;
+				return (Math.Max(0, left - hanging), Math.Max(0, left));
+			}
+			// each numbering instance's definition, and each definition's levels' indents
+			var definitionOf = Regex.Matches(numbering, @"<w:num w:numId=""(\d+)""[^>]*>.*?<w:abstractNumId w:val=""(\d+)""", RegexOptions.Singleline)
+				.GroupBy(m => m.Groups[1].Value).ToDictionary(g => g.Key, g => g.First().Groups[2].Value);
+			var levelsOf = new Dictionary<string, Dictionary<int, (float, float)?>>();
+			foreach (Match definition in Regex.Matches(numbering, @"<w:abstractNum\b[^>]*w:abstractNumId=""(\d+)"".*?</w:abstractNum>", RegexOptions.Singleline))
+				levelsOf[definition.Groups[1].Value] = Regex.Matches(definition.Value, @"<w:lvl\b[^>]*w:ilvl=""(\d)"".*?</w:lvl>", RegexOptions.Singleline)
+					.GroupBy(m => int.Parse(m.Groups[1].Value)).ToDictionary(g => g.Key, g => IndentOf(g.First().Value));
+			// the list paragraphs: where each is drawn, by level
+			var drawn = new List<(float, float)>[9];
+			for (int i = 0; i < 9; i++) drawn[i] = new();
+			foreach (Match paragraph in Regex.Matches(document, @"<w:pPr>.*?</w:pPr>", RegexOptions.Singleline)) {
+				var id = Regex.Match(paragraph.Value, @"<w:numId w:val=""(\d+)""");
+				if (!id.Success || id.Groups[1].Value == "0" || !definitionOf.TryGetValue(id.Groups[1].Value, out var abstractId)) continue;
+				int level = Regex.Match(paragraph.Value, @"<w:ilvl w:val=""(\d)""") is { Success: true } lv ? Math.Min(8, int.Parse(lv.Groups[1].Value)) : 0;
+				var own = IndentOf(Regex.Replace(paragraph.Value, @"<w:numPr>.*?</w:numPr>|<w:rPr>.*?</w:rPr>", "", RegexOptions.Singleline));
+				var at = own ?? (levelsOf.TryGetValue(abstractId, out var levels) && levels.TryGetValue(level, out var d) ? d : null);
+				if (at is { } a) drawn[level].Add(a);
+			}
+			if (drawn.All(d => d.Count == 0)) return null;
+			return drawn.Select(d => d.Count == 0 ? ((float?)null, (float?)null)
+				: d.GroupBy(x => x).OrderByDescending(g => g.Count()).First().Key is var (number, text) ? ((float?)number, (float?)text) : (null, null)).ToArray();
+		} catch (Exception ex) when (ex is IOException or InvalidDataException or FormatException) { return null; }
+	}
+
 	// ---- list indents for Word and LibreOffice
 
 	/// The RTF with ordinary lists' indents made hanging indents wide enough for their numbers. RichEdit draws list
@@ -1279,9 +1322,11 @@ public static class OfficeConverters {
 		return FitListIndents(scratch.TextDocument) ? ((System.Windows.Forms.RichTextBox)scratch).Rtf ?? rtf : rtf;
 	}
 
-	// Ordinary (not legal) list paragraphs: the number where the editor draws it (18 points a level, from 18), the text
-	// after the level's widest number and a gap. Returns true if any changed.
-	static bool FitListIndents(EllipticBit.RichEditorNET.TextObjectModel2.ITextDocument2 doc) {
+	/// Ordinary (not legal) list paragraphs: their level's indents (LegalLists.IndentsFor: the document's list levels'
+	/// Number at and Text at; automatic, the number at 18 points a level, from 18, the text after the level's widest
+	/// number and a gap). The widths are the whole document's; from start to end only are changed (the editor's list
+	/// commands: the items they made or moved). Returns true if any changed.
+	public static bool FitListIndents(EllipticBit.RichEditorNET.TextObjectModel2.ITextDocument2 doc, int start = 0, int end = int.MaxValue) {
 		var items = new List<(int Start, int Level, string Number, string Font, float Size)>();
 		foreach (var p in LegalLists.Paragraphs(doc)) {
 			if ((p.ListType & 0xFFFF) == 0 || LegalLists.IsLegal(p.ListType)) continue;
@@ -1297,9 +1342,10 @@ public static class OfficeConverters {
 		foreach (var item in items) hang[item.Level] = Math.Max(hang[item.Level], LegalLists.TextWidth(item.Number, item.Font, item.Size) + item.Size * 0.5f);
 		bool changed = false;
 		foreach (var item in items) {
+			if (item.Start < start || item.Start > end) continue;
 			float h = MathF.Ceiling(Math.Max(18, hang[item.Level]));
 			var para = doc.Range2(item.Start, item.Start).Para;
-			float first = -h, left = 18 * (item.Level + 1) + h;
+			var (first, left) = LegalLists.IndentsFor(item.Level, h);
 			if (Math.Abs(para.FirstLineIndent - first) < 0.5f && Math.Abs(para.LeftIndent - left) < 0.5f) continue;
 			para.SetIndents(first, left, para.RightIndent);
 			changed = true;

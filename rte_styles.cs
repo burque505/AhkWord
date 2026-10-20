@@ -1,4 +1,4 @@
-// Paragraph styles for RTE Writer (rte_writer37.cs, through #load).
+// Paragraph styles for RTE Writer (rte_writer38.cs, through #load).
 //   - ParagraphStyle: a named set of formatting: the font (name, size, bold, italic, underline, colour) and the
 //     paragraph's (alignment, indents, space before and after, line spacing, keep with next, keep lines together, widow
 //     and orphan control, page break before, no space between paragraphs of the same style), a heading level (0 for
@@ -443,6 +443,9 @@ public static class StyleEngine
 		var paragraphs = LegalLists.Paragraphs(doc);
 		foreach (var group in paragraphs.GroupBy(p => p.Style)) {
 			if (sheet.ById(group.Key) is not { Numbered: false } style || style == sheet.Normal || style.Name == "Normal") continue;
+			// (Word's List Paragraph is the style Word gives list items whose numbering is their own, not the style's:
+			// those stay the lists they are)
+			if (string.Equals(style.Name, "List Paragraph", StringComparison.OrdinalIgnoreCase)) continue;
 			// numbered: most of its paragraphs are items of one kind of list (Word's numbered style whose numbering some
 			// paragraphs have turned off, such as a quotation between them, is one; those paragraphs stay as they are).
 			// A number typed in front with a tab counts where there are list items too (a converter that writes some of

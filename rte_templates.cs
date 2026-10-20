@@ -1,4 +1,4 @@
-// Templates and the start page for RTE Writer (rte_writer37.cs, through #load).
+// Templates and the start page for RTE Writer (rte_writer38.cs, through #load).
 //   - Templates: documents (.rtf, .docx, .odt, .md, .html, .txt) in the templates folder beside the program and in the
 //     user's own Templates folder (beside the settings); a new document made from one is untitled. Fields in a template,
 //     {{Your name}} or {{Recipient|Sir or Madam}} (a default after the bar), are asked for in a dialog when the document
