@@ -1,0 +1,72 @@
+# AhkWord's documentation (MkDocs with the Material theme). Build or preview it with make_docs.py.
+site_name: AhkWord
+site_description: A word processor for Windows that AutoHotkey scripts can drive while you type.
+repo_url: https://github.com/burque505/AhkWord
+repo_name: burque505/AhkWord
+edit_uri: ""
+copyright: AhkWord is under the MIT license.
+
+theme:
+  name: material
+  logo: assets/ahkword-256.png
+  favicon: assets/ahkword-256.png
+  font: false            # (the system's fonts: no request to Google Fonts)
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle: { icon: material/weather-sunny, name: Light mode }
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.highlight
+    - content.code.copy
+
+extra_css:
+  - assets/ahkword.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc: { permalink: true }
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.keys
+  - pymdownx.tabbed: { alternate_style: true }
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - User guide:
+      - Documents and files: guide/documents.md
+      - Formatting and paragraphs: guide/formatting.md
+      - Styles: guide/styles.md
+      - Lists and numbering: guide/lists.md
+      - Tables: guide/tables.md
+      - Pages and printing: guide/pages.md
+      - Line numbers: guide/line-numbers.md
+      - Pictures: guide/pictures.md
+      - Markdown and HTML views: guide/source-views.md
+      - Templates: guide/templates.md
+      - The ribbon and keyboard: guide/ribbon.md
+  - For legal drafting: legal.md
+  - Automation:
+      - Scripts, events and macros: automation/index.md
+      - API reference: automation/api.md
+  - Reference:
+      - Requirements: reference/requirements.md
+      - Settings and folders: reference/settings.md
+      - File formats and converters: reference/formats.md
+      - Known limitations: reference/limitations.md
+      - Troubleshooting: reference/troubleshooting.md
+  - For developers: developers.md

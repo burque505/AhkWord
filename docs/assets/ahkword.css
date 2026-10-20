@@ -1,0 +1,17 @@
+/* AhkWord's colours: the icon's deep teal and warm orange */
+:root, [data-md-color-scheme="default"] {
+  --md-primary-fg-color: #0E6670;
+  --md-primary-fg-color--light: #2C8A93;
+  --md-primary-fg-color--dark: #0A4D54;
+  --md-accent-fg-color: #C25B12;
+  --md-typeset-a-color: #0E6670;
+}
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0E6670;
+  --md-primary-fg-color--light: #2C8A93;
+  --md-primary-fg-color--dark: #0A4D54;
+  --md-accent-fg-color: #E8833A;
+  --md-typeset-a-color: #5BC0C9;
+}
+/* the logo in the header on its own light square */
+.md-header__button.md-logo img { height: 1.8rem; }

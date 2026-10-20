@@ -1,0 +1,3 @@
+# What builds AhkWord's documentation (pinned: MkDocs 2.0 will break Material for MkDocs)
+mkdocs==1.6.1
+mkdocs-material==9.7.7

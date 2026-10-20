@@ -34,3 +34,6 @@ Csharp-in-AHK.ini
 
 # Macros' own settings (My signature.ini holds your name and details)
 rte_macros/*.ini
+
+# The documentation as built (make_docs.py build); the pages themselves are in docs/
+site/
