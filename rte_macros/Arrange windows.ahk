@@ -1,10 +1,10 @@
 #Requires AutoHotkey v2.0
 #Include "..\RteClient2.ahk"
-; Arranges the open RTE Writer windows side by side on the monitor of the active one
+; Arranges the open AhkWord windows side by side on the monitor of the active one
 ; (up to 3 in columns, more in a grid), each in Print Layout with its page fitted to its width.
 
 A_TitleMatchMode := "RegEx"
-Windows := WinGetList(" - RTE Writer$")          ; front to back: the active one first
+Windows := WinGetList(" - AhkWord$")          ; front to back: the active one first
 if Windows.Length = 0
     ExitApp
 ; the monitor the front window is on, without the taskbar
@@ -45,11 +45,11 @@ MoveVisible(Hwnd, X, Y, W, H) {
     WinMove(X - (L - OX), Y - (T - OY), W + (OW - (R - L)), H + (OH - (B - T)), Hwnd)
 }
 
-; The hidden automation window of the RTE Writer that owns a window (0: none).
+; The hidden automation window of the AhkWord that owns a window (0: none).
 ServerOf(Hwnd) {
     Hidden := A_DetectHiddenWindows
     A_DetectHiddenWindows := true
-    try return WinExist("^RTE Writer automation server " WinGetPID(Hwnd) "$")
+    try return WinExist("^AhkWord automation server " WinGetPID(Hwnd) "$")
     finally A_DetectHiddenWindows := Hidden
 }
 

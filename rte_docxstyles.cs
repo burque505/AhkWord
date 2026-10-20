@@ -1,8 +1,8 @@
 // Paragraph styles in the .docx files the built-in converter (rte_office7.cs's OpenXml) reads and writes, for RTE
-// Writer (rte_writer38.cs, through #load). The converter goes through HTML (the PowerTools reading, HtmlToOpenXml
+// Writer (AhkWord.cs, through #load). The converter goes through HTML (the PowerTools reading, HtmlToOpenXml
 // writing), which keeps only headings, and those with its own look. So:
 //   - reading: the .docx's paragraph styles, as Word works them out (the document's defaults, the styles each is based
-//     on, the theme's fonts), go into the reader's HTML as RTE Writer's own HTML has them (StyleHtml): each paragraph's
+//     on, the theme's fonts), go into the reader's HTML as AhkWord's own HTML has them (StyleHtml): each paragraph's
 //     style (data-rte-style), its line and page breaks (data-rte-breaks), and the styles' definitions (the
 //     rte-writer-styles meta). LibreOffice's .odt files are read the same way (LibreOffice makes a .docx of them).
 //   - writing: the .docx gets the document's styles (each style's whole definition, not based on another, so that it
@@ -28,7 +28,7 @@ public static class DocxStyles
 	static readonly XNamespace A = "http://schemas.openxmlformats.org/drawingml/2006/main";
 	static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
-	/// RTE Writer's name for a Word style name ("heading 1": Heading 1).
+	/// AhkWord's name for a Word style name ("heading 1": Heading 1).
 	public static string NameOf(string wordName) =>
 		ParagraphStyle.HeadingNumber(wordName) is int n and > 0 ? "Heading " + n
 		: string.Equals(wordName, "Normal", StringComparison.OrdinalIgnoreCase) ? "Normal" : wordName.Trim();
@@ -44,7 +44,7 @@ public static class DocxStyles
 
 	// ================================================================ reading
 
-	/// The .docx's paragraph styles, each as Word works it out; Names: styleId to RTE Writer's name.
+	/// The .docx's paragraph styles, each as Word works it out; Names: styleId to AhkWord's name.
 	public static (StyleSheet Sheet, Dictionary<string, string> Names) Read(string path) {
 		using var zip = ZipFile.OpenRead(path);
 		XDocument? Load(string name) { var e = zip.GetEntry(name); if (e == null) return null; using var s = e.Open(); return XDocument.Load(s); }
@@ -123,7 +123,7 @@ public static class DocxStyles
 
 	/// The built-in reader's HTML (one block per paragraph, paired up in order with the .docx's paragraphs and their
 	/// formats): each block gets its paragraph's style and line and page breaks, and the page the styles' definitions,
-	/// as RTE Writer's own HTML has them.
+	/// as AhkWord's own HTML has them.
 	public static void IntoHtml(string path, XElement html, IReadOnlyList<XElement> blocks, IReadOnlyList<DocxLineSpacing.Format> formats) {
 		StyleSheet sheet;
 		Dictionary<string, string> names;

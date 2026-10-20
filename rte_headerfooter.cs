@@ -1,4 +1,4 @@
-// Headers and footers of a document, for RTE Writer (rte_writer13.cs, through #load; uses the Open XML SDK packages
+// Headers and footers of a document, for AhkWord (AhkWord.cs, through #load; uses the Open XML SDK packages
 // that rte_office5.cs lists).
 // A document's header and footer each have a left, a center and a right part, with the fields {title} {file} {page}
 // {pages} {date} {time} (PageBands). They are printed, and kept in the files:
@@ -10,7 +10,7 @@
 //                  parts); the exact parts in a custom XML part (.docx) or a user-defined property (.odt)
 //   HTML           <meta name="rte-writer-header-footer" content="...">
 //   Markdown       <!-- rte-writer-header-footer: ... --> as the last line
-// Read back: the exact parts if the file has them and its real header and footer are still the ones RTE Writer wrote
+// Read back: the exact parts if the file has them and its real header and footer are still the ones AhkWord wrote
 // (if they were edited in Word or LibreOffice, those win); otherwise the real header and footer, with Word's and
 // LibreOffice's page number, page count, date and time fields as {page} {pages} {date} {time}.
 using System.IO.Compression;
@@ -66,7 +66,7 @@ public static class HeaderFooter
 	const string RtfDestination = "rtewriterheaderfooter";
 	const string MetaName = "rte-writer-header-footer";
 	const string XmlNamespace = "urn:rte-writer:header-footer";
-	const string OdtProperty = "RTE Writer header and footer";
+	const string OdtProperty = "AhkWord header and footer";
 	static readonly Regex Field = new(@"\{(title|file|page|pages|date|time)\}", RegexOptions.IgnoreCase);
 
 	// {title} and {file} become text; the others stay fields (filled in by Word and LibreOffice).
@@ -190,7 +190,7 @@ public static class HeaderFooter
 		return -1;
 	}
 
-	/// The header and footer of RTF (null if it has neither): RTE Writer's exact copy, or the RTF's header and footer.
+	/// The header and footer of RTF (null if it has neither): AhkWord's exact copy, or the RTF's header and footer.
 	public static PageBands? FromRtf(string rtf) {
 		PageBands? exact = null;
 		var copy = Regex.Match(rtf, @"\{\\\*\\" + RtfDestination + @" ((?:[^\\{}]|\\[\\{}]|\\u-?\d+\?)*)\}");
@@ -217,7 +217,7 @@ public static class HeaderFooter
 		return Regex.Replace(s, @"\\([\\{}])", "$1");
 	}
 
-	/// RTF without its header and footer groups (and RTE Writer's copy), which RichEdit has no place for.
+	/// RTF without its header and footer groups (and AhkWord's copy), which RichEdit has no place for.
 	public static string StripFromRtf(string rtf) {
 		foreach (string name in new[] { "header", "headerl", "headerr", "headerf", "footer", "footerl", "footerr", "footerf", "*\\" + RtfDestination }) {
 			while (true) {

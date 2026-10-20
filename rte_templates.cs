@@ -1,4 +1,4 @@
-// Templates and the start page for RTE Writer (rte_writer38.cs, through #load).
+// Templates and the start page for AhkWord (AhkWord.cs, through #load).
 //   - Templates: documents (.rtf, .docx, .odt, .md, .html, .txt) in the templates folder beside the program and in the
 //     user's own Templates folder (beside the settings); a new document made from one is untitled. Fields in a template,
 //     {{Your name}} or {{Recipient|Sir or Madam}} (a default after the bar), are asked for in a dialog when the document
@@ -319,7 +319,7 @@ sealed class StartPage : UserControl
 				content.Controls.Add(Link(name + (keys != null ? $"    ({keys})" : ""), () => MacroChosen?.Invoke(path)));
 		}
 
-		var show = new CheckBox { Text = "Show this page when RTE Writer starts", Checked = showAtStart, AutoSize = true, Margin = new Padding(3, LogicalToDeviceUnits(18), 0, LogicalToDeviceUnits(24)) };
+		var show = new CheckBox { Text = "Show this page when AhkWord starts", Checked = showAtStart, AutoSize = true, Margin = new Padding(3, LogicalToDeviceUnits(18), 0, LogicalToDeviceUnits(24)) };
 		show.CheckedChanged += (s, e) => ShowAtStartChanged?.Invoke(show.Checked);
 		content.Controls.Add(show);
 		content.ResumeLayout();

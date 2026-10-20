@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0
 #Include "..\RteClient2.ahk"
-; Saves the document 3 seconds after you stop typing (needs rte_writer2.ahk). Only documents that already have a file
+; Saves the document 3 seconds after you stop typing (needs AhkWord.ahk). Only documents that already have a file
 ; name are saved, so save a new document once yourself. Stops when the editor closes; to stop it earlier, exit it
 ; from its tray icon.
 ; The save uses Rte.Post: this script queues it and does not wait; a failure raises the AsyncError event.

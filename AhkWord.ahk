@@ -2,8 +2,10 @@
 #SingleInstance Off    ; (File > New Window starts this script again: one instance for each window)
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
-; RTE Writer, iteration 38: a word processor built on RichEditorNET (rte_writer38.cs), hosted in this AHK process.
-; Adds to iteration 31:
+; AhkWord (RTE Writer until iteration 38), iteration 39: a word processor built on RichEditorNET (AhkWord.cs), hosted
+; in this AHK process. Iteration 39: the name AhkWord, and file names that stay the same from now on (AhkWord.ahk,
+; AhkWord.cs); the settings are carried over from %APPDATA%\RTE Writer the first time.
+; Iteration 32 added to iteration 31:
 ;   - Paragraph styles: the Style box and Home > Styles (Modify, New, Update to Match, Delete; the Classic, Plain and
 ;     Modern style sets; Save Styles as My Default). Headings are what their style says. Scripts: Rte.Style := "Heading 1".
 ; Iteration 31 added to iteration 30:
@@ -16,7 +18,7 @@
 ;     Scripts: Rte.NewFromTemplate("Letter"), Rte.InsertTemplate("Signature Block"), Rte.FillFields(), Rte.StartPage := 1.
 ; Iteration 29 added to iteration 28:
 ;   - Autosave and recovery: a recovery copy every minute while there are unsaved changes, offered at the next start if
-;     RTE Writer didn't close normally. Portable mode: a file named "portable" (or portable.txt) beside this script keeps
+;     AhkWord didn't close normally. Portable mode: a file named "portable" (or portable.txt) beside this script keeps
 ;     the settings and recovery copies in a "data" folder here. Scripts: Rte.AutosaveSeconds, Rte.Portable.
 ; Iteration 28 added to iteration 27:
 ;   - File > Close (Ctrl+W) closes the document and starts an empty one; Export as PDF is on the Layout tab and in the
@@ -104,16 +106,16 @@
 ; Iteration 8 added Markdown formatting (HTML and M-ArkDown), Paragraph > List levels and Restart / Continue numbering.
 ; Earlier iterations added events, recent files, settings, drag and drop, printing, PDF export, headers and footers,
 ; spelling suggestions, the outline, macro recording and hotkeys, and real Markdown. Settings are kept in
-; %APPDATA%\RTE Writer\settings.json (Rte.SettingsFile), or data\settings.json here in portable mode; set
-; RTE_WRITER_SETTINGS to a file path to keep them elsewhere.
-; Optionally pass a document to open:  rte_writer38.ahk "C:\path\document.md"
+; %APPDATA%\AhkWord\settings.json (Rte.SettingsFile), or data\settings.json here in portable mode; set
+; AHKWORD_SETTINGS to a file path to keep them elsewhere.
+; Optionally pass a document to open:  AhkWord.ahk "C:\path\document.md"
 ;
 ; AHK automation: other scripts #Include "RteClient2.ahk" and call Rte.<Name>(...), react to events with
 ; Rte.On(Event, Callback) and queue calls with Rte.Post(...). Tools > Automation API lists everything that can be called,
 ; e.g. Rte.InsertPageBreak(), Rte.LegalNumbering(), Rte.LegalFormat := "All", Rte.InsertTable(3, 4), Rte.ExportDocx("C:\path\copy.docx").
 ;
 ; Hotkeys defined here keep working while the editor is open, and call it directly (in-process):
-#HotIf WinActive("RTE Writer ahk_pid " ProcessExist())    ; (each window's own: several can be open)
+#HotIf WinActive("AhkWord ahk_pid " ProcessExist())    ; (each window's own: several can be open)
 ^!d::Rte.InsertText(FormatTime(, "d MMMM yyyy"))                           ; Ctrl+Alt+D: insert today's date
 ^!w::Rte.SetStatus(Rte.WordCount() " words, " Rte.CharacterCount() " characters")   ; Ctrl+Alt+W: counts in the status bar
 #HotIf
@@ -122,13 +124,13 @@
 ; timer, which runs as soon as the editor is up (this script's main thread is busy running it).
 SetTimer(SubscribeToSaved, -100)
 SubscribeToSaved() {
-    try Rte.On("Saved", (e) => TrayTip(Rte.FileName, "RTE Writer: saved", "Iconi Mute"))
+    try Rte.On("Saved", (e) => TrayTip(Rte.FileName, "AhkWord: saved", "Iconi Mute"))
     catch TargetError    ; the editor is not up yet
         SetTimer(SubscribeToSaved, -200)
 }
 
 StartFile := A_Args.Length ? A_Args[1] : ""
-RunCSharpFile(A_ScriptDir "\rte_writer38.cs", A_AhkPath, A_ScriptDir, StartFile, A_ScriptFullPath)
+RunCSharpFile(A_ScriptDir "\AhkWord.cs", A_AhkPath, A_ScriptDir, StartFile, A_ScriptFullPath)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
-    MsgBox("RTE Writer stopped because of an error (" CSExitCode "):`n`n" CSOutput, "RTE Writer", "Iconx")
+    MsgBox("AhkWord stopped because of an error (" CSExitCode "):`n`n" CSOutput, "AhkWord", "Iconx")
 ExitApp

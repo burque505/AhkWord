@@ -1,4 +1,4 @@
-// Page view for RTE Writer's Print Layout (rte_writer38.cs, through #load): the printed pages as sheets of their own,
+// Page view for AhkWord's Print Layout (AhkWord.cs, through #load): the printed pages as sheets of their own,
 // with their headers and footers and a gap between them, as in Word, while the text is edited as before.
 // RichEdit shows a document as one long page and can't leave a gap between two of its lines, but a line whose text is
 // raised (ITextFont.Position, as for superscript) is that much taller, its text at its top (lowering is ignored): so
@@ -64,7 +64,7 @@ public sealed class PageGaps
 	/// The band between two sheets, in points.
 	public const float BandPoints = 14;
 
-	// A raise of RTE Writer's own: whole points and 0.35 (7 twips).
+	// A raise of AhkWord's own: whole points and 0.35 (7 twips).
 	const float GapMark = 0.35f;
 	static bool Ours(float position) => position > 0.5f && Math.Abs(position - MathF.Floor(position) - GapMark) < 0.02f;
 	static float Marked(float points) => MathF.Floor(Math.Clamp(points, 1, 1580)) + GapMark;
@@ -273,7 +273,7 @@ public sealed class PageGaps
 		Lifted = -1;
 	}
 
-	/// The document has raises of RTE Writer's own (a gap's, moved by editing or left behind).
+	/// The document has raises of AhkWord's own (a gap's, moved by editing or left behind).
 	public bool AnyLeft() {
 		var doc = editor.TextDocument;
 		int storyEnd = doc.Range2(0, 0).StoryLength;

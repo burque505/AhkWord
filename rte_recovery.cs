@@ -1,5 +1,5 @@
-// Where RTE Writer keeps its files (AppFolders: portable mode), and the recovery copies it autosaves (Recovery), for
-// RTE Writer (rte_writer38.cs, through #load).
+// Where AhkWord keeps its files (AppFolders: portable mode), and the recovery copies it autosaves (Recovery), for
+// AhkWord (AhkWord.cs, through #load).
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -8,34 +8,60 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 
-// RTE Writer's own files: its settings in %APPDATA%\RTE Writer, the converters' state (LibreOffice's profile, the log)
-// in %LOCALAPPDATA%\RTE Writer; in portable mode (a file named "portable" or "portable.txt" beside the program) all of
+// AhkWord's own files: its settings in %APPDATA%\AhkWord, the converters' state (LibreOffice's profile, the log)
+// in %LOCALAPPDATA%\AhkWord; in portable mode (a file named "portable" or "portable.txt" beside the program) all of
 // them in a "data" folder beside it instead, so that the folder can be carried to another computer with them. (The
 // macros are beside the program already, in rte_macros. The NuGet packages and the C# compiler stay in the user's
 // caches, and are fetched again on a computer that hasn't got them.)
 public static class AppFolders
 {
-	/// The program's folder (rte_writer*.ahk's): set before anything else is read.
+	/// The program's folder (AhkWord.ahk's): set before anything else is read.
 	public static string ProgramFolder { get; set; } = AppContext.BaseDirectory;
 
-	/// The script RTE Writer was started with (rte_writer*.ahk; null if not known): File > New Window starts it again.
+	/// The script AhkWord was started with (AhkWord.ahk; null if not known): File > New Window starts it again.
 	public static string? HostScript { get; set; }
 
 	public static bool Portable => File.Exists(Path.Combine(ProgramFolder, "portable")) || File.Exists(Path.Combine(ProgramFolder, "portable.txt"));
 
+	/// Iteration 39: a folder for all of AhkWord's files, as portable mode's data folder (the AHKWORD_DATA environment
+	/// variable; null: none).
+	public static string? DataFolder => Environment.GetEnvironmentVariable("AHKWORD_DATA") is { Length: > 0 } data ? data : null;
+
 	/// The settings' folder (roaming).
-	public static string Roaming => Portable ? Path.Combine(ProgramFolder, "data")
-		: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "RTE Writer");
+	public static string Roaming => Portable ? Path.Combine(ProgramFolder, "data") : DataFolder ?? CarriedOver(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
 
 	/// The converters' state (this computer's).
-	public static string Local => Portable ? Path.Combine(ProgramFolder, "data")
-		: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RTE Writer");
+	public static string Local => Portable ? Path.Combine(ProgramFolder, "data") : DataFolder ?? CarriedOver(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+
+	// Iteration 39: the program was RTE Writer, its folders %APPDATA%\RTE Writer and %LOCALAPPDATA%\RTE Writer. The first
+	// time AhkWord's folder is asked for and isn't there, the old one's files are copied into it (settings, templates,
+	// recovery copies, the converters' state); the old folder stays as it was, for an older copy still run.
+	static readonly HashSet<string> carried = new(StringComparer.OrdinalIgnoreCase);
+	const string OldName = "RTE Writer";
+
+	/// AhkWord's folder in parent (%APPDATA%, %LOCALAPPDATA%), RTE Writer's files copied into it if it isn't there yet.
+	public static string CarriedOver(string parent) {
+		string folder = Path.Combine(parent, "AhkWord"), old = Path.Combine(parent, OldName);
+		lock (carried) {
+			if (carried.Add(folder) && !Directory.Exists(folder) && Directory.Exists(old)) {
+				try { Copy(old, folder); }
+				catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }    // (what was copied stays; the rest starts anew)
+			}
+		}
+		return folder;
+	}
+
+	static void Copy(string from, string to) {
+		Directory.CreateDirectory(to);
+		foreach (string file in Directory.GetFiles(from)) File.Copy(file, Path.Combine(to, Path.GetFileName(file)), overwrite: false);
+		foreach (string folder in Directory.GetDirectories(from)) Copy(folder, Path.Combine(to, Path.GetFileName(folder)));
+	}
 }
 
 // The recovery copy of the document being edited: written (as RTF, with its header, footer and line numbering) while
-// it has unsaved changes, and removed when it is saved, closed or discarded, and when RTE Writer closes. A copy left
-// behind is a document whose RTE Writer ended without closing (a crash, a power cut, Windows restarting): the next
-// start offers it. Each RTE Writer has copies of its own (named by its process), so two running at once don't take each
+// it has unsaved changes, and removed when it is saved, closed or discarded, and when AhkWord closes. A copy left
+// behind is a document whose AhkWord ended without closing (a crash, a power cut, Windows restarting): the next
+// start offers it. Each AhkWord has copies of its own (named by its process), so two running at once don't take each
 // other's for left behind.
 public sealed class Recovery
 {
@@ -87,7 +113,7 @@ public sealed class Recovery
 		foreach (var path in paths) try { File.Delete(path); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 	}
 
-	/// The copies in the folder whose RTE Writer isn't running any more, the newest first.
+	/// The copies in the folder whose AhkWord isn't running any more, the newest first.
 	public static List<Orphan> Orphans(string folder) {
 		var orphans = new List<Orphan>();
 		if (!Directory.Exists(folder)) return orphans;
@@ -101,7 +127,7 @@ public sealed class Recovery
 		return orphans.OrderByDescending(o => o.Info.Saved).ToList();
 	}
 
-	// (a process with the copy's id and start time: its RTE Writer is still running)
+	// (a process with the copy's id and start time: its AhkWord is still running)
 	static bool Running(Info info) {
 		try {
 			using var process = Process.GetProcessById(info.ProcessId);

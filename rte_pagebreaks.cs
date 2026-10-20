@@ -1,4 +1,4 @@
-// Manual page breaks for RichEditBox (used by RTE Writer, rte_writer12.cs, through #load).
+// Manual page breaks for RichEditBox (used by AhkWord, AhkWord.cs, through #load).
 // In the document a page break is a paragraph of its own: a form feed (U+000C) and its paragraph mark, which is how
 // RichEdit reads Word's "\page\par" from RTF. RichEdit's printing (EM_FORMATRANGE) starts a new page after the form
 // feed, and its RTF writes it as \page, which Word and LibreOffice read as a page break. (TOM sees the form feed as a
@@ -211,7 +211,7 @@ public static class PageBreaks
 			if (tag.Index < position) continue;
 			var style = StyleAttribute.Match(tag.Groups[2].Value);
 			if (!style.Success || BreakStyle.Match(style.Value) is not { Success: true } breakStyle) continue;
-			// (RTE Writer's own "page break before" paragraph: the paragraph's setting, which data-rte-breaks gives back)
+			// (AhkWord's own "page break before" paragraph: the paragraph's setting, which data-rte-breaks gives back)
 			if (Regex.IsMatch(tag.Groups[2].Value, "data-rte-breaks=\"[^\"]*p", RegexOptions.IgnoreCase)) continue;
 			string name = tag.Groups[1].Value.ToLowerInvariant();
 			bool before = breakStyle.Groups["side"].Value.Equals("before", StringComparison.OrdinalIgnoreCase);

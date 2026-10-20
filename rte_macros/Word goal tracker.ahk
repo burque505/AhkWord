@@ -1,6 +1,6 @@
 #Requires AutoHotkey v2.0
 #Include "..\RteClient2.ahk"
-; A small always-on-top window showing progress towards a word goal, updated as you type (needs rte_writer2.ahk).
+; A small always-on-top window showing progress towards a word goal, updated as you type (needs AhkWord.ahk).
 Answer := InputBox("Word goal for this document:", "Word goal", "w240 h110", 500)
 if Answer.Result != "OK" || !IsInteger(Answer.Value) || Answer.Value < 1
     ExitApp

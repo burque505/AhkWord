@@ -1,4 +1,4 @@
-// RTE Writer: line breaks (Shift+Enter) in HTML, as other editors have them: a <br> inside the paragraph, list item,
+// AhkWord: line breaks (Shift+Enter) in HTML, as other editors have them: a <br> inside the paragraph, list item,
 // heading or table cell, and <br> read back as a line break, not a new paragraph.
 // RichEditorNET's own HTML writes the text on each side of a line break (RichEdit's vertical tab) as a block of its own
 // (a heading's first line even as a <p>), and reads <br> as a new paragraph. ExportHtml merges those blocks back into one

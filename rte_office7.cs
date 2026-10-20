@@ -5,14 +5,14 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer38.cs, through #load).
+// Word and OpenDocument conversions for AhkWord (AhkWord.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
 // without spacing of its own as 1.08 lines, and "at least" as exactly. All of a paragraph's tabs come back as tabs (the
 // PowerTools write those after the first as a margin on a no-break space), and its empty paragraphs stay.
 // Version 6: pictures keep their alt text in RTF, as the picture property Word and LibreOffice use for it
 // ({\*\picprop{\sp{\sn wzDescription}{\sv ...}}}): WithAltTexts writes it, Pictures reads it, PngPictures keeps it.
-// Version 5: Export takes a last change to the RTF given to Word and LibreOffice (RTE Writer adds the header, footer
+// Version 5: Export takes a last change to the RTF given to Word and LibreOffice (AhkWord adds the header, footer
 // and page layout there, rte_headerfooter.cs, after the other changes).
 // Version 4: page breaks. Word and LibreOffice get them in the RTF (\page); the openxml converter writes the editor's
 // HTML page breaks (rte_pagebreaks.cs) as Word page breaks (HtmlToOpenXml does that itself), and reads Word's
@@ -27,12 +27,12 @@
 // one Word list numbered %1.%2.%3, and Word's compound numbers ("1.2") come back as a legal list. (Word and
 // LibreOffice get the numbers as text in the RTF, which they show as they are.)
 //
-// RTE Writer's own format for these is RTF ((RichTextBox)editor).Rtf, which keeps everything RichEdit has: fonts,
+// AhkWord's own format for these is RTF ((RichTextBox)editor).Rtf, which keeps everything RichEdit has: fonts,
 // colours, alignment, lists, tables and pictures. A converter turns that RTF into .docx or .odt, or a .docx/.odt into
 // RTF, using whichever of these is installed:
 //   Word         - an invisible Word.Application through COM, and only when Word is NOT already running (an automation
 //                  client can attach to the user's Word, and quitting it would close the user's documents)
-//   LibreOffice  - soffice --headless --convert-to, with its own profile in %LOCALAPPDATA%\RTE Writer, so it never
+//   LibreOffice  - soffice --headless --convert-to, with its own profile in %LOCALAPPDATA%\AhkWord, so it never
 //                  touches the user's LibreOffice settings or a LibreOffice that is running
 //   openxml      - .docx only, from and to the editor's HTML, with NuGet packages and nothing installed: HtmlToOpenXml
 //                  writes .docx (its list numbering is repaired here), Codeuctivity.OpenXmlPowerTools
@@ -43,7 +43,7 @@
 // For .docx the order is Word, openxml, LibreOffice, pandoc, writing and reading. For .odt it is LibreOffice, Word, pandoc
 // writing, and Word, LibreOffice, pandoc reading: RichEdit makes real lists of Word's RTF, but only text ("1.<tab>") of
 // LibreOffice's. A caller can name the converters to use ("word", "openxml", "libreoffice", "pandoc", comma-separated);
-// the RTE_WRITER_CONVERTERS environment variable does the same for all calls.
+// the AHKWORD_CONVERTERS environment variable (or RTE_WRITER_CONVERTERS, its old name) does the same for all calls.
 
 using System.Diagnostics;
 using System.Reflection;
@@ -180,7 +180,7 @@ public static class OfficeConverters {
 	// ---- Word
 
 	// Converts with Word on a thread of its own, so that a Word that stops answering (a message it shows while hidden)
-	// can be given up on: after 90 seconds that Word is ended and the conversion fails, instead of RTE Writer hanging.
+	// can be given up on: after 90 seconds that Word is ended and the conversion fails, instead of AhkWord hanging.
 	static string WordConvert(string input, string output, int fileFormat) {
 		if (!WordInstalled) throw new InvalidOperationException("not installed");
 		EndLeftoverWord();
@@ -190,7 +190,7 @@ public static class OfficeConverters {
 		var thread = new Thread(() => {
 			try { WordConvertOnThread(input, output, fileFormat, since); }
 			catch (Exception ex) { error = ex; }
-		}) { IsBackground = true, Name = "RTE Writer: Word conversion" };
+		}) { IsBackground = true, Name = "AhkWord: Word conversion" };
 		thread.SetApartmentState(ApartmentState.STA);
 		thread.Start();
 		if (!thread.Join(TimeSpan.FromSeconds(90))) {
@@ -234,11 +234,11 @@ public static class OfficeConverters {
 		if (!File.Exists(output)) throw new InvalidOperationException("Word did not write the file");
 	}
 
-	// ---- Words that RTE Writer starts: a record of them, so that one left running (RTE Writer closed or killed during
-	// a conversion) is known to be RTE Writer's, and is ended by the next conversion instead of being taken for the
+	// ---- Words that AhkWord starts: a record of them, so that one left running (AhkWord closed or killed during
+	// a conversion) is known to be AhkWord's, and is ended by the next conversion instead of being taken for the
 	// user's Word. The user's own Word is never in the record.
 
-	static string StateFolder => AppFolders.Local;    // (%LOCALAPPDATA%\RTE Writer, or beside the program in portable mode)
+	static string StateFolder => AppFolders.Local;    // (%LOCALAPPDATA%\AhkWord, or beside the program in portable mode)
 	static string WordRecord => Path.Combine(StateFolder, "word-processes.txt");
 
 	/// The converters' log (Word conversions and the Words they end).
@@ -297,7 +297,7 @@ public static class OfficeConverters {
 	// After Quit: waits up to 15 seconds for the Word processes started since the conversion began to exit, then ends
 	// the ones still there that have no window. They are ours: Word wasn't running when the conversion began, and a Word
 	// the user opens meanwhile has a window. (Word can start a second process, so this looks for all of them, not just
-	// the first one.) Otherwise a hidden Word would stay, and RTE Writer would take it for the user's.
+	// the first one.) Otherwise a hidden Word would stay, and AhkWord would take it for the user's.
 	static int EndOurWord(DateTime since, bool wait = true) {
 		var clock = Stopwatch.StartNew();
 		Log("Word processes after the conversion: " + Describe(Process.GetProcessesByName("WINWORD")));
@@ -370,7 +370,7 @@ public static class OfficeConverters {
 		}
 	}
 
-	/// The font of text without one of its own, for the openxml converter (RTE Writer sets it to the editor's font).
+	/// The font of text without one of its own, for the openxml converter (AhkWord sets it to the editor's font).
 	public static (string Name, float Points)? DefaultFont;
 
 	static string OpenXmlWrite(string html, string output) {
@@ -1395,7 +1395,8 @@ public static class OfficeConverters {
 	// ---- helpers
 
 	static List<string> Order(string[] preferred, string? via) {
-		via = string.IsNullOrWhiteSpace(via) ? Environment.GetEnvironmentVariable("RTE_WRITER_CONVERTERS") : via;
+		// (AHKWORD_CONVERTERS; RTE_WRITER_CONVERTERS, its name before iteration 39, still does)
+		via = string.IsNullOrWhiteSpace(via) ? Environment.GetEnvironmentVariable("AHKWORD_CONVERTERS") is { Length: > 0 } set ? set : Environment.GetEnvironmentVariable("RTE_WRITER_CONVERTERS") : via;
 		if (string.IsNullOrWhiteSpace(via)) return preferred.ToList();
 		var named = via.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(v => v.ToLowerInvariant()).ToList();
 		var unknown = named.Where(n => !All.Contains(n)).ToList();
@@ -1407,7 +1408,7 @@ public static class OfficeConverters {
 	static string Message(Exception ex) => (ex is TargetInvocationException { InnerException: { } inner } ? inner : ex).Message.Trim();
 
 	static string TempFolder() {
-		string path = Path.Combine(Path.GetTempPath(), "RTE Writer", Guid.NewGuid().ToString("N"));
+		string path = Path.Combine(Path.GetTempPath(), "AhkWord", Guid.NewGuid().ToString("N"));
 		Directory.CreateDirectory(path);
 		return path;
 	}

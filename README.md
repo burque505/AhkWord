@@ -8,7 +8,7 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
 
 *[`examples/Showcase.rtf`](examples/Showcase.rtf), made entirely with the editor's own commands. The file has line numbers turned on (Layout > Line Numbers), which this picture doesn't show.*
 
-> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer38.*`). Renaming them to AhkWord is planned.
+> **Work in progress.** AhkWord was called **RTE Writer** until iteration 38. On its first start it copies your settings, templates and recovery copies from `%APPDATA%\RTE Writer` into `%APPDATA%\AhkWord` (the old folder is left as it was), and scripts written for RTE Writer keep working.
 
 ## Features
 
@@ -62,7 +62,7 @@ The commands are on a ribbon, the one built into Windows (as in Paint and WordPa
 
 ![The showcase document side by side: its Markdown source on the left and the formatted text on the right](images/sidebyside.png)
 
-- **A Markdown editor:** a `.md` file edited in the Markdown view is saved exactly as you typed it: your spacing, list markers and line endings stay. (Edits made in the formatted view are saved as RTE Writer writes Markdown.)
+- **A Markdown editor:** a `.md` file edited in the Markdown view is saved exactly as you typed it: your spacing, list markers and line endings stay. (Edits made in the formatted view are saved as AhkWord writes Markdown.)
 - **Formatting keys and buttons insert markup:** in the source view, Ctrl+B gives `**bold**` (or `<strong>` in HTML), Ctrl+1 to Ctrl+6 headings, the list buttons `- ` and `1. ` (renumbered as you indent with Ctrl+M), the alignment keys `<div align>`, and the font control `<span style>`; Table, Link, Picture, Page Break and Date & Time insert theirs. Commands with no Markdown or HTML form say so in the status bar.
 - **Line breaks** (Shift+Enter) are `<br>` in HTML, and `\` at the line end (or `<br>` in headings and table cells) in Markdown, as other editors write them; both are read back as line breaks.
 - **Tables are lined up:** Markdown tables are written with their columns aligned. In the Markdown view, **Tab** and **Shift+Tab** in a table line it up again and move to the next or previous cell (Tab in the last cell adds a row), and the **Table** button tidies the table the caret is in. Keep a table's rows together: a blank line, or a line without `|`, ends a Markdown table, and what follows shows as typed.
@@ -90,7 +90,7 @@ Rte.On("Saved", (e) => TrayTip(Rte.FileName, "Saved"))
 - **Calls** wait for the editor and return its result. `Rte.Post(...)` queues a call and returns at once. **Tools > Automation API** in the editor lists everything that can be called.
 - **Events** (`TextChanged`, `SelectionChanged`, `ModifiedChanged`, `Saved`, `Opened`, `Closed`, `AsyncError`) are delivered to callbacks registered with `Rte.On`.
 - **Macros:** the **Macros** button on the Tools tab runs the scripts in [`rte_macros`](rte_macros), and **Macro Hotkeys** gives any of them a hotkey. **Record Macro** (Ctrl+Shift+R) records typing and ribbon commands as a new macro script.
-- **Hotkeys in the host script:** `rte_writer38.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
+- **Hotkeys in the host script:** `AhkWord.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
 
 The example macros include:
 
@@ -99,7 +99,7 @@ The example macros include:
 - **Collect from anywhere:** select text in any program and press Win+Shift+C to add it, with its source and time, to the end of the document.
 - **PDF on save:** each save also makes a PDF beside the document.
 - **Folder to PDF:** makes a PDF of every document in a folder.
-- **Arrange windows:** puts the open RTE Writer windows side by side on the screen (three or fewer in columns, more in a grid), each page fitted to its window's width. Give it a hotkey with Macro Hotkeys.
+- **Arrange windows:** puts the open AhkWord windows side by side on the screen (three or fewer in columns, more in a grid), each page fitted to its window's width. Give it a hotkey with Macro Hotkeys.
 - An auto-save, a word goal tracker, an event monitor, document statistics, and Title Case for the selection.
 
 ## Making templates
@@ -119,7 +119,7 @@ A template is an ordinary document with blanks. To make one:
    - The same name used several times is asked for once.
    - The filled-in text takes the formatting of the field's first character: format the whole `{{...}}` as the text should look.
    - Use square brackets for text to write by hand, such as `[The first point.]`.
-3. **Save it as Rich Text Format into your Templates folder** (`%APPDATA%\RTE Writer\Templates`; the start page's "Your templates folder" opens it), named as the template should be called. A piece to insert into other documents (a caption, a signature block) goes into the `Parts` folder inside it instead.
+3. **Save it as Rich Text Format into your Templates folder** (`%APPDATA%\AhkWord\Templates`; the start page's "Your templates folder" opens it), named as the template should be called. A piece to insert into other documents (a caption, a signature block) goes into the `Parts` folder inside it instead.
 4. **Use it** with File > New from Template, or Insert > Insert from Template for a part. To change it later, open the file itself with File > Open, edit it and save it.
 
 Fields in the header and footer are not filled in (they have their own fields, such as `{page}`). In an RTF file written by hand, the braces are written `\{\{Field\}\}`; the editor does this itself when it saves.
@@ -168,18 +168,18 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 1. Install the requirements above: the .NET 10 Desktop Runtime and 64-bit AutoHotkey v2 (the C# compiler is downloaded on the first start if none is installed).
 2. Clone this repository.
-3. Run `rte_writer38.ahk`. To open a document at start, pass its path: `rte_writer38.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`, and `examples\Styles Tutorial.rtf`, a tutorial on styles, style sets and paragraph settings that uses them itself.
+3. Run `AhkWord.ahk`. To open a document at start, pass its path: `AhkWord.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`, and `examples\Styles Tutorial.rtf`, a tutorial on styles, style sets and paragraph settings that uses them itself.
 
-Settings are kept in `%APPDATA%\RTE Writer\settings.json`, with the recovery copies beside them in `Recovery`. Set the environment variable `RTE_WRITER_SETTINGS` to a file path to keep them elsewhere.
+Settings are kept in `%APPDATA%\AhkWord\settings.json`, with the recovery copies beside them in `Recovery`. Set the environment variable `AHKWORD_SETTINGS` (or `RTE_WRITER_SETTINGS`, its old name) to a file path to keep them elsewhere, or `AHKWORD_DATA` to a folder to keep all of AhkWord's files there (settings, templates, recovery copies, the converters' state), as portable mode does.
 
-**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `rte_writer38.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
+**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `AhkWord.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `rte_writer38.ahk` | Starts the editor and holds its in-process hotkeys |
-| `rte_writer38.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
+| `AhkWord.ahk` | Starts the editor and holds its in-process hotkeys |
+| `AhkWord.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
 | `rte_markdown6.cs` | Markdown reading and writing |
 | `rte_linebreaks.cs` | Line breaks (Shift+Enter) in HTML |
 | `rte_htmllists2.cs` | HTML list numbering (start numbers, restarts, styles) |
@@ -212,12 +212,12 @@ Settings are kept in `%APPDATA%\RTE Writer\settings.json`, with the recovery cop
 
 ## Running an earlier iteration
 
-`make_version.ps1` makes a complete, runnable copy of any committed iteration (`.\make_version.ps1 33`, or `-All`), or of the files as they are now (`-Working`, stamped with the date and time), in `..\rte-versions`, beside this folder. Each copy stands alone, with no link to git, so nothing done here can change it. Its program files are read-only, and it runs in portable mode, keeping its settings in its own `data` folder rather than yours. Run it with its own `rte_writerNN.ahk`; `VERSION.txt` says which iteration it is. (The modules are edited in place from one iteration to the next, so an old `rte_writerNN.cs` runs only beside the modules of its own time.) `-List` lists the copies there are.
+`make_version.ps1` makes a complete, runnable copy of any committed iteration (`.\make_version.ps1 33`, or `-All`), or of the files as they are now (`-Working`, stamped with the date and time), in `..\rte-versions`, beside this folder. Each copy stands alone, with no link to git, so nothing done here can change it. Its program files are read-only, and it runs in portable mode, keeping its settings in its own `data` folder rather than yours. Run it with its own `AhkWord.ahk` (`rte_writerNN.ahk` for iterations up to 38); `VERSION.txt` says which iteration it is. (The modules are edited in place from one iteration to the next, so an old copy's program runs only beside the modules of its own time.) `-List` lists the copies there are.
 
 ## Known limitations
 
 - **Table borders are single lines.** Double, dotted and other border styles from Word documents show and are saved as single lines of the same width and color; RichEdit draws only single lines.
-- **Merged cells can't be made.** Tables from Word with merged cells open, but RTE Writer can't merge or split cells.
+- **Merged cells can't be made.** Tables from Word with merged cells open, but AhkWord can't merge or split cells.
 - **Markdown has no table formatting or paragraph spacing.** Column widths, borders, shading, line spacing and space before and after paragraphs are kept in RTF, Word, OpenDocument and HTML files, not in Markdown (see [Markdown and HTML views](#markdown-and-html-views)).
 - **Markdown table rows are single lines,** so tables whose cells hold paragraphs are best edited in the formatted view.
 - **On-screen line numbers match the printed ones in Print Layout only.** With View > Print Layout (the default), the editor's lines are the printed lines, at any zoom. With it off, lines wrap at the window's edge, so a line's number on screen can differ from its printed number; printing, Print Preview, PDF export and `Rte.PrintedLineAt` always number the printed lines.

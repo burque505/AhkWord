@@ -1,4 +1,4 @@
-// Line numbers for RTE Writer (rte_writer38.cs, through #load; uses the Open XML SDK packages that rte_office7.cs lists).
+// Line numbers for AhkWord (AhkWord.cs, through #load; uses the Open XML SDK packages that rte_office7.cs lists).
 // Iteration 20: they are printed too (PrintedLineNumbers), in Print, Print Preview and PDF export.
 // A document's line numbering is set as in Word (Layout > Line Numbers): off, continuous, or restarting on each page; the
 // first line's number; which numbers are shown (every line's, or every 5th ...); the distance from the text. Lines in
@@ -110,7 +110,7 @@ public static class LineNumberFormats
 		typeof(W.PrinterSettingsReference), typeof(W.SectionPropertiesChange)
 	};
 
-	/// Sets a .docx's line numbering (in its last section, the whole document's for RTE Writer). Word's w:start is the
+	/// Sets a .docx's line numbering (in its last section, the whole document's for AhkWord). Word's w:start is the
 	/// first number less one.
 	public static void AddToDocx(string path, LineNumbering numbering) {
 		using var package = WordprocessingDocument.Open(path, true);

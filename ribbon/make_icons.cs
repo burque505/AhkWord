@@ -1,4 +1,4 @@
-// Draws RTE Writer's ribbon icons as 32-bit BMPs (the format the Windows Ribbon compiler, uicc.exe, takes), in the
+// Draws AhkWord's ribbon icons as 32-bit BMPs (the format the Windows Ribbon compiler, uicc.exe, takes), in the
 // sizes the ribbon picks from by screen DPI: 16 20 24 32 for small images, 32 40 48 64 for large ones.
 // The icons are Microsoft's Fluent UI System Icons (MIT license, https://github.com/microsoft/fluentui-system-icons):
 // the "Regular" font has each icon drawn for several pixel sizes, and the one drawn for the size wanted (or for an exact

@@ -1,11 +1,11 @@
 #Requires AutoHotkey v2.0
 
-; RteClient2.ahk - control a running RTE Writer (rte_writer2.ahk) from any AutoHotkey v2 script, and react to its events.
+; RteClient2.ahk - control a running AhkWord (AhkWord.ahk) from any AutoHotkey v2 script, and react to its events.
 ; Same as RteClient.ahk, plus (iteration 2) Rte.On / Rte.Off for events and Rte.Post for calls that do not wait.
 ;
 ; Usage:
 ;   #Include "RteClient2.ahk"
-;   Rte.InsertText("Hello")             ; call any RTE Writer / RichEditBox method by name
+;   Rte.InsertText("Hello")             ; call any AhkWord / RichEditBox method by name
 ;   Rte.ToggleBold()
 ;   Rte.SetBlockStyle("Heading1")       ; enum values by name
 ;   Rte.SetFontColor("#C00000")         ; colors as #RRGGBB or names ("Red")
@@ -22,10 +22,10 @@
 ;
 ; Calls are synchronous: each runs on the editor's UI thread and returns when it has finished, waiting at most
 ; Rte.Timeout milliseconds. The editor stays responsive between calls.
-;   - From another script: the request goes to the editor's hidden window "RTE Writer automation server <pid>" as
+;   - From another script: the request goes to the editor's hidden window "AhkWord automation server <pid>" as
 ;     WM_COPYDATA, and the reply comes back the same way. Scripts started from the editor's Tools > Macros menu talk to
-;     that editor (RTE_WRITER_HWND); otherwise the RTE Writer window used last (the frontmost; several can be open).
-;   - From rte_writer2.ahk itself (hotkeys defined there): the call goes straight to the editor through RunCSharp.
+;     that editor (RTE_WRITER_HWND); otherwise the AhkWord window used last (the frontmost; several can be open).
+;   - From AhkWord.ahk itself (hotkeys defined there): the call goes straight to the editor through RunCSharp.
 ;
 ; Events: the editor posts them to this script's window (A_ScriptHwnd) and never waits for the script. Callbacks run
 ; one at a time, in the order the events happened, in a separate thread; they may call Rte. The callback gets an
@@ -39,7 +39,7 @@
 class Rte {
     static Timeout := 10000
 
-    ; True if an RTE Writer is running.
+    ; True if an AhkWord is running.
     static IsRunning => this._Server(false) != 0
 
     ; Rte.Call("Name", args*) is the same as Rte.Name(args*).
@@ -98,7 +98,7 @@ class Rte {
     static _Reply := ""
     static _InProcess := '
     (
-        var dispatch = (Func<string[], string>?)AppContext.GetData("rte.dispatch") ?? throw new InvalidOperationException("RTE Writer is not running.");
+        var dispatch = (Func<string[], string>?)AppContext.GetData("rte.dispatch") ?? throw new InvalidOperationException("AhkWord is not running.");
         AHK.Return(dispatch(args[0].Split((char)31)));
     )'
     ; Event numbers (wParam) as sent by the editor, starting at 1.
@@ -122,7 +122,7 @@ class Rte {
             Text .= Chr(31) String(Arg)
         DllCall("GetWindowThreadProcessId", "ptr", Server, "uint*", &Pid := 0)
         if Pid = DllCall("GetCurrentProcessId") {
-            ; The editor runs in this process (rte_writer2.ahk), so call it directly. Dynamic call: only rte_writer2.ahk
+            ; The editor runs in this process (AhkWord.ahk), so call it directly. Dynamic call: only AhkWord.ahk
             ; needs Csharp-in-AHK.
             Reply := %"RunCSharp"%(this._InProcess, Text)
         } else {
@@ -134,13 +134,13 @@ class Rte {
             A_DetectHiddenWindows := true
             try SendMessage(0x4A, A_ScriptHwnd, Data.Ptr, , "ahk_id " Server, , , , this.Timeout)
             catch TimeoutError
-                throw TimeoutError("RTE Writer did not answer within " this.Timeout " ms (" Name ").", -2)
+                throw TimeoutError("AhkWord did not answer within " this.Timeout " ms (" Name ").", -2)
             finally
                 A_DetectHiddenWindows := Hidden
             Reply := this._Reply
         }
         if Reply = ""
-            throw Error("No reply from RTE Writer (" Name ").", -2)
+            throw Error("No reply from AhkWord (" Name ").", -2)
         if SubStr(Reply, 1, 1) = "1"
             throw Error(SubStr(Reply, 2), -2, Name)
         return SubStr(Reply, 2)
@@ -189,17 +189,18 @@ class Rte {
         try {
             if (Hwnd := EnvGet("RTE_WRITER_HWND")) != "" && WinExist("ahk_id " Hwnd)
                 return Hwnd + 0
-            ; the RTE Writer used last: the frontmost of its windows (WinGetList lists them front to back)
-            for Window in WinGetList(" - RTE Writer$")
-                if Hwnd := WinExist("^RTE Writer automation server " WinGetPID(Window) "$")
+            ; the AhkWord used last: the frontmost of its windows (WinGetList lists them front to back); RTE Writer's
+            ; too, AhkWord's name until iteration 38
+            for Window in WinGetList(" - (AhkWord|RTE Writer)$")
+                if Hwnd := WinExist("^(AhkWord|RTE Writer) automation server " WinGetPID(Window) "$")
                     return Hwnd
-            if Hwnd := WinExist("^RTE Writer automation server \d+$")
+            if Hwnd := WinExist("^(AhkWord|RTE Writer) automation server \d+$")
                 return Hwnd
         } finally {
             A_DetectHiddenWindows := Hidden, A_TitleMatchMode := Mode
         }
         if Required
-            throw TargetError("RTE Writer is not running (start rte_writer2.ahk).", -3)
+            throw TargetError("AhkWord is not running (start AhkWord.ahk).", -3)
         return 0
     }
 }

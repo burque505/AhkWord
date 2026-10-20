@@ -1,4 +1,4 @@
-// Legal numbering (1., 1.1, 1.1.1) for RichEditBox, used by RTE Writer (rte_writer10.cs, through #load).
+// Legal numbering (1., 1.1, 1.1.1) for RichEditBox, used by AhkWord (AhkWord.cs, through #load).
 //
 // RichEdit numbers each list level on its own (1. / a. / i.) and cannot show compound numbers; given an RTF list table
 // with them, it drops the list. So a legal list is made of list paragraphs whose own number is hidden (TOM list type
@@ -429,7 +429,7 @@ public static class LegalLists
 	}
 
 	// RichEdit's RTF doesn't keep a list paragraph's ListStart either where it has no number of its own, and with it goes
-	// where a numbering starts again, nor its level (a numbered style's sub-levels): RTE Writer's RTF keeps both, in
+	// where a numbering starts again, nor its level (a numbered style's sub-levels): AhkWord's RTF keeps both, in
 	// order, in {\*\rtewriterlists 1:0,1:1,1001:0} (start:level; files from before levels were kept have starts alone).
 	static readonly Regex StartsGroupRx = new(@"\{\\\*\\rtewriterlists ([0-9,:\-]*)\}");
 
@@ -468,7 +468,7 @@ public static class LegalLists
 	// Word's numbering off (numId 0) stays with its paragraph: under Normal and back to the numbered style it is still
 	// unnumbered. The mark is a ListType of NoNumber alone, on a paragraph in no list: RichEdit draws nothing for it,
 	// keeps it through typing and Enter (the new paragraph has it too, as Word's), and numbering the paragraph replaces
-	// it. RichEdit's RTF doesn't keep it: RTE Writer's keeps the marked paragraphs, by their index among Paragraphs, in
+	// it. RichEdit's RTF doesn't keep it: AhkWord's keeps the marked paragraphs, by their index among Paragraphs, in
 	// {\*\rtewriteroff count:i,j,...} (count: the paragraphs then, so that a file changed elsewhere isn't misread).
 	public static bool IsNumberingOff(int listType) => listType == NoNumber;
 

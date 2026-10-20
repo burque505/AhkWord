@@ -1,12 +1,12 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "..\Csharp-in-AHK.ahk"
-; Builds RteRibbon.ribbon, the compiled ribbon that rte_writer38.cs loads, from RteRibbon.xml:
+; Builds RteRibbon.ribbon, the compiled ribbon that AhkWord.cs loads, from RteRibbon.xml:
 ;   1. make_icons.cs draws the icons into build\icons (32-bit BMPs, 16 to 64 pixels for the DPI steps) from Microsoft's
 ;      Fluent UI System Icons (MIT license), whose font is downloaded once into build\fluent, at a fixed commit;
 ;   2. uicc.exe (Windows SDK) compiles the markup into a binary ribbon (.bml) and a resource script (.rc);
 ;   3. rc.exe (Windows SDK) compiles that into a .res file;
 ;   4. link.exe (Visual Studio C++ tools) wraps it in a resource-only DLL: RteRibbon.ribbon.
-; Only needed after changing the markup or the icons; running RTE Writer needs only RteRibbon.ribbon.
+; Only needed after changing the markup or the icons; running AhkWord needs only RteRibbon.ribbon.
 ; Pass "console" to report on the console instead of in a message box.
 
 Console := A_Args.Length && A_Args[1] = "console"

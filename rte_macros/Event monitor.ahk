@@ -1,7 +1,7 @@
 #Requires AutoHotkey v2.0
 #Include "..\RteClient2.ahk"
-; Shows the editor's events as they happen (needs rte_writer2.ahk). Close this window, or the editor, to stop.
-Monitor := Gui("+AlwaysOnTop +Resize +MinSize300x150", "RTE Writer events")
+; Shows the editor's events as they happen (needs AhkWord.ahk). Close this window, or the editor, to stop.
+Monitor := Gui("+AlwaysOnTop +Resize +MinSize300x150", "AhkWord events")
 Monitor.SetFont("s9", "Segoe UI")
 List := Monitor.AddListView("w560 r14", ["Time", "Event", "Details"])
 List.ModifyCol(1, 70), List.ModifyCol(2, 120), List.ModifyCol(3, 340)

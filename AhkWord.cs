@@ -20,8 +20,15 @@
 #load "rte_paragraph.cs"
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
-// RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer38.ahk. Iteration 38 adds to iteration 37:
+// AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
+// Run it with AhkWord.ahk. Iteration 39 adds to iteration 38:
+//   - The name AhkWord (RTE Writer until iteration 38): the window, dialogs and messages; the files are AhkWord.ahk
+//     and AhkWord.cs from now on (an iteration's own copy: make_version.ps1). Its folders are %APPDATA%\AhkWord and
+//     %LOCALAPPDATA%\AhkWord, the old ones' files copied into them the first time (AppFolders); AHKWORD_SETTINGS and
+//     AHKWORD_CONVERTERS name the environment variables (the old RTE_WRITER_ names still work). Scripts are unchanged:
+//     the Rte object, RteClient2.ahk (which finds AhkWord's windows, and RTE Writer's), RTE_WRITER_HWND and the event
+//     message keep their names.
+// Iteration 38 added to iteration 37:
 //   - List levels' indents: Paragraph > List levels has Number at and Text at for each level (points from the margin,
 //     Word's number position and text indent; empty: automatic, as before). The levels are the document's
 //     (WriterForm.Levels; {\*\rtewriterlevels} in its RTF; a .docx's from where its list paragraphs are drawn,
@@ -53,7 +60,7 @@
 //     numbering's items (rte_legal.cs: numbers worked out from position, one numbering through the document, restarts
 //     only where asked), numbered in their style's format and keeping their style's indents. Pasted numbered
 //     paragraphs join the numbering where they land (StyleEngine.JoinPasted); a Word document's numbered style comes in
-//     as one (StyleEngine.NumberAfterLoad); exports give Word each level's own format; RTE Writer's RTF keeps where
+//     as one (StyleEngine.NumberAfterLoad); exports give Word each level's own format; AhkWord's RTF keeps where
 //     the numbering starts again ({\*\rtewriterlists}). A paragraph of a numbered style can have its numbering turned
 //     off (No numbering; a Word paragraph whose numbering is off): it stays so, its style the same. Items of numbered
 //     styles have no room for a RichEdit number (ListTab 0), so that their first lines show where their indents say.
@@ -105,11 +112,11 @@
 //     styles are defined from its own paragraphs). Scripts: Rte.Style := "Heading 1", Rte.Styles(), Rte.ModifyStyle(...),
 //     Rte.NewStyle(...), Rte.StyleSet := "Modern", Rte.SaveStylesAsDefault().
 // Iteration 31 added to iteration 30:
-//   - Several windows: File > New Window and File > Open in New Window start another RTE Writer (a little down and to
+//   - Several windows: File > New Window and File > Open in New Window start another AhkWord (a little down and to
 //     the right of this one), to work on two documents at once; each window is a whole editor of its own (its recovery
 //     copies, its macros, its automation). The windows share the settings file: each saves only what it changed, so a
 //     window closing doesn't undo the other's (recent documents, macro hotkeys and remembered values are merged item
-//     by item). Scripts started outside the editor talk to the RTE Writer window used last. Scripts: Rte.NewWindow().
+//     by item). Scripts started outside the editor talk to the AhkWord window used last. Scripts: Rte.NewWindow().
 // Iteration 30 added to iteration 29:
 //   - Templates (rte_templates.cs): File > New from Template (and the start page) makes an untitled document from a
 //     template: a document in the templates folder beside the program (Letter, Memo, Report, Court Paper, Meeting Notes)
@@ -119,7 +126,7 @@
 //     filled in: the parts in a Parts folder are pieces for that (Caption, Signature Block, Certificate of Service).
 //     Insert > Fill In Fields fills in the fields left in the document. Scripts: Rte.NewFromTemplate("Letter",
 //     "Recipient=Ms. Rivera"), Rte.InsertTemplate("Signature Block"), Rte.FillFields(), Rte.Templates().
-//   - The start page, shown at the start (without a file to open; "Show this page when RTE Writer starts") and by
+//   - The start page, shown at the start (without a file to open; "Show this page when AhkWord starts") and by
 //     File > Start Page: a blank document, the templates, the recent documents and the macros. Esc goes to the blank
 //     document. Scripts: Rte.StartPage := 1.
 //   - The macros gallery is on the Home tab too, and in the Quick Access Toolbar's list.
@@ -128,7 +135,7 @@
 // Iteration 29 added to iteration 28:
 //   - Autosave and recovery (rte_recovery.cs): while the document has unsaved changes, a recovery copy of it (RTF, with
 //     its header, footer and line numbering) is written every minute, beside the settings, and removed when it is
-//     saved, closed or discarded, and when RTE Writer closes. If RTE Writer ended without closing (a crash, a power cut,
+//     saved, closed or discarded, and when AhkWord closes. If AhkWord ended without closing (a crash, a power cut,
 //     Windows restarting), the next start offers the copy: recover it (as unsaved changes to the document it was, which
 //     Save then replaces), discard it, or decide next time. The document's own file is never written by autosave.
 //     Scripts: Rte.AutosaveSeconds := 120 (0: off), Rte.RecoveryFolder.
@@ -205,7 +212,7 @@
 //     nor paragraphs whose numbers are suppressed (Suppress for Current Paragraph: TOM's NoLineNumber, RTF's \noline).
 //     The numbers follow the editor's lines (LineNumberGutter, a strip left of the text, drawn after the editor paints).
 //     Kept in RTF (\linemod ...), Word (w:lnNumType) and OpenDocument files, and in HTML and Markdown as a comment-like
-//     setting. Not printed by RTE Writer yet. Scripts: Rte.LineNumbers := "continuous", Rte.SetLineNumbers("page", 1, 5),
+//     setting. Not printed by AhkWord yet. Scripts: Rte.LineNumbers := "continuous", Rte.SetLineNumbers("page", 1, 5),
 //     Rte.SuppressLineNumbers(1), Rte.LineNumberAt(position).
 // Iteration 18 added to iteration 17:
 //   - Table properties (rte_tables2.cs): Table Tools > Properties (and the table's right-click menu) sets the column
@@ -246,7 +253,7 @@
 //   - The document's header and footer are shown in strips above and below the text (BandStrip), filled in as on the
 //     first page ({page} is 1, {pages} the number of pages it prints on, worked out once typing pauses); clicking one
 //     opens File > Header and Footer. View > Header and footer shows or hides the strips.
-//   - Pictures keep their alt text through RTF (rte_office6.cs): the RTF RTE Writer writes (files, Word, LibreOffice)
+//   - Pictures keep their alt text through RTF (rte_office6.cs): the RTF AhkWord writes (files, Word, LibreOffice)
 //     has it as each picture's description, and pictures read from RTF get it back.
 // Iteration 13 added to iteration 12:
 //   - Headers and footers per document (rte_headerfooter.cs): File > Header and Footer sets the document's own (and,
@@ -311,7 +318,7 @@
 //     {pages} {date} {time} are filled in on each page. Headers and footers are drawn in the page margins.
 // Iteration 3 added comfort features to iteration 2:
 //   - File > Open Recent; the window size and position, view settings, last folder and page setup are remembered in
-//     %APPDATA%\RTE Writer\settings.json (or the file named by the RTE_WRITER_SETTINGS environment variable; in
+//     %APPDATA%\AhkWord\settings.json (or the file named by the AHKWORD_SETTINGS environment variable, or RTE_WRITER_SETTINGS; in
 //     portable mode, data\settings.json beside the program).
 //   - Drag and drop: drop a document to open it, or images to insert them where they are dropped.
 //   - Page Setup, Print Preview, Print, and Export as PDF (through the "Microsoft Print to PDF" printer).
@@ -326,12 +333,12 @@
 //   - Formatting toolbar and menus; Tab / Shift+Tab nest list items, with automatic numbering styles per level.
 //   - Automation: the public members of EditorApi, plus the main RichEditBox members, can be called by name from AHK
 //     (see RteClient.ahk):
-//       * from other AHK processes, through a hidden window "RTE Writer automation server <pid>" (WM_COPYDATA);
+//       * from other AHK processes, through a hidden window "AhkWord automation server <pid>" (WM_COPYDATA);
 //       * from the hosting AHK process, through the delegate in AppContext.GetData("rte.dispatch").
 //     Request: verb, member name and arguments separated by U+001F; verb is "call", "get" or "set".
 //     Reply: "0" + result as text, or "1" + error message.
 //     Tools > Macros runs the AHK scripts in the rte_macros folder (with RTE_WRITER_HWND set to this editor's server).
-// args: [0] AutoHotkey exe (A_AhkPath), [1] folder of rte_writer.ahk, [2] optional file to open.
+// args: [0] AutoHotkey exe (A_AhkPath), [1] folder of AhkWord.ahk, [2] optional file to open.
 using System.Collections;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -357,7 +364,7 @@ using RibbonLib.Interop;
 // AHK hotkeys and timers keep running meanwhile and can call the editor (see RteClient.ahk).
 Application.EnableVisualStyles();
 AppFolders.ProgramFolder = args.Length > 1 ? args[1] : Environment.CurrentDirectory;    // (portable mode: before the settings)
-AppFolders.HostScript = args.Length > 3 && args[3] != "" ? args[3] : null;    // (rte_writer*.ahk: New Window starts it again)
+AppFolders.HostScript = args.Length > 3 && args[3] != "" ? args[3] : null;    // (AhkWord.ahk: New Window starts it again)
 using var form = new WriterForm(
 	args.Length > 0 ? args[0] : "",
 	args.Length > 1 ? args[1] : Environment.CurrentDirectory,
@@ -455,7 +462,8 @@ static class PrettyHtml
 
 class WriterForm : Form
 {
-	public const string AppName = "RTE Writer";
+	public const string AppName = "AhkWord";
+	public const int Iteration = 39;    // (the About box)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -747,7 +755,7 @@ class WriterForm : Form
 		Button(RibbonCommand.Close, CloseDocumentCommand, Keys.Control | Keys.W);
 		Button(RibbonCommand.NewFromTemplate, NewFromTemplateCommand);
 		Button(RibbonCommand.StartPage, () => ShowStart(true));
-		Button(RibbonCommand.NewWindow, () => { StartWindow(null); SetStatus("Opening a new RTE Writer window..."); });
+		Button(RibbonCommand.NewWindow, () => { StartWindow(null); SetStatus("Opening a new AhkWord window..."); });
 		Button(RibbonCommand.OpenInNewWindow, OpenInNewWindowDialog);
 		Button(RibbonCommand.InsertFromTemplate, InsertTemplateCommand);
 		Button(RibbonCommand.FillInFields, FillFieldsCommand);
@@ -1004,7 +1012,7 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration 32: paragraph styles)\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
+	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration {Iteration})\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
 		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
@@ -1166,7 +1174,7 @@ class WriterForm : Form
 		try { recovery.Clear(); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 	}
 
-	// At the start: copies that an RTE Writer which didn't close normally left behind are offered, the newest first (one
+	// At the start: copies that an AhkWord which didn't close normally left behind are offered, the newest first (one
 	// a start; the others the next times). Started with a file, they wait for a start without one.
 	// Returns whether a copy was recovered.
 	bool OfferRecovery(bool startedWithFile) {
@@ -1176,11 +1184,11 @@ class WriterForm : Form
 		var newest = orphans[0];
 		string when = $"{newest.Info.Saved.ToShortTimeString()} on {newest.Info.Saved.ToShortDateString()}";
 		if (startedWithFile) {
-			SetStatus($"RTE Writer didn't close normally last time: start it without a file to recover \"{newest.Info.Name}\" (autosaved at {when}).");
+			SetStatus($"AhkWord didn't close normally last time: start it without a file to recover \"{newest.Info.Name}\" (autosaved at {when}).");
 			return false;
 		}
 		string more = orphans.Count > 1 ? $"\n\n({orphans.Count - 1} more recovery cop{(orphans.Count == 2 ? "y is" : "ies are")} offered at the next start.)" : "";
-		var answer = MessageBox.Show(this, $"RTE Writer didn't close normally last time. It had autosaved \"{newest.Info.Name}\" at {when}.\n\n"
+		var answer = MessageBox.Show(this, $"AhkWord didn't close normally last time. It had autosaved \"{newest.Info.Name}\" at {when}.\n\n"
 			+ "Yes: recover it (then save it to keep it).\nNo: discard the recovery copy.\nCancel: decide at the next start." + more,
 			AppName, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
 		if (answer == DialogResult.Yes) { Recover(newest); return true; }
@@ -1379,11 +1387,11 @@ class WriterForm : Form
 	}
 
 	/// After a document is loaded (its paragraphs' styles set): its style sheet. defined: the styles the file defined
-	/// (RTE Writer's own RTF), else the default ones. The styles its paragraphs use that weren't defined are defined from
+	/// (AhkWord's own RTF), else the default ones. The styles its paragraphs use that weren't defined are defined from
 	/// the first paragraph with each (the document keeps its look), or, with takeLook (Markdown, plain text, which have
 	/// no look of their own), its paragraphs are given the styles' look.
 	/// Iteration 38: the document's list levels (Paragraph > List levels): numbering, start and indents of each level,
-	/// saved in RTE Writer's RTF ({\*\rtewriterlevels}); a new document, or one from elsewhere, has the default ones
+	/// saved in AhkWord's RTF ({\*\rtewriterlevels}); a new document, or one from elsewhere, has the default ones
 	/// (Settings.ListLevels). Always 9.
 	internal List<ListLevel> Levels = new();
 	static bool LevelsSame(List<ListLevel> a, List<ListLevel> b) => a.Count == b.Count && a.Zip(b).All(p =>
@@ -1455,7 +1463,7 @@ class WriterForm : Form
 			}
 		}
 		// numbered styles: their paragraphs items of their numbering (a Word document's numbered styles become ones), and
-		// the items' restarts as RTE Writer's RTF kept them
+		// the items' restarts as AhkWord's RTF kept them
 		if (StyleEngine.NumberAfterLoad(doc, sheet, LoadedListStarts)) Editor.ClearUndo();
 		LoadedListStarts = null;
 		FillStyleBox(force: true);
@@ -1637,13 +1645,13 @@ class WriterForm : Form
 
 	// ---- Several windows (iteration 31)
 
-	/// What New Window runs: AutoHotkey with RTE Writer's own script (the one this window was started with, else the
-	/// newest rte_writer*.ahk beside the program), and the document to open (null: a new one).
+	/// What New Window runs: AutoHotkey with AhkWord's own script (the one this window was started with, else
+	/// AhkWord.ahk beside the program), and the document to open (null: a new one).
 	internal System.Diagnostics.ProcessStartInfo NewWindowStart(string? file) {
-		if (ahkPath == "" || !File.Exists(ahkPath)) throw new InvalidOperationException("AutoHotkey was not found; start RTE Writer with its rte_writer.ahk.");
+		if (ahkPath == "" || !File.Exists(ahkPath)) throw new InvalidOperationException("AutoHotkey was not found; start AhkWord with its AhkWord.ahk.");
 		string script = AppFolders.HostScript is { } host && File.Exists(host) ? host
-			: Directory.GetFiles(appDir, "rte_writer*.ahk").OrderByDescending(f => int.TryParse(Regex.Match(Path.GetFileNameWithoutExtension(f), @"\d+$").Value, out int n) ? n : 0).FirstOrDefault()
-			?? throw new FileNotFoundException("RTE Writer's script (rte_writer*.ahk) was not found in " + appDir + ".");
+			: File.Exists(Path.Combine(appDir, "AhkWord.ahk")) ? Path.Combine(appDir, "AhkWord.ahk")
+			: throw new FileNotFoundException("AhkWord's script (AhkWord.ahk) was not found in " + appDir + ".");
 		var start = new System.Diagnostics.ProcessStartInfo(ahkPath) { UseShellExecute = false, WorkingDirectory = appDir };
 		start.ArgumentList.Add(script);
 		if (file != null) start.ArgumentList.Add(Path.GetFullPath(file));
@@ -1652,7 +1660,7 @@ class WriterForm : Form
 		return start;
 	}
 
-	/// Starts another RTE Writer window, with a new document or the file given.
+	/// Starts another AhkWord window, with a new document or the file given.
 	internal void StartWindow(string? file) {
 		using var process = System.Diagnostics.Process.Start(NewWindowStart(file));
 	}
@@ -3034,7 +3042,7 @@ class WriterForm : Form
 	}
 
 	internal void RunScript(string path) {
-		if (ahkPath == "" || !File.Exists(ahkPath)) throw new InvalidOperationException("AutoHotkey was not found; start RTE Writer with rte_writer.ahk.");
+		if (ahkPath == "" || !File.Exists(ahkPath)) throw new InvalidOperationException("AutoHotkey was not found; start AhkWord with AhkWord.ahk.");
 		var start = new System.Diagnostics.ProcessStartInfo(ahkPath) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(path)! };
 		start.ArgumentList.Add(path);
 		start.Environment["RTE_WRITER_HWND"] = server.Handle.ToInt64().ToString(CultureInfo.InvariantCulture);
@@ -3139,7 +3147,7 @@ class WriterForm : Form
 
 	static string MacroScript(List<string> lines) =>
 		"#Requires AutoHotkey v2.0\r\n#Include \"..\\RteClient2.ahk\"\r\n"
-		+ $"; Recorded in RTE Writer on {DateTime.Now:g}. Each line is an RTE Writer call (Tools > Automation API lists them).\r\n"
+		+ $"; Recorded in AhkWord on {DateTime.Now:g}. Each line is an AhkWord call (Tools > Automation API lists them).\r\n"
 		+ string.Join("\r\n", lines) + "\r\n";
 
 	string UniqueMacroName() {
@@ -4017,7 +4025,7 @@ public class EditorApi
 	/// The folder of the recovery copies (beside the settings).
 	public string RecoveryFolder => form.RecoveryFolder;
 
-	/// Whether RTE Writer runs in portable mode (a file named "portable" or "portable.txt" beside it): its settings,
+	/// Whether AhkWord runs in portable mode (a file named "portable" or "portable.txt" beside it): its settings,
 	/// recovery copies and the converters' state are in its data folder.
 	public bool Portable => AppFolders.Portable;
 
@@ -4071,7 +4079,7 @@ public class EditorApi
 		return values;
 	}
 
-	/// Your own templates' folder (beside the settings); the shipped ones are in the templates folder beside RTE Writer.
+	/// Your own templates' folder (beside the settings); the shipped ones are in the templates folder beside AhkWord.
 	public string TemplatesFolder => form.OwnTemplatesFolder;
 
 	/// Makes an untitled document from a template (by name, or a file's path); unsaved changes are discarded. fields:
@@ -4243,8 +4251,8 @@ public class EditorApi
 	/// how many paragraphs were restyled.
 	public int ApplyMyStyles() => form.UseStyles(form.DefaultStyles());
 
-	/// Opens another RTE Writer window (File > New Window), with a new document or the file given. The new window is a
-	/// separate editor: scripts reach it once it is the RTE Writer used last (or with its RTE_WRITER_HWND).
+	/// Opens another AhkWord window (File > New Window), with a new document or the file given. The new window is a
+	/// separate editor: scripts reach it once it is the AhkWord used last (or with its RTE_WRITER_HWND).
 	public void NewWindow(string path = "") => form.StartWindow(path == "" ? null : path);
 
 	/// Closes the document and starts an empty one, as File > Close does (unsaved changes are discarded, as by New; the
@@ -4264,7 +4272,7 @@ public class EditorApi
 		bool canHaveBands = extension is ".rtf" or ".docx" or ".doc" or ".odt";
 		string? sourceText = null;    // a .md / .html file's own text, for the source view (and saving it as it was)
 		form.Styles = form.DefaultStyles();
-		form.Levels = form.DefaultLevels();    // (RTE Writer's RTF: its own, as the Rtf setter finds them)
+		form.Levels = form.DefaultLevels();    // (AhkWord's RTF: its own, as the Rtf setter finds them)
 		form.UseNormalFont();    // (text without a font of its own, as HTML's and Markdown's: Normal's)
 		StyleSheet? fileStyles = null;
 		bool takeLook = false, styledLook = false;
@@ -4296,7 +4304,7 @@ public class EditorApi
 				if (kind == "rtf") {
 					Rtf = content;
 					fileStyles = StylesFromRtf(content);
-					// (a .docx's styles as the file defines them, where RTE Writer's own aren't there: else a style's look
+					// (a .docx's styles as the file defines them, where AhkWord's own aren't there: else a style's look
 					// would be its first paragraph's, as the converter left it, such as a numbered style's first item
 					// with the list's indents)
 					if (fileStyles == null && extension == ".docx")
@@ -4341,7 +4349,7 @@ public class EditorApi
 				bands = HeaderFooter.FromHtml(html);
 				numbering = LineNumberFormats.FromHtml(html);
 				SetHtml(html);
-				fileStyles = StyleHtml.FromMeta(html);    // (RTE Writer's HTML: its styles, which its styled paragraphs are given again)
+				fileStyles = StyleHtml.FromMeta(html);    // (AhkWord's HTML: its styles, which its styled paragraphs are given again)
 				styledLook = fileStyles != null;
 				break;
 			}
@@ -4544,15 +4552,15 @@ public class EditorApi
 		} catch (Exception ex) when (ex is FormatException or JsonException) { return null; }
 	}
 
-	// The styles an RTF just loaded has (Word's, LibreOffice's, RTE Writer's): each paragraph's set from its \sN; returns
-	// RTE Writer's own definitions (null if the file has none). An RTF without any styles (written by RTE Writer before it
+	// The styles an RTF just loaded has (Word's, LibreOffice's, AhkWord's): each paragraph's set from its \sN; returns
+	// AhkWord's own definitions (null if the file has none). An RTF without any styles (written by AhkWord before it
 	// had them, or by WordPad) gets its headings from their fonts, as before, the large ones only (bold 24, 18 and 14 pt:
 	// a bold 12 pt line is a heading's look only by chance).
 	StyleSheet? StylesFromRtf(string rtf) {
 		form.LoadedListStarts = LegalLists.StartsFrom(rtf);    // (StylesAfterLoad gives them back to the numbered items)
 		var (sheet, names, paragraphs, any) = RtfStyles.Read(rtf);
 		var doc = ed.TextDocument;
-		LegalLists.RestoreOff(doc, rtf);    // (the paragraphs whose numbering is off, as RTE Writer's RTF kept them)
+		LegalLists.RestoreOff(doc, rtf);    // (the paragraphs whose numbering is off, as AhkWord's RTF kept them)
 		if (any) {
 			string Name(int number) => names.TryGetValue(number, out var name) ? (ParagraphStyle.HeadingNumber(name) is int n and > 0 ? "Heading " + n : name) : "Normal";
 			StyleEngine.SetNames(doc, paragraphs.Select(Name).ToList());
@@ -4573,10 +4581,10 @@ public class EditorApi
 	public string Rtf {
 		get => OfficeConverters.WithAltTexts(RawRtf, AltTexts());
 		set {
-			if (ListLevelsFrom(value) is { } levels) form.Levels = levels;    // (the document's list levels, as RTE Writer's RTF kept them)
+			if (ListLevelsFrom(value) is { } levels) form.Levels = levels;    // (the document's list levels, as AhkWord's RTF kept them)
 			value = OfficeConverters.SimplePictures(value);    // (Word's picture wrappers, which RichEdit can drop)
 			value = OfficeConverters.WithoutUnlistedNumbering(value, out var wordStarts);    // (Word's paragraphs in no list, which RichEdit would number)
-			// (LibreOffice's and Word's "page break before" paragraphs, which are their page breaks; RTE Writer's own keep it)
+			// (LibreOffice's and Word's "page break before" paragraphs, which are their page breaks; AhkWord's own keep it)
 			if (!value.Contains(@"{\*\rtewriterstyles")) value = PageBreaks.FromPageBreakBefore(value);
 			value = HeaderFooter.StripFromRtf(value);             // (the header and footer are the document's Bands)
 			value = RtfTables.WordShading(value);                 // (Word's cell backgrounds, which RichEdit ignores)
@@ -6613,7 +6621,7 @@ static class Automation
 			lines.AddRange(members.Select(m => "  " + m));
 			lines.Add("");
 		}
-		Section("RTE Writer (EditorApi):", typeof(EditorApi), m => m.DeclaringType == typeof(EditorApi));
+		Section("AhkWord (EditorApi):", typeof(EditorApi), m => m.DeclaringType == typeof(EditorApi));
 		var api = typeof(EditorApi).GetMembers(BindingFlags.Public | BindingFlags.Instance).Select(m => m.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
 		Section("Editor (RichEditBox):", typeof(RichEditBox), m => (m.DeclaringType == typeof(RichEditBox) || EditorMembers.Contains(m.Name)) && !api.Contains(m.Name)
 			&& !(m is PropertyInfo p && p.PropertyType.Namespace == typeof(ITextDocument2).Namespace));
@@ -6669,8 +6677,8 @@ sealed class EventHub
 	[DllImport("user32")] static extern bool IsWindow(IntPtr hWnd);
 }
 
-// Settings remembered between sessions, stored as JSON in %APPDATA%\RTE Writer\settings.json (in portable mode,
-// data\settings.json beside the program), or in the file named by the RTE_WRITER_SETTINGS environment variable. A
+// Settings remembered between sessions, stored as JSON in %APPDATA%\AhkWord\settings.json (in portable mode,
+// data\settings.json beside the program), or in the file named by the AHKWORD_SETTINGS (or RTE_WRITER_SETTINGS) environment variable. A
 // missing or unreadable file gives the defaults.
 public sealed class Settings
 {
@@ -6724,7 +6732,9 @@ public sealed class Settings
 	// Always three parts, whatever the file contained.
 	public static string[] Parts(string[]? parts) => Enumerable.Range(0, 3).Select(i => parts != null && i < parts.Length ? parts[i] ?? "" : "").ToArray();
 
-	public static string FilePath => Environment.GetEnvironmentVariable("RTE_WRITER_SETTINGS") is { Length: > 0 } path ? path
+	// (AHKWORD_SETTINGS; RTE_WRITER_SETTINGS, its name before iteration 39, still does)
+	public static string FilePath => (Environment.GetEnvironmentVariable("AHKWORD_SETTINGS") is { Length: > 0 } set ? set
+		: Environment.GetEnvironmentVariable("RTE_WRITER_SETTINGS")) is { Length: > 0 } path ? path
 		: Path.Combine(AppFolders.Roaming, "settings.json");
 
 	public static Settings Load() {
@@ -6753,7 +6763,7 @@ public sealed class Settings
 		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 	}
 
-	// Several RTE Writer windows share this file. Each remembers the settings as it last read or wrote them (known); a
+	// Several AhkWord windows share this file. Each remembers the settings as it last read or wrote them (known); a
 	// save first takes from the file what another window changed since and this one didn't: a setting changed only
 	// there is taken over, one changed in both keeps this window's, except that lists and maps (the recent documents,
 	// macro hotkeys, remembered template values) are merged item by item (this window's additions, changes and removals
@@ -6792,13 +6802,13 @@ public sealed class Settings
 	}
 }
 
-// Keeps the default printer as it is while RTE Writer prints to a printer the user didn't choose (PDF export). While
+// Keeps the default printer as it is while AhkWord prints to a printer the user didn't choose (PDF export). While
 // Windows manages the default printer ("Let Windows manage my default printer", on by default), printing makes the
 // printer used the default, also in Windows' record for the network the computer is on; and Windows applies it again
 // when the process ends, so putting the default back afterwards doesn't last. Instead, Windows is told that the user
 // manages the default (LegacyDefaultPrinterMode = 1) for the print job, and its own setting is put back as soon as the
 // job is done (checked: the default and Windows' record stay as they were, also after the process ends). The setting to
-// put back is kept in the settings file meanwhile, and put back at the next start if RTE Writer ended in between.
+// put back is kept in the settings file meanwhile, and put back at the next start if AhkWord ended in between.
 sealed class DefaultPrinterGuard : IDisposable
 {
 	const string Key = @"Software\Microsoft\Windows NT\CurrentVersion\Windows", Value = "LegacyDefaultPrinterMode";
@@ -6823,7 +6833,7 @@ sealed class DefaultPrinterGuard : IDisposable
 		if (active) Restore(settings);
 	}
 
-	/// Puts back Windows' setting as a guard found it (after its job, or at the next start if RTE Writer ended meanwhile).
+	/// Puts back Windows' setting as a guard found it (after its job, or at the next start if AhkWord ended meanwhile).
 	public static void Restore(Settings settings) {
 		if (settings.PrinterModeToRestore is not int mode) return;
 		try {
@@ -8451,7 +8461,7 @@ sealed class AutomationServer : NativeWindow, IDisposable
 
 	public AutomationServer(Func<string[], string> dispatch) {
 		this.dispatch = dispatch;
-		CreateHandle(new CreateParams { Caption = "RTE Writer automation server " + Environment.ProcessId });
+		CreateHandle(new CreateParams { Caption = "AhkWord automation server " + Environment.ProcessId });
 	}
 
 	protected override void WndProc(ref Message m) {

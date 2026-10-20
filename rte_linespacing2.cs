@@ -1,4 +1,4 @@
-// Line and paragraph spacing for RTE Writer (rte_writer38.cs, through #load): the selected paragraphs' line spacing,
+// Line and paragraph spacing for AhkWord (AhkWord.cs, through #load): the selected paragraphs' line spacing,
 // as in Word's Line and Paragraph Spacing button (1.0, 1.15, 1.5, 2.0 ... lines, or at least / exactly so many points),
 // and (version 2) their space before and after. They are paragraph formats (TOM's SetLineSpacing, SpaceBefore,
 // SpaceAfter), kept by RichEdit in RTF (\sl \slmult \sb \sa) and so in Word and OpenDocument files made by Word or
@@ -127,7 +127,7 @@ public static class LineSpacing
 			// indents and tab stops (not list items: their indents are the list's)
 			string tabs = "";
 			var block = blocks[k];
-			// the line and page breaks: for RTE Writer (data-rte-breaks) and as CSS, which browsers keep when printing
+			// the line and page breaks: for AhkWord (data-rte-breaks) and as CSS, which browsers keep when printing
 			string breaks = Breaks(para);
 			foreach (char flag in breaks)
 				parts.Add(flag switch {

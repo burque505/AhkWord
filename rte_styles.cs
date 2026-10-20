@@ -1,4 +1,4 @@
-// Paragraph styles for RTE Writer (rte_writer38.cs, through #load).
+// Paragraph styles for AhkWord (AhkWord.cs, through #load).
 //   - ParagraphStyle: a named set of formatting: the font (name, size, bold, italic, underline, colour) and the
 //     paragraph's (alignment, indents, space before and after, line spacing, keep with next, keep lines together, widow
 //     and orphan control, page break before, no space between paragraphs of the same style), a heading level (0 for
@@ -10,7 +10,7 @@
 //     sets the paragraph's formatting, and the character formatting that is the style's (formatting given to part of the
 //     paragraph, such as a bold word, stays); changing a style changes the paragraphs that have it in the same way.
 //   - RtfStyles: the styles in RTF, as Word and LibreOffice read them (a style sheet, and each paragraph's \sN), with the
-//     styles' own definitions kept for RTE Writer in {\*\rtewriterstyles ...}.
+//     styles' own definitions kept for AhkWord in {\*\rtewriterstyles ...}.
 //   - StyleHtml: headings as h1-h6 in HTML, other styles as data-rte-style; read back (markers, as rte_linespacing2.cs).
 //   - StyleDialog: Modify Style and New Style.
 using System;
@@ -208,7 +208,7 @@ public static class StyleEngine
 		}
 	}
 
-	/// The style name a TOM paragraph style number stands for (null: none RTE Writer gave).
+	/// The style name a TOM paragraph style number stands for (null: none AhkWord gave).
 	public static string? NameOf(int id) {
 		if (id == -1 || id == 0) return "Normal";
 		if (id is <= -2 and >= -7) return "Heading " + (-id - 1);
@@ -503,7 +503,7 @@ public static class StyleEngine
 			any = true;
 		}
 		LegalLists.LoadedIndents.Clear();
-		any |= LegalLists.RestoreStarts(doc, starts);    // (RTE Writer's RTF: where the numbering starts again)
+		any |= LegalLists.RestoreStarts(doc, starts);    // (AhkWord's RTF: where the numbering starts again)
 		if (any) Renumber(doc);
 		return any;
 	}
@@ -718,7 +718,7 @@ public static class StyleEngine
 }
 
 // Styles in RTF. Word, LibreOffice and RichEdit read a style sheet ({\stylesheet{\s0 Normal;}{\s1 heading 1;}...}) and
-// each paragraph's style (\sN); RichEdit keeps only its own (Normal, the headings) and drops the others, so RTE Writer
+// each paragraph's style (\sN); RichEdit keeps only its own (Normal, the headings) and drops the others, so AhkWord
 // writes them itself, and keeps the styles' definitions for itself in {\*\rtewriterstyles base64-JSON} (others ignore it).
 public static class RtfStyles
 {
@@ -752,7 +752,7 @@ public static class RtfStyles
 	}
 
 	/// The RTF (RichEdit's) with the styles: the style sheet (each style's whole definition, so that Word and LibreOffice
-	/// have them as RTE Writer has them, and RTE Writer's own copy), and each paragraph's \sN at its start, before its
+	/// have them as AhkWord has them, and AhkWord's own copy), and each paragraph's \sN at its start, before its
 	/// own formatting (which a reader that applies the style's then puts back). names: the paragraphs' styles in order
 	/// (StyleEngine.Names). If the paragraphs don't match in number, only the style sheet is written. widows: whether each
 	/// paragraph has widow and orphan control (StyleEngine.WidowControls), written as Word reads it (\widctlpar: RichEdit
@@ -859,7 +859,7 @@ public static class RtfStyles
 		rtf = rtf.Insert(end - 1, entry);
 		return entries.Length - 1;
 	}
-	/// What an RTF says about styles: RTE Writer's definitions (null if it has none), the style sheet's names by number,
+	/// What an RTF says about styles: AhkWord's definitions (null if it has none), the style sheet's names by number,
 	/// and each paragraph's style number (in order, as Inject counts them). Any: whether it has styles at all.
 	public static (StyleSheet? Sheet, Dictionary<int, string> Names, List<int> Paragraphs, bool Any) Read(string rtf) {
 		StyleSheet? sheet = null;
@@ -987,12 +987,12 @@ public static class RtfStyles
 }
 
 // Styles through the clipboard: RichEdit's own copy and paste keep only the headings' styles, so Copy and Cut also put
-// the copied paragraphs' styles (and their definitions) on the clipboard, in a format of RTE Writer's own, and Paste gives
+// the copied paragraphs' styles (and their definitions) on the clipboard, in a format of AhkWord's own, and Paste gives
 // the pasted paragraphs their styles again (a style the document hasn't got comes with its definition, from another
 // window's document too).
 public static class StyleClipboard
 {
-	public const string Format = "RTE Writer paragraph styles";
+	public const string Format = "AhkWord paragraph styles";
 
 	/// The clipboard (tests use one of their own, so as to leave the user's as it is).
 	public static Func<IDataObject?> Read = Clipboard.GetDataObject;
@@ -1042,7 +1042,7 @@ public static class StyleClipboard
 		} catch (System.Runtime.InteropServices.ExternalException) { }
 	}
 
-	/// paste: RichEdit's own Paste; then the pasted paragraphs get their styles back (if the clipboard has RTE Writer's).
+	/// paste: RichEdit's own Paste; then the pasted paragraphs get their styles back (if the clipboard has AhkWord's).
 	/// Returns whether the style sheet got styles it hadn't.
 	/// Where the last Paste put its text (start, end).
 	public static (int Start, int End) Pasted { get; private set; }
@@ -1175,11 +1175,11 @@ public static class StyleHtml
 
 	const string MetaName = "rte-writer-styles";
 
-	/// The document's styles for RTE Writer, in the HTML file's head (as the header and footer are).
+	/// The document's styles for AhkWord, in the HTML file's head (as the header and footer are).
 	public static string Meta(StyleSheet sheet) =>
 		$"<meta name=\"{MetaName}\" content=\"{Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(sheet)))}\">";
 
-	/// The styles an HTML file has for RTE Writer (null: none).
+	/// The styles an HTML file has for AhkWord (null: none).
 	public static StyleSheet? FromMeta(string html) {
 		var m = Regex.Match(html, "<meta\\s+name=\"" + MetaName + "\"\\s+content=\"([A-Za-z0-9+/=]+)\"", RegexOptions.IgnoreCase);
 		if (!m.Success) return null;

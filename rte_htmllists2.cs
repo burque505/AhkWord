@@ -1,4 +1,4 @@
-// List numbering in HTML for RichEditBox (used by RTE Writer, rte_writer10.cs, through #load).
+// List numbering in HTML for RichEditBox (used by AhkWord, AhkWord.cs, through #load).
 // Version 2 adds legal numbering (rte_legal.cs): a legal list is <ol class="rte-legal">, its items without their
 // number text, and CSS counters draw "1.2.1" in browsers.
 // RichEditorNET's HTML keeps the numbering style of a list (<ol type="a">) but not its punctuation, its start number,
