@@ -129,6 +129,10 @@ SubscribeToSaved() {
         SetTimer(SubscribeToSaved, -200)
 }
 
+; AhkWord's icon in the tray too (images\icon\ahkword.ico)
+if FileExist(A_ScriptDir "\images\icon\ahkword.ico")
+    TraySetIcon(A_ScriptDir "\images\icon\ahkword.ico")
+
 StartFile := A_Args.Length ? A_Args[1] : ""
 RunCSharpFile(A_ScriptDir "\AhkWord.cs", A_AhkPath, A_ScriptDir, StartFile, A_ScriptFullPath)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output

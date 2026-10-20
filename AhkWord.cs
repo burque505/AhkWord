@@ -21,7 +21,13 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 40 adds to iteration 39:
+// Run it with AhkWord.ahk. Iteration 41 adds to iteration 40:
+//   - AhkWord's icon (images\icon\ahkword.ico: a W whose strokes are A, H and K; the W alone at 16 to 24 pixels),
+//     drawn by images\icon\make_icon.py: the window's and the taskbar's (WriterForm.AppIcon), the tray's (AhkWord.ahk).
+//   - AhkWord is an app of its own on the taskbar (TaskbarIdentity): its app ID "AhkWord" for the process and its
+//     windows, and the windows' relaunch properties (the icon, the name, AutoHotkey with AhkWord.ahk): the taskbar shows
+//     AhkWord's icon, groups its windows apart from other AutoHotkey scripts, and pinned starts AhkWord.
+// Iteration 40 added to iteration 39:
 //   - Home > Styles > Copy Styles from Document (Word's Organizer): another document's styles, ticked, come into this
 //     one, and into your defaults for new documents if "Also for new documents" is (StyleImport.From: AhkWord's RTF and
 //     HTML whole; a .docx's, its numbered styles numbered as Word's definitions say, DocxStyles.Numbering; other RTF's
@@ -469,7 +475,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 40;    // (the About box; make_version.ps1)
+	public const int Iteration = 41;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -557,12 +563,30 @@ class WriterForm : Form
 	bool skipLegalCheck, guardingCaret, guardPending;
 	int lastCaret = -1;
 
+	/// Iteration 41: AhkWord's icon (images\icon\ahkword.ico, made by images\icon\make_icon.py); null if it isn't there
+	/// or can't be read (the window then has .NET's).
+	internal static Icon? AppIcon(string appDir) {
+		string path = Path.Combine(appDir, "images", "icon", "ahkword.ico");
+		try { return File.Exists(path) ? new Icon(path) : null; }
+		catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException) { return null; }
+	}
+
+	// (its window: AhkWord's own on the taskbar, its icon, and pinned it starts AhkWord: TaskbarIdentity)
+	protected override void OnHandleCreated(EventArgs e) {
+		base.OnHandleCreated(e);
+		string icon = Path.Combine(appDir, "images", "icon", "ahkword.ico");
+		string script = AppFolders.HostScript is { } host && File.Exists(host) ? host : Path.Combine(appDir, "AhkWord.ahk");
+		TaskbarIdentity.SetWindow(Handle, $"\"{ahkPath}\" \"{script}\"", File.Exists(icon) ? icon : null);
+	}
+
 	public WriterForm(string ahkPath, string appDir, string? startFile) {
+		TaskbarIdentity.SetProcess();    // (before its first window)
 		this.ahkPath = ahkPath;
 		this.appDir = appDir;
 		DefaultPrinterGuard.Restore(Settings);    // (if a PDF export was interrupted)
 		Bands = DefaultBands();
 		Text = AppName;
+		if (AppIcon(appDir) is { } icon) Icon = icon;    // (the title bar's and the taskbar's)
 		StartPosition = FormStartPosition.CenterScreen;
 		Size = new Size(LogicalToDeviceUnits(1150), LogicalToDeviceUnits(820));
 		Editor.EnableHtmlFontSizing = false;    // (any font size: styles do what "structured documents" did, iteration 34)
@@ -6755,6 +6779,94 @@ sealed class EventHub
 // Settings remembered between sessions, stored as JSON in %APPDATA%\AhkWord\settings.json (in portable mode,
 // data\settings.json beside the program), or in the file named by the AHKWORD_SETTINGS (or RTE_WRITER_SETTINGS) environment variable. A
 // missing or unreadable file gives the defaults.
+// Iteration 41: AhkWord as an app of its own on the taskbar. It runs in AutoHotkey's process, so Windows would take it
+// for AutoHotkey: its button grouped with other scripts', AutoHotkey's icon, and pinned it would start AutoHotkey alone.
+// An app ID of its own ("AhkWord", for the process and its windows) and, on each window, the shell's "relaunch"
+// properties (its icon, its name, the command that starts it) make the taskbar show AhkWord's icon, group AhkWord's
+// windows by themselves, and start AhkWord when its pinned button is clicked.
+public static class TaskbarIdentity
+{
+	public const string AppId = "AhkWord";
+
+	[DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+	static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
+	[DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+	static extern int GetCurrentProcessExplicitAppUserModelID(out IntPtr appId);
+	[DllImport("shell32.dll")]
+	static extern int SHGetPropertyStoreForWindow(IntPtr hwnd, ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out IPropertyStore store);
+	[DllImport("ole32.dll")]
+	static extern int PropVariantClear(ref PropVariant value);
+
+	[ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+	interface IPropertyStore {
+		int GetCount(out uint count);
+		int GetAt(uint index, out PropertyKey key);
+		int GetValue(ref PropertyKey key, out PropVariant value);
+		int SetValue(ref PropertyKey key, ref PropVariant value);
+		int Commit();
+	}
+
+	[StructLayout(LayoutKind.Sequential, Pack = 4)]
+	struct PropertyKey { public Guid Format; public uint Id; public PropertyKey(Guid format, uint id) { Format = format; Id = id; } }
+
+	// a PROPVARIANT: its type (VT_LPWSTR: 31; VT_EMPTY: 0) and, 8 bytes in, the string's pointer
+	[StructLayout(LayoutKind.Explicit, Size = 24)]
+	struct PropVariant { [FieldOffset(0)] public ushort Type; [FieldOffset(8)] public IntPtr Pointer; }
+
+	static readonly Guid AppUserModel = new("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3");
+	static readonly PropertyKey RelaunchCommand = new(AppUserModel, 2), RelaunchIcon = new(AppUserModel, 3),
+		RelaunchName = new(AppUserModel, 4), Id = new(AppUserModel, 5);
+
+	/// The process's app ID: before its first window, so that the taskbar knows it from the start.
+	public static void SetProcess() {
+		try { SetCurrentProcessExplicitAppUserModelID(AppId); } catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException) { }
+	}
+
+	/// The process's app ID (null: none set).
+	public static string? ProcessId() {
+		try {
+			if (GetCurrentProcessExplicitAppUserModelID(out IntPtr id) != 0 || id == IntPtr.Zero) return null;
+			string? value = Marshal.PtrToStringUni(id);
+			Marshal.FreeCoTaskMem(id);
+			return value;
+		} catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException) { return null; }
+	}
+
+	/// A window's app ID and relaunch properties: the command that starts AhkWord, its icon (an .ico; null: none).
+	public static bool SetWindow(IntPtr window, string command, string? icon) {
+		var properties = new List<(PropertyKey Key, string Value)> { (Id, AppId), (RelaunchCommand, command), (RelaunchName, AppId) };
+		if (icon != null) properties.Add((RelaunchIcon, icon + ",0"));
+		try {
+			var iid = typeof(IPropertyStore).GUID;
+			if (SHGetPropertyStoreForWindow(window, ref iid, out var store) != 0) return false;
+			try {
+				foreach (var (key, value) in properties) {
+					var k = key;
+					var v = new PropVariant { Type = 31, Pointer = Marshal.StringToCoTaskMemUni(value) };
+					try { store.SetValue(ref k, ref v); } finally { PropVariantClear(ref v); }
+				}
+				store.Commit();
+			} finally { Marshal.ReleaseComObject(store); }
+			return true;
+		} catch (Exception ex) when (ex is COMException or DllNotFoundException or EntryPointNotFoundException or InvalidCastException) { return false; }
+	}
+
+	/// A window's properties as set (app ID, relaunch command, icon, name), for checking.
+	public static (string? Id, string? Command, string? Icon, string? Name) OfWindow(IntPtr window) {
+		try {
+			var iid = typeof(IPropertyStore).GUID;
+			if (SHGetPropertyStoreForWindow(window, ref iid, out var store) != 0) return default;
+			try {
+				string? Get(PropertyKey key) {
+					if (store.GetValue(ref key, out var v) != 0) return null;
+					try { return v.Type == 31 ? Marshal.PtrToStringUni(v.Pointer) : null; } finally { PropVariantClear(ref v); }
+				}
+				return (Get(Id), Get(RelaunchCommand), Get(RelaunchIcon), Get(RelaunchName));
+			} finally { Marshal.ReleaseComObject(store); }
+		} catch (Exception ex) when (ex is COMException or InvalidCastException) { return default; }
+	}
+}
+
 public sealed class Settings
 {
 	public const int MaxRecentFiles = 10;
