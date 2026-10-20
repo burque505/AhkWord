@@ -35,9 +35,14 @@ try {
 	New-Item -ItemType Directory -Force $work | Out-Null
 	git -C $root archive --format=zip -o $archive HEAD
 	Expand-Archive $archive $folder
-	foreach ($only in "make_version.ps1", "make_release.ps1", ".gitignore") {
+	foreach ($only in "make_version.ps1", "make_release.ps1", ".gitignore", "make_docs.py", "mkdocs.yml") {
 		$path = Join-Path $folder $only
 		if (Test-Path $path) { [IO.File]::Delete($path) }
+	}
+	# (the documentation's sources and its workflow: the documentation is on the web, https://burque505.github.io/AhkWord/)
+	foreach ($only in "docs", ".github") {
+		$path = Join-Path $folder $only
+		if (Test-Path $path) { [IO.Directory]::Delete($path, $true) }
 	}
 	# AhkWord.exe, AutoHotkey's license, and what AhkWord.exe is
 	Copy-Item $AutoHotkey (Join-Path $folder "AhkWord.exe")
