@@ -1,4 +1,4 @@
-// Paragraph styles for RTE Writer (rte_writer36.cs, through #load).
+// Paragraph styles for RTE Writer (rte_writer37.cs, through #load).
 //   - ParagraphStyle: a named set of formatting: the font (name, size, bold, italic, underline, colour) and the
 //     paragraph's (alignment, indents, space before and after, line spacing, keep with next, keep lines together, widow
 //     and orphan control, page break before, no space between paragraphs of the same style), a heading level (0 for
@@ -54,7 +54,29 @@ public sealed class ParagraphStyle
 	public string Numbering { get; set; } = "";        // the number's format: NumberFormats ("1.", "(a)", "1.1" ...); "": none
 	public int NumberLevel { get; set; } = 1;          // its level in the numbering, 1-9 (1: the top level)
 
+	// its sub-levels' formats, below its own level ("a., i., (1)"; "": the usual ones after its own, SubLevelFormats)
+	public string SubLevels { get; set; } = "";
+
 	[System.Text.Json.Serialization.JsonIgnore] public bool Numbered => Numbering != "";
+
+	/// How far right each sub-level is indented from the one above it (points; Modify Style > Sub-level indent).
+	public float SubLevelIndent { get; set; } = 36;
+
+	/// The usual formats one after another, each sub-level taking the next: after "1." come "a.", "i.", "(1)" ...
+	public static readonly string[] SubLevelOrder = { "1.", "a.", "i.", "(1)", "(a)", "(i)", "A.", "I.", "(A)" };
+
+	/// The format of the style's numbers at a depth below its own level (0: its own); null if it isn't numbered.
+	public string? FormatAt(int depth) {
+		if (!Numbered) return null;
+		if (depth <= 0 || Numbering == NumberFormats.Legal) return Numbering;
+		var own = SubLevels.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+		if (depth - 1 < own.Length && NumberFormats.Valid(own[depth - 1])) return own[depth - 1];
+		int at = Array.IndexOf(SubLevelOrder, Numbering);
+		return SubLevelOrder[((at < 0 ? 0 : at) + depth) % SubLevelOrder.Length];
+	}
+
+	/// The sub-levels' formats as shown in Modify Style ("a., i., (1), ..."): its own, or the usual ones.
+	public string SubLevelFormats() => Numbering == NumberFormats.Legal ? "" : string.Join(", ", Enumerable.Range(1, 8).Select(d => FormatAt(d)));
 
 	public ParagraphStyle Copy() => (ParagraphStyle)MemberwiseClone();
 
@@ -293,8 +315,12 @@ public static class StyleEngine
 			var para = doc.Range2(pStart, pStart).Para;
 			var old = sheet.ById(para.Style) ?? sheet.Normal;
 			Tag(para, IdOf(style.Name));
-			// (a list item keeps its list's indents; a numbered style's item has the style's)
-			SetParagraph(para, style, keepIndents: (para.ListType & 0xFFFF) != tomConstants.tomListNone && !style.Numbered);
+			// (a list item keeps its list's indents; a numbered style's item has the style's; a paragraph whose numbering is
+			// off, a numbered style's unnumbered one or one marked so, keeps indents of its own through any style, as it
+			// stays unnumbered: changing the style and back gives the paragraph as it was)
+			bool off = !LegalLists.IsLegal(para.ListType) && (old.Numbered && (para.ListType & 0xFFFF) == tomConstants.tomListNone || LegalLists.IsNumberingOff(para.ListType));
+			bool ownIndents = off && !(Same(para.FirstLineIndent, old.FirstLine) && Same(para.LeftIndent, old.LeftIndent) && Same(para.RightIndent, old.RightIndent));
+			SetParagraph(para, style, keepIndents: ownIndents || (para.ListType & 0xFFFF) != tomConstants.tomListNone && !style.Numbered);
 			SetCharacters(doc, pStart, pEnd, old, style, whole: true);
 			numbering |= Number(doc, pStart, old, style);
 		}
@@ -309,11 +335,26 @@ public static class StyleEngine
 		var para = doc.Range2(start, start).Para;
 		bool item = LegalLists.IsLegal(para.ListType);
 		if (now.Numbered) {
-			int level = Math.Clamp(now.NumberLevel, 1, 9) - 1;
+			// (a numbered style's paragraph whose numbering is off stays so under another numbered style, and one marked
+			// so, from a style without numbering, as Word's "numbering off" stays with the paragraph)
+			if (!item && (old.Numbered || LegalLists.IsNumberingOff(para.ListType))) { LegalLists.SetNumberingOff(para); return false; }
+			// (a sub-level item of a numbered style stays as deep below the new style's level)
+			int depth = item && old.Numbered ? Math.Max(0, para.ListLevelIndex - (Math.Clamp(old.NumberLevel, 1, 9) - 1)) : 0;
+			// (a number typed in front of a paragraph that had no numbered style, "a. " under "1." items: the style's number of
+			// that sub-level now, the typed one taken out, as the paragraph meant)
+			if (!item && TypedLevel(now, doc.Range2(start, Math.Min(doc.Range2(0, 0).StoryLength, start + 40)).Text ?? "") is { } typed) {
+				doc.Range2(start, start + typed.Length).Text = "";
+				para = doc.Range2(start, start).Para;
+				depth = typed.Depth;
+			}
+			int level = Math.Min(8, Math.Clamp(now.NumberLevel, 1, 9) - 1 + depth);
+			if (depth > 0) para.SetIndents(now.FirstLine, now.LeftIndent + depth * now.SubLevelIndent, now.RightIndent);
 			if (item && para.ListLevelIndex == level) { LegalLists.NoNumberSpace(para); return false; }
 			LegalLists.SetStyled(para, level, item ? para.ListStart : 0);    // (an item already keeps its series; others go on)
 			return true;
 		}
+		// (an unnumbered paragraph of a numbered style to one without numbering: marked numbering off, for coming back)
+		if (old.Numbered && !item) { LegalLists.SetNumberingOff(para); return false; }
 		if (!old.Numbered || !item) return false;    // (a legal item made with Legal numbering stays one)
 		int storyEnd = doc.Range2(0, 0).StoryLength;
 		var m = LegalLists.Prefix.Match(doc.Range2(start, Math.Min(storyEnd, start + 40)).Text ?? "");
@@ -357,9 +398,9 @@ public static class StyleEngine
 
 	/// A number typed in front of a paragraph with a tab after it (" 2.<tab>", "(b)<tab>"): its numbered style format
 	/// and the length to take out; null if it has none (or no tab: "2 apples" isn't a number of a list).
-	public static (string Format, int Length)? TypedFormat(string text) {
+	public static (string Format, int Length)? TypedFormat(string text, bool spaces = false) {
 		var m = LegalLists.TypedMarker.Match(text);
-		if (!m.Success || m.Groups["bullet"].Success || m.Groups["gap"].Value != "\t") return null;
+		if (!m.Success || m.Groups["bullet"].Success || (m.Groups["gap"].Value != "\t" && !spaces)) return null;
 		string n = m.Groups["n"].Value;
 		bool open = m.Groups["open"].Success;
 		string close = m.Groups["close"].Value;
@@ -373,6 +414,20 @@ public static class StyleEngine
 		return NumberFormats.Valid(format) ? (format, m.Length) : null;
 	}
 
+	/// A number typed in front of a paragraph ("a. ", "(ii)<tab>") in the format of one of a numbered style's levels: that
+	/// level's depth below the style's own (0: the style's own format) and the length to take out; null if none.
+	public static (int Depth, int Length)? TypedLevel(ParagraphStyle style, string text) {
+		if (TypedFormat(text, spaces: true) is not { } typed) return null;
+		int top = Math.Clamp(style.NumberLevel, 1, 9) - 1;
+		for (int depth = 0; top + depth <= 8; depth++)
+			if (style.FormatAt(depth) == typed.Format) return (depth, typed.Length);
+		// ("i." is one letter too: as a roman numeral where the style has one)
+		if (typed.Format.Replace('a', 'i') is var roman && roman != typed.Format && Regex.IsMatch(text, @"^ *\(?[iI][.)]"))
+			for (int depth = 0; top + depth <= 8; depth++)
+				if (style.FormatAt(depth) == roman) return (depth, typed.Length);
+		return null;
+	}
+
 	/// A numbered style's format for a RichEdit list type ("1." for numbers with a period ...; null: not a numbered list).
 	public static string? FormatOf(int listType) {
 		char count = (listType & 0xFFFF) switch { 2 => '1', 3 => 'a', 4 => 'A', 5 => 'i', 6 => 'I', _ => '\0' };
@@ -384,7 +439,7 @@ public static class StyleEngine
 	/// style, such as its "List Number") becomes a numbered style of that format and level, and the paragraphs of every
 	/// numbered style become items of its numbering: one whose list went on after other paragraphs (Word's "10." after a
 	/// heading) goes on, one that started again at another number starts there. Returns whether any did.
-	public static bool NumberAfterLoad(ITextDocument2 doc, StyleSheet sheet, List<int>? starts = null) {
+	public static bool NumberAfterLoad(ITextDocument2 doc, StyleSheet sheet, List<(int Start, int Level)>? starts = null) {
 		var paragraphs = LegalLists.Paragraphs(doc);
 		foreach (var group in paragraphs.GroupBy(p => p.Style)) {
 			if (sheet.ById(group.Key) is not { Numbered: false } style || style == sheet.Normal || style.Name == "Normal") continue;
@@ -396,10 +451,16 @@ public static class StyleEngine
 			if (items == 0) continue;
 			var numbered = group.Where(p => FormatOf(p.ListType) != null || TypedFormat(p.Text) != null).ToList();
 			if (numbered.Count * 2 <= count) continue;
+			// (one format for each level: the lowest level the style's own, the ones below it its sub-levels, as a Word
+			// multilevel list's)
 			var kinds = numbered.Select(p => (Format: FormatOf(p.ListType) ?? TypedFormat(p.Text)?.Format, p.Level)).Distinct().ToList();
-			if (kinds.Count != 1 || kinds[0].Format is not { } format) continue;
-			style.Numbering = format;
-			style.NumberLevel = Math.Clamp(kinds[0].Level + 1, 1, 9);
+			if (kinds.Any(k => k.Format == null) || kinds.GroupBy(k => k.Level).Any(g => g.Count() > 1)) continue;
+			int top = kinds.Min(k => k.Level);
+			style.Numbering = kinds.First(k => k.Level == top).Format!;
+			style.NumberLevel = Math.Clamp(top + 1, 1, 9);
+			int deepest = kinds.Max(k => k.Level);
+			style.SubLevels = deepest == top ? "" : string.Join(",", Enumerable.Range(top + 1, deepest - top)
+				.Select(level => kinds.FirstOrDefault(k => k.Level == level).Format ?? style.FormatAt(level - top)));
 		}
 		bool any = false;
 		// (from the last paragraph: a typed number that goes moves the text after it)
@@ -416,15 +477,25 @@ public static class StyleEngine
 			if (typed is { } t) doc.Range2(p.Start, p.Start + t.Length).Text = "";
 			var para = doc.Range2(p.Start, p.Start).Para;
 			if (p.Legal) {
-				if (p.Level != level) para.ListLevelIndex = level;
+				if (p.Level < level) para.ListLevelIndex = level;    // (a sub-level below its style's level stays one)
 				// (its indents as loaded: legal numbering's were given it before its style was known)
 				if (LegalLists.LoadedIndents.TryGetValue(p.Start, out var loaded)) para.SetIndents(loaded.First, loaded.Left, para.RightIndent);
 				LegalLists.NoNumberSpace(para);
 			} else {
 				// (a list's first item, after a paragraph not in it or another list's: "a list starting at" its number,
 				// which Normalize makes go on if that is the next number, as Word's lists of one run each do)
-				bool runStart = listItem && (i == 0 || paragraphs[i - 1].ListType != p.ListType || paragraphs[i - 1].ListStart != p.ListStart);
-				LegalLists.SetStyled(para, level, runStart ? LegalLists.Loaded + Math.Max(1, p.ListStart) : 0);
+				// (the items of deeper levels in between don't end its run: "2." after "1.", "a." and "b." goes on)
+				int before = i - 1;
+				while (before >= 0 && FormatOf(paragraphs[before].ListType) != null && paragraphs[before].Level > p.Level) before--;
+				bool runStart = listItem && (before < 0 || FormatOf(paragraphs[before].ListType) == null || paragraphs[before].ListType != p.ListType || paragraphs[before].ListStart != p.ListStart);
+				// (a Word item of a deeper level stays there: a sub-level of its style)
+				int itemLevel = Math.Max(level, listItem ? p.Level : level);
+				LegalLists.SetStyled(para, itemLevel, runStart ? LegalLists.Loaded + Math.Max(1, p.ListStart) : 0);
+				// (its style's indents, a sub-level's further in, as Word's numbered style draws them: the list's own, as
+				// converters and the typed numbers' conversion leave them, aren't the style's; a style with no indents
+				// of its own, its numbering's in Word, keeps them)
+				if (style.LeftIndent != 0 || style.FirstLine != 0)
+					para.SetIndents(style.FirstLine, style.LeftIndent + (itemLevel - level) * style.SubLevelIndent, para.RightIndent);
 			}
 			any = true;
 		}
@@ -465,8 +536,11 @@ public static class StyleEngine
 			if ((AlignText(para.Alignment)) == old.Align) para.Alignment = AlignOf(updated.Align);
 			if (Same(para.SpaceBefore, old.Before) || (old.Contextual && Same(para.SpaceBefore, 0))) para.SpaceBefore = updated.Before;
 			if (Same(para.SpaceAfter, old.After) || (old.Contextual && Same(para.SpaceAfter, 0))) para.SpaceAfter = updated.After;
-			if (Same(para.LeftIndent, old.LeftIndent) && Same(para.FirstLineIndent, old.FirstLine) && Same(para.RightIndent, old.RightIndent))
-				para.SetIndents(updated.FirstLine, updated.LeftIndent, updated.RightIndent);
+			// (a sub-level item: its depth's indent, from the old style's to the new's)
+			int depth = updated.Numbered && LegalLists.IsLegal(para.ListType) ? Math.Max(0, para.ListLevelIndex - (Math.Clamp(updated.NumberLevel, 1, 9) - 1)) : 0;
+			// (and its sub-level indent, from the old style's to the new's)
+			if (Same(para.LeftIndent, old.LeftIndent + depth * old.SubLevelIndent) && Same(para.FirstLineIndent, old.FirstLine) && Same(para.RightIndent, old.RightIndent))
+				para.SetIndents(updated.FirstLine, updated.LeftIndent + depth * updated.SubLevelIndent, updated.RightIndent);
 			if (global::LineSpacing.Of(doc.Range2(pStart, pStart)) == Normalize(old.LineSpacing)) SetLine(para, updated.LineSpacing);
 			if (Is(para.KeepWithNext) == old.KeepWithNext) para.KeepWithNext = Tom(updated.KeepWithNext);
 			if (Is(para.KeepTogether) == old.KeepTogether) para.KeepTogether = Tom(updated.KeepTogether);
@@ -475,7 +549,7 @@ public static class StyleEngine
 			SetCharacters(doc, pStart, end, old, updated, whole: false);
 			count++;
 		}
-		if (numbering || (updated.Numbered && old.Numbering != updated.Numbering)) Renumber(doc);    // (numbers in another format)
+		if (numbering || (updated.Numbered && (old.Numbering != updated.Numbering || old.SubLevelFormats() != updated.SubLevelFormats()))) Renumber(doc);    // (numbers in another format)
 		if (old.Contextual || updated.Contextual) Contextual(doc, sheet, 0, doc.Range2(0, 0).StoryLength);
 		return count;
 	}
@@ -1153,6 +1227,8 @@ sealed class StyleDialog : Form
 	readonly CheckBox keep = new() { Text = "Keep with the next paragraph", AutoSize = true };
 	readonly ComboBox numbering = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
 	readonly ComboBox numberLevel = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 70 };
+	readonly TextBox subLevels = new() { Width = 220 };
+	readonly NumericUpDown subLevelIndent = new() { Minimum = 0, Maximum = 144, DecimalPlaces = 1, Increment = 1, Width = 70 };
 	readonly Panel preview = new() { Height = 120, Dock = DockStyle.Fill, BackColor = SystemColors.Window, BorderStyle = BorderStyle.FixedSingle };
 	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
 	Color color = Color.Black;
@@ -1214,7 +1290,17 @@ sealed class StyleDialog : Form
 		for (int n = 1; n <= 9; n++) numberLevel.Items.Add(n.ToString());
 		numberLevel.SelectedIndex = Math.Clamp(style.NumberLevel, 1, 9) - 1;
 		numberLevel.Enabled = numbering.SelectedIndex > 0;
-		numbering.SelectedIndexChanged += (s, e) => numberLevel.Enabled = numbering.SelectedIndex > 0;
+		// the sub-levels' formats (Tab on a numbered paragraph): empty for the usual ones after the style's, shown faintly
+		subLevels.Text = style.SubLevels.Replace(",", ", ");
+		void SubLevelHint() {
+			var sample = new ParagraphStyle { Numbering = numbering.SelectedIndex > 0 ? NumberFormats.All[numbering.SelectedIndex - 1] : "" };
+			subLevels.PlaceholderText = sample.Numbered ? sample.SubLevelFormats() : "";
+			subLevels.Enabled = sample.Numbered && sample.Numbering != NumberFormats.Legal;
+			subLevelIndent.Enabled = sample.Numbered && sample.Numbering != NumberFormats.Legal;
+		}
+		subLevelIndent.Value = (decimal)Math.Clamp(style.SubLevelIndent, 0, 144);
+		SubLevelHint();
+		numbering.SelectedIndexChanged += (s, e) => { numberLevel.Enabled = numbering.SelectedIndex > 0; SubLevelHint(); };
 		foreach (Control c in new Control[] { font, size, bold, italic, underline, align, left, right, first, before, after, line, numbering, numberLevel })
 			switch (c) {
 				case ComboBox box: box.TextChanged += (s, e) => preview.Invalidate(); box.SelectedIndexChanged += (s, e) => preview.Invalidate(); break;
@@ -1241,6 +1327,8 @@ sealed class StyleDialog : Form
 		Row("First line (pt):", first, "", new Label { Text = "(negative: hanging)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
 		Row("Space before (pt):", before, "After (pt):", after);
 		Row("Numbering:", numbering, "Level:", numberLevel);
+		Row("Sub-levels:", subLevels, "", new Label { Text = "(Tab, Shift+Tab; empty: the usual)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
+		Row("Sub-level indent (pt):", subLevelIndent, "", new Label { Text = "(each sub-level this much further in)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
 		var paragraphButton = new Button { Text = "&Paragraph...", AutoSize = true };
 		paragraphButton.Click += (s, e) => ParagraphCommand();
 		Row("", keep, "", paragraphButton);
@@ -1294,6 +1382,8 @@ sealed class StyleDialog : Form
 		if (isNew && ParagraphStyle.BuiltIn(n)) { message = $"\"{n}\" is one of the styles there always are."; return false; }
 		try { global::LineSpacing.Parse(line.Text); } catch (ArgumentException ex) { message = ex.Message; return false; }
 		if (font.Text.Trim() == "") { message = "Choose a font."; return false; }
+		foreach (var part in subLevels.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+			if (!NumberFormats.Valid(part) || part == NumberFormats.Legal) { message = $"\"{part}\" is not a sub-level's format: {string.Join(" ", NumberFormats.All.Where(f => f != NumberFormats.Legal))}."; return false; }
 		return true;
 	}
 
@@ -1307,7 +1397,9 @@ sealed class StyleDialog : Form
 		Align = Aligns[Math.Max(0, align.SelectedIndex)], LeftIndent = (float)left.Value, RightIndent = (float)right.Value, FirstLine = (float)first.Value,
 		Before = (float)before.Value, After = (float)after.Value, LineSpacing = line.Text.Trim(), KeepWithNext = keep.Checked,
 		KeepTogether = breaks.KeepTogether, WidowControl = breaks.WidowControl, PageBreakBefore = breaks.PageBreakBefore, Contextual = breaks.Contextual,
-		Numbering = numbering.SelectedIndex > 0 ? NumberFormats.All[numbering.SelectedIndex - 1] : "", NumberLevel = numberLevel.SelectedIndex + 1
+		Numbering = numbering.SelectedIndex > 0 ? NumberFormats.All[numbering.SelectedIndex - 1] : "", NumberLevel = numberLevel.SelectedIndex + 1,
+		SubLevels = string.Join(",", subLevels.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)),
+		SubLevelIndent = (float)subLevelIndent.Value
 	};
 
 	// A sample paragraph in the style, with grey text before and after it (the space and indents to scale).

@@ -1,5 +1,5 @@
 // Paragraph styles in the .docx files the built-in converter (rte_office7.cs's OpenXml) reads and writes, for RTE
-// Writer (rte_writer36.cs, through #load). The converter goes through HTML (the PowerTools reading, HtmlToOpenXml
+// Writer (rte_writer37.cs, through #load). The converter goes through HTML (the PowerTools reading, HtmlToOpenXml
 // writing), which keeps only headings, and those with its own look. So:
 //   - reading: the .docx's paragraph styles, as Word works them out (the document's defaults, the styles each is based
 //     on, the theme's fonts), go into the reader's HTML as RTE Writer's own HTML has them (StyleHtml): each paragraph's

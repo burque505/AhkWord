@@ -233,7 +233,7 @@ public static class HtmlLists
 		return ListParagraphs(doc).Select(start => {
 			var para = doc.Range2(start, start).Para;
 			bool isLegal = LegalLists.IsLegal(para.ListType) && legal.ContainsKey(start);
-			string? own = isLegal && LegalLists.StyleNumbering(para.Style)?.Format is { } format && format != NumberFormats.Legal ? legal[start].Number : null;
+			string? own = isLegal && LegalLists.StyleFormat(para.Style, Math.Max(0, para.ListLevelIndex)) is { } format && format != NumberFormats.Legal ? legal[start].Number : null;
 			return new Item(para.ListLevelIndex, para.ListType & 0xFFFF, para.ListType & 0x70000, Math.Max(0, para.ListStart), isLegal,
 				isLegal ? legal[start].Counters[0] : 1, isLegal ? legal[start].Series : 0, MarkStyle(doc, start, pageFont), own);
 		}).ToList();

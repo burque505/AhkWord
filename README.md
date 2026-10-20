@@ -8,7 +8,7 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
 
 *[`examples/Showcase.rtf`](examples/Showcase.rtf), made entirely with the editor's own commands. The file has line numbers turned on (Layout > Line Numbers), which this picture doesn't show.*
 
-> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer36.*`). Renaming them to AhkWord is planned.
+> **Work in progress.** The editor is still named **RTE Writer** in the code, its window and its settings folder, and its files are numbered by iteration (`rte_writer37.*`). Renaming them to AhkWord is planned.
 
 ## Features
 
@@ -24,6 +24,8 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
   - All the numbered styles' paragraphs (and legal numbering's) are **one numbering through the document**: it goes on over the paragraphs between them (headings, quotations), and a lower level starts at (a) again under each item above it.
   - Numbers are **worked out from where each paragraph is**: cut a numbered paragraph and the ones after it close up; paste it elsewhere and it **joins the numbering where it lands**, at its level, and everything after it renumbers. Undo takes back the paste and its numbers together. Numbered list items pasted from elsewhere (Word) join too, taking the numbered style of the nearest item of their level.
   - The numbering starts again only where you say (List Options > Restart numbering), and that is kept when the document is saved and opened again.
+  - **Numbering off stays off:** a numbered style's paragraph whose numbering you turned off stays unnumbered, with its own indents, when you give it another style and then its style again (through Normal or a heading too, and when saved in between), as in Word. Numbering it again (the Numbering button, Tab) takes that away.
+  - **Sub-levels:** Tab on a numbered style's paragraph makes it a point under the one before it (a., b. under 1.; i., ii. a level further), Shift+Tab takes it back out. Tab at the start of a paragraph of a numbered style whose numbering is off makes it a sub-level item too, removing a letter typed in front of it ("a. "); so does Tab over several such paragraphs selected together, and giving a numbered style to paragraphs that start with a typed letter or number of one of its levels. The sub-levels go 1. / a. / i. / (1) / (a) / (i) by default; Modify Style > Sub-levels sets a style's own ("(a), (i)"), and Sub-level indent how much further in each sub-level is (36 pt at first). The style's own indents (Indent left, First line) set where its numbers and lines start. They are kept in saved documents and in Word and OpenDocument files as the list's levels, with the style's indents. A Word style whose list has several levels (Word's own numbered sub-items, not letters typed in) comes in with those levels as sub-levels; letters typed in stay text when a document is opened.
   - A Word document's numbered style (such as its "List Number") comes in as a numbered style, numbered as Word numbers it; Word, LibreOffice and the built-in writer get real Word list numbering back ("1." and "(a)" as Word's own list levels).
   - Giving a paragraph another style takes its number away; turning a style's numbering off takes its paragraphs' numbers away. The number is part of the paragraph's text, kept out of reach of typing (the caret goes after it).
 - **Tables:** insert tables, add and delete rows and columns, set column widths, borders (none, all, outside, inside ..., with line width and color), shading, row height, vertical alignment, cell padding and the table's alignment on the page, move between cells with Tab and Shift+Tab (Tab in the last cell adds a row, as in Word), also in tables from Word and other programs.
@@ -88,7 +90,7 @@ Rte.On("Saved", (e) => TrayTip(Rte.FileName, "Saved"))
 - **Calls** wait for the editor and return its result. `Rte.Post(...)` queues a call and returns at once. **Tools > Automation API** in the editor lists everything that can be called.
 - **Events** (`TextChanged`, `SelectionChanged`, `ModifiedChanged`, `Saved`, `Opened`, `Closed`, `AsyncError`) are delivered to callbacks registered with `Rte.On`.
 - **Macros:** the **Macros** button on the Tools tab runs the scripts in [`rte_macros`](rte_macros), and **Macro Hotkeys** gives any of them a hotkey. **Record Macro** (Ctrl+Shift+R) records typing and ribbon commands as a new macro script.
-- **Hotkeys in the host script:** `rte_writer36.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
+- **Hotkeys in the host script:** `rte_writer37.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
 
 The example macros include:
 
@@ -166,18 +168,18 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 1. Install the requirements above: the .NET 10 Desktop Runtime and 64-bit AutoHotkey v2 (the C# compiler is downloaded on the first start if none is installed).
 2. Clone this repository.
-3. Run `rte_writer36.ahk`. To open a document at start, pass its path: `rte_writer36.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`, and `examples\Styles Tutorial.rtf`, a tutorial on styles, style sets and paragraph settings that uses them itself.
+3. Run `rte_writer37.ahk`. To open a document at start, pass its path: `rte_writer37.ahk "C:\path\document.md"`. Try `examples\Showcase.rtf`, and `examples\Styles Tutorial.rtf`, a tutorial on styles, style sets and paragraph settings that uses them itself.
 
 Settings are kept in `%APPDATA%\RTE Writer\settings.json`, with the recovery copies beside them in `Recovery`. Set the environment variable `RTE_WRITER_SETTINGS` to a file path to keep them elsewhere.
 
-**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `rte_writer36.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
+**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `rte_writer37.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `rte_writer36.ahk` | Starts the editor and holds its in-process hotkeys |
-| `rte_writer36.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
+| `rte_writer37.ahk` | Starts the editor and holds its in-process hotkeys |
+| `rte_writer37.cs` | The editor window, the ribbon's commands, the Markdown and HTML views, and the automation interface |
 | `rte_markdown6.cs` | Markdown reading and writing |
 | `rte_linebreaks.cs` | Line breaks (Shift+Enter) in HTML |
 | `rte_htmllists2.cs` | HTML list numbering (start numbers, restarts, styles) |

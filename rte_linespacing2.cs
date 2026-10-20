@@ -1,4 +1,4 @@
-// Line and paragraph spacing for RTE Writer (rte_writer36.cs, through #load): the selected paragraphs' line spacing,
+// Line and paragraph spacing for RTE Writer (rte_writer37.cs, through #load): the selected paragraphs' line spacing,
 // as in Word's Line and Paragraph Spacing button (1.0, 1.15, 1.5, 2.0 ... lines, or at least / exactly so many points),
 // and (version 2) their space before and after. They are paragraph formats (TOM's SetLineSpacing, SpaceBefore,
 // SpaceAfter), kept by RichEdit in RTF (\sl \slmult \sb \sa) and so in Word and OpenDocument files made by Word or
@@ -615,15 +615,20 @@ public static class DocxLineSpacing
 			};
 			Place(pPr, new XElement(W + "spacing", new XAttribute(W + "before", Twips(Math.Max(0, para.SpaceBefore))), new XAttribute(W + "after", Twips(Math.Max(0, para.SpaceAfter))),
 				new XAttribute(W + "line", line), new XAttribute(W + "lineRule", rule)));
-			// indents and tab stops (list items keep their list's indents)
-			if ((para.ListType & 0xFFFF) != tomConstants.tomListNone || pPr.Element(W + "numPr") != null) continue;
+			// indents and tab stops (list items keep their list's indents; legal and numbered styles' items, whose
+			// indents are their own, as the editor draws them, don't)
+			bool legal = LegalLists.IsLegal(para.ListType);
+			if (!legal && ((para.ListType & 0xFFFF) != tomConstants.tomListNone || pPr.Element(W + "numPr") != null)) continue;
 			int left = Twips(para.LeftIndent), right = Twips(para.RightIndent), first = Twips(para.FirstLineIndent);
 			pPr.Element(W + "ind")?.Remove();
-			if (left != 0 || right != 0 || first != 0) {
+			// (all of them, 0 too, for a paragraph of a style or a numbered item: else Word gives it the style's or the
+			// list level's, such as a hanging indent of a numbered style on its paragraph whose numbering is off)
+			bool full = legal || StyleEngine.NameOf(para.Style) is { } style && style != "Normal";
+			if (left != 0 || right != 0 || first != 0 || full) {
 				var ind = new XElement(W + "ind");
-				if (left != 0) ind.SetAttributeValue(W + "left", left);
-				if (right != 0) ind.SetAttributeValue(W + "right", right);
-				if (first > 0) ind.SetAttributeValue(W + "firstLine", first);
+				if (left != 0 || full) ind.SetAttributeValue(W + "left", left);
+				if (right != 0 || full) ind.SetAttributeValue(W + "right", right);
+				if (first > 0 || first == 0 && full) ind.SetAttributeValue(W + "firstLine", first);
 				else if (first < 0) ind.SetAttributeValue(W + "hanging", -first);
 				Place(pPr, ind);
 			}

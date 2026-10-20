@@ -21,7 +21,21 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // RTE Writer: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with rte_writer36.ahk. Iteration 36 adds to iteration 35:
+// Run it with rte_writer37.ahk. Iteration 37 adds to iteration 36:
+//   - Sub-levels in numbered styles: Tab and Shift+Tab move a numbered style's paragraph to a sub-level under the
+//     one before it, numbered by ParagraphStyle.FormatAt (1. / a. / i. / (1) / (a) / (i) ... from the style's own
+//     format, or ParagraphStyle.SubLevels, Modify Style > Sub-levels), its indent a level further in
+//     (ParagraphStyle.SubLevelIndent, 36 pt at first; Modify Style > Sub-level indent). Tab
+//     at the start of an unnumbered paragraph of a numbered style makes it a sub-level item, removing a number
+//     typed in front (so does Tab over several selected, and a numbered style given to a paragraph that starts with
+//     a typed number of one of its levels: StyleEngine.TypedLevel). Kept through style changes, saving (the rtewriterlists group now has start:level) and Word
+//     and OpenDocument files (a format per list level); a Word style numbered over several levels comes in with
+//     them as its sub-levels.
+//   - Numbering off stays with the paragraph (as Word's numId 0): a numbered style's unnumbered paragraph keeps it and
+//     its own indents through other styles, Normal too, and back (LegalLists.SetNumberingOff: ListType NoNumber on a
+//     paragraph in no list; saved in {\*\rtewriteroff count:i,j,...}). Changing a style and back gives the paragraphs
+//     as they were.
+// Iteration 36 added to iteration 35:
 //   - Numbered styles: a paragraph style can number its paragraphs (ParagraphStyle.Numbering "1.", "(a)", "i." ...
 //     or "1.1" legal, NumberLevel 1-9; Modify Style > Numbering; the built-in Numbered Paragraph). They are legal
 //     numbering's items (rte_legal.cs: numbers worked out from position, one numbering through the document, restarts
@@ -623,7 +637,8 @@ class WriterForm : Form
 		Editor.TextChanged += (s, e) => { wordCountTimer.Stop(); wordCountTimer.Start(); UpdateTitle(); Restart(textEventTimer); Restart(outlineTimer); Restart(legalTimer); };
 		legalTimer.Tick += (s, e) => { legalTimer.Stop(); CheckLegalNumbers(); };
 		LegalLists.Format = Enum.TryParse<LegalLists.Periods>(Settings.LegalFormat, true, out var legalFormat) ? legalFormat : LegalLists.Periods.Top;
-		LegalLists.StyleNumbering = id => Styles.ById(id) is { Numbered: true } numbered ? (numbered.Numbering, Math.Clamp(numbered.NumberLevel, 1, 9) - 1) : null;    // (numbered styles)
+		LegalLists.StyleNumbering = id => Styles.ById(id) is { Numbered: true } numbered ? (numbered.Numbering, Math.Clamp(numbered.NumberLevel, 1, 9) - 1) : null;
+		LegalLists.StyleFormat = (id, level) => Styles.ById(id) is { Numbered: true } numbered ? numbered.FormatAt(level - (Math.Clamp(numbered.NumberLevel, 1, 9) - 1)) : null;    // (and its sub-levels)    // (numbered styles)
 		Editor.ContextMenuHook = ShowContextMenu;
 		Editor.OpenLink = OpenLinkCommand;
 		Editor.AltTextOf = position => api.PictureAltText(position);
@@ -1353,7 +1368,7 @@ class WriterForm : Form
 	/// the first paragraph with each (the document keeps its look), or, with takeLook (Markdown, plain text, which have
 	/// no look of their own), its paragraphs are given the styles' look.
 	/// The numbered items' ListStart values the RTF being loaded kept (LegalLists.StartsFrom), for StylesAfterLoad.
-	internal List<int>? LoadedListStarts;
+	internal List<(int Start, int Level)>? LoadedListStarts;
 
 	internal void StylesAfterLoad(StyleSheet? defined, bool takeLook, bool styledLook = false) {
 		var sheet = defined?.Copy() ?? DefaultStyles();
@@ -2942,7 +2957,8 @@ class WriterForm : Form
 			Run(() => api.NextCell(keyData == Keys.Tab ? 1 : -1), M("Key", key));
 			return true;
 		}
-		if ((keyData == Keys.Tab || keyData == (Keys.Shift | Keys.Tab)) && Editor.IsHandleCreated && msg.HWnd == Editor.Handle && api.InList() && !api.InTable()) {
+		if ((keyData == Keys.Tab || keyData == (Keys.Shift | Keys.Tab)) && Editor.IsHandleCreated && msg.HWnd == Editor.Handle && !api.InTable()
+			&& (api.InList() || keyData == Keys.Tab && api.TabMakesSubLevel())) {    // (an unnumbered paragraph of a numbered style: a sub-level item)
 			int delta = keyData == Keys.Tab ? 1 : -1;
 			Run(() => api.Nest(delta), M("Nest", delta));
 			return true;
@@ -4065,7 +4081,8 @@ public class EditorApi
 
 	// A style's settings changed: "Name=Value" lines (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent,
 	// RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore,
-	// Contextual, Level, Next, Numbering ("1.", "(a)", "1.1" ...; nothing: none), NumberLevel (1-9)).
+	// Contextual, Level, Next, Numbering ("1.", "(a)", "1.1" ...; nothing: none), NumberLevel (1-9), SubLevels ("a., i., (1)";
+	// nothing: the usual ones after Numbering), SubLevelIndent (points each sub-level further in, 36 at first)).
 	static ParagraphStyle WithSettings(ParagraphStyle style, string settings) {
 		var result = style.Copy();
 		foreach (var line in settings.Split('\n', StringSplitOptions.RemoveEmptyEntries)) {
@@ -4073,7 +4090,7 @@ public class EditorApi
 			if (equals <= 0) continue;
 			string key = line[..equals].Trim(), value = line[(equals + 1)..].Trim();
 			var property = typeof(ParagraphStyle).GetProperty(key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)
-				?? throw new ArgumentException($"A style has no \"{key}\" (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent, RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore, Contextual, Level, Next, Numbering, NumberLevel).");
+				?? throw new ArgumentException($"A style has no \"{key}\" (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent, RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore, Contextual, Level, Next, Numbering, NumberLevel, SubLevels, SubLevelIndent).");
 			if (property.Name == "Name" || !property.CanWrite) continue;
 			object converted = property.PropertyType == typeof(bool) ? value is "1" or "true" or "True" or "yes"
 				: property.PropertyType == typeof(float) ? float.Parse(value, CultureInfo.InvariantCulture)
@@ -4085,6 +4102,10 @@ public class EditorApi
 		if (result.Numbering != "" && !NumberFormats.Valid(result.Numbering))
 			throw new ArgumentException($"\"{result.Numbering}\" is not a numbering: {string.Join(", ", NumberFormats.All)}, or nothing for none.");
 		if (result.NumberLevel is < 1 or > 9) throw new ArgumentException("NumberLevel is 1 (the top level) to 9.");
+		if (result.SubLevelIndent is < 0 or > 144) throw new ArgumentException("SubLevelIndent is 0 to 144 points.");
+		foreach (var part in result.SubLevels.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+			if (!NumberFormats.Valid(part) || part == NumberFormats.Legal) throw new ArgumentException($"\"{part}\" is not a sub-level's format (SubLevels: \"a., i., (1)\", or nothing for the usual ones).");
+		result.SubLevels = string.Join(",", result.SubLevels.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 		return result;
 	}
 
@@ -4222,7 +4243,23 @@ public class EditorApi
 				var (kind, content, converter) = OfficeConverters.Import(full, via);
 				bands = extension == ".docx" ? HeaderFooter.FromDocx(full) : extension == ".odt" ? HeaderFooter.FromOdt(full) : kind == "rtf" ? HeaderFooter.FromRtf(content) : null;
 				numbering = extension == ".docx" ? LineNumberFormats.FromDocx(full) : extension == ".odt" ? LineNumberFormats.FromOdt(full) : kind == "rtf" ? LineNumberFormats.FromRtf(content) : null;
-				if (kind == "rtf") { Rtf = content; fileStyles = StylesFromRtf(content); }
+				if (kind == "rtf") {
+					Rtf = content;
+					fileStyles = StylesFromRtf(content);
+					// (a .docx's styles as the file defines them, where RTE Writer's own aren't there: else a style's look
+					// would be its first paragraph's, as the converter left it, such as a numbered style's first item
+					// with the list's indents)
+					if (fileStyles == null && extension == ".docx")
+						try {
+							if (DocxStyles.Read(full).Sheet is { Styles.Count: > 0 } read) {
+								// (in the order the document uses them, as styles taken from its paragraphs are)
+								var used = StyleEngine.Paragraphs(ed.TextDocument, 0, ed.TextDocument.Range2(0, 0).StoryLength)
+									.Select(p => StyleEngine.NameOf(ed.TextDocument.Range2(p.Start, p.Start).Para.Style)).Distinct().ToList();
+								read.Styles = read.Styles.OrderBy(s => used.FindIndex(n => string.Equals(n, s.Name, StringComparison.OrdinalIgnoreCase)) is var at && at < 0 ? int.MaxValue : at).ToList();
+								fileStyles = read;
+							}
+						} catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException) { }
+				}
 				else {
 					SetHtml(content);
 					// (the built-in reader's: the .docx's styles, DocxStyles; its text has its own look already, every run's
@@ -4426,7 +4463,8 @@ public class EditorApi
 	// (and the numbered items' ListStart values: where their numbering starts again)
 	string StyledRtf(string rtf) {
 		string styled = RtfStyles.Inject(rtf, StyleEngine.Names(ed.TextDocument, form.Styles), form.Styles, StyleEngine.WidowControls(ed.TextDocument));
-		string starts = form.WithoutGaps(() => LegalLists.StartsGroup(ed.TextDocument));
+		// (and the paragraphs whose numbering is off: LegalLists.OffGroup)
+		string starts = form.WithoutGaps(() => LegalLists.StartsGroup(ed.TextDocument) + LegalLists.OffGroup(ed.TextDocument));
 		int end = styled.LastIndexOf('}');
 		return starts == "" || end < 0 ? styled : styled.Insert(end, starts);
 	}
@@ -4439,6 +4477,7 @@ public class EditorApi
 		form.LoadedListStarts = LegalLists.StartsFrom(rtf);    // (StylesAfterLoad gives them back to the numbered items)
 		var (sheet, names, paragraphs, any) = RtfStyles.Read(rtf);
 		var doc = ed.TextDocument;
+		LegalLists.RestoreOff(doc, rtf);    // (the paragraphs whose numbering is off, as RTE Writer's RTF kept them)
 		if (any) {
 			string Name(int number) => names.TryGetValue(number, out var name) ? (ParagraphStyle.HeadingNumber(name) is int n and > 0 ? "Heading " + n : name) : "Normal";
 			StyleEngine.SetNames(doc, paragraphs.Select(Name).ToList());
@@ -5487,6 +5526,7 @@ public class EditorApi
 	/// Nests (positive) or un-nests (negative) the selected list items by that many levels, like Tab / Shift+Tab.
 	/// With automatic level styles, numbered items take the style of their new level: 1. -> a. -> i. -> 1. ...
 	public void Nest(int levels = 1) {
+		if (NestStyled(levels)) return;    // (numbered styles' paragraphs: their sub-levels)
 		if (TouchesLegalList()) {    // legal items: their new levels' indents and numbers, in one undo step
 			var range = SelectionRange();
 			int start = range.Start, end = range.End;
@@ -5499,6 +5539,68 @@ public class EditorApi
 		for (int i = 0; i < Math.Abs(levels); i++) NestOnce(Math.Sign(levels));
 	}
 
+
+	// Numbered styles' sub-levels: the selected items of numbered styles go levels down (or up) within their style,
+	// never above its own level, each level the style's SubLevelIndent further in; going down (Tab), a paragraph of a numbered style
+	// whose numbering is off becomes an item a level below its style's, a letter or number typed in front of it taken
+	// out (its number is the style's now). One undo step. False if the selection has no paragraph of a numbered style.
+	bool NestStyled(int levels) {
+		var doc = ed.TextDocument;
+		var range = SelectionRange();
+		var touched = LegalLists.Touched(doc, range.Start, range.End).Where(p => form.Styles.ById(p.Style) is { Numbered: true }).ToList();
+		if (touched.Count == 0 || touched.All(p => !p.Legal) && levels < 0) return false;
+		doc.BeginEditCollection();
+		try {
+			foreach (var p in Enumerable.Reverse(touched)) {    // (from the last: a typed number that goes moves the text after it)
+				var style = form.Styles.ById(p.Style)!;
+				int top = Math.Clamp(style.NumberLevel, 1, 9) - 1;
+				var para = doc.Range2(p.Start, p.Start).Para;
+				int level;
+				if (p.Legal) {
+					level = Math.Clamp(p.Level + levels, top, 8);
+					if (level == p.Level) continue;
+					para.ListLevelIndex = level;
+				} else {
+					if (levels < 0) continue;
+					if (TypedNumber(p.Text) is > 0 and var typed) doc.Range2(p.Start, p.Start + typed).Text = "";
+					level = Math.Min(8, top + levels);
+					para = doc.Range2(p.Start, p.Start).Para;
+					LegalLists.SetStyled(para, level);
+				}
+				para.SetIndents(style.FirstLine, style.LeftIndent + (level - top) * style.SubLevelIndent, para.RightIndent);
+				LegalLists.NoNumberSpace(para);
+			}
+			StyleEngine.Renumber(doc);
+		} finally {
+			doc.EndEditCollection();
+		}
+		return true;
+	}
+
+	/// The caret at the start of an unnumbered paragraph of a numbered style (or in a number typed in front of it):
+	/// Tab makes it a sub-level item there, as on a numbered paragraph, instead of typing a tab. So too a selection over
+	/// several paragraphs, all of numbered styles (the a.-e. under a "1." item, their numbering off).
+	public bool TabMakesSubLevel() {
+		var doc = ed.TextDocument;
+		var selection = doc.Selection2;
+		if (selection.Start != selection.End) {
+			var touched = LegalLists.Touched(doc, selection.Start, selection.End);
+			return touched.Count > 1 && touched.All(p => form.Styles.ById(p.Style) is { Numbered: true });
+		}
+		var p = LegalLists.Touched(doc, selection.Start, selection.Start).FirstOrDefault();
+		if (p == null || p.Legal || form.Styles.ById(p.Style) is not { Numbered: true }) return false;
+		return selection.Start <= p.Start + TypedNumber(p.Text);
+	}
+
+	/// The length of a number typed in front of a paragraph ("a. ", "(ii) ", "3) ", with its spaces or tab), or 0: a
+	/// number, one letter or a roman numeral, with its punctuation (not just any word with a space after it).
+	static int TypedNumber(string text) {
+		var m = LegalLists.TypedMarker.Match(text);
+		if (!m.Success || m.Groups["bullet"].Success || !m.Groups["close"].Success) return 0;
+		string n = m.Groups["n"].Value;
+		bool roman = n.All(ch => "ivxlcdm".Contains(ch)) || n.All(ch => "IVXLCDM".Contains(ch));
+		return char.IsDigit(n[0]) || n.Length == 1 || roman ? m.Length : 0;
+	}
 
 	void NestOnce(int delta) {
 		int selStart = ed.SelectionStart, selLength = ed.SelectionLength, selEnd = selStart + selLength;

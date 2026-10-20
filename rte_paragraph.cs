@@ -1,4 +1,4 @@
-// The Paragraph dialog, tab stops and the page-keeping rules for RTE Writer (rte_writer36.cs, through #load).
+// The Paragraph dialog, tab stops and the page-keeping rules for RTE Writer (rte_writer37.cs, through #load).
 //   - ParagraphFormat: what the Paragraph dialog sets (alignment, indents, spacing, line spacing, the line and page
 //     break rules, suppressed line numbers, tab stops), read from the selected paragraphs (a value they don't share is
 //     left empty) and given to them (only what was set), or to a style; as "Key=Value" lines for scripts.

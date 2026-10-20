@@ -5,7 +5,7 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
-// Word and OpenDocument conversions for RTE Writer (rte_writer36.cs, through #load).
+// Word and OpenDocument conversions for RTE Writer (rte_writer37.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
 // without spacing of its own as 1.08 lines, and "at least" as exactly. All of a paragraph's tabs come back as tabs (the
@@ -808,13 +808,25 @@ public static class OfficeConverters {
 		_ = scratch.Handle;
 		((System.Windows.Forms.RichTextBox)scratch).Rtf = rtf;
 		var doc = scratch.TextDocument;
+		// (LevelsFromNumbers gives the items legal numbering's indents, noting the ones they had: the editor's own, kept
+		// here for a numbered style's items; the editor's notes, for a document being opened, stay as they were)
+		var editors = new Dictionary<int, (float First, float Left)>(LegalLists.LoadedIndents);
+		LegalLists.LoadedIndents.Clear();
 		LegalLists.LevelsFromNumbers(doc);
+		var had = new Dictionary<int, (float First, float Left)>(LegalLists.LoadedIndents);
+		LegalLists.LoadedIndents.Clear();
+		foreach (var (at, indents) in editors) LegalLists.LoadedIndents[at] = indents;
 		var paragraphs = LegalLists.Paragraphs(doc);
 		var numbers = LegalLists.Numbers(paragraphs);
 		if (numbers.Count == 0) return rtf;
 		// the items as the editor numbers them, where it has said (numbered styles: their formats and levels)
 		var legal = paragraphs.Where(p => numbers.ContainsKey(p.Start)).ToList();
 		var items = LegalItems is { } given && given.Count == legal.Count ? given : null;
+		for (int i = 0; items != null && i < legal.Count; i++)
+			if (items[i].Format != null && had.TryGetValue(legal[i].Start, out var own)) {
+				var para = doc.Range2(legal[i].Start, legal[i].Start).Para;
+				para.SetIndents(own.First, own.Left, para.RightIndent);
+			}
 		var series = (items != null ? items.Select(i => i.Series) : numbers.Values.Select(n => n.Series)).Distinct().ToList();
 		var formats = series.Select(_ => new string?[9]).ToList();    // each series' format for each level (its first item's)
 		var texts = new string[legal.Count];    // each marker's number text, by marker index

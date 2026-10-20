@@ -35,6 +35,10 @@ public static class LegalLists
 	/// it from its style sheet.
 	public static Func<int, (string Format, int Level)?> StyleNumbering = _ => null;
 
+	/// A numbered style's format at a level (its own level's, or a sub-level's below it: ParagraphStyle.FormatAt), by
+	/// its TOM style number and the level (0-based); null: a legal item's.
+	public static Func<int, int, string?> StyleFormat = (_, _) => null;
+
 	/// A number typed in front of a paragraph ("1.2.1 " or "1.2.1<tab>"), which Make takes as the item's level.
 	static readonly Regex Typed = new(@"^(\d+(?:\.\d+)*)\.?(?:\t| +)");
 
@@ -106,7 +110,7 @@ public static class LegalLists
 			counters[level]++;
 			for (int k = level + 1; k < counters.Length; k++) counters[k] = 0;
 			for (int k = 0; k < level; k++) if (counters[k] == 0) counters[k] = 1;    // a skipped level counts as 1
-			numbers[p.Start] = (Number(counters, level, StyleNumbering(p.Style)?.Format), series.Value, (int[])counters.Clone());
+			numbers[p.Start] = (Number(counters, level, StyleFormat(p.Style, level)), series.Value, (int[])counters.Clone());
 		}
 		return numbers;
 	}
@@ -120,7 +124,7 @@ public static class LegalLists
 		var paragraphs = Paragraphs(doc);
 		var numbers = Numbers(paragraphs);
 		return paragraphs.Where(p => numbers.ContainsKey(p.Start))
-			.Select(p => new Item(Math.Min(p.Level, 9), StyleNumbering(p.Style)?.Format, numbers[p.Start].Number, numbers[p.Start].Series)).ToList();
+			.Select(p => new Item(Math.Min(p.Level, 9), StyleFormat(p.Style, Math.Min(p.Level, 9)), numbers[p.Start].Number, numbers[p.Start].Series)).ToList();
 	}
 
 	/// Writes the right number in front of every legal item, and gives nested items their series' ListStart (Shift+Tab
@@ -413,31 +417,76 @@ public static class LegalLists
 	}
 
 	// RichEdit's RTF doesn't keep a list paragraph's ListStart either where it has no number of its own, and with it goes
-	// where a numbering starts again: RTE Writer's RTF keeps the items' values, in order, in {\*\rtewriterlists 1,1,1001}.
-	static readonly Regex StartsGroupRx = new(@"\{\\\*\\rtewriterlists ([0-9,\-]*)\}");
+	// where a numbering starts again, nor its level (a numbered style's sub-levels): RTE Writer's RTF keeps both, in
+	// order, in {\*\rtewriterlists 1:0,1:1,1001:0} (start:level; files from before levels were kept have starts alone).
+	static readonly Regex StartsGroupRx = new(@"\{\\\*\\rtewriterlists ([0-9,:\-]*)\}");
 
-	/// The group with the items' ListStart values ("": no items).
+	/// The group with the items' ListStart values and levels ("": no items).
 	public static string StartsGroup(ITextDocument2 doc) {
-		var starts = Paragraphs(doc).Where(p => p.Legal).Select(p => p.ListStart).ToList();
-		return starts.Count == 0 ? "" : @"{\*\rtewriterlists " + string.Join(",", starts) + "}";
+		var items = Paragraphs(doc).Where(p => p.Legal).Select(p => $"{p.ListStart}:{p.Level}").ToList();
+		return items.Count == 0 ? "" : @"{\*\rtewriterlists " + string.Join(",", items) + "}";
 	}
 
-	/// The values an RTF has kept (null: none).
-	public static List<int>? StartsFrom(string rtf) {
+	/// The values an RTF has kept (null: none; a level of -1: not kept).
+	public static List<(int Start, int Level)>? StartsFrom(string rtf) {
 		var m = StartsGroupRx.Match(rtf);
 		if (!m.Success) return null;
-		try { return m.Groups[1].Value.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse).ToList(); } catch (FormatException) { return null; }
+		try {
+			return m.Groups[1].Value.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(v => v.Split(':') is var parts && parts.Length > 1
+				? (int.Parse(parts[0]), Math.Clamp(int.Parse(parts[1]), 0, 8)) : (int.Parse(parts[0]), -1)).ToList();
+		} catch (FormatException) { return null; }
 	}
 
-	/// Gives the items their kept values back, if there are as many items as values. Returns whether any changed.
-	public static bool RestoreStarts(ITextDocument2 doc, List<int>? starts) {
+	/// Gives the items their kept values (and levels) back, if there are as many items as values. Returns whether any
+	/// changed.
+	public static bool RestoreStarts(ITextDocument2 doc, List<(int Start, int Level)>? starts) {
 		if (starts == null) return false;
 		var items = Paragraphs(doc).Where(p => p.Legal).ToList();
 		if (items.Count != starts.Count) return false;
 		bool changed = false;
-		for (int i = 0; i < items.Count; i++)
-			if (items[i].ListStart != starts[i]) { doc.Range2(items[i].Start, items[i].Start).Para.ListStart = starts[i]; changed = true; }
+		for (int i = 0; i < items.Count; i++) {
+			var para = doc.Range2(items[i].Start, items[i].Start).Para;
+			if (items[i].ListStart != starts[i].Start) { para.ListStart = starts[i].Start; changed = true; }
+			if (starts[i].Level >= 0 && items[i].Level != starts[i].Level) { para.ListLevelIndex = starts[i].Level; changed = true; }
+		}
 		return changed;
+	}
+
+	// "Numbering off": a paragraph of a numbered style whose numbering was turned off keeps that through other styles, as
+	// Word's numbering off (numId 0) stays with its paragraph: under Normal and back to the numbered style it is still
+	// unnumbered. The mark is a ListType of NoNumber alone, on a paragraph in no list: RichEdit draws nothing for it,
+	// keeps it through typing and Enter (the new paragraph has it too, as Word's), and numbering the paragraph replaces
+	// it. RichEdit's RTF doesn't keep it: RTE Writer's keeps the marked paragraphs, by their index among Paragraphs, in
+	// {\*\rtewriteroff count:i,j,...} (count: the paragraphs then, so that a file changed elsewhere isn't misread).
+	public static bool IsNumberingOff(int listType) => listType == NoNumber;
+
+	/// Marks a paragraph in no list as one whose numbering is off (its indents as they were).
+	public static void SetNumberingOff(ITextPara para) {
+		if ((para.ListType & 0xFFFF) != tomConstants.tomListNone || para.ListType == NoNumber) return;
+		float first = para.FirstLineIndent, left = para.LeftIndent, right = para.RightIndent;
+		para.ListType = NoNumber;
+		if (Math.Abs(para.FirstLineIndent - first) > 0.01f || Math.Abs(para.LeftIndent - left) > 0.01f || Math.Abs(para.RightIndent - right) > 0.01f)
+			para.SetIndents(first, left, right);
+	}
+
+	static readonly Regex OffGroupRx = new(@"\{\\\*\\rtewriteroff (\d+):([0-9,]*)\}");
+
+	/// The group with the paragraphs whose numbering is off ("": none).
+	public static string OffGroup(ITextDocument2 doc) {
+		var paragraphs = Paragraphs(doc);
+		var off = Enumerable.Range(0, paragraphs.Count).Where(i => IsNumberingOff(paragraphs[i].ListType)).ToList();
+		return off.Count == 0 ? "" : $@"{{\*\rtewriteroff {paragraphs.Count}:{string.Join(",", off)}}}";
+	}
+
+	/// Marks the paragraphs an RTF kept as numbering off again (if it has as many paragraphs as it had).
+	public static void RestoreOff(ITextDocument2 doc, string rtf) {
+		var m = OffGroupRx.Match(rtf);
+		if (!m.Success) return;
+		var paragraphs = Paragraphs(doc);
+		if (!int.TryParse(m.Groups[1].Value, out int count) || count != paragraphs.Count) return;
+		foreach (var part in m.Groups[2].Value.Split(',', StringSplitOptions.RemoveEmptyEntries))
+			if (int.TryParse(part, out int i) && i >= 0 && i < paragraphs.Count)
+				SetNumberingOff(doc.Range2(paragraphs[i].Start, paragraphs[i].Start).Para);
 	}
 
 	/// The indents legal items had as loaded, by paragraph start, before LevelsFromNumbers gave them legal numbering's
