@@ -25,6 +25,8 @@ concurrency:
 
 jobs:
   build:
+    # only in AhkWord's own repository: copies of it (a private one, without Pages) skip it rather than fail
+    if: github.repository == 'burque505/AhkWord'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
