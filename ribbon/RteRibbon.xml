@@ -1102,7 +1102,20 @@
         <Image Source="icons/savestyles_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
-    <Command Name="cmdApplyMyStyles" Id="391" LabelTitle="&amp;Apply My Styles" Keytip="A" TooltipTitle="Apply My Styles" TooltipDescription="Give this document your styles (the ones new documents get): its headings, Normal text and other styles take your look; formatting of a paragraph's own stays.">
+    <Command Name="cmdCopyStyles" Id="394" LabelTitle="&amp;Copy Styles from Document..." Keytip="C" TooltipTitle="Copy Styles from Document" TooltipDescription="Bring styles from another document (AhkWord's, Word's, RTF) into this one, and into your defaults for new documents if you like: choose which.">
+      <Command.LargeImages>
+        <Image Source="icons/applystyles_32.bmp" MinDPI="96" />
+        <Image Source="icons/applystyles_40.bmp" MinDPI="120" />
+        <Image Source="icons/applystyles_48.bmp" MinDPI="144" />
+        <Image Source="icons/applystyles_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/applystyles_16.bmp" MinDPI="96" />
+        <Image Source="icons/applystyles_20.bmp" MinDPI="120" />
+        <Image Source="icons/applystyles_24.bmp" MinDPI="144" />
+        <Image Source="icons/applystyles_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>    <Command Name="cmdApplyMyStyles" Id="391" LabelTitle="&amp;Apply My Styles" Keytip="A" TooltipTitle="Apply My Styles" TooltipDescription="Give this document your styles (the ones new documents get): its headings, Normal text and other styles take your look; formatting of a paragraph's own stays.">
       <Command.LargeImages>
         <Image Source="icons/applystyles_32.bmp" MinDPI="96" />
         <Image Source="icons/applystyles_40.bmp" MinDPI="120" />
@@ -2070,6 +2083,7 @@
                 <ToggleButton CommandName="cmdStyleSetModern" />
               </MenuGroup>
               <MenuGroup>
+                <Button CommandName="cmdCopyStyles" />
                 <Button CommandName="cmdApplyMyStyles" />
                 <Button CommandName="cmdSaveStyles" />
               </MenuGroup>

@@ -18,6 +18,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Text;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -895,6 +896,99 @@ public static class RtfStyles
 		return (sheet, names, paragraphs, sheet != null || names.Count > 1 || paragraphs.Any(p => p > 0));
 	}
 
+	/// Iteration 40: the paragraph styles an RTF's style sheet defines, as Word and LibreOffice write them (each on the
+	/// one it is based on, \sbasedon): font, size, bold, italic, underline, colour, alignment, indents, space before and
+	/// after, line spacing, keep with next and together, page break before, widow control, the style after it. null: no
+	/// style sheet. (AhkWord's own RTF has its definitions whole: Read's Sheet.)
+	public static StyleSheet? Definitions(string rtf) {
+		int sheetAt = rtf.IndexOf("{\\stylesheet", StringComparison.Ordinal);
+		if (sheetAt < 0) return null;
+		string table = rtf[sheetAt..GroupEnd(rtf, sheetAt)];
+		// the font and colour tables
+		var fonts = new Dictionary<int, string>();
+		int fontsAt = rtf.IndexOf("{\\fonttbl", StringComparison.Ordinal);
+		if (fontsAt >= 0)
+			foreach (Match m in Regex.Matches(rtf[fontsAt..GroupEnd(rtf, fontsAt)], @"\{\\f(\d+)((?:[^{};]|\{[^{}]*\})*);"))
+				fonts[int.Parse(m.Groups[1].Value)] = Unescape(Regex.Replace(m.Groups[2].Value, @"\{[^{}]*\}|\\[a-zA-Z]+-?\d* ?", "")).Trim();
+		var colors = new List<string> { "" };
+		int colorsAt = rtf.IndexOf("{\\colortbl", StringComparison.Ordinal);
+		if (colorsAt >= 0) {
+			var parts = rtf[colorsAt..GroupEnd(rtf, colorsAt)].Split(';');
+			colors.Clear();
+			for (int k = 0; k < parts.Length - 1; k++) {
+				int Part(string name) => Regex.Match(parts[k], @"\\" + name + @"(\d+)") is { Success: true } m ? int.Parse(m.Groups[1].Value) : 0;
+				colors.Add(parts[k].Contains("\\red") ? $"#{Part("red"):X2}{Part("green"):X2}{Part("blue"):X2}" : "");
+			}
+		}
+		// each paragraph style: its number, name, what it's based on, and its control words
+		var entries = new Dictionary<int, (string Name, int BasedOn, int Next, List<(string Word, int? Value)> Words)>();
+		int depth = 0, entry = -1;
+		for (int i = 0; i < table.Length; i++) {
+			char c = table[i];
+			if (c == '\\') { i++; continue; }
+			if (c == '{' && ++depth == 2) entry = i;
+			else if (c == '}' && depth-- == 2 && entry >= 0) {
+				string group = table[entry..(i + 1)];
+				if (Regex.IsMatch(group, @"^\{\\\*?\\?(cs|ts|ds)\d")) continue;    // (character, table and section styles)
+				string body = Regex.Replace(group[1..^1], @"\{[^{}]*\}", "");
+				string name = Regex.Replace(Unescape(body), @"\\\*|\\[a-zA-Z]+-?\d* ?|\\[^a-zA-Z]", "").Split(';')[0].Trim();
+				if (name == "") continue;
+				var words = Regex.Matches(body.Split(';')[0], @"\\([a-z]+)(-?\d+)? ?").Select(m => (m.Groups[1].Value, m.Groups[2].Success ? int.Parse(m.Groups[2].Value) : (int?)null)).ToList();
+				int number = words.FirstOrDefault(w => w.Item1 == "s").Item2 ?? 0;
+				if (!words.Any(w => w.Item1 == "s") && !string.Equals(name, "Normal", StringComparison.OrdinalIgnoreCase)) continue;
+				int basedOn = words.FirstOrDefault(w => w.Item1 == "sbasedon").Item2 ?? 222, next = words.FirstOrDefault(w => w.Item1 == "snext").Item2 ?? number;
+				entries[number] = (name, basedOn, next, words);
+			}
+		}
+		if (entries.Count == 0) return null;
+		string NameOf(string name) => ParagraphStyle.HeadingNumber(name) is int h and > 0 ? "Heading " + h : name;
+		var made = new Dictionary<int, ParagraphStyle>();
+		ParagraphStyle Make(int number, int guard = 0) {
+			if (made.TryGetValue(number, out var done)) return done;
+			var (name, basedOn, next, words) = entries[number];
+			var style = basedOn != number && entries.ContainsKey(basedOn) && guard < 20 ? Make(basedOn, guard + 1).Copy()
+				: new ParagraphStyle { Font = "Times New Roman", Size = 12, WidowControl = true };
+			style.Name = NameOf(name);
+			style.Level = ParagraphStyle.HeadingNumber(name);
+			style.Next = next != number && entries.TryGetValue(next, out var after) ? NameOf(after.Name) : "";
+			int? lineAt = null; int multiple = 0;
+			foreach (var (word, value) in words) {
+				switch (word) {
+					case "f": if (value is int f && fonts.TryGetValue(f, out var font) && font != "") style.Font = font; break;
+					case "fs": if (value > 0) style.Size = value.Value / 2f; break;
+					case "b": style.Bold = value != 0; break;
+					case "i": style.Italic = value != 0; break;
+					case "ul": style.Underline = value != 0; break;
+					case "ulnone": style.Underline = false; break;
+					case "cf": style.Color = value is int k && k >= 0 && k < colors.Count ? colors[k] : ""; break;
+					case "ql": style.Align = "left"; break;
+					case "qc": style.Align = "center"; break;
+					case "qr": style.Align = "right"; break;
+					case "qj": style.Align = "justify"; break;
+					case "li": style.LeftIndent = (value ?? 0) / 20f; break;
+					case "ri": style.RightIndent = (value ?? 0) / 20f; break;
+					case "fi": style.FirstLine = (value ?? 0) / 20f; break;
+					case "sb": style.Before = Math.Max(0, (value ?? 0) / 20f); break;
+					case "sa": style.After = Math.Max(0, (value ?? 0) / 20f); break;
+					case "sl": lineAt = value; break;
+					case "slmult": multiple = value ?? 0; break;
+					case "keepn": style.KeepWithNext = value != 0; break;
+					case "keep": style.KeepTogether = value != 0; break;
+					case "pagebb": style.PageBreakBefore = value != 0; break;
+					case "widctlpar": style.WidowControl = true; break;
+					case "nowidctlpar": style.WidowControl = false; break;
+					case "outlinelevel": if (style.Level == 0 && value is int o && o is >= 0 and < 6) style.Level = o + 1; break;
+				}
+			}
+			if (lineAt is int sl && sl != 0)
+				style.LineSpacing = multiple == 1 ? (sl / 240f).ToString("0.##", CultureInfo.InvariantCulture)
+					: sl < 0 ? $"exactly {-sl / 20f:0.##}pt".Replace(',', '.') : $"at least {sl / 20f:0.##}pt".Replace(',', '.');
+			return made[number] = style;
+		}
+		var sheet = new StyleSheet { Set = "", Styles = entries.Keys.OrderBy(n => n).Select(n => Make(n)).ToList() };
+		return sheet;
+	}
+
 	static string Unescape(string text) => Regex.Replace(text, @"\\'([0-9a-fA-F]{2})|\\u(-?\d+)\??", m =>
 		m.Groups[1].Success ? ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString() : ((char)(short)int.Parse(m.Groups[2].Value)).ToString());
 
@@ -1433,5 +1527,106 @@ sealed class StyleDialog : Form
 			y += sample.Height * 2 + (float)after.Value * scale;
 		}
 		if (y < area.Bottom) g.DrawString("The paragraph after, in grey.", context, grey, area.Left, y);
+	}
+}
+
+// Iteration 40: Copy Styles from Document: the styles another document has (StyleImport.From), and the dialog that
+// chooses which come into this one (CopyStylesDialog).
+public static class StyleImport
+{
+	/// The extensions whose styles can be read.
+	public static readonly string[] Extensions = { ".rtf", ".docx", ".html", ".htm" };
+
+	/// The styles a file defines: AhkWord's own RTF and HTML, whole (numbering and sub-levels too); a .docx's as Word
+	/// works them out, numbered styles numbered as Word's definitions say; other RTF's style sheet (Word's,
+	/// LibreOffice's). null: none (or a kind it can't read).
+	public static StyleSheet? From(string path) {
+		string extension = Path.GetExtension(path).ToLowerInvariant();
+		StyleSheet? sheet = extension switch {
+			".rtf" => File.ReadAllText(path, Encoding.Latin1) is var rtf ? RtfStyles.Read(rtf).Sheet ?? RtfStyles.Definitions(rtf) : null,
+			".docx" => DocxStyles.Read(path).Sheet is var docx ? Numbered(docx, DocxStyles.Numbering(path)) : null,
+			".html" or ".htm" => StyleHtml.FromMeta(File.ReadAllText(path)),
+			_ => null
+		};
+		return sheet is { Styles.Count: > 0 } ? sheet : null;
+	}
+
+	static StyleSheet Numbered(StyleSheet sheet, Dictionary<string, (string Format, int Level)> numbering) {
+		foreach (var style in sheet.Styles)
+			if (numbering.TryGetValue(style.Name, out var n)) { style.Numbering = n.Format; style.NumberLevel = n.Level; }
+		return sheet;
+	}
+
+	/// A style as one line, for choosing it: font, size, look, indents, spacing, numbering.
+	public static string Describe(ParagraphStyle s) {
+		var parts = new List<string> { $"{s.Font} {s.Size:0.#} pt" };
+		if (s.Bold) parts.Add("bold");
+		if (s.Italic) parts.Add("italic");
+		if (s.Underline) parts.Add("underlined");
+		if (s.Align != "left") parts.Add(s.Align);
+		if (s.LeftIndent != 0 || s.FirstLine != 0) parts.Add($"indent {s.LeftIndent:0.#} pt, first line {s.FirstLine:0.#} pt");
+		if (s.LineSpacing != "1") parts.Add("line spacing " + s.LineSpacing);
+		if (s.Before != 0 || s.After != 0) parts.Add($"space {s.Before:0.#} pt before, {s.After:0.#} pt after");
+		if (s.Numbered) parts.Add($"numbered {s.Numbering} (level {s.NumberLevel})");
+		return string.Join(", ", parts);
+	}
+}
+
+// The styles of another document: tick those to copy into this one (each says whether it is new here or replaces
+// this document's), and whether they go into your defaults for new documents too.
+sealed class CopyStylesDialog : Form
+{
+	readonly CheckedListBox list = new() { CheckOnClick = true, Width = 520, Height = 260, IntegralHeight = false };
+	readonly Label about = new() { AutoSize = true, MaximumSize = new Size(520, 0), ForeColor = SystemColors.GrayText, Margin = new Padding(3, 6, 3, 3) };
+	readonly CheckBox forNew = new() { Text = "Also for new documents (your default styles)", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
+	readonly List<ParagraphStyle> styles;
+
+	public CopyStylesDialog(string file, StyleSheet source, StyleSheet here) {
+		Text = "Copy Styles from " + Path.GetFileName(file);
+		FormBorderStyle = FormBorderStyle.FixedDialog;
+		MaximizeBox = MinimizeBox = false;
+		ShowInTaskbar = false;
+		StartPosition = FormStartPosition.CenterParent;
+		AutoScaleMode = AutoScaleMode.Dpi;
+		Font = SystemFonts.MessageBoxFont ?? Font;
+		AutoSize = true;
+		AutoSizeMode = AutoSizeMode.GrowAndShrink;
+		Padding = new Padding(10);
+		styles = source.Styles.ToList();
+		foreach (var s in styles) list.Items.Add(s.Name + (here.Find(s.Name) != null ? "   (replaces this document's)" : "   (new here)"));
+		list.SelectedIndexChanged += (s, e) => about.Text = list.SelectedIndex >= 0 ? StyleImport.Describe(styles[list.SelectedIndex]) : "";
+		var all = new Button { Text = "&All", AutoSize = true };
+		all.Click += (s, e) => { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, true); };
+		var none = new Button { Text = "N&one", AutoSize = true };
+		none.Click += (s, e) => { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, false); };
+		var ok = new Button { Text = "Copy", AutoSize = true };
+		ok.Click += (s, e) => { if (list.CheckedIndices.Count == 0) { error.Text = "Tick the styles to copy."; return; } DialogResult = DialogResult.OK; Close(); };
+		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+		layout.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(520, 0), Text = "Tick the styles to copy into this document. One that this document has already takes the copied definition, and its paragraphs the new look (formatting of their own stays)." });
+		layout.Controls.Add(list);
+		layout.Controls.Add(about);
+		var pick = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+		pick.Controls.AddRange(new Control[] { all, none });
+		layout.Controls.Add(pick);
+		layout.Controls.Add(forNew);
+		layout.Controls.Add(error);
+		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
+		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		layout.Controls.Add(buttons);
+		Controls.Add(layout);
+		AcceptButton = ok;
+		CancelButton = cancel;
+		if (list.Items.Count > 0) list.SelectedIndex = 0;
+	}
+
+	/// The ticked styles' names.
+	public List<string> Chosen => list.CheckedIndices.Cast<int>().Select(i => styles[i].Name).ToList();
+	public bool ForNewDocuments => forNew.Checked;
+
+	/// For a script or test: ticks the named styles.
+	public void Tick(params string[] names) {
+		for (int i = 0; i < styles.Count; i++) list.SetItemChecked(i, names.Contains(styles[i].Name, StringComparer.OrdinalIgnoreCase));
 	}
 }

@@ -21,7 +21,13 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 39 adds to iteration 38:
+// Run it with AhkWord.ahk. Iteration 40 adds to iteration 39:
+//   - Home > Styles > Copy Styles from Document (Word's Organizer): another document's styles, ticked, come into this
+//     one, and into your defaults for new documents if "Also for new documents" is (StyleImport.From: AhkWord's RTF and
+//     HTML whole; a .docx's, its numbered styles numbered as Word's definitions say, DocxStyles.Numbering; other RTF's
+//     style sheet, RtfStyles.Definitions). A style this document has takes the copied definition (its paragraphs too).
+//     Scripts: Rte.StylesIn(path), Rte.CopyStyles(path, "Law Paragraph", 1).
+// Iteration 39 added to iteration 38:
 //   - The name AhkWord (RTE Writer until iteration 38): the window, dialogs and messages; the files are AhkWord.ahk
 //     and AhkWord.cs from now on (an iteration's own copy: make_version.ps1). Its folders are %APPDATA%\AhkWord and
 //     %LOCALAPPDATA%\AhkWord, the old ones' files copied into them the first time (AppFolders); AHKWORD_SETTINGS and
@@ -395,7 +401,7 @@ enum RibbonCommand : uint
 	ListLowerRoman = 265, ListUpperRoman = 266, ListLevels = 267, AutoLevel = 268, RestartNumbering = 269, ContinueNumbering = 270,
 	ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, StylesMenu = 380,
 	ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384, StyleSetClassic = 385,
-	StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, ApplyMyStyles = 391, PageBreak = 280, Table = 281,
+	StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, ApplyMyStyles = 391, CopyStyles = 394, PageBreak = 280, Table = 281,
 	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295,
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
@@ -463,7 +469,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 39;    // (the About box)
+	public const int Iteration = 40;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -873,6 +879,7 @@ class WriterForm : Form
 		foreach (var (id, set) in new[] { (RibbonCommand.StyleSetClassic, "Classic"), (RibbonCommand.StyleSetPlain, "Plain"), (RibbonCommand.StyleSetModern, "Modern") })
 			Toggle(id, () => { api.StyleSet = set; Record(M("StyleSet", set)); });
 		Button(RibbonCommand.ApplyMyStyles, () => { int count = api.ApplyMyStyles(); Record(M("ApplyMyStyles")); SetStatus($"Your styles are this document's now ({count} paragraph{(count == 1 ? "" : "s")} restyled; formatting of their own stayed)."); });
+		Button(RibbonCommand.CopyStyles, CopyStylesCommand);
 		Button(RibbonCommand.SaveStyles, () => { api.SaveStylesAsDefault(); SetStatus("New documents get these styles now (Styles > Classic, Plain or Modern, then this, to change them again)."); });
 
 		// Insert
@@ -2805,6 +2812,32 @@ class WriterForm : Form
 		menu.Show(screenPoint);
 	}
 
+	// ---------------------------------------------------------------- Iteration 40: copy styles from a document
+
+	// Home > Styles > Copy Styles from Document: a document, then which of its styles come into this one (and into
+	// your defaults for new documents, if ticked).
+	void CopyStylesCommand() {
+		using var open = new OpenFileDialog { Title = "Copy Styles from Document", InitialDirectory = StartFolder,
+			Filter = "Documents with styles (*.rtf;*.docx;*.html;*.htm)|*.rtf;*.docx;*.html;*.htm|All files (*.*)|*.*" };
+		if (open.ShowDialog(this) != DialogResult.OK) return;
+		StyleSheet? source;
+		try { source = StyleImport.From(open.FileName); }
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Xml.XmlException) {
+			MessageBox.Show(this, $"{Path.GetFileName(open.FileName)} could not be read: {ex.Message}", AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+			return;
+		}
+		if (source == null) {
+			MessageBox.Show(this, $"{Path.GetFileName(open.FileName)} has no paragraph styles that AhkWord can read (AhkWord's own RTF and HTML, Word's .docx, other RTF).", AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+			return;
+		}
+		using var dlg = new CopyStylesDialog(open.FileName, source, Styles);
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		string names = string.Join(", ", dlg.Chosen);
+		int count = api.CopyStyles(open.FileName, names, dlg.ForNewDocuments);
+		Record(M("CopyStyles", open.FileName, names, dlg.ForNewDocuments));
+		SetStatus($"Copied {count} style{(count == 1 ? "" : "s")} ({names}) from {Path.GetFileName(open.FileName)}" + (dlg.ForNewDocuments ? ", for new documents too." : "."));
+	}
+
 	// ---------------------------------------------------------------- Iteration 8: list levels
 
 	void ListLevelsCommand() {
@@ -4236,6 +4269,48 @@ public class EditorApi
 			if (!StyleSets.Names.Contains(value.Trim(), StringComparer.OrdinalIgnoreCase)) throw new ArgumentException("The style sets are Classic, Plain and Modern.");
 			form.UseStyleSet(value.Trim());
 		}
+	}
+
+	/// Iteration 40: the paragraph styles a document has (AhkWord's own RTF and HTML, a Word .docx, other RTF), one name
+	/// a line, without opening it.
+	public string StylesIn(string path) =>
+		string.Join("\n", (StyleImport.From(Path.GetFullPath(path)) ?? throw new InvalidOperationException($"No styles found in {Path.GetFileName(path)}.")).Styles.Select(s => s.Name));
+
+	/// Copy Styles from Document: the styles named (by commas or lines; empty: all of them) come from another document
+	/// into this one. A style this document has takes the copied definition and its paragraphs the new look (formatting
+	/// of their own stays); others are added. With forNewDocuments they go into your default styles too (the ones new
+	/// documents get), the others of those staying as they are. Returns how many styles were copied.
+	public int CopyStyles(string path, string names = "", bool forNewDocuments = false) {
+		path = Path.GetFullPath(path);
+		var source = StyleImport.From(path) ?? throw new InvalidOperationException($"No styles found in {Path.GetFileName(path)}.");
+		var wanted = names.Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+			.Select(n => source.Find(n) ?? throw new ArgumentException($"{Path.GetFileName(path)} has no style \"{n}\" (Rte.StylesIn lists them).")).ToList();
+		if (wanted.Count == 0) wanted = source.Styles.ToList();
+		// (a style after Enter that neither has: the same style again)
+		ParagraphStyle Fitted(ParagraphStyle style, StyleSheet into) {
+			var copy = style.Copy();
+			if (copy.Next != "" && into.Find(copy.Next) == null && !wanted.Any(w => string.Equals(w.Name, copy.Next, StringComparison.OrdinalIgnoreCase))) copy.Next = "";
+			return copy;
+		}
+		foreach (var style in wanted) {
+			var copy = Fitted(style, form.Styles);
+			if (form.Styles.Find(copy.Name) is { } mine) { copy.Name = mine.Name; if (ParagraphStyle.BuiltIn(mine.Name)) copy.Level = mine.Level; form.ChangeStyle(mine, copy); }
+			else form.Styles.Styles.Add(copy);
+		}
+		form.StylesChanged();
+		form.FillStyleBox(force: true);
+		if (forNewDocuments) {
+			var defaults = form.DefaultStyles();
+			foreach (var style in wanted) {
+				var copy = Fitted(style, defaults);
+				int at = defaults.Styles.FindIndex(s => string.Equals(s.Name, copy.Name, StringComparison.OrdinalIgnoreCase));
+				if (at >= 0) { copy.Name = defaults.Styles[at].Name; if (ParagraphStyle.BuiltIn(copy.Name)) copy.Level = defaults.Styles[at].Level; defaults.Styles[at] = copy; }
+				else defaults.Styles.Add(copy);
+			}
+			form.Settings.MyStyles = defaults;
+			form.Settings.Save();
+		}
+		return wanted.Count;
 	}
 
 	/// New documents get this document's styles (your changes included).

@@ -44,6 +44,47 @@ public static class DocxStyles
 
 	// ================================================================ reading
 
+	/// Iteration 40: the .docx's numbered styles (a style whose definition, or one it is based on, has numbering, as
+	/// Word's List Number): by AhkWord's name, the format of the level it numbers at ("1.", "(a)" ...; NumberFormats)
+	/// and that level (1-9). Styles whose level's format AhkWord hasn't got are left out.
+	public static Dictionary<string, (string Format, int Level)> Numbering(string path) {
+		var result = new Dictionary<string, (string, int)>(StringComparer.OrdinalIgnoreCase);
+		using var zip = ZipFile.OpenRead(path);
+		XDocument? Load(string name) { var e = zip.GetEntry(name); if (e == null) return null; using var s = e.Open(); return XDocument.Load(s); }
+		var styles = Load("word/styles.xml");
+		var numbering = Load("word/numbering.xml");
+		if (styles?.Root == null || numbering?.Root == null) return result;
+		var abstractOf = numbering.Root.Elements(W + "num").Where(n => n.Attribute(W + "numId") != null)
+			.ToDictionary(n => (string)n.Attribute(W + "numId")!, n => (string?)n.Element(W + "abstractNumId")?.Attribute(W + "val") ?? "");
+		var byId = styles.Root.Elements(W + "style").Where(s => (string?)s.Attribute(W + "type") == "paragraph" && s.Attribute(W + "styleId") != null)
+			.GroupBy(s => (string)s.Attribute(W + "styleId")!).ToDictionary(g => g.Key, g => g.First());
+		foreach (var (id, style) in byId) {
+			// its numbering: its own, else the one of the style it's based on
+			XElement? numPr = null;
+			for (var (at, depth) = ((string?)id, 0); at != null && depth < 20 && byId.TryGetValue(at, out var s) && numPr == null; depth++) {
+				numPr = s.Element(W + "pPr")?.Element(W + "numPr");
+				at = (string?)s.Element(W + "basedOn")?.Attribute(W + "val");
+			}
+			string? numId = (string?)numPr?.Element(W + "numId")?.Attribute(W + "val");
+			if (numId == null || numId == "0" || !abstractOf.TryGetValue(numId, out var abstractId)) continue;
+			int level = int.TryParse((string?)numPr!.Element(W + "ilvl")?.Attribute(W + "val"), out int l) ? Math.Clamp(l, 0, 8) : 0;
+			var lvl = numbering.Root.Elements(W + "abstractNum").FirstOrDefault(a => (string?)a.Attribute(W + "abstractNumId") == abstractId)?
+				.Elements(W + "lvl").FirstOrDefault(v => (string?)v.Attribute(W + "ilvl") == level.ToString(Invariant));
+			if (lvl == null) continue;
+			string kind = ((string?)lvl.Element(W + "numFmt")?.Attribute(W + "val")) switch {
+				"decimal" => "1", "lowerLetter" => "a", "upperLetter" => "A", "lowerRoman" => "i", "upperRoman" => "I", _ => ""
+			};
+			string text = (string?)lvl.Element(W + "lvlText")?.Attribute(W + "val") ?? "";
+			if (kind == "") continue;
+			// "%1." is "1."; "%1.%2" (the levels above it too) is legal numbering's
+			string format = Regex.Matches(text, @"%\d").Count > 1 ? NumberFormats.Legal : text.Replace("%" + (level + 1), kind);
+			if (!NumberFormats.Valid(format)) continue;
+			string name = NameOf((string?)style.Element(W + "name")?.Attribute(W + "val") ?? id);
+			result[name] = (format, level + 1);
+		}
+		return result;
+	}
+
 	/// The .docx's paragraph styles, each as Word works it out; Names: styleId to AhkWord's name.
 	public static (StyleSheet Sheet, Dictionary<string, string> Names) Read(string path) {
 		using var zip = ZipFile.OpenRead(path);
