@@ -21,7 +21,12 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 42 adds to iteration 41:
+// Run it with AhkWord.ahk. Iteration 43 adds to iteration 42:
+//   - Less flicker in Show Pages and Print Layout: the editor paints through a bitmap (RichEdit's text, then the sheets'
+//     bands and the page lines over it, onto the screen at once: WriterEditBox.WndProc), as the panel around it does;
+//     the gaps worked out again a second after typing are put in with the window not drawing until they are in, and
+//     the line with the caret stays where it was on the screen (QuietGaps).
+// Iteration 42 added to iteration 41:
 //   - Show Pages redesigned (rte_pagegaps.cs): where a page starts with a paragraph, its gap is space before that
 //     paragraph (ordinary paragraph formatting: the caret and typing behave as anywhere); only where a page starts
 //     inside a paragraph is the line before it raised, and text typed in that line is raised with it (no more lifting
@@ -482,7 +487,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 42;    // (the About box; make_version.ps1)
+	public const int Iteration = 43;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -606,7 +611,7 @@ class WriterForm : Form
 
 		api = new EditorApi(this);
 		lineGutter = new LineNumberGutter(Editor);
-		var page = pagePanel = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
+		var page = pagePanel = new BufferedPanel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
 		pageGaps = new PageGaps(Editor);
 		Editor.Gaps = pageGaps;
 		Editor.BandParts = GapBandParts;
@@ -1951,6 +1956,8 @@ class WriterForm : Form
 			|| (Settings.PrintLayout && !PagesShown);    // (and Print Layout's page boundaries)
 		bool pageView = PageViewActive;
 		if (!pageView && pageGaps.Applied && !gapsOut) { QuietGaps(pageGaps.Remove); pageGaps.Forget(); }
+		// (the page view showing without its gaps, as back from a source view, which took them out: worked out again)
+		if (pageView && !pageGaps.Applied && !gapsOut && !quietGaps) bandPagesStale = true;
 		if (pageGaps.Lost) { pageGaps.Lost = false; bandPagesStale = true; }    // (gaps editing took apart: worked out again)
 		if (needPages && bandPagesStale && !gapsOut && (DateTime.Now - lastEdit).TotalMilliseconds > 1000) {
 			bandPagesStale = false;
@@ -2002,11 +2009,13 @@ class WriterForm : Form
 	internal PageGaps Gaps => pageGaps;
 
 	const int EM_GETSCROLLPOS = 0x04DD, EM_SETSCROLLPOS = 0x04DE, EM_SETEVENTMASK_GAPS = 0x0445;
+	[DllImport("user32.dll")] static extern bool LockWindowUpdate(IntPtr hWnd);
 	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendPoint(IntPtr hWnd, int msg, IntPtr wParam, ref Point lParam);
 	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendMask(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
 	// Puts the gaps in or takes them out: without undo steps or change notifications, the document's modified flag as
-	// it was, the text at the top of the window where it was.
+	// it was, the line with the caret where it was on the screen (or, the caret out of view, the text at the top of the
+	// window), the window not drawing until it is all done (iteration 43: no in-between state shown).
 	void QuietGaps(Action change) {
 		if (!Editor.IsHandleCreated) { pageGaps.Forget(); return; }    // (the window closing: the gaps go with its text)
 		if (quietGaps) { change(); return; }
@@ -2015,6 +2024,16 @@ class WriterForm : Form
 		bool modified = Editor.Modified;
 		int top = Editor.GetCharIndexFromPosition(new Point(1, 1));
 		int topY = Editor.GetPositionFromCharIndex(top).Y;
+		// (the caret's line's bottom, the next line's top: a gap before the caret's line or a raise of it leaves its text
+		// there, where its top moves)
+		var caretLine = doc.Range2(doc.Selection2.Start, doc.Selection2.Start);
+		caretLine.Expand(5);    // tomLine
+		if (caretLine.End < doc.Range2(0, 0).StoryLength - 1 && Editor.GetPositionFromCharIndex(caretLine.End).Y is int bottom
+			&& bottom > 0 && bottom <= Editor.ClientSize.Height)
+			(top, topY) = (caretLine.End, bottom);
+		// (nothing drawn in the window, the scroll's own moving of its pixels too, until it is unlocked; RichEdit lays out and
+		// answers as ever: with WM_SETREDRAW off it gave positions as if scrolled to the top)
+		bool hold = Editor.Visible && LockWindowUpdate(Editor.Handle);
 		doc.Undo(-9999995);    // tomSuspend
 		IntPtr mask = SendMask(Editor.Handle, EM_SETEVENTMASK_GAPS, IntPtr.Zero, IntPtr.Zero);
 		doc.Freeze();
@@ -2025,14 +2044,24 @@ class WriterForm : Form
 			SendMask(Editor.Handle, EM_SETEVENTMASK_GAPS, IntPtr.Zero, mask);
 			doc.Undo(-9999994);    // tomResume
 			Editor.Modified = modified;
-			int moved = Editor.GetPositionFromCharIndex(top).Y - topY;
-			if (moved != 0) {
+			// scrolled back by as much as it moved (iteration 43: EM_SETSCROLLPOS takes the window's pixels, not unzoomed ones,
+			// as was taken before: zoomed, the text was left a line or so off, which showed as a jump); what a step moved the
+			// text by is measured, and any rest scrolled with that
+			double perStep = 1;
+			for (int tries = 0; tries < 4; tries++) {
+				int moved = Editor.GetPositionFromCharIndex(top).Y - topY;
+				int step = (int)Math.Round(moved / perStep);
+				if (step == 0) break;
 				var scroll = new Point();
 				SendPoint(Editor.Handle, EM_GETSCROLLPOS, IntPtr.Zero, ref scroll);
-				scroll.Y += (int)Math.Round(moved / Math.Max(0.1f, Editor.ZoomFactor));    // (EM_SETSCROLLPOS takes the unzoomed position)
+				scroll.Y += step;
 				SendPoint(Editor.Handle, EM_SETSCROLLPOS, IntPtr.Zero, ref scroll);
+				int done = moved - (Editor.GetPositionFromCharIndex(top).Y - topY);
+				if (done == 0) break;    // (at the top or the end: as far as it goes)
+				perStep = done / (double)step;
 			}
 			quietGaps = false;
+			if (hold) LockWindowUpdate(IntPtr.Zero);
 			Editor.Invalidate();
 			pagePanel.Invalidate();
 		}
@@ -7570,6 +7599,13 @@ sealed class MacroHotkeysDialog : Form
 // The editor control: RichEditBox with a hook for the right-click menu, so the spelling menu can come before the
 // library's formatting toolbar. The hook gets the screen point and the character position, and returns true if it
 // showed a menu.
+// The panel around the editor (Show Pages draws the bands in its margins): painted through a bitmap, so the grey isn't
+// first painted white (iteration 43).
+sealed class BufferedPanel : Panel
+{
+	public BufferedPanel() => DoubleBuffered = true;
+}
+
 sealed class WriterEditBox : RichEditBox
 {
 	public Func<Point, int, bool>? ContextMenuHook;
@@ -7839,6 +7875,91 @@ sealed class WriterEditBox : RichEditBox
 	/// After the editor painted (and so scrolled, changed or zoomed): the line numbers follow.
 	public Action? Painted;
 
+	/// Whether the editor paints through a bitmap when something is drawn over its text (false: RichEdit paints on the
+	/// screen, then the drawings go over it there).
+	public bool Buffered = true;
+
+	// Iteration 43: RichEdit paints the part of the window to paint into a bitmap (WM_PRINTCLIENT), the gaps, page breaks
+	// and page lines are drawn over it there, and the bitmap goes onto the screen at once: drawn over on the screen, the
+	// white RichEdit paints there showed for a moment first (a flicker as the caret moved past a sheet's end).
+	void PaintBuffered() {
+		var paint = new PaintStruct();
+		IntPtr screen = BeginPaint(Handle, ref paint);
+		try {
+			var area = Rectangle.FromLTRB(paint.Left, paint.Top, paint.Right, paint.Bottom);
+			area.Intersect(ClientRectangle);
+			if (area.Width > 0 && area.Height > 0)
+				Render(screen, area, memory => BitBlt(screen, area.Left, area.Top, area.Width, area.Height, memory, 0, 0, SRCCOPY));
+		}
+		finally { EndPaint(Handle, ref paint); }
+	}
+
+	// The part area of the window as PaintBuffered puts it on the screen, in a bitmap compatible with dc, to done.
+	void Render(IntPtr dc, Rectangle area, Action<IntPtr> done) {
+		IntPtr memory = CreateCompatibleDC(dc), bitmap = CreateCompatibleBitmap(dc, area.Width, area.Height);
+		IntPtr old = SelectObject(memory, bitmap);
+		try {
+			SetViewportOrgEx(memory, -area.Left, -area.Top, IntPtr.Zero);
+			SendPaint(Handle, WM_PRINTCLIENT, memory, (IntPtr)(PRF_CLIENT | PRF_ERASEBKGND));
+			SetViewportOrgEx(memory, 0, 0, IntPtr.Zero);
+			using (var g = Graphics.FromHdc(memory)) {
+				g.TranslateTransform(-area.Left, -area.Top);
+				DrawDrawings(g);
+			}
+			done(memory);
+		}
+		finally {
+			SelectObject(memory, old);
+			DeleteObject(bitmap);
+			DeleteDC(memory);
+		}
+	}
+
+	/// The part area of the window as it is painted (tests).
+	public Bitmap Snapshot(Rectangle area) {
+		IntPtr dc = GetDC(Handle);
+		try {
+			Bitmap? shot = null;
+			Render(dc, area, memory => {
+				using var copy = new Bitmap(area.Width, area.Height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);    // (GDI leaves no alpha)
+				using (var g = Graphics.FromImage(copy)) {
+					IntPtr target = g.GetHdc();
+					BitBlt(target, 0, 0, area.Width, area.Height, memory, 0, 0, SRCCOPY);
+					g.ReleaseHdc(target);
+				}
+				shot = new Bitmap(copy);
+			});
+			return shot!;
+		}
+		finally { ReleaseDC(Handle, dc); }
+	}
+	[DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr hWnd);
+	[DllImport("user32.dll")] static extern int ReleaseDC(IntPtr hWnd, IntPtr hdc);
+
+	/// What is drawn over the text: the page view's gaps (or the page breaks), the printed pages' boundaries.
+	public void DrawDrawings(Graphics g) {
+		if (Gaps is { Applied: true }) DrawGaps(g);
+		else DrawPageBreaks(g);
+		DrawPageBoundaries(g);
+	}
+
+	const int WM_PRINTCLIENT = 0x0318, PRF_CLIENT = 0x04, PRF_ERASEBKGND = 0x08, SRCCOPY = 0x00CC0020;
+	[StructLayout(LayoutKind.Sequential)]
+	struct PaintStruct {
+		public IntPtr Hdc; public int Erase; public int Left, Top, Right, Bottom; public int Restore, IncUpdate;
+		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public byte[] Reserved;
+	}
+	[DllImport("user32.dll")] static extern IntPtr BeginPaint(IntPtr hWnd, ref PaintStruct paint);
+	[DllImport("user32.dll")] static extern bool EndPaint(IntPtr hWnd, ref PaintStruct paint);
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendPaint(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+	[DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+	[DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int width, int height);
+	[DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr hdc, IntPtr obj);
+	[DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr obj);
+	[DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr hdc);
+	[DllImport("gdi32.dll")] static extern bool SetViewportOrgEx(IntPtr hdc, int x, int y, IntPtr previous);
+	[DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr dest, int x, int y, int width, int height, IntPtr source, int sourceX, int sourceY, int rop);
+
 	// Replacing the text (WM_SETTEXT, as New and Open do through RichEditorNET; EM_STREAMIN, EM_SETTEXTEX) resets
 	// RichEdit's zoom to 100%: it is put back, so a zoom (the user's, or Page Width's) outlives a new document.
 	const int WM_SETTEXT = 0x000C, EM_STREAMIN = 0x0449, EM_SETTEXTEX = 0x0461, EM_GETZOOM = 0x04E0, EM_SETZOOM = 0x04E1;
@@ -7859,13 +7980,9 @@ sealed class WriterEditBox : RichEditBox
 			return;
 		}
 		if (m.Msg == WM_PAINT) {
-			base.WndProc(ref m);
-			if (((pageBreaks == null || pageBreaks.Count > 0) || PageStarts is { Count: > 1 } || Gaps is { Applied: true }) && IsHandleCreated) {
-				using var g = CreateGraphics();
-				if (Gaps is { Applied: true }) DrawGaps(g);
-				else DrawPageBreaks(g);
-				DrawPageBoundaries(g);
-			}
+			if (((pageBreaks == null || pageBreaks.Count > 0) || PageStarts is { Count: > 1 } || Gaps is { Applied: true }) && IsHandleCreated && Buffered)
+				PaintBuffered();
+			else base.WndProc(ref m);
 			Painted?.Invoke();
 			return;
 		}
