@@ -21,7 +21,11 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 46 adds to iteration 45:
+// Run it with AhkWord.ahk. Iteration 47 adds to iteration 46:
+//   - Saving as .rtf (and the recovery copy) keeps every paragraph's style: the list indents are fitted before the
+//     styles go in. Fitting them goes through RichEdit, which writes only its own styles (Normal, the headings): a new
+//     document's numbered style paragraphs (Numbered Paragraph) came back as Normal, keeping only their numbers.
+// Iteration 46 added to iteration 45:
 //   - Line numbers on the screen as far from the text as printed and as in Word: the numbering's distance, or a
 //     quarter of an inch (auto), at the zoom (LineNumberGutter.DistancePixels); they were 8 pixels from it.
 //     Within the left margin: as much of the distance as fits there (LineNumberGutter.MaxWidth).
@@ -522,7 +526,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 46;    // (the About box; make_version.ps1)
+	public const int Iteration = 47;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -4235,7 +4239,9 @@ public class EditorApi
 	public bool Portable => AppFolders.Portable;
 
 	// The recovery copy's content: the document as RTF, with its header, footer and line numbering.
-	internal string RecoveryRtf() => WithBands(OfficeConverters.ListIndentsRtf(StyledRtf(RawRtf)), form.FileName ?? "");
+	// (iteration 47: the list indents fitted before the styles go in: fitting them goes through RichEdit, which writes
+	// only its own styles, Normal and the headings, and so lost the others' paragraphs, a Numbered Paragraph's)
+	internal string RecoveryRtf() => WithBands(StyledRtf(OfficeConverters.ListIndentsRtf(RawRtf)), form.FileName ?? "");
 
 	// A recovery copy back in the editor: as unsaved changes to the document it was (fileName; null: a new one).
 	internal void Recover(string rtf, string? fileName) {
@@ -4675,7 +4681,7 @@ public class EditorApi
 		// (ordinary lists with hanging indents that fit their numbers: RichEdit's own RTF indents them so that Word and
 		// LibreOffice put the numbers too far in)
 		else if (extension == ".rtf")    // (and pictures as PNG, and the header and footer)
-			File.WriteAllText(full, WithBands(OfficeConverters.PngPictures(OfficeConverters.WithAltTexts(OfficeConverters.ListIndentsRtf(StyledRtf(RawRtf)), AltTexts())), full), Encoding.Latin1);
+			File.WriteAllText(full, WithBands(OfficeConverters.PngPictures(OfficeConverters.WithAltTexts(StyledRtf(OfficeConverters.ListIndentsRtf(RawRtf)), AltTexts())), full), Encoding.Latin1);    // (list indents before the styles: RecoveryRtf)
 		else {
 			string content = extension switch {
 				".md" or ".markdown" => form.WithoutGaps(() => MarkdownConverter.ToMarkdown(ed, ImageFiles(full))) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering),
