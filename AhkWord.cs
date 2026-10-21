@@ -21,7 +21,16 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 43 adds to iteration 42:
+// Run it with AhkWord.ahk. Iteration 44 adds to iteration 43:
+//   - Show Pages: the sheets' grey bands in the page's margins scroll with the text in the same move: in Print Layout
+//     the margins are the editor's own (EM_SETMARGINS: WriterEditBox.TextMargins; the header and footer text, page
+//     lines and page breaks kept within the text's width), so RichEdit moves their pixels with the text's; drawn beside
+//     the editor, they followed it a moment later, a flicker at the text's edges while scrolling. (With line numbers
+//     the left margin is still beside them: its bands follow in the same pass as the editor's paint, FollowGapBands;
+//     and the editor paints at once when the wheel, the scroll bar or a key scrolled it.)
+//   - Settings: reading, writing and putting the new file in place are tried again a few times if something has the
+//     file open a moment (Settings.Retried): a save failed now and then with "access denied" and was lost.
+// Iteration 43 added to iteration 42:
 //   - Less flicker in Show Pages and Print Layout: the editor paints through a bitmap (RichEdit's text, then the sheets'
 //     bands and the page lines over it, onto the screen at once: WriterEditBox.WndProc), as the panel around it does;
 //     the gaps worked out again a second after typing are put in with the window not drawing until they are in, and
@@ -487,7 +496,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 43;    // (the About box; make_version.ps1)
+	public const int Iteration = 44;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -616,7 +625,7 @@ class WriterForm : Form
 		Editor.Gaps = pageGaps;
 		Editor.BandParts = GapBandParts;
 		pagePanel.Paint += (s, e) => PaintGapBands(e.Graphics);
-		Editor.Painted += () => { if (pageGaps.Applied) pagePanel.Invalidate(false); };
+		Editor.Painted += FollowGapBands;
 		FitPagePadding();
 		page.Controls.Add(Editor);
 		page.Controls.Add(lineGutter);     // (docked before the editor, after the header and footer)
@@ -2186,16 +2195,40 @@ class WriterForm : Form
 
 	// The bands between the sheets where they cross the page's margins (outside the editor, which draws its part).
 	void PaintGapBands(Graphics g) {
-		if (!pageGaps.Applied || !Editor.IsHandleCreated) return;
+		var bands = PanelBands();
+		if (bands.Count == 0) return;
 		using var grey = new SolidBrush(PrintLayoutPage.Surround);
+		foreach (var band in bands) g.FillRectangle(grey, band);
+	}
+
+	// The sheets' bands in the panel's margins, as FollowGapBands last had them painted (the panel's coordinates).
+	List<Rectangle> panelBands = new();
+
+	// The bands across the panel, beside the editor's (in view only).
+	List<Rectangle> PanelBands() {
+		var bands = new List<Rectangle>();
+		if (!pageGaps.Applied || !Editor.IsHandleCreated) return bands;
 		float ppp = Editor.PixelsPerPoint;
 		foreach (var gap in pageGaps.Gaps) {
 			if (gap.Page == 0) continue;    // (page 1's top: no band)
 			var (_, band, _) = pageGaps.Areas(gap, Editor.ClientSize.Width, ppp);
 			float y = Editor.Top + band.Y;
 			if (y + band.Height < 0 || y > pagePanel.Height) continue;
-			g.FillRectangle(grey, 0, Math.Max(Editor.Top, y), pagePanel.Width, Math.Min(band.Bottom + Editor.Top, Editor.Bottom) - Math.Max(Editor.Top, y));
+			int top = (int)Math.Floor(Math.Max(Editor.Top, y)), bottom = (int)Math.Ceiling(Math.Min(band.Bottom + Editor.Top, Editor.Bottom));
+			if (bottom > top) bands.Add(new Rectangle(0, top, pagePanel.Width, bottom - top));
 		}
+		return bands;
+	}
+
+	// Iteration 44: after the editor painted (it scrolled, or the text changed), the margins' bands follow at once, in the
+	// same pass: painted later, as Windows gets round to it, they lagged a moment behind the bands in the page, which
+	// showed as a flicker while scrolling. Only where a band was or is now, and not at all if none moved.
+	void FollowGapBands() {
+		var now = PanelBands();
+		if (now.SequenceEqual(panelBands)) return;
+		foreach (var band in panelBands.Concat(now)) pagePanel.Invalidate(band, false);
+		panelBands = now;
+		pagePanel.Update();
 	}
 
 	/// The header and footer new documents get (File > Header and Footer can make a document's the default).
@@ -2310,6 +2343,7 @@ class WriterForm : Form
 				int left = LogicalToDeviceUnits(28);
 				if (Numbering.On) left = Math.Max(LogicalToDeviceUnits(4), left - Math.Max(lineGutter.Width, LogicalToDeviceUnits(30)));
 				pagePanel.Padding = new Padding(left, LogicalToDeviceUnits(14), LogicalToDeviceUnits(16), 0);
+				Editor.TextMargins = headerStrip.Inset = footerStrip.Inset = (0, 0);
 				return;
 			}
 			if (Settings.ZoomMode is "PageWidth" or "OnePage") FitZoom(host);
@@ -2322,7 +2356,12 @@ class WriterForm : Form
 			int padLeft = Math.Max(LogicalToDeviceUnits(4), marginLeft - gutter), padRight = Math.Max(LogicalToDeviceUnits(4), marginRight - bar - slack);
 			int width = padLeft + gutter + text + bar + slack + padRight;
 			pagePanel.Dock = DockStyle.None;
-			pagePanel.Padding = new Padding(padLeft, LogicalToDeviceUnits(14), padRight, 0);
+			// (the margins are the editor's own, inside it (TextMargins), so that Show Pages' bands in them scroll with the
+			// text in the same move; the left one beside the line numbers is the panel's, left of them; the scroll bar at
+			// the page's right edge)
+			int panelLeft = Numbering.On ? padLeft : 0;
+			pagePanel.Padding = new Padding(panelLeft, LogicalToDeviceUnits(14), 0, 0);
+			Editor.TextMargins = headerStrip.Inset = footerStrip.Inset = (padLeft - panelLeft, padRight);
 			host.BackColor = PrintLayoutPage.Surround;
 			host.AutoScrollMinSize = new Size(width, 0);
 			host.AutoScroll = width > host.ClientSize.Width;
@@ -2393,7 +2432,7 @@ class WriterForm : Form
 				widest = Math.Max(widest, Editor.PointToClient(new Point(x, y)).X);
 			}
 		} catch (COMException) { return; }
-		int room = Editor.ClientSize.Width - LogicalToDeviceUnits(2);
+		int room = Editor.ClientSize.Width - Editor.TextMargins.Right - LogicalToDeviceUnits(2);
 		if (widest <= room) return;
 		pageOverhang += widest - room + LogicalToDeviceUnits(4);
 		FitPagePadding();
@@ -6983,11 +7022,22 @@ public sealed class Settings
 			});
 			// (written beside, then moved over: another window never reads half a file)
 			string temporary = FilePath + "." + Environment.ProcessId + ".tmp";
-			File.WriteAllText(temporary, json);
-			File.Move(temporary, FilePath, true);
+			Retried(() => File.WriteAllText(temporary, json));
+			Retried(() => File.Move(temporary, FilePath, true));
 			known = Snapshot();
 		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 	}
+
+	// The file opened a moment by something else (a virus scanner, the search indexer, another window's save): tried
+	// again a few times (iteration 44: putting the new file in place then failed now and then with "access denied", and
+	// the save was lost, a change made in another window with it; a failed read left another window's changes out).
+	static T Retried<T>(Func<T> io) {
+		for (int tries = 1; ; tries++) {
+			try { return io(); }
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && tries < 5) { System.Threading.Thread.Sleep(25 * tries); }
+		}
+	}
+	static void Retried(Action io) => Retried(() => { io(); return 0; });
 
 	// Several AhkWord windows share this file. Each remembers the settings as it last read or wrote them (known); a
 	// save first takes from the file what another window changed since and this one didn't: a setting changed only
@@ -7003,7 +7053,7 @@ public sealed class Settings
 	void MergeFromFile() {
 		if (known == null || !File.Exists(FilePath)) return;
 		Settings? disk;
-		try { disk = JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)); } catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { return; }
+		try { disk = JsonSerializer.Deserialize<Settings>(Retried(() => File.ReadAllText(FilePath))); } catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { return; }
 		if (disk == null) return;
 		foreach (var property in Kept) {
 			string before = known.TryGetValue(property.Name, out var b) ? b : "", ours = Json(property.GetValue(this)), theirs = Json(property.GetValue(disk));
@@ -7681,12 +7731,37 @@ sealed class WriterEditBox : RichEditBox
 	protected override void OnHandleCreated(EventArgs e) {
 		base.OnHandleCreated(e);
 		SetDefaultSize();
+		ApplyTextMargins();
 	}
 
 	protected override void OnFontChanged(EventArgs e) {
 		base.OnFontChanged(e);
-		if (IsHandleCreated) SetDefaultSize();
+		if (IsHandleCreated) { SetDefaultSize(); ApplyTextMargins(); }
 	}
+
+	/// The space left and right of the text inside the editor (pixels). Iteration 44: in Print Layout the page's margins
+	/// are the editor's own, so that what is drawn in them (Show Pages' bands) moves with the text when RichEdit scrolls,
+	/// in the same move: drawn beside the editor, they followed it a moment later, a flicker at the text's edges.
+	public (int Left, int Right) TextMargins {
+		get => textMargins;
+		set { if (value == textMargins && appliedZoom == CurrentZoom()) return; textMargins = value; ApplyTextMargins(); Invalidate(); }
+	}
+	(int Left, int Right) textMargins;
+	float appliedZoom = -1;
+	float CurrentZoom() { try { return Math.Max(0.1f, ZoomFactor); } catch (Exception) { return 1f; } }
+	// (RichEdit zooms its margins: it is given them unzoomed; set again when the zoom changes, by the page's layout)
+	void ApplyTextMargins() {
+		if (!IsHandleCreated) return;
+		float zoom = appliedZoom = CurrentZoom();
+		int left = (int)Math.Round(textMargins.Left / zoom), right = (int)Math.Round(textMargins.Right / zoom);
+		SendScroll(Handle, EM_SETMARGINS, (IntPtr)3, (IntPtr)((right << 16) | (left & 0xFFFF)));    // EC_LEFTMARGIN | EC_RIGHTMARGIN
+	}
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendScroll(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+	const int EM_SETMARGINS = 0x00D3;
+
+	/// Where the text goes across the window (inside TextMargins): what is drawn with it (headers and footers, page lines)
+	/// stays within it.
+	public Rectangle TextArea => Rectangle.FromLTRB(textMargins.Left, 0, Math.Max(textMargins.Left, ClientSize.Width - textMargins.Right), ClientSize.Height);
 
 	public void SetDefaultSize() {
 		var format = new CharFormat2 { cbSize = Marshal.SizeOf<CharFormat2>(), dwMask = 0x80000000u, yHeight = (int)Math.Round(Font.SizeInPoints * 20) };    // CFM_SIZE, in twips
@@ -7757,7 +7832,7 @@ sealed class WriterEditBox : RichEditBox
 	public void DrawPageBreaks(Graphics g) {
 		pageBreaks ??= PageBreaks.Positions(TextDocument);
 		if (pageBreaks.Count == 0) return;
-		var client = ClientRectangle;
+		var client = TextArea;
 		int storyEnd = TextDocument.Range2(0, 0).StoryLength;
 		int lineHeight = Math.Max(8, Font.Height);
 		using var pen = new Pen(Color.FromArgb(150, 150, 150)) { DashStyle = DashStyle.Dash };
@@ -7821,6 +7896,7 @@ sealed class WriterEditBox : RichEditBox
 		using var font = new Font("Segoe UI", Math.Max(6f, 8.5f * ppp / (DeviceDpi / 72f)), GraphicsUnit.Point);
 		void Parts(string[]? parts, RectangleF area) {
 			if (parts is not { Length: 3 } || area.Height <= 0) return;
+			area = new RectangleF(textMargins.Left, area.Top, Math.Max(1, width - textMargins.Left - textMargins.Right), area.Height);    // (above and below the text, not in the margins)
 			var format = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
 			foreach (var (text, align) in new[] { (parts[0], StringAlignment.Near), (parts[1], StringAlignment.Center), (parts[2], StringAlignment.Far) }) {
 				if (string.IsNullOrWhiteSpace(text)) continue;
@@ -7846,7 +7922,7 @@ sealed class WriterEditBox : RichEditBox
 	public void DrawPageBoundaries(Graphics g) {
 		if (pageStarts is not { Count: > 1 } starts) return;
 		var covered = Gaps is { Applied: true } withGaps ? withGaps.Gaps.Where(x => x.Page > 0).Select(x => x.Next).ToHashSet() : new HashSet<int>();
-		var client = ClientRectangle;
+		var client = TextArea;
 		int storyEnd = TextDocument.Range2(0, 0).StoryLength;
 		string story = "";
 		using var pen = new Pen(Color.FromArgb(150, 170, 200)) { DashStyle = DashStyle.Dot };
@@ -7944,6 +8020,13 @@ sealed class WriterEditBox : RichEditBox
 	}
 
 	const int WM_PRINTCLIENT = 0x0318, PRF_CLIENT = 0x04, PRF_ERASEBKGND = 0x08, SRCCOPY = 0x00CC0020;
+	const int WM_MOUSEWHEEL = 0x020A, WM_VSCROLL = 0x0115, WM_KEYDOWN = 0x0100, WM_TIMER = 0x0113, EM_GETSCROLLPOS = 0x04DD;
+	Point ScrollPosition() {
+		var point = new Point();
+		SendScroll(Handle, EM_GETSCROLLPOS, IntPtr.Zero, ref point);
+		return point;
+	}
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendScroll(IntPtr hWnd, int msg, IntPtr wParam, ref Point lParam);
 	[StructLayout(LayoutKind.Sequential)]
 	struct PaintStruct {
 		public IntPtr Hdc; public int Erase; public int Left, Top, Right, Bottom; public int Restore, IncUpdate;
@@ -7984,6 +8067,16 @@ sealed class WriterEditBox : RichEditBox
 				PaintBuffered();
 			else base.WndProc(ref m);
 			Painted?.Invoke();
+			return;
+		}
+		// Iteration 44: a message that scrolled the text (the wheel, the scroll bar, a key, RichEdit's timer while dragging):
+		// painted at once, and with it what follows the editor's paint (the margins' bands, the line numbers). RichEdit
+		// moves the text's pixels itself at once, but Windows paints only once no input is waiting: while the wheel
+		// turned, the rest lagged behind the text by as long as it turned.
+		if (m.Msg is WM_MOUSEWHEEL or WM_VSCROLL or WM_KEYDOWN or WM_TIMER && IsHandleCreated) {
+			var before = ScrollPosition();
+			base.WndProc(ref m);
+			if (IsHandleCreated && ScrollPosition() != before) Update();
 			return;
 		}
 		if (m.Msg == WM_CONTEXTMENU && ContextMenuHook != null) {
@@ -8563,9 +8656,16 @@ sealed class BandStrip : Control
 		Invalidate();
 	}
 
+	/// Space at either side, as the editor's text has (Print Layout: the page's margins are the editor's own).
+	public (int Left, int Right) Inset {
+		get => inset;
+		set { if (value == inset) return; inset = value; Invalidate(); }
+	}
+	(int Left, int Right) inset;
+
 	protected override void OnPaint(PaintEventArgs e) {
 		var g = e.Graphics;
-		var area = ClientRectangle;
+		var area = Rectangle.FromLTRB(inset.Left, 0, Math.Max(inset.Left + 1, ClientSize.Width - inset.Right), ClientSize.Height);
 		int gap = LogicalToDeviceUnits(4);
 		using var pen = new Pen(Color.FromArgb(190, 190, 190)) { DashStyle = DashStyle.Dot };
 		int lineY = header ? area.Bottom - 1 : area.Top;
