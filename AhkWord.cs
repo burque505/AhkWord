@@ -21,7 +21,11 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 46 adds to iteration 45:
+// Run it with AhkWord.ahk. Iteration 47 adds to iteration 46:
+//   - An experimental Word converter, "officeimo" (rte_office7.cs, version 8): OfficeIMO.Word.Rtf turns the document's
+//     RTF into .docx and a .docx into RTF directly, without Word or LibreOffice. Only when named (Open/SaveAs's via, or
+//     AHKWORD_CONVERTERS); Rte.ConverterReport says what it couldn't carry over.
+// Iteration 46 added to iteration 45:
 //   - Line numbers on the screen as far from the text as printed and as in Word: the numbering's distance, or a
 //     quarter of an inch (auto), at the zoom (LineNumberGutter.DistancePixels); they were 8 pixels from it.
 //     Within the left margin: as much of the distance as fits there (LineNumberGutter.MaxWidth).
@@ -522,7 +526,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 46;    // (the About box; make_version.ps1)
+	public const int Iteration = 47;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -4966,6 +4970,10 @@ public class EditorApi
 
 	/// Which converters for Word and OpenDocument files are available.
 	public string Converters() => OfficeConverters.Describe();
+
+	/// What the last conversion by the experimental officeimo converter couldn't carry over, one line each ("": nothing,
+	/// or another converter did it). Iteration 47.
+	public string ConverterReport() => LastConverter == OfficeConverters.OfficeImo ? OfficeConverters.LastReport : "";
 
 	// ---- Print Layout (iteration 24)
 

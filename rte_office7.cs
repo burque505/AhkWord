@@ -5,7 +5,15 @@
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
 #:package SkiaSharp@4.152.0
+#:package OfficeIMO.Core@3.5.1
+#:package OfficeIMO.Rtf@3.5.1
+#:package OfficeIMO.Word@3.5.1
+#:package OfficeIMO.Word.Rtf@3.5.1
 // Word and OpenDocument conversions for AhkWord (AhkWord.cs, through #load).
+// Version 8 (iteration 47, experimental): an "officeimo" converter, only when asked for (via, or AHKWORD_CONVERTERS):
+// OfficeIMO.Word.Rtf (MIT, https://github.com/EvotecIT/OfficeIMO) turns the RTF into .docx and a .docx into RTF
+// directly, without Word, LibreOffice or the detour through HTML that openxml takes; what it couldn't carry over is in
+// LastReport.
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
 // without spacing of its own as 1.08 lines, and "at least" as exactly. All of a paragraph's tabs come back as tabs (the
@@ -57,8 +65,8 @@ using Codeuctivity.OpenXmlPowerTools.OpenXMLWordprocessingMLToHtmlConverter;
 using W = DocumentFormat.OpenXml.Wordprocessing;
 
 public static class OfficeConverters {
-	public const string Word = "word", LibreOffice = "libreoffice", OpenXml = "openxml", Pandoc = "pandoc";
-	static readonly string[] All = { Word, LibreOffice, OpenXml, Pandoc };
+	public const string Word = "word", LibreOffice = "libreoffice", OpenXml = "openxml", Pandoc = "pandoc", OfficeImo = "officeimo";
+	static readonly string[] All = { Word, LibreOffice, OpenXml, Pandoc, OfficeImo };
 
 	// ---- what is installed
 
@@ -100,8 +108,12 @@ public static class OfficeConverters {
 	// One line per converter, for the About box and Rte.Converters().
 	public static string Describe() {
 		string word = !WordInstalled ? "not installed" : WordRunning ? "installed, but running (not used while it is open)" : "installed";
-		return $"Word: {word}\nLibreOffice: {LibreOfficePath ?? "not found"}\nOpen XML (built in, .docx only): {(OpenXmlAvailable ? "available" : "packages missing")}\npandoc: {PandocPath ?? "not found"}";
+		return $"Word: {word}\nLibreOffice: {LibreOfficePath ?? "not found"}\nOpen XML (built in, .docx only): {(OpenXmlAvailable ? "available" : "packages missing")}\npandoc: {PandocPath ?? "not found"}"
+			+ "\nOfficeIMO (built in, .docx only, experimental: only when named): available";
 	}
+
+	/// What the last officeimo conversion couldn't carry over, one line each ("" for none; officeimo only).
+	public static string LastReport { get; private set; } = "";
 
 	// ---- conversions
 
@@ -123,6 +135,7 @@ public static class OfficeConverters {
 						Word => WordConvert(WriteRtf(temp, "document-word.rtf", finish(legalRtf ??= WithNormalStyle(LegalRtf(rtf)))), Path.Combine(temp, "word." + format), format == "docx" ? 16 : 23),    // wdFormatDocumentDefault, wdFormatOpenDocumentText
 						LibreOffice => LibreOfficeConvert(WriteRtf(temp, "document-lo.rtf", finish(ModernBullets(legalRtf ??= WithNormalStyle(LegalRtf(rtf))))), temp, format == "docx" ? "docx:MS Word 2007 XML" : "odt", format),
 						OpenXml => format == "docx" ? OpenXmlWrite(html(), Path.Combine(temp, "openxml.docx")) : throw new InvalidOperationException("writes only .docx"),
+						OfficeImo => format == "docx" ? OfficeImoWrite(finish(legalRtf ??= WithNormalStyle(LegalRtf(rtf))), Path.Combine(temp, "officeimo.docx")) : throw new InvalidOperationException("writes only .docx"),
 						_ => PandocConvert(WriteHtml(temp, html()), Path.Combine(temp, "pandoc." + format), "html", format, temp),
 					};
 					File.Copy(result, output, overwrite: true);
@@ -154,6 +167,7 @@ public static class OfficeConverters {
 						Word => ("rtf", File.ReadAllText(WordConvert(copy, Path.Combine(temp, "word.rtf"), 6), System.Text.Encoding.Latin1), converter),    // wdFormatRTF
 						LibreOffice => LibreOfficeImport(copy, temp, format),
 						OpenXml => format == "docx" ? ("html", OpenXmlRead(copy), converter) : throw new InvalidOperationException("reads only .docx"),
+						OfficeImo => format == "docx" ? ("rtf", OfficeImoRead(copy), converter) : throw new InvalidOperationException("reads only .docx"),
 						_ => ("html", File.ReadAllText(PandocConvert(copy, Path.Combine(temp, "pandoc.html"), format, "html", temp, "--embed-resources", "--standalone")), converter),
 					};
 				}
@@ -1400,11 +1414,33 @@ public static class OfficeConverters {
 		if (string.IsNullOrWhiteSpace(via)) return preferred.ToList();
 		var named = via.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(v => v.ToLowerInvariant()).ToList();
 		var unknown = named.Where(n => !All.Contains(n)).ToList();
-		if (unknown.Count > 0) throw new ArgumentException("Unknown converter " + string.Join(", ", unknown) + " (use word, libreoffice, openxml or pandoc)");
+		if (unknown.Count > 0) throw new ArgumentException("Unknown converter " + string.Join(", ", unknown) + " (use word, libreoffice, openxml, pandoc or officeimo)");
 		return named.Distinct().ToList();
 	}
 
-	static string Name(string converter) => converter switch { Word => "Word", LibreOffice => "LibreOffice", OpenXml => "Open XML", _ => "pandoc" };
+	static string Name(string converter) => converter switch { Word => "Word", LibreOffice => "LibreOffice", OpenXml => "Open XML", OfficeImo => "OfficeIMO", _ => "pandoc" };
+
+	// ---- officeimo (version 8, experimental): OfficeIMO.Word.Rtf, RTF to .docx and back with a report of what was lost
+
+	static string OfficeImoWrite(string rtf, string output) {
+		var conversion = OfficeIMO.Word.Rtf.WordRtfConverterExtensions.ToWordDocumentResult(OfficeIMO.Rtf.RtfDocument.Parse(rtf));
+		LastReport = OfficeImoReport(conversion.Report);
+		using var document = conversion.RequireValue();
+		document.Save(output);
+		return output;
+	}
+
+	static string OfficeImoRead(string input) {
+		using var document = OfficeIMO.Word.WordDocument.Load(input);
+		var conversion = OfficeIMO.Word.Rtf.WordRtfConverterExtensions.ToRtfDocumentResult(document);
+		LastReport = OfficeImoReport(conversion.Report);
+		return conversion.RequireValue().ToRtf();
+	}
+
+	// Each loss (flattened, omitted, blocked, an error) on a line: its code, what, how often.
+	static string OfficeImoReport(OfficeIMO.Rtf.RtfConversionReport report) =>
+		string.Join("\n", report.Diagnostics.Where(d => d.Severity == OfficeIMO.Rtf.RtfConversionSeverity.Error || d.Action != OfficeIMO.Rtf.RtfConversionAction.Preserved)
+			.Select(d => $"{d.Code} {d.Action}: {d.Message}{(d.Count > 1 ? $" (x{d.Count})" : "")}{(d.Feature is { Length: > 0 } f ? $" [{f}]" : "")}"));
 	static string Message(Exception ex) => (ex is TargetInvocationException { InnerException: { } inner } ? inner : ex).Message.Trim();
 
 	static string TempFolder() {
