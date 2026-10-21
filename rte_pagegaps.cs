@@ -240,6 +240,7 @@ public sealed class PageGaps
 		int storyEnd = doc.Range2(0, 0).StoryLength;
 		string story = doc.Range2(0, storyEnd).Text ?? "";
 		Pages = starts.Count;
+		(TextAreaPoints, BottomPoints) = (textArea, bottom);
 		var gaps = new List<Gap>();
 		if (starts.Count == 0 || story.Length < 2) { Put(gaps); return; }
 		// page 1's top margin: space before the first paragraph (not before a table's first row)
@@ -263,6 +264,37 @@ public sealed class PageGaps
 			gaps.Add(new Gap(line.Start, line.End, at, raise, slack, bottom, BandPoints, top, k));
 		}
 		Put(gaps);
+	}
+
+	/// The page's text height and bottom margin (points) the gaps were worked out with.
+	public float TextAreaPoints { get; private set; }
+	public float BottomPoints { get; private set; }
+
+	/// Iteration 46: the last sheet's end, which has no gap after it (typing goes on there): the rest of its text area and
+	/// its bottom margin with the footer (the editor's coordinates; null: no gaps). It is drawn below the text, where the
+	/// view can scroll past the text's end; never above the text's end (typing on, before the pages are worked out
+	/// again).
+	/// maxBlank: the most of the sheet's blank rest below the text that is drawn (pixels: the view scrolls past the text
+	/// only until its last line is at the window's top).
+	public RectangleF? LastSheetEnd(float width, float pixelsPerPoint, float maxBlank = float.MaxValue) {
+		if (!Applied || TextAreaPoints <= 0) return null;
+		// the last page's text starts below the last gap's header (or below page 1's top margin)
+		var last = Gaps.OrderBy(g => g.Page).Last();
+		float textTop = Areas(last, width, pixelsPerPoint).Header.Bottom;
+		var doc = editor.TextDocument;
+		int end = Math.Max(0, doc.Range2(0, 0).StoryLength - 1);
+		var lastLine = doc.Range2(end, end);
+		lastLine.Expand(5);    // tomLine
+		float textEnd = PositionOf(lastLine.Start).Y + LineHeight(lastLine);
+		float sheetEnd = Math.Max(Math.Min(textTop + TextAreaPoints * pixelsPerPoint, textEnd + Math.Max(0, maxBlank)), textEnd);
+		return new RectangleF(0, sheetEnd, width, BottomPoints * pixelsPerPoint);
+	}
+
+	// A line's height on the screen (pixels): from its top to the next line's, or (the last line) its text's.
+	float LineHeight(ITextRange2 line) {
+		line.GetPoint(0x20 | 0 | 0x200, out _, out int top);       // tomStart | TA_TOP | tomAllowOffClient
+		line.GetPoint(0x20 | 8 | 0x200, out _, out int bottom);    // TA_BOTTOM
+		return Math.Max(0, bottom - top);
 	}
 
 	/// Forgets the gaps without touching the document (a new one was loaded, or they were taken out for good).

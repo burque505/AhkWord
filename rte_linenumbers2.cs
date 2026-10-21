@@ -182,6 +182,19 @@ public static class LineNumberFormats
 		config.SetAttributeValue(Text + "offset", ((numbering.Distance > 0 ? numbering.Distance : 360) / 1440.0).ToString("0.####", CultureInfo.InvariantCulture) + "in");
 		config.SetAttributeValue(Style + "num-format", "1");
 		config.SetAttributeValue(Text + "number-position", "left");
+		// (iteration 46) the header's and footer's paragraphs not numbered (as Word and LibreOffice's own Header and Footer
+		// styles have it): numbered, LibreOffice counted the footer's line on and on, a second "page number" in the margin
+		if (numbering.On && root.Element(Office + "master-styles") is { } masters) {
+			var names = masters.Descendants().Where(e => e.Name.LocalName is "header" or "footer" or "header-left" or "footer-left" or "header-first" or "footer-first")
+				.SelectMany(e => e.Descendants(Text + "p").Concat(e.Descendants(Text + "h"))).Select(p => (string?)p.Attribute(Text + "style-name")).OfType<string>().ToHashSet();
+			var automatic = root.Element(Office + "automatic-styles");
+			foreach (var style in (automatic?.Elements(Style + "style") ?? Enumerable.Empty<XElement>()).Concat(officeStyles.Elements(Style + "style"))) {
+				if (!names.Contains((string?)style.Attribute(Style + "name") ?? "")) continue;
+				var properties = style.Element(Style + "paragraph-properties");
+				if (properties == null) { properties = new XElement(Style + "paragraph-properties"); style.AddFirst(properties); }
+				properties.SetAttributeValue(Text + "number-lines", "false");
+			}
+		}
 		entry.Delete();
 		var added = zip.CreateEntry("styles.xml", CompressionLevel.Optimal);
 		using (var stream = added.Open()) styles.Save(stream, SaveOptions.DisableFormatting);
@@ -235,7 +248,8 @@ sealed class LineNumberGutter : Control
 	List<int>? pageStarts;
 	List<(int Start, int End)>? skipped;    // characters whose lines have no number (cached until the text changes)
 
-	const int EM_GETLINECOUNT = 0x00BA, EM_LINEINDEX = 0x00BB, EM_GETFIRSTVISIBLELINE = 0x00CE, EM_EXLINEFROMCHAR = 0x0436;
+	const int EM_GETLINECOUNT = 0x00BA, EM_LINEINDEX = 0x00BB, EM_GETFIRSTVISIBLELINE = 0x00CE, EM_EXLINEFROMCHAR = 0x0436, EM_POSFROMCHAR = 0x00D6;
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendPosition(IntPtr hWnd, int msg, ref Point point, IntPtr cp);
 	const int tomParagraph = 4;
 	[DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 	int Send(int msg, int wParam = 0, int lParam = 0) => (int)SendMessage(editor.Handle, msg, (IntPtr)wParam, (IntPtr)lParam);
@@ -279,6 +293,9 @@ sealed class LineNumberGutter : Control
 	/// What is painted under the numbers (this control's coordinates): Show Pages' bands between the sheets, which go
 	/// across the page and so across the numbers' margin too (null: none).
 	public Func<IEnumerable<Rectangle>>? Bands;
+	/// When it was last painted, and the numbers it drew (Rte.PageViewReport).
+	public DateTime LastPainted { get; private set; }
+	public List<ShownNumber> LastDrawn { get; private set; } = new();
 	public Color BandColor = Color.Gray;
 
 	// ---- which lines count
@@ -362,17 +379,37 @@ sealed class LineNumberGutter : Control
 		return new Font(editor.Font.FontFamily, editor.Font.SizeInPoints * zoom, FontStyle.Regular, GraphicsUnit.Point);
 	}
 
-	// Wide enough for the largest number the document can have, and at least two digits.
+	// Wide enough for the largest number the document can have, and at least two digits, and the distance from the text.
 	void FitWidth() {
 		if (!IsHandleCreated || !editor.IsHandleCreated) return;
 		int largest = numbering.Start + Send(EM_GETLINECOUNT);
 		using var font = NumberFont();
-		int width = TextRenderer.MeasureText(new string('8', Math.Max(2, largest.ToString(CultureInfo.InvariantCulture).Length)), font).Width + LogicalToDeviceUnits(12);
+		int digits = TextRenderer.MeasureText(new string('8', Math.Max(2, largest.ToString(CultureInfo.InvariantCulture).Length)), font).Width + LogicalToDeviceUnits(4);
+		// (no wider than the room it has, the page's left margin: as much of the distance as fits there)
+		int width = Math.Max(digits, Math.Min(digits + DistancePixels(), maxWidth));
+		distanceShown = width - digits;
 		if (Math.Abs(width - Width) > 1) Width = width;
+	}
+	int distanceShown;
+
+	/// The widest it may be (pixels): in Print Layout the page's left margin, which the text starts after.
+	public int MaxWidth {
+		get => maxWidth;
+		set { if (value == maxWidth) return; maxWidth = value; FitWidth(); Invalidate(); }
+	}
+	int maxWidth = int.MaxValue;
+
+	// Iteration 46: the numbers as far from the text as printed (and as in Word): the numbering's distance, or a quarter
+	// of an inch (auto), at the zoom; they were 8 pixels from it.
+	int DistancePixels() {
+		float zoom = 1f;
+		try { zoom = editor.ZoomFactor; } catch (Exception) { }
+		return (int)Math.Round((numbering.Distance > 0 ? numbering.Distance : 360) / 1440f * DeviceDpi * zoom);
 	}
 
 	protected override void OnPaint(PaintEventArgs e) {
 		base.OnPaint(e);
+		LastPainted = DateTime.Now;
 		if (!numbering.On || !editor.IsHandleCreated) return;
 		if (Bands?.Invoke() is { } bands) {
 			using var band = new SolidBrush(BandColor);
@@ -383,15 +420,42 @@ sealed class LineNumberGutter : Control
 	}
 
 	void Draw(Graphics g) {
+		using var font = NumberFont();
+		int right = ClientSize.Width - distanceShown;
+		LastDrawn = Shown(font).ToList();
+		foreach (var shown in LastDrawn) {
+			string text = shown.Number.ToString(CultureInfo.CurrentCulture);
+			int width = TextRenderer.MeasureText(g, text, font, Size.Empty, TextFormatFlags.NoPadding).Width;
+			TextRenderer.DrawText(g, text, font, new Point(right - width, shown.Top), SystemColors.GrayText, TextFormatFlags.NoPadding);
+		}
+	}
+
+	/// A number as drawn: its line (from 0), the line's first character, its text's baseline and the number's top (this
+	/// control's coordinates).
+	public sealed record ShownNumber(int Line, int Start, int Number, int Baseline, int Top);
+
+	/// Whether the numbers last drawn are where the numbers in view belong now.
+	public bool DrawnWhereTheyBelong() {
+		var now = ShownNumbers();
+		return now.Count == LastDrawn.Count && now.Zip(LastDrawn).All(p => p.First.Number == p.Second.Number && p.First.Top == p.Second.Top);
+	}
+
+	/// The numbers in view, where they are drawn (Rte.PageViewReport shows them too).
+	public List<ShownNumber> ShownNumbers() {
+		if (!numbering.On || !editor.IsHandleCreated || !IsHandleCreated) return new();
+		using var font = NumberFont();
+		try { return Shown(font).ToList(); }
+		catch (COMException) { return new(); }
+	}
+
+	IEnumerable<ShownNumber> Shown(Font font) {
 		var doc = editor.TextDocument;
 		int count = Send(EM_GETLINECOUNT), first = Send(EM_GETFIRSTVISIBLELINE);
 		var skippedLines = SkippedLines();
 		var restarts = RestartLines();
-		using var font = NumberFont();
 		// the numbers' tops are their baselines less the font's ascent (TextRenderer draws from the top of the cell)
 		float ascent = font.SizeInPoints * DeviceDpi / 72f * font.FontFamily.GetCellAscent(font.Style) / font.FontFamily.GetEmHeight(font.Style);
 		int bottom = PointToScreen(new Point(0, ClientSize.Height)).Y;
-		int right = ClientSize.Width - LogicalToDeviceUnits(8);
 		int number = Counted(first, restarts, skippedLines);
 		int nextSkip = skippedLines.FindIndex(s => s.Last >= first);
 		for (int line = first; line < count; line++) {
@@ -406,13 +470,18 @@ sealed class LineNumberGutter : Control
 			}
 			int at = Send(EM_LINEINDEX, line);
 			if (at < 0) break;
-			doc.Range2(at, at).GetPoint(0x20 | 24 | 0x200, out int x, out int baseline);    // tomStart | TA_BASELINE | tomAllowOffClient (screen)
+			// (iteration 46: the line's top from EM_POSFROMCHAR, the baseline's step below it from TOM: TOM's points alone
+			// were sometimes those of the view before it was last scrolled, by page 1's top margin with Show Pages)
+			var range = doc.Range2(at, at);
+			range.GetPoint(0x20 | 0 | 0x200, out _, out int topOfLine);    // tomStart | TA_TOP | tomAllowOffClient (screen)
+			range.GetPoint(0x20 | 24 | 0x200, out _, out int baselineOfLine);    // TA_BASELINE
+			var lineTop = new Point();
+			SendPosition(editor.Handle, EM_POSFROMCHAR, ref lineTop, (IntPtr)at);
+			int baseline = editor.PointToScreen(new Point(0, lineTop.Y + baselineOfLine - topOfLine)).Y;
 			if (baseline - ascent > bottom) break;
 			if (number % numbering.CountBy == 0) {
-				int y = PointToClient(new Point(x, baseline)).Y - (int)Math.Round(ascent);
-				string text = number.ToString(CultureInfo.CurrentCulture);
-				int width = TextRenderer.MeasureText(g, text, font, Size.Empty, TextFormatFlags.NoPadding).Width;
-				TextRenderer.DrawText(g, text, font, new Point(right - width, y), SystemColors.GrayText, TextFormatFlags.NoPadding);
+				int y = PointToClient(new Point(0, baseline)).Y;
+				yield return new ShownNumber(line, at, number, y, y - (int)Math.Round(ascent));
 			}
 			number++;
 		}

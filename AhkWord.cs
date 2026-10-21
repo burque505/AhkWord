@@ -21,7 +21,30 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 45 adds to iteration 44:
+// Run it with AhkWord.ahk. Iteration 46 adds to iteration 45:
+//   - Line numbers on the screen as far from the text as printed and as in Word: the numbering's distance, or a
+//     quarter of an inch (auto), at the zoom (LineNumberGutter.DistancePixels); they were 8 pixels from it.
+//     Within the left margin: as much of the distance as fits there (LineNumberGutter.MaxWidth).
+//   - Line numbers on their lines with Show Pages: the line's top from EM_POSFROMCHAR and the baseline's step below
+//     it from TOM (TOM's points alone were sometimes those of the view before it was scrolled back, by page 1's top
+//     margin: the numbers a margin below their lines); painted again when they aren't where they belong.
+//   - A document opened at a large zoom: the page's contents laid out at the page's new size (they stayed as for the
+//     page at 100%: the text at the window's edge, the numbers out of view); the page widened for lines drawn wider
+//     than the printer's by a few percent at most (it had grown to half as wide again, the footer's middle far right).
+//   - The grey around the page keeps where it is scrolled to when the editor gets the focus (PageHost): WinForms
+//     scrolled the editor's left edge to the window's, the line numbers and the left margin out of view.
+//   - Show Pages: the last sheet's end below the text, with its footer, and grey after it (PageGaps.LastSheetEnd: the
+//     last page has no gap, where typing goes on); the wheel, the scroll bar and Page Down scroll on past the text's
+//     end to it (WriterEditBox.ScrollPastEnd). Its blank rest is shortened if taller than the view could scroll to.
+//   - Saving with Show Pages on: the file made without its gaps at every step (HTML had them as huge margins before a
+//     page's first paragraph: the steps after the library's HTML read the paragraphs' spacing from the editor).
+//   - HTML: the document's styles for AhkWord at the file's end, a comment after </html> (StyleHtml.EndComment): in the
+//     head they were a long line of data at the top of the HTML source view. Files with them in the head still read.
+//   - OpenDocument with line numbers: the header's and footer's paragraphs not numbered (LibreOffice numbered the
+//     footer's line, counting on from page to page: a second page number in the margin).
+//   - Rte.PageViewReport (and the Page view report macro) lists the line numbers in view first: where each was drawn
+//     and where it belongs, and when the numbers and the editor were last painted.
+// Iteration 45 added to iteration 44:
 //   - Show Pages with line numbers: the sheets' bands go across the numbers too (they had a white gap there:
 //     LineNumberGutter.Bands), and the numbers are painted in the same pass as the editor, not a moment after it.
 // Iteration 44 added to iteration 43:
@@ -499,7 +522,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 45;    // (the About box; make_version.ps1)
+	public const int Iteration = 46;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -635,12 +658,13 @@ class WriterForm : Form
 		page.Controls.Add(headerStrip);    // (added after the editor, so docked before it)
 		page.Controls.Add(footerStrip);
 		Editor.Painted += lineGutter.EditorPainted;
+		Editor.Painted += () => editorPainted = DateTime.Now;
 		// (Show Pages' bands across the line numbers too: the panel's, moved to the numbers' own place)
 		lineGutter.BandColor = PrintLayoutPage.Surround;
 		lineGutter.Bands = () => PanelBands().Select(b => new Rectangle(b.X - lineGutter.Left, b.Y - lineGutter.Top, b.Width, b.Height));
 		lineGutter.SizeChanged += (s, e) => FitPagePadding();
 		// Print Layout: the page follows the window, the zoom (Ctrl+wheel too) and a new editor window
-		sourceSplit.Panel2.Resize += (s, e) => FitPagePadding();
+		pageHost.Resize += (s, e) => FitPagePadding();
 		Editor.Painted += () => {
 			if (pageLayout == null) return;
 			if (Math.Abs(EditorZoom() - pageZoom) > 0.001f) {
@@ -672,7 +696,8 @@ class WriterForm : Form
 		sourceBox.WordWrap = Settings.SourceWordWrap;
 		sourceBox.LineNumbers = Settings.SourceLineNumbers;
 		sourceSplit.Panel1.Controls.Add(sourcePanel);
-		sourceSplit.Panel2.Controls.Add(page);
+		pageHost.Controls.Add(page);
+		sourceSplit.Panel2.Controls.Add(pageHost);
 		outlineSplit.Panel2.Controls.Add(sourceSplit);
 		sourceBox.TextChanged += (s, e) => SourceTextChanged();
 		sourceBox.SelectionChanged += (s, e) => UpdateUi();
@@ -1983,6 +2008,8 @@ class WriterForm : Form
 			}
 		}
 		Editor.PageStarts = Settings.PrintLayout ? bandStarts : null;    // (until they are worked out again: the ones before)
+		// (iteration 46) the line numbers drawn somewhere else than their lines are now: painted again
+		if (lineGutter.Visible && !quietGaps && !gapsOut && !lineGutter.DrawnWhereTheyBelong()) lineGutter.Invalidate();
 		int viewPage = 1;
 		if (needPages && bandStarts is { Count: > 0 } starts && Editor.IsHandleCreated) {
 			int middle = Editor.GetCharIndexFromPosition(new Point(Editor.ClientSize.Width / 2, Editor.ClientSize.Height / 2));
@@ -2079,11 +2106,16 @@ class WriterForm : Form
 			if (hold) LockWindowUpdate(IntPtr.Zero);
 			Editor.Invalidate();
 			pagePanel.Invalidate();
+			// (iteration 46: the line numbers too, where they are now that the text is back in its place; drawn while the
+			// gaps went in, they were left where the text had been moved to before it)
+			lineGutter.Invalidate();
 		}
 	}
 
 	// Rte.PageViewReport: positions and sizes only.
 	internal string PageViewReport() {
+		var shownNumbers = Numbering.On ? lineGutter.ShownNumbers() : new();    // (first: see below)
+		var drawnNumbers = lineGutter.LastDrawn;
 		var r = new StringBuilder();
 		var doc = Editor.TextDocument;
 		int storyEnd = doc.Range2(0, 0).StoryLength;
@@ -2092,7 +2124,20 @@ class WriterForm : Form
 		r.AppendLine($"Program: {AppFolders.HostScript ?? "(not known)"}");
 		r.AppendLine($"Print Layout {Settings.PrintLayout}, Show Pages {Settings.PageView} (active {PageViewActive}), zoom {Editor.ZoomFactor:0.###} ({Settings.ZoomMode}), {Editor.PixelsPerPoint:0.###} px/pt, window {Editor.ClientSize.Width}x{Editor.ClientSize.Height}");
 		r.AppendLine($"Characters {storyEnd}, paragraphs {paragraphs.Count}, layout stale {bandPagesStale}, gaps out {gapsOut}");
-		try {
+		// (iteration 46) the line numbers in view: where each was drawn last, where it belongs now (worked out before
+		// anything else here, which can take the gaps out and put them back, and so paint everything again), against
+		// its line's top
+		if (Numbering.On) {
+			r.AppendLine($"Line numbers {Numbering.Describe()}; screen {DeviceDpi} dpi; numbers' column {lineGutter.Bounds}, editor {Editor.Bounds}, text margins {Editor.TextMargins}; " +
+				$"painted {(DateTime.Now - lineGutter.LastPainted).TotalMilliseconds:0} ms ago, the editor {(DateTime.Now - editorPainted).TotalMilliseconds:0} ms ago; page starts for restarts {lineGutter.PageStarts?.Count.ToString() ?? "none"}; " +
+				$"drawn where they belong: {drawnNumbers.Count == shownNumbers.Count && drawnNumbers.Zip(shownNumbers).All(p => p.First.Number == p.Second.Number && p.First.Top == p.Second.Top)}");
+			for (int i = 0; i < Math.Max(shownNumbers.Count, drawnNumbers.Count); i++) {
+				var shown = i < shownNumbers.Count ? shownNumbers[i] : null;
+				var drawn = i < drawnNumbers.Count ? drawnNumbers[i] : null;
+				string where = shown == null ? "" : $"line {shown.Line} at {shown.Start} (p{ParagraphOf(shown.Start)}), line top {Editor.GetPositionFromCharIndex(shown.Start).Y}, text's baseline {shown.Baseline + lineGutter.Top - Editor.Top}, belongs at top {shown.Top + lineGutter.Top - Editor.Top}, space before {doc.Range2(shown.Start, shown.Start).Para.SpaceBefore:0.#} pt";
+				r.AppendLine($"  number {shown?.Number ?? drawn!.Number}: {where}; drawn at top {(drawn == null ? "-" : (drawn.Top + lineGutter.Top - Editor.Top).ToString())}{(drawn != null && shown != null && drawn.Number != shown.Number ? $" (as number {drawn.Number})" : "")}");
+			}
+		}		try {
 			using var printer = CreatePrinter();
 			r.AppendLine($"Printer {printer.Document.PrinterSettings.PrinterName}; printed pages start at {string.Join(" ", printer.PageHeights().Select(p => $"{p.Start} (p{ParagraphOf(p.Start)}, {p.Height:0} pt)"))}");
 		} catch (Exception ex) { r.AppendLine("Printed pages: " + ex.Message); }
@@ -2207,6 +2252,9 @@ class WriterForm : Form
 		foreach (var band in bands) g.FillRectangle(grey, band);
 	}
 
+	DateTime editorPainted;    // (Rte.PageViewReport)
+	readonly PageHost pageHost = new() { Dock = DockStyle.Fill };
+
 	// The sheets' bands in the panel's margins, as FollowGapBands last had them painted (the panel's coordinates).
 	List<Rectangle> panelBands = new();
 
@@ -2222,6 +2270,11 @@ class WriterForm : Form
 			if (y + band.Height < 0 || y > pagePanel.Height) continue;
 			int top = (int)Math.Floor(Math.Max(Editor.Top, y)), bottom = (int)Math.Ceiling(Math.Min(band.Bottom + Editor.Top, Editor.Bottom));
 			if (bottom > top) bands.Add(new Rectangle(0, top, pagePanel.Width, bottom - top));
+		}
+		// (iteration 46) the grey after the last sheet
+		if (Editor.LastSheetEnd() is { } end && Editor.Top + end.Bottom < Editor.Bottom) {
+			int top = (int)Math.Floor(Math.Max(Editor.Top, Editor.Top + end.Bottom));
+			bands.Add(new Rectangle(0, top, pagePanel.Width, Editor.Bottom - top));
 		}
 		return bands;
 	}
@@ -2341,7 +2394,7 @@ class WriterForm : Form
 		if (fittingPage) return;
 		fittingPage = true;
 		try {
-			var host = sourceSplit.Panel2;
+			var host = pageHost;
 			if (pageLayout == null) {
 				host.AutoScroll = false;
 				host.BackColor = SystemColors.Window;
@@ -2350,11 +2403,13 @@ class WriterForm : Form
 				if (Numbering.On) left = Math.Max(LogicalToDeviceUnits(4), left - Math.Max(lineGutter.Width, LogicalToDeviceUnits(30)));
 				pagePanel.Padding = new Padding(left, LogicalToDeviceUnits(14), LogicalToDeviceUnits(16), 0);
 				Editor.TextMargins = headerStrip.Inset = footerStrip.Inset = (0, 0);
+				lineGutter.MaxWidth = int.MaxValue;
 				return;
 			}
 			if (Settings.ZoomMode is "PageWidth" or "OnePage") FitZoom(host);
 			pageZoom = EditorZoom();
 			var (marginLeft, text, marginRight) = PrintLayoutPage.Pixels(pageLayout, pageZoom, DeviceDpi);
+			lineGutter.MaxWidth = Math.Max(LogicalToDeviceUnits(20), marginLeft - LogicalToDeviceUnits(4));    // (the numbers within the left margin)
 			// (the lines are broken with the printer's measurements but drawn with the screen's, whose hinted letters are a
 			// little wider: 3% more, and more if a line drawn still reaches the edge, PageOverhang)
 			int gutter = Numbering.On ? lineGutter.Width : 0, bar = SystemInformation.VerticalScrollBarWidth;
@@ -2373,6 +2428,9 @@ class WriterForm : Form
 			host.AutoScroll = width > host.ClientSize.Width;
 			int x = Math.Max(0, (host.ClientSize.Width - width) / 2);
 			pagePanel.SetBounds(x + host.AutoScrollPosition.X, 0, width, host.ClientSize.Height);
+			// (iteration 46: what it holds laid out at its new size: a document opened at a large zoom left the editor
+			// and the line numbers as for the page at 100%, the text at the window's edge, the footer off its middle)
+			pagePanel.PerformLayout();
 		} finally {
 			fittingPage = false;
 		}
@@ -2440,7 +2498,13 @@ class WriterForm : Form
 		} catch (COMException) { return; }
 		int room = Editor.ClientSize.Width - Editor.TextMargins.Right - LogicalToDeviceUnits(2);
 		if (widest <= room) return;
-		pageOverhang += widest - room + LogicalToDeviceUnits(4);
+		// (iteration 46: at most a few percent of the text's width, as the screen's letters are wider than the printer's;
+		// measured while the page was being laid out afresh (a document opened at a large zoom), a line could seem a
+		// page wider than it is, and the page stayed that wide, its footer's middle far to the right)
+		int cap = Math.Max(LogicalToDeviceUnits(8), (int)Math.Ceiling((pageLayout?.TextWidth ?? 0) / 1440f * DeviceDpi * EditorZoom() * 0.04f));
+		int wider = Math.Min(cap, pageOverhang + widest - room + LogicalToDeviceUnits(4));
+		if (wider <= pageOverhang) return;
+		pageOverhang = wider;
 		FitPagePadding();
 	}
 
@@ -4593,6 +4657,18 @@ public class EditorApi
 		// HTML and Markdown keep their pictures in document_images\ next to the file, except HTML saved with "inside"
 		bool picturesInside = extension is ".html" or ".htm" && via == PicturesInside;
 		// a .md / .html file whose document came from its source text, unchanged since, gets that text as it was typed
+		// (iteration 46: the file made from the document as it is, without the page view's gaps, whatever step reads it)
+		form.WithoutGaps(() => WriteFile(full, extension, via, picturesInside));
+		ed.Modified = false;
+		form.ClearRecovery();
+		FileConverter = extension is ".docx" or ".odt" || picturesInside ? via : "";
+		form.SetFileName(full);
+		form.AddRecent(full);
+		form.Events.Raise(EditorEvent.Saved);
+		return full;
+	}
+
+	void WriteFile(string full, string extension, string via, bool picturesInside) {
 		if (form.VerbatimSource(extension) is { } verbatim)
 			File.WriteAllText(full, picturesInside ? verbatim : PicturesToFiles(verbatim, full), new UTF8Encoding(false));
 		else if (extension is ".docx" or ".odt") Export(full, via);
@@ -4609,13 +4685,6 @@ public class EditorApi
 			};
 			File.WriteAllText(full, content, new UTF8Encoding(false));
 		}
-		ed.Modified = false;
-		form.ClearRecovery();
-		FileConverter = extension is ".docx" or ".odt" || picturesInside ? via : "";
-		form.SetFileName(full);
-		form.AddRecent(full);
-		form.Events.Raise(EditorEvent.Saved);
-		return full;
 	}
 
 	/// The full path of the current file ("" for a new document).
@@ -4657,9 +4726,16 @@ public class EditorApi
 	}
 
 	// The library's HTML, with page breaks, real tables (it writes their cells as paragraphs) and list numbering.
+	// (iteration 46: all of it without the page view's gaps: the steps after the library's HTML read the paragraphs'
+	// spacing from the editor, and wrote Show Pages' gaps as huge margins before a page's first paragraph)
 	string HtmlBody(out string css) {
-		string body = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, global::LineSpacing.ExportHtml(ed, StyleHtml.Export(ed, form.Styles, LineBreaks.ExportHtml(ed, form.WithoutGaps(() => ed.Html)))))), out css);
-		css = ParagraphCss + css;
+		string listsCss = "";
+		string body = form.WithoutGaps(() => {
+			string html = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, global::LineSpacing.ExportHtml(ed, StyleHtml.Export(ed, form.Styles, LineBreaks.ExportHtml(ed, ed.Html))))), out var found);
+			listsCss = found;
+			return html;
+		});
+		css = ParagraphCss + listsCss;
 		return body;
 	}
 
@@ -4677,7 +4753,7 @@ public class EditorApi
 	// conversions use it as it comes).
 	string HtmlFile(string title, bool pretty = false) {
 		string body = HtmlBody(out string css);
-		return HtmlDocument(pretty ? PrettyHtml.Format(body) : body, title, css, (OwnBands ? HeaderFooter.HtmlMeta(form.Bands) : "") + LineNumberFormats.HtmlMeta(form.Numbering) + StyleHtml.Meta(form.Styles));
+		return HtmlDocument(pretty ? PrettyHtml.Format(body) : body, title, css, (OwnBands ? HeaderFooter.HtmlMeta(form.Bands) : "") + LineNumberFormats.HtmlMeta(form.Numbering), StyleHtml.EndComment(form.Styles));
 	}
 
 	/// The "via" for an HTML file that keeps its pictures inside it.
@@ -6651,10 +6727,10 @@ public class EditorApi
 		}
 	}
 
-	static string HtmlDocument(string body, string title, string css = "", string meta = "") =>
+	static string HtmlDocument(string body, string title, string css = "", string meta = "", string end = "") =>
 		"<!DOCTYPE html>\r\n<html>\r\n<head>\r\n<meta charset=\"utf-8\">\r\n" + meta + "<title>" + WebUtility.HtmlEncode(title) + "</title>\r\n"
 		+ HtmlLists.StyleElement(css) + "</head>\r\n<body>\r\n"
-		+ body + "\r\n</body>\r\n</html>\r\n";
+		+ body + "\r\n</body>\r\n</html>\r\n" + end;
 
 	static string BodyOf(string html) {
 		var match = Regex.Match(html, @"<body[^>]*>(.*)</body>", RegexOptions.Singleline | RegexOptions.IgnoreCase);
@@ -7655,6 +7731,15 @@ sealed class MacroHotkeysDialog : Form
 // The editor control: RichEditBox with a hook for the right-click menu, so the spelling menu can come before the
 // library's formatting toolbar. The hook gets the screen point and the character position, and returns true if it
 // showed a menu.
+// The grey around the page (Print Layout), which scrolls sideways when the page is wider than the window. Iteration 46:
+// it stays where it is scrolled to when the editor gets the focus. WinForms scrolls a panel to bring a control that gets
+// the focus into view, and so put the editor's left edge at the window's: with line numbers, the numbers and the left
+// margin (beside the editor) went out of view.
+sealed class PageHost : Panel
+{
+	protected override Point ScrollToControl(Control activeControl) => AutoScrollPosition;
+}
+
 // The panel around the editor (Show Pages draws the bands in its margins): painted through a bitmap, so the grey isn't
 // first painted white (iteration 43).
 sealed class BufferedPanel : Panel
@@ -7824,6 +7909,8 @@ sealed class WriterEditBox : RichEditBox
 					if (header.Bottom < client.Top || footer.Top > client.Bottom) continue;
 					Invalidate(Rectangle.FromLTRB(0, (int)Math.Floor(footer.Top), client.Width, (int)Math.Ceiling(header.Bottom) + 1), false);
 				}
+				if (LastSheetEnd() is { } end && end.Top < client.Bottom)
+					Invalidate(Rectangle.FromLTRB(0, (int)Math.Floor(Math.Max(0, end.Top)), client.Width, client.Bottom), false);
 			}
 			if (pageStarts is { Count: > 1 } starts)
 				foreach (int at in starts.Skip(1)) {
@@ -7920,6 +8007,29 @@ sealed class WriterEditBox : RichEditBox
 			g.DrawLine(edge, band.Left, band.Bottom - 1, band.Right, band.Bottom - 1);
 			Parts(BandParts?.Invoke(true, gap.Page + 1), header);
 		}
+		// (iteration 46) the last sheet's end below the text: its footer, grey after it
+		if (LastSheetEnd() is { } end && end.Top < client.Bottom && end.Bottom > client.Top - 1) {
+			Parts(BandParts?.Invoke(false, gaps.Pages), end);
+			if (end.Bottom < client.Bottom) {
+				g.FillRectangle(grey, RectangleF.FromLTRB(0, end.Bottom, width, client.Bottom));
+				g.DrawLine(edge, 0, end.Bottom, width, end.Bottom);
+			}
+		}
+	}
+
+	/// Iteration 46: how much further the view may scroll down past the text's end (pixels): until the last sheet's
+	/// footer, and a little grey after it, are in view (0: no further).
+	public int RoomBelow() {
+		if (LastSheetEnd() is not { } end) return 0;
+		return Math.Max(0, (int)Math.Ceiling(end.Bottom + 18 * PixelsPerPoint - ClientSize.Height));
+	}
+
+	/// The last sheet's end (PageGaps.LastSheetEnd), its blank rest no taller than the view can scroll past the text to
+	/// show it whole with its footer (null: no gaps).
+	public RectangleF? LastSheetEnd() {
+		if (Gaps is not { Applied: true } gaps) return null;
+		float ppp = PixelsPerPoint;
+		return gaps.LastSheetEnd(ClientSize.Width, ppp, ClientSize.Height - (gaps.BottomPoints + 18) * ppp - 40 * ppp);
 	}
 
 	/// Draws the boundaries of the printed pages in view: a thin line above each page's first line, and "Page N" at
@@ -8026,7 +8136,44 @@ sealed class WriterEditBox : RichEditBox
 	}
 
 	const int WM_PRINTCLIENT = 0x0318, PRF_CLIENT = 0x04, PRF_ERASEBKGND = 0x08, SRCCOPY = 0x00CC0020;
-	const int WM_MOUSEWHEEL = 0x020A, WM_VSCROLL = 0x0115, WM_KEYDOWN = 0x0100, WM_TIMER = 0x0113, EM_GETSCROLLPOS = 0x04DD;
+	const int WM_MOUSEWHEEL = 0x020A, WM_VSCROLL = 0x0115, WM_KEYDOWN = 0x0100, WM_TIMER = 0x0113, EM_GETSCROLLPOS = 0x04DD, EM_SETSCROLLPOS = 0x04DE;
+
+	// Iteration 46: RichEdit scrolls only until the text's last line is at the window's bottom, but Show Pages draws the
+	// last sheet's end (its footer) below it: the wheel and the scroll bar's down arrow and page go on down there (and
+	// stay there: RichEdit would pull the view back up to its own end).
+	bool ScrollPastEnd(Message m) {
+		bool down = m.Msg switch {
+			WM_MOUSEWHEEL => (short)((m.WParam.ToInt64() >> 16) & 0xFFFF) < 0 && (ModifierKeys & Keys.Control) == 0,
+			WM_VSCROLL => (m.WParam.ToInt64() & 0xFFFF) is 1 or 3,    // SB_LINEDOWN, SB_PAGEDOWN
+			_ => false
+		};
+		if (!down || Gaps is not { Applied: true } || !AtScrollEnd()) return false;
+		int room = RoomBelow();
+		if (room > 0) {
+			int notches = m.Msg == WM_MOUSEWHEEL ? Math.Max(1, -(short)((m.WParam.ToInt64() >> 16) & 0xFFFF) / 120) : 1;
+			int step = m.Msg == WM_VSCROLL && (m.WParam.ToInt64() & 0xFFFF) == 3 ? ClientSize.Height * 9 / 10 : notches * Math.Max(20, ClientSize.Height / 6);
+			ScrollDown(Math.Min(room, step));
+		}
+		return true;
+	}
+
+	// Whether the view is at RichEdit's own end of scrolling, or past it.
+	bool AtScrollEnd() {
+		var info = new ScrollInfo { Size = Marshal.SizeOf<ScrollInfo>(), Mask = 0x17 };    // SIF_ALL
+		if (!GetScrollInfo(Handle, 1, ref info)) return false;    // (SB_VERT)
+		return info.Page > 0 && ScrollPosition().Y >= info.Max - info.Page;
+	}
+
+	void ScrollDown(int by) {
+		if (by <= 0) return;
+		var position = ScrollPosition();
+		position.Y += by;
+		SendScroll(Handle, EM_SETSCROLLPOS, IntPtr.Zero, ref position);
+		Update();
+	}
+
+	[StructLayout(LayoutKind.Sequential)] struct ScrollInfo { public int Size, Mask, Min, Max, Page, Pos, TrackPos; }
+	[DllImport("user32.dll")] static extern bool GetScrollInfo(IntPtr hWnd, int bar, ref ScrollInfo info);
 	Point ScrollPosition() {
 		var point = new Point();
 		SendScroll(Handle, EM_GETSCROLLPOS, IntPtr.Zero, ref point);
@@ -8080,9 +8227,15 @@ sealed class WriterEditBox : RichEditBox
 		// moves the text's pixels itself at once, but Windows paints only once no input is waiting: while the wheel
 		// turned, the rest lagged behind the text by as long as it turned.
 		if (m.Msg is WM_MOUSEWHEEL or WM_VSCROLL or WM_KEYDOWN or WM_TIMER && IsHandleCreated) {
+			if (ScrollPastEnd(m)) return;
 			var before = ScrollPosition();
 			base.WndProc(ref m);
 			if (IsHandleCreated && ScrollPosition() != before) Update();
+			// (iteration 46) Page Down or Ctrl+End at the end: on to the last sheet's footer, the caret still in view
+			if (m.Msg == WM_KEYDOWN && ((int)m.WParam == 0x22 || ((int)m.WParam == 0x23 && (ModifierKeys & Keys.Control) != 0)) && AtScrollEnd()) {
+				int caretTop = GetPositionFromCharIndex(TextDocument.Selection2.Start).Y;
+				ScrollDown(Math.Min(RoomBelow(), Math.Max(0, caretTop)));
+			}
 			return;
 		}
 		if (m.Msg == WM_CONTEXTMENU && ContextMenuHook != null) {

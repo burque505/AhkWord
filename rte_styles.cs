@@ -1273,9 +1273,15 @@ public static class StyleHtml
 	public static string Meta(StyleSheet sheet) =>
 		$"<meta name=\"{MetaName}\" content=\"{Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(sheet)))}\">";
 
-	/// The styles an HTML file has for AhkWord (null: none).
+	/// Iteration 46: the document's styles for AhkWord at the HTML file's end, a comment after the html element (browsers
+	/// leave it out): in the head, the long line of them came first in the HTML source view, before the document.
+	public static string EndComment(StyleSheet sheet) =>
+		$"<!-- {MetaName} {Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(sheet)))} -->\r\n";
+
+	/// The styles an HTML file has for AhkWord (null: none): at its end, or (files saved before iteration 46) in its head.
 	public static StyleSheet? FromMeta(string html) {
-		var m = Regex.Match(html, "<meta\\s+name=\"" + MetaName + "\"\\s+content=\"([A-Za-z0-9+/=]+)\"", RegexOptions.IgnoreCase);
+		var m = Regex.Match(html, "<!--\\s*" + MetaName + "\\s+([A-Za-z0-9+/=]+)\\s*-->", RegexOptions.IgnoreCase);
+		if (!m.Success) m = Regex.Match(html, "<meta\\s+name=\"" + MetaName + "\"\\s+content=\"([A-Za-z0-9+/=]+)\"", RegexOptions.IgnoreCase);
 		if (!m.Success) return null;
 		try { return JsonSerializer.Deserialize<StyleSheet>(Encoding.UTF8.GetString(Convert.FromBase64String(m.Groups[1].Value))); }
 		catch (Exception ex) when (ex is FormatException or JsonException) { return null; }
