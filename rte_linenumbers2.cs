@@ -267,12 +267,19 @@ sealed class LineNumberGutter : Control
 		if (Visible) Invalidate();
 	}
 
-	/// After the editor painted (scrolled, typed, zoomed): the numbers follow.
+	/// After the editor painted (scrolled, typed, zoomed): the numbers follow, in the same pass (painted later, as
+	/// Windows gets round to it, they lagged a moment behind the text while it scrolled).
 	public void EditorPainted() {
 		if (!Visible) return;
 		FitWidth();
 		Invalidate();
+		Update();
 	}
+
+	/// What is painted under the numbers (this control's coordinates): Show Pages' bands between the sheets, which go
+	/// across the page and so across the numbers' margin too (null: none).
+	public Func<IEnumerable<Rectangle>>? Bands;
+	public Color BandColor = Color.Gray;
 
 	// ---- which lines count
 
@@ -367,6 +374,10 @@ sealed class LineNumberGutter : Control
 	protected override void OnPaint(PaintEventArgs e) {
 		base.OnPaint(e);
 		if (!numbering.On || !editor.IsHandleCreated) return;
+		if (Bands?.Invoke() is { } bands) {
+			using var band = new SolidBrush(BandColor);
+			foreach (var area in bands) e.Graphics.FillRectangle(band, area);
+		}
 		try { Draw(e.Graphics); }
 		catch (COMException) { }    // the document can be briefly unavailable while it is being replaced
 	}

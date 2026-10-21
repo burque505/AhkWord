@@ -21,7 +21,10 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 44 adds to iteration 43:
+// Run it with AhkWord.ahk. Iteration 45 adds to iteration 44:
+//   - Show Pages with line numbers: the sheets' bands go across the numbers too (they had a white gap there:
+//     LineNumberGutter.Bands), and the numbers are painted in the same pass as the editor, not a moment after it.
+// Iteration 44 added to iteration 43:
 //   - Show Pages: the sheets' grey bands in the page's margins scroll with the text in the same move: in Print Layout
 //     the margins are the editor's own (EM_SETMARGINS: WriterEditBox.TextMargins; the header and footer text, page
 //     lines and page breaks kept within the text's width), so RichEdit moves their pixels with the text's; drawn beside
@@ -496,7 +499,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 44;    // (the About box; make_version.ps1)
+	public const int Iteration = 45;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -632,6 +635,9 @@ class WriterForm : Form
 		page.Controls.Add(headerStrip);    // (added after the editor, so docked before it)
 		page.Controls.Add(footerStrip);
 		Editor.Painted += lineGutter.EditorPainted;
+		// (Show Pages' bands across the line numbers too: the panel's, moved to the numbers' own place)
+		lineGutter.BandColor = PrintLayoutPage.Surround;
+		lineGutter.Bands = () => PanelBands().Select(b => new Rectangle(b.X - lineGutter.Left, b.Y - lineGutter.Top, b.Width, b.Height));
 		lineGutter.SizeChanged += (s, e) => FitPagePadding();
 		// Print Layout: the page follows the window, the zoom (Ctrl+wheel too) and a new editor window
 		sourceSplit.Panel2.Resize += (s, e) => FitPagePadding();
