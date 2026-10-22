@@ -33,18 +33,37 @@ public sealed class PageBands
 	public string[]? WrittenHeader { get; set; }
 	public string[]? WrittenFooter { get; set; }
 
+	/// Iteration 49: the first page has a header and footer of its own (FirstHeader / FirstFooter, which may be empty:
+	/// none on that page); ShowHeader and ShowFooter are for every page, the first one too.
+	[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] public bool DifferentFirst { get; set; }
+	public string[]? FirstHeader { get; set; }
+	public string[]? FirstFooter { get; set; }
+	public string[]? WrittenFirstHeader { get; set; }
+	public string[]? WrittenFirstFooter { get; set; }
+
 	public static string[] Parts(string[]? parts) => Enumerable.Range(0, 3).Select(i => parts != null && i < parts.Length ? parts[i] ?? "" : "").ToArray();
 
-	public PageBands Copy() => new() { ShowHeader = ShowHeader, Header = Parts(Header), ShowFooter = ShowFooter, Footer = Parts(Footer) };
+	public PageBands Copy() => new() {
+		ShowHeader = ShowHeader, Header = Parts(Header), ShowFooter = ShowFooter, Footer = Parts(Footer),
+		DifferentFirst = DifferentFirst, FirstHeader = DifferentFirst ? Parts(FirstHeader) : null, FirstFooter = DifferentFirst ? Parts(FirstFooter) : null
+	};    // (the first page's parts only if it has its own: files without them stay as they were)
 
 	public bool SameAs(PageBands other) => ShowHeader == other.ShowHeader && ShowFooter == other.ShowFooter
-		&& Parts(Header).SequenceEqual(Parts(other.Header)) && Parts(Footer).SequenceEqual(Parts(other.Footer));
+		&& Parts(Header).SequenceEqual(Parts(other.Header)) && Parts(Footer).SequenceEqual(Parts(other.Footer))
+		&& DifferentFirst == other.DifferentFirst
+		&& (!DifferentFirst || (Parts(FirstHeader).SequenceEqual(Parts(other.FirstHeader)) && Parts(FirstFooter).SequenceEqual(Parts(other.FirstFooter))));
 
-	bool HeaderEmpty => !ShowHeader || Parts(Header).All(p => p.Trim() == "");
-	bool FooterEmpty => !ShowFooter || Parts(Footer).All(p => p.Trim() == "");
+	/// The header's parts on a page (1 is the first; null: no header there).
+	public string[]? HeaderOn(int page) => !ShowHeader ? null : Parts(DifferentFirst && page == 1 ? FirstHeader : Header);
+	public string[]? FooterOn(int page) => !ShowFooter ? null : Parts(DifferentFirst && page == 1 ? FirstFooter : Footer);
+
+	static bool Blank(string[]? parts) => Parts(parts).All(p => p.Trim() == "");
 	/// The parts that go into a file's real header (null: no header there).
-	[System.Text.Json.Serialization.JsonIgnore] public string[]? HeaderToWrite => HeaderEmpty ? null : Parts(Header);
-	[System.Text.Json.Serialization.JsonIgnore] public string[]? FooterToWrite => FooterEmpty ? null : Parts(Footer);
+	[System.Text.Json.Serialization.JsonIgnore] public string[]? HeaderToWrite => !ShowHeader || Blank(Header) ? null : Parts(Header);
+	[System.Text.Json.Serialization.JsonIgnore] public string[]? FooterToWrite => !ShowFooter || Blank(Footer) ? null : Parts(Footer);
+	/// The first page's (with DifferentFirst only; null: none there).
+	[System.Text.Json.Serialization.JsonIgnore] public string[]? FirstHeaderToWrite => !DifferentFirst || !ShowHeader || Blank(FirstHeader) ? null : Parts(FirstHeader);
+	[System.Text.Json.Serialization.JsonIgnore] public string[]? FirstFooterToWrite => !DifferentFirst || !ShowFooter || Blank(FirstFooter) ? null : Parts(FirstFooter);
 
 	static readonly JsonSerializerOptions Json = new() { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
 	public string ToJson() => JsonSerializer.Serialize(this, Json);
@@ -52,7 +71,10 @@ public sealed class PageBands
 		try { return JsonSerializer.Deserialize<PageBands>(json) is { } b ? Normalized(b) : null; }
 		catch (JsonException) { return null; }
 	}
-	static PageBands Normalized(PageBands b) { b.Header = Parts(b.Header); b.Footer = Parts(b.Footer); return b; }
+	static PageBands Normalized(PageBands b) {
+		b.Header = Parts(b.Header); b.Footer = Parts(b.Footer); b.FirstHeader = Parts(b.FirstHeader); b.FirstFooter = Parts(b.FirstFooter);
+		return b;
+	}
 }
 
 /// The page a document is laid out on in other programs (twips): Page Setup's paper and margins.
@@ -78,20 +100,35 @@ public static class HeaderFooter
 		var b = bands.Copy();
 		b.WrittenHeader = bands.HeaderToWrite is { } h ? Filled(h, title, file) : null;
 		b.WrittenFooter = bands.FooterToWrite is { } f ? Filled(f, title, file) : null;
+		b.WrittenFirstHeader = bands.FirstHeaderToWrite is { } fh ? Filled(fh, title, file) : null;
+		b.WrittenFirstFooter = bands.FirstFooterToWrite is { } ff ? Filled(ff, title, file) : null;
 		return b;
 	}
 
+	/// A file's own first-page header and footer (iteration 49): whether it has them, and their parts (null: none).
+	readonly record struct FirstPage(bool Different, string[]? Header, string[]? Footer);
+
 	// What was read from a file's real header and footer (null: none), against the exact copy (null: none).
-	static PageBands? Decide(PageBands? exact, string[]? header, string[]? footer, bool haveReal) {
+	static PageBands? Decide(PageBands? exact, string[]? header, string[]? footer, bool haveReal, FirstPage first = default) {
 		if (exact != null) {
-			bool same = !haveReal || (Same(exact.WrittenHeader, header) && Same(exact.WrittenFooter, footer));
-			if (same) { exact.WrittenHeader = exact.WrittenFooter = null; return exact; }
+			bool same = !haveReal || (Same(exact.WrittenHeader, header) && Same(exact.WrittenFooter, footer)
+				&& exact.DifferentFirst == first.Different && (!first.Different || (Same(exact.WrittenFirstHeader, first.Header) && Same(exact.WrittenFirstFooter, first.Footer))));
+			if (same) { exact.WrittenHeader = exact.WrittenFooter = exact.WrittenFirstHeader = exact.WrittenFirstFooter = null; return exact; }
 		}
 		if (!haveReal) return null;
-		return new PageBands {
+		var bands = new PageBands {
 			ShowHeader = header != null, Header = PageBands.Parts(header),
 			ShowFooter = footer != null, Footer = PageBands.Parts(footer)
 		};
+		if (first.Different) {
+			bands.DifferentFirst = true;
+			bands.FirstHeader = PageBands.Parts(first.Header);
+			bands.FirstFooter = PageBands.Parts(first.Footer);
+			// (a header on the first page only: shown, with nothing on the others)
+			bands.ShowHeader |= first.Header != null;
+			bands.ShowFooter |= first.Footer != null;
+		}
+		return bands;
 	}
 
 	static bool Same(string[]? a, string[]? b) =>
@@ -136,16 +173,24 @@ public static class HeaderFooter
 		if (layout.Landscape) sb.Append(@"\landscape");
 		sb.Append(@"\sectd");
 		if (layout.Landscape) sb.Append(@"\lndscpsxn");
+		if (bands.DifferentFirst) sb.Append(@"\titlepg");
 		sb.Append($@"\pgwsxn{layout.Width}\pghsxn{layout.Height}\marglsxn{layout.Left}\margrsxn{layout.Right}\margtsxn{layout.Top}\margbsxn{layout.Bottom}\headery720\footery720 ");
 		int size = (int)Math.Round(fontSize * 2);
-		void Band(string destination, string[]? parts) {
-			if (parts == null) return;
+		void Band(string destination, string[]? parts, bool empty = false) {
+			if (parts == null) {
+				if (empty) sb.Append("{\\").Append(destination).Append(@"\pard\plain\par}");    // (the first page's: none there)
+				return;
+			}
 			sb.Append("{\\").Append(destination).Append($@"\pard\plain\f0\fs{size}\tqc\tx{layout.TextWidth / 2}\tqr\tx{layout.TextWidth} ");
 			sb.Append(string.Join(@"\tab ", Filled(parts, title, file).Select(RtfText)));
 			sb.Append(@"\par}");
 		}
 		Band("header", bands.HeaderToWrite);
 		Band("footer", bands.FooterToWrite);
+		if (bands.DifferentFirst) {
+			Band("headerf", bands.FirstHeaderToWrite, bands.ShowHeader);
+			Band("footerf", bands.FirstFooterToWrite, bands.ShowFooter);
+		}
 		sb.Append(@"{\*\").Append(RtfDestination).Append(' ').Append(RtfEscape(Stamped(bands, title, file).ToJson())).Append('}');
 		return rtf.Insert(body, sb.ToString());
 	}
@@ -206,7 +251,20 @@ public static class HeaderFooter
 			var parts = PartsOf(FirstLine(text), align);
 			if (isHeader) header = parts; else footer = parts;
 		}
-		return Decide(exact, header, footer, any);
+		// (iteration 49) the first page's: \titlepg in the first section (before any \sect), \headerf and \footerf
+		var first = default(FirstPage);
+		var sectionEnd = Regex.Match(rtf, @"\\sect(?![a-zA-Z])");
+		if (Regex.IsMatch(sectionEnd.Success ? rtf[..sectionEnd.Index] : rtf, @"\\titlepg(?![a-zA-Z])")) {
+			string[]? Read(string name) {
+				int start = FindGroup(rtf, name);
+				if (start < 0) return null;
+				var (groupText, align) = RtfGroupText(rtf, start);
+				return PartsOf(FirstLine(groupText), align);
+			}
+			first = new FirstPage(true, Read("headerf"), Read("footerf"));
+			any |= first.Header != null || first.Footer != null || FindGroup(rtf, "headerf") >= 0 || FindGroup(rtf, "footerf") >= 0;
+		}
+		return Decide(exact, header, footer, any, first);
 	}
 
 	// Header text over several paragraphs: the first one with text (the editor's header is one line).
@@ -398,18 +456,32 @@ public static class HeaderFooter
 			if (section == null) { section = new W.SectionProperties(); body.Append(section); }
 			foreach (var old in section.Elements<W.HeaderReference>().Cast<DocumentFormat.OpenXml.OpenXmlElement>().Concat(section.Elements<W.FooterReference>()).ToList()) old.Remove();
 			DocumentFormat.OpenXml.OpenXmlElement? last = null;
-			if (bands.HeaderToWrite is { } header) {
+			void Add(DocumentFormat.OpenXml.OpenXmlElement reference) => last = last == null ? section.PrependChild(reference) : section.InsertAfter(reference, last);
+			void Header(string[]? parts, W.HeaderFooterValues type) {
+				if (parts == null) return;
 				var part = main.AddNewPart<HeaderPart>();
-				part.Header = new W.Header(DocxParagraph(Filled(header, title, file), layout, "Header"));
+				part.Header = new W.Header(DocxParagraph(Filled(parts, title, file), layout, "Header"));
 				part.Header.Save();
-				last = section.PrependChild(new W.HeaderReference { Type = W.HeaderFooterValues.Default, Id = main.GetIdOfPart(part) });
+				Add(new W.HeaderReference { Type = type, Id = main.GetIdOfPart(part) });
 			}
-			if (bands.FooterToWrite is { } footer) {
+			void Footer(string[]? parts, W.HeaderFooterValues type) {
+				if (parts == null) return;
 				var part = main.AddNewPart<FooterPart>();
-				part.Footer = new W.Footer(DocxParagraph(Filled(footer, title, file), layout, "Footer"));
+				part.Footer = new W.Footer(DocxParagraph(Filled(parts, title, file), layout, "Footer"));
 				part.Footer.Save();
-				var reference = new W.FooterReference { Type = W.HeaderFooterValues.Default, Id = main.GetIdOfPart(part) };
-				last = last == null ? section.PrependChild(reference) : section.InsertAfter(reference, last);
+				Add(new W.FooterReference { Type = type, Id = main.GetIdOfPart(part) });
+			}
+			Header(bands.HeaderToWrite, W.HeaderFooterValues.Default);
+			Footer(bands.FooterToWrite, W.HeaderFooterValues.Default);
+			// (iteration 49) the first page's own (none there if it has none: a first page without one is blank)
+			Header(bands.FirstHeaderToWrite, W.HeaderFooterValues.First);
+			Footer(bands.FirstFooterToWrite, W.HeaderFooterValues.First);
+			section.RemoveAllChildren<W.TitlePage>();
+			if (bands.DifferentFirst) {
+				var titlePage = new W.TitlePage();
+				// (in its place in the section's properties: before these, if there are any)
+				var after = section.ChildElements.FirstOrDefault(e => e is W.TextDirection or W.BiDi or W.GutterOnRight or W.DocGrid or W.PrinterSettingsReference);
+				if (after != null) section.InsertBefore(titlePage, after); else section.Append(titlePage);
 			}
 			section.RemoveAllChildren<W.PageSize>();
 			section.RemoveAllChildren<W.PageMargin>();
@@ -463,9 +535,10 @@ public static class HeaderFooter
 				if (ReadCustomXml(custom) is { } json) exact = PageBands.FromJson(json);
 			var section = main.Document.Body?.Elements<W.SectionProperties>().LastOrDefault()
 				?? main.Document.Body?.Descendants<W.SectionProperties>().FirstOrDefault();
-			string[]? Read<TRef>(Func<string, OpenXmlPart?> part) where TRef : W.HeaderFooterReferenceType {
+			string[]? Read<TRef>(Func<string, OpenXmlPart?> part, bool firstPage = false) where TRef : W.HeaderFooterReferenceType {
 				var references = section?.Elements<TRef>().ToList() ?? new List<TRef>();
-				var reference = references.FirstOrDefault(r => r.Type == null || r.Type.Value == W.HeaderFooterValues.Default) ?? references.FirstOrDefault();
+				var reference = firstPage ? references.FirstOrDefault(r => r.Type?.Value == W.HeaderFooterValues.First)
+					: references.FirstOrDefault(r => r.Type == null || r.Type.Value == W.HeaderFooterValues.Default) ?? references.FirstOrDefault(r => r.Type?.Value != W.HeaderFooterValues.First);
 				if (reference?.Id?.Value is not string id || part(id) is not { } found) return null;
 				var root = found.RootElement;
 				if (root == null) return null;
@@ -478,7 +551,11 @@ public static class HeaderFooter
 			bool haveReal = section != null && (section.Elements<W.HeaderReference>().Any() || section.Elements<W.FooterReference>().Any());
 			var header = Read<W.HeaderReference>(id => main.GetPartById(id));
 			var footer = Read<W.FooterReference>(id => main.GetPartById(id));
-			return Decide(exact, header, footer, haveReal);
+			// (iteration 49) the first page's own: w:titlePg on (no w:val, or a true one)
+			var first = default(FirstPage);
+			if (section?.GetFirstChild<W.TitlePage>() is { } titlePage && (titlePage.Val == null || titlePage.Val.Value))
+				first = new FirstPage(true, Read<W.HeaderReference>(id => main.GetPartById(id), true), Read<W.FooterReference>(id => main.GetPartById(id), true));
+			return Decide(exact, header, footer, haveReal, first);
 		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) {
 			return null;
 		}
@@ -582,7 +659,16 @@ public static class HeaderFooter
 				return result;
 			}
 			bool haveReal = page?.Element(Style + "header") != null || page?.Element(Style + "footer") != null;
-			return Decide(exact, Read("header"), Read("footer"), haveReal);
+			var (header, footer) = (Read("header"), Read("footer"));
+			// (iteration 49) the first page's own: style:header-first / footer-first (LibreOffice's; without one, the first
+			// page has the others' header or footer)
+			var first = default(FirstPage);
+			bool firstHeader = page?.Element(Style + "header-first") != null, firstFooter = page?.Element(Style + "footer-first") != null;
+			if (firstHeader || firstFooter) {
+				first = new FirstPage(true, firstHeader ? Read("header-first") : header, firstFooter ? Read("footer-first") : footer);
+				haveReal = true;
+			}
+			return Decide(exact, header, footer, haveReal, first);
 		} catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException) {
 			return null;
 		}

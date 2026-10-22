@@ -21,7 +21,20 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 48 adds to iteration 47:
+// Run it with AhkWord.ahk. Iteration 49 adds to iteration 48:
+//   - A different first page header and footer (Layout > Header & Footer > First page; DifferentFirstPage,
+//     SetFirstHeader, SetFirstFooter for scripts): page 1 gets its own parts, or none if they are empty (a letter's
+//     or a pleading's first page). Shown on the sheets (Show Pages) and the strips, printed, and kept in the files:
+//     RTF \titlepg with \headerf / \footerf, .docx w:titlePg with first-page header and footer parts, .odt
+//     style:header-first / footer-first (as LibreOffice writes them); read back from all three, also as Word or
+//     LibreOffice changed them. "Use for new documents too" keeps them as the default.
+//   - Show Pages: a blank document has its sheet, header and footer before anything is typed (the gaps were left out
+//     for a document of one paragraph mark).
+//   - Show Pages: after a recovery copy (every AutosaveSeconds while there are changes; its RTF is read without the
+//     gaps), the text sometimes stayed drawn without page 1's top margin, over the header, until scrolled: RichEdit
+//     lays the text out again only once the messages waiting are done, so the window is painted once more then.
+//   - A header or footer changed (the dialog, scripts) is shown at once, not half a second later.
+// Iteration 48 added to iteration 47:
 //   - Show Pages is on by default (redesigned in iteration 42, without flicker since 44): new settings have it; saved
 //     settings keep their own.
 //   - A crash fixed (there since the ribbon came, iteration 16): now and then, after opening a long document, AhkWord
@@ -539,7 +552,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 48;    // (the About box; make_version.ps1)
+	public const int Iteration = 49;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -2026,7 +2039,8 @@ class WriterForm : Form
 		bool visible = Settings.ShowBands;
 		var bands = Bands;
 		static bool Numbered(string[] parts) => PageBands.Parts(parts).Any(p => p.Contains("{page", StringComparison.OrdinalIgnoreCase));
-		bool needPages = (visible && ((bands.ShowHeader && Numbered(bands.Header)) || (bands.ShowFooter && Numbered(bands.Footer))))
+		bool needPages = (visible && ((bands.ShowHeader && Numbered(bands.Header)) || (bands.ShowFooter && Numbered(bands.Footer))
+				|| (bands.DifferentFirst && (bands.ShowHeader || bands.ShowFooter))))    // (iteration 49: which page is in view)
 			|| (Settings.PrintLayout && !PagesShown);    // (and Print Layout's page boundaries)
 		bool pageView = PageViewActive;
 		if (!pageView && pageGaps.Applied && !gapsOut) { QuietGaps(pageGaps.Remove); pageGaps.Forget(); }
@@ -2063,8 +2077,8 @@ class WriterForm : Form
 			"date" => DateTime.Now.ToShortDateString(),
 			_ => DateTime.Now.ToShortTimeString()
 		}, RegexOptions.IgnoreCase);
-		var header = PageBands.Parts(bands.Header).Select(Fill).ToArray();
-		var footer = PageBands.Parts(bands.Footer).Select(Fill).ToArray();
+		var header = PageBands.Parts(bands.HeaderOn(viewPage)).Select(Fill).ToArray();
+		var footer = PageBands.Parts(bands.FooterOn(viewPage)).Select(Fill).ToArray();
 		string shown = $"{visible}|{pageView}|{bands.ShowHeader}|{string.Join("\t", header)}|{bands.ShowFooter}|{string.Join("\t", footer)}";
 		if (shown == bandsShown) return;
 		bandsShown = shown;
@@ -2148,8 +2162,23 @@ class WriterForm : Form
 			// (iteration 46: the line numbers too, where they are now that the text is back in its place; drawn while the
 			// gaps went in, they were left where the text had been moved to before it)
 			lineGutter.Invalidate();
+			// (iteration 49) and once more when the messages waiting are done: RichEdit sometimes lays the text out again
+			// only then, and the paint just now drew it as it was before (after a recovery copy, whose RTF is read without
+			// the gaps: the text without page 1's top margin, over the header drawn where it belongs), until scrolled
+			if (!repaintPending && IsHandleCreated) {
+				repaintPending = true;
+				BeginInvoke(() => {
+					repaintPending = false;
+					if (quietGaps || !Editor.IsHandleCreated) return;
+					Editor.Invalidate();
+					Editor.Update();
+					lineGutter.Invalidate();
+				});
+			}
 		}
 	}
+
+	bool repaintPending;
 
 	// Rte.PageViewReport: positions and sizes only.
 	internal string PageViewReport() {
@@ -2280,7 +2309,7 @@ class WriterForm : Form
 			"date" => DateTime.Now.ToShortDateString(),
 			_ => DateTime.Now.ToShortTimeString()
 		}, RegexOptions.IgnoreCase);
-		return PageBands.Parts(header ? bands.Header : bands.Footer).Select(Fill).ToArray();
+		return (header ? bands.HeaderOn(page) : bands.FooterOn(page))!.Select(Fill).ToArray();
 	}
 
 	// The bands between the sheets where they cross the page's margins (outside the editor, which draws its part).
@@ -2331,11 +2360,13 @@ class WriterForm : Form
 
 	/// The header and footer new documents get (File > Header and Footer can make a document's the default).
 	internal PageBands DefaultBands() => new() {
-		ShowHeader = Settings.ShowHeader, Header = Settings.Parts(Settings.Header), ShowFooter = Settings.ShowFooter, Footer = Settings.Parts(Settings.Footer)
+		ShowHeader = Settings.ShowHeader, Header = Settings.Parts(Settings.Header), ShowFooter = Settings.ShowFooter, Footer = Settings.Parts(Settings.Footer),
+		DifferentFirst = Settings.DifferentFirst, FirstHeader = Settings.Parts(Settings.FirstHeader), FirstFooter = Settings.Parts(Settings.FirstFooter)
 	};
 
 	internal void MakeDefault(PageBands bands) {
 		(Settings.ShowHeader, Settings.Header, Settings.ShowFooter, Settings.Footer) = (bands.ShowHeader, Settings.Parts(bands.Header), bands.ShowFooter, Settings.Parts(bands.Footer));
+		(Settings.DifferentFirst, Settings.FirstHeader, Settings.FirstFooter) = (bands.DifferentFirst, Settings.Parts(bands.FirstHeader), Settings.Parts(bands.FirstFooter));
 		Settings.Save();
 	}
 
@@ -2356,6 +2387,12 @@ class WriterForm : Form
 		return new PageLayout(Twips(width), Twips(height), Twips(m[0]), Twips(m[1]), Twips(m[2]), Twips(m[3]), Settings.Landscape);
 	}
 
+	/// The header or footer changed: shown at once (iteration 49), not at the strips' next look, half a second on.
+	internal void BandsChangedNow() {
+		bandsShown = "";
+		UpdateBands();
+	}
+
 	void HeaderFooterCommand() {
 		using var dlg = new HeaderFooterDialog(Bands, DefaultBands());
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
@@ -2363,6 +2400,7 @@ class WriterForm : Form
 		if (!bands.SameAs(Bands)) {
 			Bands = bands;
 			Editor.Modified = true;    // (saved with the document)
+			BandsChangedNow();
 		}
 		if (dlg.MakeDefault) MakeDefault(bands);
 		SetStatus((dlg.MakeDefault ? "Header and footer set for this document and new ones." : "Header and footer set for this document.")
@@ -6666,7 +6704,7 @@ public class EditorApi
 	// ---- The document's header and footer (fields: {title} {file} {page} {pages} {date} {time}); printed, and saved
 	// with the document (iteration 13)
 
-	void BandsChanged() => ed.Modified = true;
+	void BandsChanged() { ed.Modified = true; form.BandsChangedNow(); }
 
 	/// Sets the document's header (left, center and right parts) and shows it.
 	public void SetHeader(string left = "", string center = "", string right = "") {
@@ -6699,6 +6737,36 @@ public class EditorApi
 
 	/// The footer's left, center and right parts, one per line.
 	public string FooterParts => string.Join("\n", PageBands.Parts(form.Bands.Footer));
+
+	/// Whether the first page has a header and footer of its own (SetFirstHeader, SetFirstFooter). Empty
+	/// parts leave the first page without one, as on a letter's or a pleading's first page.
+	public bool DifferentFirstPage {
+		get => form.Bands.DifferentFirst;
+		set { form.Bands.DifferentFirst = value; BandsChanged(); }
+	}
+
+	/// Sets the first page's header (left, center and right parts): the first page gets its own (DifferentFirstPage).
+	/// The header is shown (ShowHeader), on the other pages too: with their parts empty, only the first page has one.
+	public void SetFirstHeader(string left = "", string center = "", string right = "") {
+		form.Bands.FirstHeader = new[] { left, center, right };
+		form.Bands.FirstFooter = PageBands.Parts(form.Bands.FirstFooter);
+		form.Bands.DifferentFirst = form.Bands.ShowHeader = true;
+		BandsChanged();
+	}
+
+	/// Sets the first page's footer (left, center and right parts), as SetFirstHeader.
+	public void SetFirstFooter(string left = "", string center = "", string right = "") {
+		form.Bands.FirstFooter = new[] { left, center, right };
+		form.Bands.FirstHeader = PageBands.Parts(form.Bands.FirstHeader);
+		form.Bands.DifferentFirst = form.Bands.ShowFooter = true;
+		BandsChanged();
+	}
+
+	/// The first page's header parts, one per line (empty lines if it has none of its own).
+	public string FirstHeaderParts => string.Join("\n", PageBands.Parts(form.Bands.FirstHeader));
+
+	/// The first page's footer parts, one per line.
+	public string FirstFooterParts => string.Join("\n", PageBands.Parts(form.Bands.FirstFooter));
 
 	/// Whether the header and footer are shown above and below the text (View > Header and footer).
 	public bool HeaderFooterVisible {
@@ -7125,6 +7193,9 @@ public sealed class Settings
 	}
 	Dictionary<string, string> templateValues = new(StringComparer.OrdinalIgnoreCase);    // between recovery copies while there are unsaved changes (0: none)    // Windows' LegacyDefaultPrinterMode while a PDF export changed it (-1: none)
 	public string[] Footer { get; set; } = DefaultFooter;
+	public bool DifferentFirst { get; set; }    // (iteration 49) the first page's own header and footer
+	public string[] FirstHeader { get; set; } = { "", "", "" };
+	public string[] FirstFooter { get; set; } = { "", "", "" };
 	public static string[] DefaultHeader => new[] { "{title}", "", "{date}" };
 	public static string[] DefaultFooter => new[] { "", "Page {page} of {pages}", "" };
 
@@ -7334,10 +7405,10 @@ sealed class DocumentPrinter : IDisposable
 		// The line numbers left of the text; the header just above the text area and the footer just below it, in the margins.
 		if (numberMarks != null && page <= numberMarks.Count)
 			PrintedLineNumbers.Draw(g, numberMarks[page - 1], numbering, editor.Font, margins.Left - hardX);
-		if (bands.ShowHeader)
-			DrawBand(g, bands.Header, new RectangleF(margins.Left - hardX, Math.Max(5, margins.Top - BandGap - BandHeight) - hardY, margins.Width, BandHeight));
-		if (bands.ShowFooter)
-			DrawBand(g, bands.Footer, new RectangleF(margins.Left - hardX, margins.Bottom + BandGap - hardY, margins.Width, BandHeight));
+		if (bands.HeaderOn(page) is { } header)    // (iteration 49: the first page's own, if it has one)
+			DrawBand(g, header, new RectangleF(margins.Left - hardX, Math.Max(5, margins.Top - BandGap - BandHeight) - hardY, margins.Width, BandHeight));
+		if (bands.FooterOn(page) is { } footer)
+			DrawBand(g, footer, new RectangleF(margins.Left - hardX, margins.Bottom + BandGap - hardY, margins.Width, BandHeight));
 		e.HasMorePages = nextChar > start && nextChar < end;
 	}
 
@@ -8907,6 +8978,9 @@ sealed class HeaderFooterDialog : Form
 	readonly CheckBox showFooter = new() { Text = "Show a footer", AutoSize = true };
 	readonly CheckBox makeDefault = new() { Text = "Use for new documents too", AutoSize = true, Margin = new Padding(3, 6, 3, 0) };
 	readonly TextBox[] header = { new(), new(), new() }, footer = { new(), new(), new() };
+	// (iteration 49) the first page's own
+	readonly CheckBox differentFirst = new() { Text = "Different first page (empty parts: none on the first page)", AutoSize = true };
+	readonly TextBox[] firstHeader = { new(), new(), new() }, firstFooter = { new(), new(), new() };
 
 	/// Whether the header and footer become the default for new documents.
 	public bool MakeDefault => makeDefault.Checked;
@@ -8924,6 +8998,7 @@ sealed class HeaderFooterDialog : Form
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
 		layout.Controls.Add(Band("Header (above the text)", showHeader, header));
 		layout.Controls.Add(Band("Footer (below the text)", showFooter, footer));
+		layout.Controls.Add(FirstPage());
 		layout.Controls.Add(new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(560), 0), Margin = new Padding(3, 6, 3, 6),
 			Text = "Fields: {title} document name, {file} full path, {page} page number, {pages} number of pages, {date}, {time}.\n"
@@ -8958,9 +9033,35 @@ sealed class HeaderFooterDialog : Form
 			parts[i].Width = LogicalToDeviceUnits(180);
 			table.Controls.Add(parts[i], i, 2);
 		}
-		show.CheckedChanged += (s, e) => { foreach (var part in parts) part.Enabled = show.Checked; };
+		show.CheckedChanged += (s, e) => { foreach (var part in parts) part.Enabled = show.Checked; EnableFirst(); };
 		box.Controls.Add(table);
 		return box;
+	}
+
+	// The first page's header and footer: a row of three parts each.
+	GroupBox FirstPage() {
+		var box = new GroupBox { Text = "First page", AutoSize = true, Padding = new Padding(8), Dock = DockStyle.Fill };
+		var table = new TableLayoutPanel { ColumnCount = 4, AutoSize = true, Dock = DockStyle.Fill };
+		table.Controls.Add(differentFirst, 0, 0);
+		table.SetColumnSpan(differentFirst, 4);
+		string[] labels = { "Left", "Center", "Right" };
+		for (int i = 0; i < 3; i++) table.Controls.Add(new Label { Text = labels[i], AutoSize = true }, i + 1, 1);
+		foreach (var (row, name, parts) in new[] { (2, "Header", firstHeader), (3, "Footer", firstFooter) }) {
+			table.Controls.Add(new Label { Text = name, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
+			for (int i = 0; i < 3; i++) {
+				parts[i].Width = LogicalToDeviceUnits(160);
+				parts[i].AccessibleName = "First page " + name.ToLowerInvariant() + ", " + labels[i].ToLowerInvariant();
+				table.Controls.Add(parts[i], i + 1, row);
+			}
+		}
+		differentFirst.CheckedChanged += (s, e) => EnableFirst();
+		box.Controls.Add(table);
+		return box;
+	}
+
+	void EnableFirst() {
+		foreach (var part in firstHeader) part.Enabled = differentFirst.Checked && showHeader.Checked;
+		foreach (var part in firstFooter) part.Enabled = differentFirst.Checked && showFooter.Checked;
 	}
 
 	void LoadFrom(PageBands bands) {
@@ -8968,17 +9069,26 @@ sealed class HeaderFooterDialog : Form
 		showFooter.Checked = bands.ShowFooter;
 		var h = PageBands.Parts(bands.Header);
 		var f = PageBands.Parts(bands.Footer);
+		var fh = PageBands.Parts(bands.FirstHeader);
+		var ff = PageBands.Parts(bands.FirstFooter);
+		differentFirst.Checked = bands.DifferentFirst;
 		for (int i = 0; i < 3; i++) {
 			header[i].Text = h[i];
 			footer[i].Text = f[i];
+			firstHeader[i].Text = fh[i];
+			firstFooter[i].Text = ff[i];
 			header[i].Enabled = showHeader.Checked;
 			footer[i].Enabled = showFooter.Checked;
 		}
+		EnableFirst();
 	}
 
 	public PageBands Result() => new() {
 		ShowHeader = showHeader.Checked, Header = header.Select(b => b.Text).ToArray(),
-		ShowFooter = showFooter.Checked, Footer = footer.Select(b => b.Text).ToArray()
+		ShowFooter = showFooter.Checked, Footer = footer.Select(b => b.Text).ToArray(),
+		DifferentFirst = differentFirst.Checked,
+		FirstHeader = differentFirst.Checked ? firstHeader.Select(b => b.Text).ToArray() : null,
+		FirstFooter = differentFirst.Checked ? firstFooter.Select(b => b.Text).ToArray() : null
 	};
 }
 

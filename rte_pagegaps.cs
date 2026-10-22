@@ -242,7 +242,8 @@ public sealed class PageGaps
 		Pages = starts.Count;
 		(TextAreaPoints, BottomPoints) = (textArea, bottom);
 		var gaps = new List<Gap>();
-		if (starts.Count == 0 || story.Length < 2) { Put(gaps); return; }
+		// (iteration 49: an empty document too, its one paragraph mark: its sheet, header and footer shown before typing)
+		if (starts.Count == 0 || story.Length < 1) { Put(gaps); return; }
 		// page 1's top margin: space before the first paragraph (not before a table's first row)
 		if (!InTable(story, 0)) gaps.Add(new Gap(0, 0, 0, 0, 0, 0, 0, top, 0, Paragraph: true));
 		for (int k = 1; k < starts.Count; k++) {
@@ -292,9 +293,14 @@ public sealed class PageGaps
 
 	// A line's height on the screen (pixels): from its top to the next line's, or (the last line) its text's.
 	float LineHeight(ITextRange2 line) {
-		line.GetPoint(0x20 | 0 | 0x200, out _, out int top);       // tomStart | TA_TOP | tomAllowOffClient
-		line.GetPoint(0x20 | 8 | 0x200, out _, out int bottom);    // TA_BOTTOM
-		return Math.Max(0, bottom - top);
+		try {
+			line.GetPoint(0x20 | 0 | 0x200, out _, out int top);       // tomStart | TA_TOP | tomAllowOffClient
+			line.GetPoint(0x20 | 8 | 0x200, out _, out int bottom);    // TA_BOTTOM
+			return Math.Max(0, bottom - top);
+		} catch (System.Runtime.InteropServices.COMException) {
+			// (iteration 49: E_PENDING, the text not laid out again yet: its font's line, as near as can be said now)
+			return Math.Max(1, line.Font.Size) * 1.17f * editor.DeviceDpi / 72f * Math.Max(0.1f, editor.ZoomFactor);
+		}
 	}
 
 	/// Forgets the gaps without touching the document (a new one was loaded, or they were taken out for good).

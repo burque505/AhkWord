@@ -9,6 +9,8 @@
 
 **Layout > Header & Footer** sets the text at the top and bottom of every page, with fields for the page number, the number of pages, the date and time, and the document's title or file name: `{page}`, `{pages}`, `{date}`, `{time}`, `{title}`, `{file}`. They are shown above and below the text in the editor (View > Header and footer shows or hides them; click one to change it), printed, and saved in the document: as real headers and footers in RTF, Word and OpenDocument files, where Word and LibreOffice keep the page numbers up to date.
 
+**Different first page** (under *First page* in the same dialog) gives page 1 a header and footer of its own: a letterhead at the top of a letter, say, with "Page {page}" only from page 2 on. Leave the first page's parts empty for no header or footer there. The first page's parts are kept in RTF, Word and OpenDocument files the same way, and a first page set up in Word or LibreOffice is read back. Scripts use `DifferentFirstPage`, `SetFirstHeader` and `SetFirstFooter` (see the [API reference](../automation/api.md)).
+
 ## Print Layout and zoom
 
 **View > Print Layout** (on at first) breaks the lines where they will break on the printed page, as Word and LibreOffice do, and shows the page on grey with its margins as on paper. A dotted line marked "Page 2", "Page 3" ... shows where each printed page begins. With Print Layout off, lines wrap at the window's edge.

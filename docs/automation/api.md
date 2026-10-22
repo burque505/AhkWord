@@ -1617,6 +1617,37 @@ Changes the heading level (1-6, or 0 for normal text) of the paragraph at a posi
 
 ## The document's header and footer
 
+### DifferentFirstPage
+
+```autohotkey
+value := Rte.DifferentFirstPage
+Rte.DifferentFirstPage := value
+```
+
+1/0
+
+Whether the first page has a header and footer of its own (SetFirstHeader, SetFirstFooter). Empty parts leave the first page without one, as on a letter's or a pleading's first page.
+
+### FirstFooterParts
+
+```autohotkey
+value := Rte.FirstFooterParts
+```
+
+text · read-only
+
+The first page's footer parts, one per line.
+
+### FirstHeaderParts
+
+```autohotkey
+value := Rte.FirstHeaderParts
+```
+
+text · read-only
+
+The first page's header parts, one per line (empty lines if it has none of its own).
+
 ### FooterParts
 
 ```autohotkey
@@ -1655,6 +1686,26 @@ Rte.MakeHeaderFooterDefault()
 ```
 
 Makes the document's header and footer the default for new documents (and documents without their own).
+
+### SetFirstFooter
+
+```autohotkey
+Rte.SetFirstFooter(left = "", center = "", right = "")
+```
+
+*left*: text · *center*: text · *right*: text
+
+Sets the first page's footer (left, center and right parts), as SetFirstHeader.
+
+### SetFirstHeader
+
+```autohotkey
+Rte.SetFirstHeader(left = "", center = "", right = "")
+```
+
+*left*: text · *center*: text · *right*: text
+
+Sets the first page's header (left, center and right parts): the first page gets its own (DifferentFirstPage). The header is shown (ShowHeader), on the other pages too: with their parts empty, only the first page has one.
 
 ### SetFooter
 
