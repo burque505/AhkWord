@@ -17,7 +17,7 @@ Zoom, as in Word: **Page Width** (the default: the page fills the window's width
 
 ## Show Pages
 
-**View > Show Pages** (off at first) shows each printed page as a sheet of its own, as in Word: its header and footer in its margins, with grey between the sheets. You edit as usual: typing, the caret and the end of the document behave as without it. The sheets are only the view's: saving, copying, printing and the other formats see the document as it is.
+**View > Show Pages** (on at first) shows each printed page as a sheet of its own, as in Word: its header and footer in its margins, with grey between the sheets. You edit as usual: typing, the caret and the end of the document behave as without it. The sheets are only the view's: saving, copying, printing and the other formats see the document as it is.
 
 The sheets follow your typing a second behind: they are worked out again a second after you stop, so while you type, a page's end can sit a few lines from where it will print until then. A page that ends inside a table is marked with a "Page N" line instead of a sheet of its own.
 

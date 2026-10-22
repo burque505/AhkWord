@@ -21,7 +21,20 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 47 adds to iteration 46:
+// Run it with AhkWord.ahk. Iteration 48 adds to iteration 47:
+//   - Show Pages is on by default (redesigned in iteration 42, without flicker since 44): new settings have it; saved
+//     settings keep their own.
+//   - A crash fixed (there since the ribbon came, iteration 16): now and then, after opening a long document, AhkWord
+//     ended with an access violation in UIRibbon.dll, in the ribbon's own timer (COfficeSpaceUser::OnUpdate >
+//     InvalidateUICommandInternal, as Microsoft's symbols name it). Changing the Styles menu's label, RibbonLib tells
+//     the ribbon with a pointer to a key it has just made; the ribbon queues it for its timer, and a garbage collection
+//     in between moved or freed the key. The label is now changed with a key pinned for good (SetRibbonLabel).
+//   - Show Pages: the window painted whole when the gaps are in, its painting held meanwhile (WriterEditBox.HoldPaint,
+//     not LockWindowUpdate any more): after opening, the window sometimes kept what it showed before the gaps went in
+//     (a table row drawn over a paragraph, until scrolling painted it again).
+//   - The ribbon is sent only what changed (WriterForm.Push): it was sent some 45 values at every caret move, nearly
+//     all unchanged (less work for it; not the crash's cause, as it turned out).
+// Iteration 47 added to iteration 46:
 //   - Saving as .rtf (and the recovery copy) keeps every paragraph's style: the list indents are fitted before the
 //     styles go in. Fitting them goes through RichEdit, which writes only its own styles (Normal, the headings): a new
 //     document's numbered style paragraphs (Numbered Paragraph) came back as Normal, keeping only their numbers.
@@ -526,7 +539,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 47;    // (the About box; make_version.ps1)
+	public const int Iteration = 48;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -879,7 +892,7 @@ class WriterForm : Form
 		fontControl = new RibbonFontControl(ribbon, (uint)RibbonCommand.Font);
 		fontControl.ExecuteEvent += (s, e) => {
 			var changes = FontControlEventArgs.Create(fontControl, e).ChangedFontValues;
-			BeginInvoke(() => { LeaveOverlays(); ApplyFontChanges(changes); Editor.Focus(); });
+			BeginInvoke(() => { ribbonSent.Clear(); LeaveOverlays(); ApplyFontChanges(changes); Editor.Focus(); });    // (ribbonSent: Command)
 		};
 		Shortcut(Keys.Control | Keys.B, "Bold", api.ToggleBold, M("ToggleBold"));
 		Shortcut(Keys.Control | Keys.I, "Italic", api.ToggleItalic, M("ToggleItalic"));
@@ -937,6 +950,7 @@ class WriterForm : Form
 			if (updatingUi || GalleryItemEventArgs.Create(blockCombo, e).SelectedItem is not { SelectedItemIndex: >= 0 } item || item.SelectedItemIndex >= styleBoxNames.Count) return;
 			string name = styleBoxNames[item.SelectedItemIndex];
 			BeginInvoke(() => {
+				ribbonSent.Clear();    // (Command)
 				LeaveOverlays();
 				if (SourceActive) {
 					if (SourceBlockOf(name) is BlockStyle block) RunSource(() => SourceBlockStyle(block));
@@ -1074,6 +1088,7 @@ class WriterForm : Form
 	bool zoomClicked = true;    // (Print Layout, Page Width, One Page or Multiple Pages clicked, or the ribbon new: UpdateRibbon pushes their states to it)
 
 	void Command(RibbonCommand id, Action action, string? macro) {
+		ribbonSent.Clear();    // (a click may have changed what the ribbon shows: UpdateRibbon sends all again)
 		if (id is RibbonCommand.PrintLayout or RibbonCommand.ZoomPageWidth or RibbonCommand.ZoomOnePage or RibbonCommand.ZoomMultiplePages) zoomClicked = true;
 		if (PagesShown && !PageViewCommands.Contains(id)) ShowPages(false);
 		if (StartShown && id != RibbonCommand.StartPage) ShowStart(false);
@@ -1580,7 +1595,22 @@ class WriterForm : Form
 		string label = StyleSetLabel();
 		if (label == styleSetShown) return;
 		styleSetShown = label;
-		try { stylesMenu.Label = label; } catch (COMException) { }
+		try { SetRibbonLabel(stylesMenu, RibbonCommand.StylesMenu, label); } catch (COMException) { }
+	}
+
+	// Iteration 48: a ribbon control's label changed without RibbonLib's Label setter. The setter tells the ribbon with
+	// a pointer to a key it has just made (PropertyKeyRef.From); the ribbon queues it for its timer, and a garbage
+	// collection in between moved or freed the key: the timer read freed memory, and AhkWord ended with an access
+	// violation in UIRibbon.dll (COfficeSpaceUser::OnUpdate > InvalidateUICommandInternal), now and then after opening
+	// a long document. Here the label goes where RibbonLib keeps it, and the ribbon is told with a key pinned for good.
+	static readonly GCHandle pinnedLabelKey = GCHandle.Alloc(PropertyKeyRef.From(RibbonProperties.Label), GCHandleType.Pinned);
+	void SetRibbonLabel(RibbonDropDownButton control, RibbonCommand id, string label) {
+		const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
+		var provider = typeof(RibbonDropDownButton).GetField("_labelPropertiesProvider", Private)?.GetValue(control);
+		var field = provider?.GetType().GetField("_label", Private);
+		if (field == null || !ribbon.Initialized) { control.Label = label; return; }    // (another RibbonLib: its own setter)
+		field.SetValue(provider, label);
+		ribbon.Framework.InvalidateUICommand((uint)id, Invalidations.Property, (PropertyKeyRef)pinnedLabelKey.Target!);
 	}
 
 	// The Style box's list: the document's styles, in the sheet's order.
@@ -2055,7 +2085,6 @@ class WriterForm : Form
 	internal PageGaps Gaps => pageGaps;
 
 	const int EM_GETSCROLLPOS = 0x04DD, EM_SETSCROLLPOS = 0x04DE, EM_SETEVENTMASK_GAPS = 0x0445;
-	[DllImport("user32.dll")] static extern bool LockWindowUpdate(IntPtr hWnd);
 	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendPoint(IntPtr hWnd, int msg, IntPtr wParam, ref Point lParam);
 	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendMask(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
@@ -2077,9 +2106,12 @@ class WriterForm : Form
 		if (caretLine.End < doc.Range2(0, 0).StoryLength - 1 && Editor.GetPositionFromCharIndex(caretLine.End).Y is int bottom
 			&& bottom > 0 && bottom <= Editor.ClientSize.Height)
 			(top, topY) = (caretLine.End, bottom);
-		// (nothing drawn in the window, the scroll's own moving of its pixels too, until it is unlocked; RichEdit lays out and
-		// answers as ever: with WM_SETREDRAW off it gave positions as if scrolled to the top)
-		bool hold = Editor.Visible && LockWindowUpdate(Editor.Handle);
+		// (the editor's painting held until the gaps are in: a paint asked for meanwhile is left to be done after, not done
+		// in between. Iteration 48: LockWindowUpdate did this from iteration 43, but a paint while locked drew nothing and
+		// took the window's need of one with it, so the window kept what it showed before (a table row where it had been,
+		// after opening). WM_SETREDRAW off gave positions as if scrolled to the top.)
+		bool hold = Editor.Visible;
+		if (hold) Editor.HoldPaint = true;
 		doc.Undo(-9999995);    // tomSuspend
 		IntPtr mask = SendMask(Editor.Handle, EM_SETEVENTMASK_GAPS, IntPtr.Zero, IntPtr.Zero);
 		doc.Freeze();
@@ -2107,8 +2139,11 @@ class WriterForm : Form
 				perStep = done / (double)step;
 			}
 			quietGaps = false;
-			if (hold) LockWindowUpdate(IntPtr.Zero);
+			if (hold) Editor.HoldPaint = false;
+			// (painted now, all of it: only asked for, the paint was sometimes not done, the window keeping what it showed
+			// before the gaps went in)
 			Editor.Invalidate();
+			Editor.Update();
 			pagePanel.Invalidate();
 			// (iteration 46: the line numbers too, where they are now that the text is back in its place; drawn while the
 			// gaps went in, they were left where the text had been moved to before it)
@@ -3500,78 +3535,89 @@ class WriterForm : Form
 
 	// The ribbon shows the selection's format (properties that differ within it are blank, as in Word) and the view's
 	// settings; Table Tools appears while the caret is in a table.
+	// Iteration 48: what was last sent to the ribbon, each control's property: a value is sent again only when it changes.
+	// UpdateRibbon runs at every caret move and sent some 45 values each time, nearly all unchanged (the font group's
+	// each made the ribbon read all its properties again); the ribbon queues them for its timer, and its timer has been
+	// seen to crash (UIRibbon.dll, an access violation) after the window was busy for a while: the fewer queued, the
+	// fewer chances. Forgotten when a ribbon command runs (Command): a click changes a toggle's state in the ribbon itself.
+	readonly Dictionary<(object Control, string Property), object?> ribbonSent = new();
+	void Push<T>(object control, string property, T value, Action<T> send) {
+		if (ribbonSent.TryGetValue((control, property), out var sent) && Equals(sent, value)) return;
+		ribbonSent[(control, property)] = value;
+		send(value);
+	}
+
 	void UpdateRibbon(ITextRange2 range) {
 		var font = api.SelectionFont();    // (with nothing selected: what is typed next, as Word shows it)
 		FontProperties State(int value) => value == tomConstants.tomTrue ? FontProperties.Set : value == tomConstants.tomFalse ? FontProperties.NotSet : FontProperties.NotAvailable;
-		fontControl.Family = font.Name ?? "";
-		fontControl.Size = font.Size > 0 ? (decimal)Math.Round(font.Size, 1) : 0;
-		fontControl.Bold = State(font.Bold);
-		fontControl.Italic = State(font.Italic);
-		fontControl.Underline = font.Underline == tomConstants.tomUndefined ? FontUnderline.NotAvailable : font.Underline > 0 ? FontUnderline.Set : FontUnderline.NotSet;
-		fontControl.Strikethrough = State(font.StrikeThrough);
-		fontControl.VerticalPositioning = font.Superscript == tomConstants.tomTrue ? FontVerticalPosition.SuperScript
+		Push(fontControl, "Family", font.Name ?? "", v => fontControl.Family = v);
+		Push(fontControl, "Size", font.Size > 0 ? (decimal)Math.Round(font.Size, 1) : 0, v => fontControl.Size = v);
+		Push(fontControl, "Bold", State(font.Bold), v => fontControl.Bold = v);
+		Push(fontControl, "Italic", State(font.Italic), v => fontControl.Italic = v);
+		Push(fontControl, "Underline", font.Underline == tomConstants.tomUndefined ? FontUnderline.NotAvailable : font.Underline > 0 ? FontUnderline.Set : FontUnderline.NotSet, v => fontControl.Underline = v);
+		Push(fontControl, "Strikethrough", State(font.StrikeThrough), v => fontControl.Strikethrough = v);
+		Push(fontControl, "VerticalPositioning", font.Superscript == tomConstants.tomTrue ? FontVerticalPosition.SuperScript
 			: font.Subscript == tomConstants.tomTrue ? FontVerticalPosition.SubScript
-			: font.Superscript == tomConstants.tomUndefined || font.Subscript == tomConstants.tomUndefined ? FontVerticalPosition.NotAvailable : FontVerticalPosition.NotSet;
-		if (font.ForeColor >= 0) fontControl.ForegroundColor = ColorTranslator.FromWin32(font.ForeColor);
+			: font.Superscript == tomConstants.tomUndefined || font.Subscript == tomConstants.tomUndefined ? FontVerticalPosition.NotAvailable : FontVerticalPosition.NotSet, v => fontControl.VerticalPositioning = v);
+		if (font.ForeColor >= 0) Push(fontControl, "ForegroundColor", ColorTranslator.FromWin32(font.ForeColor), v => fontControl.ForegroundColor = v);
 
 		var para = range.Para;
 		int listType = para.ListType;
 		bool legal = listType > 0 && (listType & 0x40000) != 0;
 		int style = listType > 0 ? listType & 0xFFFF : listType;
-		toggleButtons[RibbonCommand.Bullets].BooleanValue = style == (int)ListStyle.Bullet;
-		toggleButtons[RibbonCommand.Numbering].BooleanValue = style > 0 && style != (int)ListStyle.Bullet && !legal;
-		toggleButtons[RibbonCommand.Legal].BooleanValue = legal;
-		toggleButtons[RibbonCommand.AlignLeft].BooleanValue = para.Alignment == (int)ParagraphAlignment.Left;
-		toggleButtons[RibbonCommand.AlignCenter].BooleanValue = para.Alignment == (int)ParagraphAlignment.Center;
-		toggleButtons[RibbonCommand.AlignRight].BooleanValue = para.Alignment == (int)ParagraphAlignment.Right;
-		toggleButtons[RibbonCommand.Justify].BooleanValue = para.Alignment == (int)ParagraphAlignment.Justify;
+		Push(toggleButtons[RibbonCommand.Bullets], "BooleanValue", style == (int)ListStyle.Bullet, v => toggleButtons[RibbonCommand.Bullets].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.Numbering], "BooleanValue", style > 0 && style != (int)ListStyle.Bullet && !legal, v => toggleButtons[RibbonCommand.Numbering].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.Legal], "BooleanValue", legal, v => toggleButtons[RibbonCommand.Legal].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.AlignLeft], "BooleanValue", para.Alignment == (int)ParagraphAlignment.Left, v => toggleButtons[RibbonCommand.AlignLeft].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.AlignCenter], "BooleanValue", para.Alignment == (int)ParagraphAlignment.Center, v => toggleButtons[RibbonCommand.AlignCenter].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.AlignRight], "BooleanValue", para.Alignment == (int)ParagraphAlignment.Right, v => toggleButtons[RibbonCommand.AlignRight].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.Justify], "BooleanValue", para.Alignment == (int)ParagraphAlignment.Justify, v => toggleButtons[RibbonCommand.Justify].BooleanValue = v);
 		string spacing = LineSpacing.Of(range);
 		foreach (var (id, value) in new[] { (RibbonCommand.LineSpacing10, "1"), (RibbonCommand.LineSpacing115, "1.15"), (RibbonCommand.LineSpacing150, "1.5"),
 			(RibbonCommand.LineSpacing200, "2"), (RibbonCommand.LineSpacing250, "2.5"), (RibbonCommand.LineSpacing300, "3") })
-			toggleButtons[id].BooleanValue = spacing == value;
+			Push(toggleButtons[id], "BooleanValue", spacing == value, v => toggleButtons[id].BooleanValue = v);
 		// (page 1's top margin, the page view's space before the first paragraph, isn't the paragraph's)
 		float before = LineSpacing.SpaceOf(range, true);
 		if (pageGaps.Applied) before -= pageGaps.ExtraAt(range.Start);    // (a page's first paragraph: the gap isn't its own space)
-		toggleButtons[RibbonCommand.SpaceBefore].BooleanValue = before > 0.05f;
-		toggleButtons[RibbonCommand.SpaceAfter].BooleanValue = LineSpacing.SpaceOf(range, false) > 0;
-		toggleButtons[RibbonCommand.LineNumbersNone].BooleanValue = !Numbering.On;
-		toggleButtons[RibbonCommand.LineNumbersContinuous].BooleanValue = Numbering.Mode == LineNumbering.Modes.Continuous;
-		toggleButtons[RibbonCommand.LineNumbersEachPage].BooleanValue = Numbering.Mode == LineNumbering.Modes.EachPage;
-		toggleButtons[RibbonCommand.SuppressLineNumbers].BooleanValue = para.NoLineNumber == tomConstants.tomTrue;
-
+		Push(toggleButtons[RibbonCommand.SpaceBefore], "BooleanValue", before > 0.05f, v => toggleButtons[RibbonCommand.SpaceBefore].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.SpaceAfter], "BooleanValue", LineSpacing.SpaceOf(range, false) > 0, v => toggleButtons[RibbonCommand.SpaceAfter].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.LineNumbersNone], "BooleanValue", !Numbering.On, v => toggleButtons[RibbonCommand.LineNumbersNone].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.LineNumbersContinuous], "BooleanValue", Numbering.Mode == LineNumbering.Modes.Continuous, v => toggleButtons[RibbonCommand.LineNumbersContinuous].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.LineNumbersEachPage], "BooleanValue", Numbering.Mode == LineNumbering.Modes.EachPage, v => toggleButtons[RibbonCommand.LineNumbersEachPage].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.SuppressLineNumbers], "BooleanValue", para.NoLineNumber == tomConstants.tomTrue, v => toggleButtons[RibbonCommand.SuppressLineNumbers].BooleanValue = v);
 		FillStyleBox();
 		int styleIndex = styleBoxNames.FindIndex(n => string.Equals(n, CaretStyleName(), StringComparison.OrdinalIgnoreCase));
-		blockCombo.SelectedItem = styleIndex >= 0 ? (uint)styleIndex : Constants.UI_Collection_InvalidIndex;
+		Push(blockCombo, "SelectedItem", styleIndex >= 0 ? (uint)styleIndex : Constants.UI_Collection_InvalidIndex, v => blockCombo.SelectedItem = v);
 		foreach (var (id, set) in new[] { (RibbonCommand.StyleSetClassic, "Classic"), (RibbonCommand.StyleSetPlain, "Plain"), (RibbonCommand.StyleSetModern, "Modern") })
-			toggleButtons[id].BooleanValue = string.Equals(Styles.Set, set, StringComparison.OrdinalIgnoreCase);
+			Push(toggleButtons[id], "BooleanValue", string.Equals(Styles.Set, set, StringComparison.OrdinalIgnoreCase), v => toggleButtons[id].BooleanValue = v);
 		ShowStyleSet();
-		toggleButtons[RibbonCommand.RecordMacro].BooleanValue = recorder.Recording;
-		toggleButtons[RibbonCommand.ViewRich].BooleanValue = view == SourceKind.None;
-		toggleButtons[RibbonCommand.ViewMarkdown].BooleanValue = view == SourceKind.Markdown;
-		toggleButtons[RibbonCommand.ViewHtml].BooleanValue = view == SourceKind.Html;
-		toggleButtons[RibbonCommand.SideBySide].BooleanValue = sideBySide;
-		checkBoxes[RibbonCommand.SourceWordWrap].BooleanValue = sourceBox.WordWrap;
-		checkBoxes[RibbonCommand.SourceLineNumbers].BooleanValue = sourceBox.LineNumbers;
-		checkBoxes[RibbonCommand.WordWrap].BooleanValue = Editor.WordWrap;
-		checkBoxes[RibbonCommand.WordWrap].Enabled = !Settings.PrintLayout;    // (Print Layout breaks lines as on paper)
-		checkBoxes[RibbonCommand.PrintLayout].BooleanValue = Settings.PrintLayout;
-		checkBoxes[RibbonCommand.ShowPages].BooleanValue = Settings.PageView;
-		checkBoxes[RibbonCommand.ShowPages].Enabled = Settings.PrintLayout;
+		Push(toggleButtons[RibbonCommand.RecordMacro], "BooleanValue", recorder.Recording, v => toggleButtons[RibbonCommand.RecordMacro].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.ViewRich], "BooleanValue", view == SourceKind.None, v => toggleButtons[RibbonCommand.ViewRich].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.ViewMarkdown], "BooleanValue", view == SourceKind.Markdown, v => toggleButtons[RibbonCommand.ViewMarkdown].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.ViewHtml], "BooleanValue", view == SourceKind.Html, v => toggleButtons[RibbonCommand.ViewHtml].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.SideBySide], "BooleanValue", sideBySide, v => toggleButtons[RibbonCommand.SideBySide].BooleanValue = v);
+		Push(checkBoxes[RibbonCommand.SourceWordWrap], "BooleanValue", sourceBox.WordWrap, v => checkBoxes[RibbonCommand.SourceWordWrap].BooleanValue = v);
+		Push(checkBoxes[RibbonCommand.SourceLineNumbers], "BooleanValue", sourceBox.LineNumbers, v => checkBoxes[RibbonCommand.SourceLineNumbers].BooleanValue = v);
+		Push(checkBoxes[RibbonCommand.WordWrap], "BooleanValue", Editor.WordWrap, v => checkBoxes[RibbonCommand.WordWrap].BooleanValue = v);
+		Push(checkBoxes[RibbonCommand.WordWrap], "Enabled", !Settings.PrintLayout, v => checkBoxes[RibbonCommand.WordWrap].Enabled = v);    // (Print Layout breaks lines as on paper)
+		Push(checkBoxes[RibbonCommand.PrintLayout], "BooleanValue", Settings.PrintLayout, v => checkBoxes[RibbonCommand.PrintLayout].BooleanValue = v);
+		Push(checkBoxes[RibbonCommand.ShowPages], "BooleanValue", Settings.PageView, v => checkBoxes[RibbonCommand.ShowPages].BooleanValue = v);
+		Push(checkBoxes[RibbonCommand.ShowPages], "Enabled", Settings.PrintLayout, v => checkBoxes[RibbonCommand.ShowPages].Enabled = v);
 		// (Page Width, One Page and Multiple Pages: one of them at a time; each pushed to the ribbon even when it seems to
 		// have it already, as a click checks a button in the ribbon before the command has run)
 		void Show(RibbonCommand id, bool on) { var button = toggleButtons[id]; if (zoomClicked && button.BooleanValue == on) button.BooleanValue = !on; button.BooleanValue = on; }
 		Show(RibbonCommand.ZoomPageWidth, Settings.PrintLayout && Settings.ZoomMode == "PageWidth" && !PagesShown);
 		Show(RibbonCommand.ZoomOnePage, Settings.PrintLayout && Settings.ZoomMode == "OnePage" && !PagesShown);
-		toggleButtons[RibbonCommand.ZoomPageWidth].Enabled = toggleButtons[RibbonCommand.ZoomOnePage].Enabled = Settings.PrintLayout;
+		Push(toggleButtons[RibbonCommand.ZoomPageWidth], "Enabled", toggleButtons[RibbonCommand.ZoomOnePage].Enabled = Settings.PrintLayout, v => toggleButtons[RibbonCommand.ZoomPageWidth].Enabled = v);
 		Show(RibbonCommand.ZoomMultiplePages, PagesShown);
 		zoomClicked = false;
-		checkBoxes[RibbonCommand.ShowBands].BooleanValue = Settings.ShowBands;
-		checkBoxes[RibbonCommand.Outline].BooleanValue = !outlineSplit.Panel1Collapsed;
-		checkBoxes[RibbonCommand.SpellCheck].BooleanValue = Editor.EnableSpellCheck;
-
-		undoButton.Enabled = Editor.CanUndo;
-		redoButton.Enabled = Editor.CanRedo;
-		cutButton.Enabled = copyButton.Enabled = Editor.SelectionLength > 0;
+		Push(checkBoxes[RibbonCommand.ShowBands], "BooleanValue", Settings.ShowBands, v => checkBoxes[RibbonCommand.ShowBands].BooleanValue = v);
+		Push(checkBoxes[RibbonCommand.Outline], "BooleanValue", !outlineSplit.Panel1Collapsed, v => checkBoxes[RibbonCommand.Outline].BooleanValue = v);
+		Push(checkBoxes[RibbonCommand.SpellCheck], "BooleanValue", Editor.EnableSpellCheck, v => checkBoxes[RibbonCommand.SpellCheck].BooleanValue = v);
+		Push(undoButton, "Enabled", Editor.CanUndo, v => undoButton.Enabled = v);
+		Push(redoButton, "Enabled", Editor.CanRedo, v => redoButton.Enabled = v);
+		Push(cutButton, "Enabled", Editor.SelectionLength > 0, v => cutButton.Enabled = v);
+		Push(copyButton, "Enabled", Editor.SelectionLength > 0, v => copyButton.Enabled = v);
 		var tools = CaretInTable() ? ContextAvailability.Available : ContextAvailability.NotAvailable;
 		if (tableTools.ContextAvailable != tools) tableTools.ContextAvailable = tools;
 	}
@@ -7043,7 +7089,7 @@ public sealed class Settings
 	public bool Structured { get; set; } = true;    // (no longer used: View > Structured / Free-form were retired in iteration 34)
 	public bool WordWrap { get; set; } = true;
 	public bool PrintLayout { get; set; } = true;    // View > Print Layout: lines as on the printed page
-	public bool PageView { get; set; }               // View > Show Pages: Print Layout's pages as sheets of their own (off: not reliable while typing yet)
+	public bool PageView { get; set; } = true;       // View > Show Pages: Print Layout's pages as sheets of their own (on from iteration 48)
 	public string ZoomMode { get; set; } = "PageWidth";    // Print Layout's zoom: PageWidth, OnePage or Manual (View > Zoom)
 	public bool SpellCheck { get; set; } = true;
 	public bool AutoLevelStyles { get; set; } = true;
@@ -8077,6 +8123,9 @@ sealed class WriterEditBox : RichEditBox
 	/// screen, then the drawings go over it there).
 	public bool Buffered = true;
 
+	/// While true, the editor doesn't paint: a paint asked for is left for later (the page view's gaps going in).
+	public bool HoldPaint;
+
 	// Iteration 43: RichEdit paints the part of the window to paint into a bitmap (WM_PRINTCLIENT), the gaps, page breaks
 	// and page lines are drawn over it there, and the bitmap goes onto the screen at once: drawn over on the screen, the
 	// white RichEdit paints there showed for a moment first (a flicker as the caret moved past a sheet's end).
@@ -8222,6 +8271,8 @@ sealed class WriterEditBox : RichEditBox
 			return;
 		}
 		if (m.Msg == WM_PAINT) {
+			// (held: not painted now, and the window's need of a paint kept, for the paint after: QuietGaps)
+			if (HoldPaint && IsHandleCreated) return;
 			if (((pageBreaks == null || pageBreaks.Count > 0) || PageStarts is { Count: > 1 } || Gaps is { Applied: true }) && IsHandleCreated && Buffered)
 				PaintBuffered();
 			else base.WndProc(ref m);
