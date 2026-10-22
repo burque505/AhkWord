@@ -20,8 +20,31 @@
 #load "rte_paragraph.cs"
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
+#load "rte_crossrefs.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 49 adds to iteration 48:
+// Run it with AhkWord.ahk. Iteration 50 adds to iteration 49:
+//   - Cross-references to numbered paragraphs (Insert > Cross-reference; rte_crossrefs.cs): "see paragraph 3(b)",
+//     to a legal item, a numbered style's paragraph or a numbered list's item, showing its number ("(b)") or its full
+//     number ("3(b)": a letter or roman sub-level in parentheses, as citations have it), without a trailing period;
+//     also a sub-point typed in front of a paragraph after a numbered one ("e. ", not a list item: "23(e)"). The number follows the paragraph's: as legal items and numbered
+//     styles are renumbered (in the same undo step), and, for lists RichEdit numbers itself, before saving, printing
+//     and exporting, and with F9 (Insert > Update). Ctrl+click goes to the paragraph. A reference whose paragraph was
+//     deleted says "(reference not found)". Scripts: CrossReferenceTargets, InsertCrossReference, UpdateCrossReferences.
+//     Both ends are hidden text in the editor; RTF (and so Word and LibreOffice files) gets Word's own bookmarks and
+//     REF fields, which Word and LibreOffice keep up to date; HTML and Markdown get anchors and links; the built-in
+//     .docx converter gets bookmarks and links to them. All are read back.
+//   - Lists, fixed (there before):
+//     - An ordinary numbered list right after legal items (or a numbered style's) started at "2.": RichEdit numbered it
+//       on from them. The legal items before it get another kind of numbers (hidden, so not shown; LegalLists.BreakChains).
+//     - Saved as .rtf and opened again, such a list came back as typed numbers ("2.<tab>"), no longer a list.
+//     - A numbered style's sub-level ("a.") came back from .html and .md as legal numbering ("5.1"), its paragraphs in
+//       Normal: HTML keeps the style on each item (data-rte-style), Markdown after [type=legal] ([style=...]).
+//     - Markdown wrote a paragraph with a typed number and a tab ("2.<tab>Text") as a table's row.
+//     - Legal items followed by a numbered style's: the built-in .docx converter gave both one Word list with the style's
+//       formats ("a." for "2.1"), as Word's and LibreOffice's RTF did; now a Word list for each run, the second going on
+//       from the first. Read back, the style's sub-level was taken for legal numbering; from Word's file, the style
+//       wasn't found numbered. And LibreOffice numbered an ordinary list after legal items on from them ("6.").
+// Iteration 49 added to iteration 48:
 //   - A different first page header and footer (Layout > Header & Footer > First page; DifferentFirstPage,
 //     SetFirstHeader, SetFirstFooter for scripts): page 1 gets its own parts, or none if they are empty (a letter's
 //     or a pleading's first page). Shown on the sheets (Show Pages) and the strips, printed, and kept in the files:
@@ -485,7 +508,7 @@ enum RibbonCommand : uint
 	ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, StylesMenu = 380,
 	ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384, StyleSetClassic = 385,
 	StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, ApplyMyStyles = 391, CopyStyles = 394, PageBreak = 280, Table = 281,
-	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, HeaderFooter = 290, NextSpelling = 295,
+	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, CrossReference = 286, UpdateReferences = 287, HeaderFooter = 290, NextSpelling = 295,
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
@@ -552,7 +575,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 49;    // (the About box; make_version.ps1)
+	public const int Iteration = 50;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -668,6 +691,7 @@ class WriterForm : Form
 		Size = new Size(LogicalToDeviceUnits(1150), LogicalToDeviceUnits(820));
 		Editor.EnableHtmlFontSizing = false;    // (any font size: styles do what "structured documents" did, iteration 34)
 		// Markdown: what a paragraph is, by its style (Code; a heading's level; else body text), not by its font
+		MarkdownConverter.StyleNameOf = (doc, position) => StyleEngine.StyleAt(doc, Styles, position) is { Numbered: true } numbered ? numbered.Name : null;    // (iteration 50)
 		MarkdownConverter.BlockOf = (doc, position) => string.Equals(StyleEngine.StyleAt(doc, Styles, position).Name, "Code", StringComparison.OrdinalIgnoreCase) ? (int)BlockStyle.Preformatted : StyleEngine.LevelAt(doc, Styles, position);
 		Editor.WordWrap = Settings.WordWrap;
 		Editor.EnableSpellCheck = Settings.SpellCheck;
@@ -779,6 +803,10 @@ class WriterForm : Form
 		LegalLists.LevelIndents = level => level < Levels.Count ? (Levels[level].NumberAt, Levels[level].TextAt) : (null, null);
 		Editor.ContextMenuHook = ShowContextMenu;
 		Editor.OpenLink = OpenLinkCommand;
+		// (iteration 50) cross-references: their numbers follow the renumbering, in the same undo step; Ctrl+click goes to
+		// the paragraph referred to
+		LegalLists.AfterRenumber = doc => CrossRefs.Update(doc) > 0;
+		Editor.FollowReference = GoToReferenceTarget;
 		Editor.AltTextOf = position => api.PictureAltText(position);
 		Editor.KeyDown += (s, e) => { if (recorder.Recording) RecordKeyDown(e); };
 		Editor.KeyPress += (s, e) => {
@@ -997,6 +1025,8 @@ class WriterForm : Form
 		Button(RibbonCommand.Table, InsertTableDialog);
 		Button(RibbonCommand.Picture, InsertImageDialog);
 		Button(RibbonCommand.Thumbnail, InsertThumbnailDialog);
+		Button(RibbonCommand.CrossReference, CrossReferenceCommand);
+		Button(RibbonCommand.UpdateReferences, UpdateReferencesCommand, Keys.F9, M("UpdateCrossReferences"));
 		Button(RibbonCommand.Link, InsertHyperlinkDialog, Keys.Control | Keys.K);
 		Button(RibbonCommand.DateTime, () => { string now = DateTime.Now.ToString("f"); api.InsertText(now); Record(M("InsertText", now)); });
 
@@ -2387,6 +2417,52 @@ class WriterForm : Form
 		return new PageLayout(Twips(width), Twips(height), Twips(m[0]), Twips(m[1]), Twips(m[2]), Twips(m[3]), Settings.Landscape);
 	}
 
+	// ---- Cross-references (iteration 50, rte_crossrefs.cs)
+
+	/// Brings the cross-references' numbers up to date, as one undo step; returns how many changed.
+	internal int UpdateReferences() {
+		var doc = Editor.TextDocument;
+		if (!Editor.IsHandleCreated || !CrossRefs.Any(Editor.Text)) return 0;
+		doc.BeginEditCollection();
+		try { return CrossRefs.Update(doc); }
+		finally { doc.EndEditCollection(); }
+	}
+
+	void UpdateReferencesCommand() {
+		int changed = UpdateReferences();
+		SetStatus(changed == 0 ? "The cross-references are up to date." : $"{changed} cross-reference{(changed == 1 ? "" : "s")} updated.");
+	}
+
+	// Ctrl+click on a cross-reference: the caret to the paragraph it refers to.
+	bool GoToReferenceTarget(int position) {
+		var doc = Editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		if (!CrossRefs.Any(story) || CrossRefs.ReferenceAt(story, position) is not { } name) return false;
+		int at = CrossRefs.TargetPosition(story, name);
+		if (at < 0) { SetStatus("⚠ The paragraph this cross-reference referred to is gone."); return true; }
+		var paragraph = doc.Range2(at, at);
+		paragraph.StartOf(tomConstants.tomParagraph, 0);
+		Editor.Select(paragraph.Start, 0);
+		Editor.ScrollToCaret();
+		SetStatus("The paragraph the cross-reference refers to.");
+		return true;
+	}
+
+	void CrossReferenceCommand() {
+		var targets = CrossRefs.Targets(Editor.TextDocument);
+		if (targets.Count == 0) {
+			MessageBox.Show(this, "There are no numbered paragraphs to refer to yet. Number the paragraphs first (Numbering, Legal, or a numbered style such as Numbered Paragraph).", AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+			return;
+		}
+		int caret = Editor.TextDocument.Selection2.Start;
+		using var dlg = new CrossReferenceDialog(targets, Settings.CrossReferenceFull, Math.Max(0, targets.FindLastIndex(t => t.Start <= caret)));
+		if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Chosen is not int index) return;
+		if (Settings.CrossReferenceFull != dlg.Full) { Settings.CrossReferenceFull = dlg.Full; Settings.Save(); }
+		string show = dlg.Full ? "full" : "number";
+		Run(() => api.InsertCrossReference(index + 1, show), M("InsertCrossReference", index + 1, show));
+		SetStatus("Cross-reference inserted: its number follows the paragraph's. Ctrl+click it to go there; F9 updates them all.");
+	}
+
 	/// The header or footer changed: shown at once (iteration 49), not at the strips' next look, half a second on.
 	internal void BandsChangedNow() {
 		bandsShown = "";
@@ -2698,6 +2774,7 @@ class WriterForm : Form
 	// Print Preview: the printed pages in a window fitted to the screen's working area (PagePreviewForm), from the page
 	// the caret is on; double-clicking a page edits the document there.
 	void PrintPreviewCommand() {
+		UpdateReferences();
 		List<int> starts;
 		using (var measuring = CreatePrinter()) starts = measuring.PageStarts();
 		using var printer = CreatePrinter();
@@ -2716,6 +2793,7 @@ class WriterForm : Form
 	void PrintCommand() => PrintCommand(this);
 
 	void PrintCommand(IWin32Window owner) {
+		UpdateReferences();
 		using var printer = CreatePrinter();
 		using var dlg = new PrintDialog { Document = printer.Document, UseEXDialog = true };
 		if (dlg.ShowDialog(owner) != DialogResult.OK) return;
@@ -3000,7 +3078,8 @@ class WriterForm : Form
 			outlineTree.Nodes.Clear();
 			var parents = new TreeNode?[7];
 			foreach (var (level, start, text) in headings) {
-				var node = new TreeNode(text.Length > 80 ? text[..80] + "…" : text) { Tag = start, ToolTipText = text };
+				string shown = CrossRefs.PlainText(text);    // (a numbered heading can be a cross-reference's target)
+				var node = new TreeNode(shown.Length > 80 ? shown[..80] + "…" : shown) { Tag = start, ToolTipText = shown };
 				TreeNode? parent = null;
 				for (int l = level - 1; l >= 1 && parent == null; l--) parent = parents[l];
 				(parent?.Nodes ?? outlineTree.Nodes).Add(node);
@@ -3796,6 +3875,19 @@ class WriterForm : Form
 		if (text != null && kind != SourceKind.None) sources[kind] = (Embedded(text).Replace("\r\n", "\n"), api.SourceOf(kind), true);
 		sourceNewline = text != null && text.Contains("\r\n") ? "\r\n" : kind == SourceKind.Html ? "\r\n" : "\n";
 		if (view != SourceKind.None) FillSource();
+		if (IsHandleCreated && CrossRefs.Any(Editor.Text)) BeginInvoke(QuietReferenceUpdate);
+	}
+
+	// (iteration 50) Once a document is loaded: its cross-references' numbers as the editor numbers the paragraphs (a
+	// file from Word or LibreOffice has their numbers; RichEdit gives a list its numbers only once it has laid it out),
+	// as part of the loading: no undo step, nothing to save.
+	void QuietReferenceUpdate() {
+		if (!Editor.IsHandleCreated || Editor.CanUndo) return;    // (something done since: F9, or saving, updates them)
+		var doc = Editor.TextDocument;
+		bool modified = Editor.Modified;
+		doc.Undo(-9999995);    // tomSuspend
+		try { CrossRefs.Update(doc); }
+		finally { doc.Undo(-9999994); Editor.Modified = modified; }    // tomResume
 	}
 
 	/// The text to save a .md / .html file with, if the document came from such source text (the file's own, or typed in
@@ -4619,7 +4711,7 @@ public class EditorApi
 				string markdown = sourceText = File.ReadAllText(full);
 				bands = HeaderFooter.FromMarkdown(markdown);
 				numbering = LineNumberFormats.FromMarkdown(markdown);
-				MarkdownConverter.Load(ed, markdown, Path.GetDirectoryName(full));
+				LoadMarkdown(markdown, Path.GetDirectoryName(full));
 				takeLook = true;    // (Markdown has no look of its own: its styles')
 				break;
 			}
@@ -4697,6 +4789,9 @@ public class EditorApi
 		PageBreaks.Normalize(ed);    // (form feeds in plain text, for one)
 		MarksFollowText();
 		if (LegalLists.AnyLegal(ed.TextDocument)) LegalLists.Renumber(ed);    // (legal items' indents fitted to their numbers' size)
+		// (iteration 50) the cross-references' targets where they belong now that the lists are made, and their numbers
+		// as the editor numbers the paragraphs (Word's and LibreOffice's REF fields come with theirs)
+		if (CrossRefs.AfterLoad(ed.TextDocument) > 0) CrossRefs.Update(ed.TextDocument);
 		}
 		ed.ClearUndo();
 		ed.Select(0, 0);
@@ -4748,6 +4843,7 @@ public class EditorApi
 		bool picturesInside = extension is ".html" or ".htm" && via == PicturesInside;
 		// a .md / .html file whose document came from its source text, unchanged since, gets that text as it was typed
 		// (iteration 46: the file made from the document as it is, without the page view's gaps, whatever step reads it)
+		form.UpdateReferences();    // (iteration 50: the cross-references' numbers as they are now)
 		form.WithoutGaps(() => WriteFile(full, extension, via, picturesInside));
 		ed.Modified = false;
 		form.ClearRecovery();
@@ -4768,8 +4864,8 @@ public class EditorApi
 			File.WriteAllText(full, WithBands(OfficeConverters.PngPictures(OfficeConverters.WithAltTexts(StyledRtf(OfficeConverters.ListIndentsRtf(RawRtf)), AltTexts())), full), Encoding.Latin1);    // (list indents before the styles: RecoveryRtf)
 		else {
 			string content = extension switch {
-				".md" or ".markdown" => form.WithoutGaps(() => MarkdownConverter.ToMarkdown(ed, ImageFiles(full))) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering),
-				".txt" => ed.Text.Replace("\n", "\r\n"),
+				".md" or ".markdown" => form.WithoutGaps(() => CrossRefs.ToMarkdown(MarkdownConverter.ToMarkdown(ed, ImageFiles(full)))) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering),
+				".txt" => CrossRefs.PlainText(ed.Text).Replace("\n", "\r\n"),
 				_ => picturesInside ? HtmlFile(Path.GetFileNameWithoutExtension(full), pretty: true)
 					: PicturesToFiles(HtmlFile(Path.GetFileNameWithoutExtension(full), pretty: true), full)
 			};
@@ -4792,7 +4888,8 @@ public class EditorApi
 		// (frozen: the markers put into the text, and taken out one by one, aren't shown)
 		ed.TextDocument.Freeze();
 		try {
-			RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(StyleHtml.MarkHtml(html))))), HtmlLists.Load, HtmlLists.Load, TableWidth());
+			RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(StyleHtml.MarkHtml(CrossRefs.FromHtml(html)))))), HtmlLists.Load, HtmlLists.Load, TableWidth());
+			CrossRefs.AfterLoad(ed.TextDocument);
 			StyleHtml.FromMarkers(ed);    // (headings and styles from their tags, not their fonts)
 			if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) + global::LineSpacing.FromMarkers(ed) > 0) ed.ClearUndo();
 		} finally {
@@ -4823,7 +4920,7 @@ public class EditorApi
 		string body = form.WithoutGaps(() => {
 			string html = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, global::LineSpacing.ExportHtml(ed, StyleHtml.Export(ed, form.Styles, LineBreaks.ExportHtml(ed, ed.Html))))), out var found);
 			listsCss = found;
-			return html;
+			return CrossRefs.ToHtml(html);
 		});
 		css = ParagraphCss + listsCss;
 		return body;
@@ -4866,7 +4963,7 @@ public class EditorApi
 
 	// RTF with the document's header, footer, page layout and line numbering, for path.
 	string WithBands(string rtf, string path) =>
-		LineNumberFormats.AddToRtf(HeaderFooter.AddToRtf(rtf, form.Bands, form.PageLayout(), Path.GetFileName(path), path, ed.Font.SizeInPoints), form.Numbering);
+		LineNumberFormats.AddToRtf(HeaderFooter.AddToRtf(CrossRefs.ToWordRtf(rtf), form.Bands, form.PageLayout(), Path.GetFileName(path), path, ed.Font.SizeInPoints), form.Numbering);
 
 	// ---- Rich Text Format, Word and OpenDocument
 
@@ -4936,6 +5033,7 @@ public class EditorApi
 			// (LibreOffice's and Word's "page break before" paragraphs, which are their page breaks; AhkWord's own keep it)
 			if (!value.Contains(@"{\*\rtewriterstyles")) value = PageBreaks.FromPageBreakBefore(value);
 			value = HeaderFooter.StripFromRtf(value);             // (the header and footer are the document's Bands)
+			value = CrossRefs.FromWordRtf(value);                 // (iteration 50: Word's REF fields and bookmarks, which RichEdit drops)
 			value = RtfTables.WordShading(value);                 // (Word's cell backgrounds, which RichEdit ignores)
 			((RichTextBox)ed).Rtf = OfficeConverters.WithoutAltTexts(value);    // (RichEdit would put their accents into the text)
 			OfficeConverters.ContinueWordLists(ed.TextDocument, wordStarts);    // (the numbers after them, as Word has them)
@@ -4943,6 +5041,7 @@ public class EditorApi
 			RestorePictures(value);       // (with the alt texts, from the RTF as it was)
 			LegalLists.LoadedIndents.Clear();
 			LegalLists.LevelsFromNumbers(ed.TextDocument);    // (RichEdit's RTF loses the levels of legal items)
+			CrossRefs.AfterLoad(ed.TextDocument);
 			ed.ClearUndo();
 			ed.Select(0, 0);
 		}
@@ -5043,6 +5142,8 @@ public class EditorApi
 				RtfTables.TablesToDocx(full, RtfTables.Find(ed.TextDocument).Select(t => RtfTables.Formats(ed, t)).ToList());
 				DocxLineSpacing.FromEditor(full, ed);    // (HtmlToOpenXml writes "at least" as exactly)
 				DocxStyles.IntoDocx(full, ed, form.Styles);    // (the styles, and each paragraph's)
+				// (iteration 50) the cross-references' targets as bookmarks (the converter drops the HTML's empty anchors)
+				CrossRefs.BookmarksIntoDocx(full, CrossRefs.Targets(ed.TextDocument).Where(t => t.Name != null).Select(t => (t.Name!, t.Text)).ToList());
 			}
 		} catch (Exception ex) {
 			form.SetStatus("⚠ The header and footer could not be added to " + Path.GetFileName(full) + ": " + ex.Message);
@@ -5702,11 +5803,17 @@ public class EditorApi
 	/// The document as Markdown. With embedImages = 1 (the default) images are data: URIs, so the text is complete on
 	/// its own; with 0 they are written as image1.png, image2.png ... (as when viewing the source).
 	public string GetMarkdown(bool embedImages = true) =>
-		form.WithoutGaps(() => MarkdownConverter.ToMarkdown(ed, embedImages ? null : (number, data, extension) => $"image{number}.{extension}"));
+		form.WithoutGaps(() => CrossRefs.ToMarkdown(MarkdownConverter.ToMarkdown(ed, embedImages ? null : (number, data, extension) => $"image{number}.{extension}")));
+
+	// Markdown into the editor, with its cross-references (iteration 50).
+	void LoadMarkdown(string markdown, string? folder) {
+		MarkdownConverter.Load(ed, CrossRefs.FromMarkdown(markdown), folder);
+		CrossRefs.AfterLoad(ed.TextDocument);
+	}
 
 	/// Replaces the document with Markdown. Relative image paths are resolved from the current file's folder.
 	public void SetMarkdown(string markdown) {
-		MarkdownConverter.Load(ed, markdown, form.FileName != null ? Path.GetDirectoryName(form.FileName) : Environment.CurrentDirectory);
+		LoadMarkdown(markdown, form.FileName != null ? Path.GetDirectoryName(form.FileName) : Environment.CurrentDirectory);
 		form.StylesAfterLoad(form.Styles, takeLook: true);
 	}
 
@@ -5739,7 +5846,7 @@ public class EditorApi
 	// The document as the source view shows it (and a .md / .html file gets it): Markdown with the header and footer
 	// line, or a whole HTML page; pictures as data: URIs.
 	internal string SourceOf(WriterForm.SourceKind kind) => kind == WriterForm.SourceKind.Markdown
-		? form.WithoutGaps(() => MarkdownConverter.ToMarkdown(ed, null)) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering)
+		? form.WithoutGaps(() => CrossRefs.ToMarkdown(MarkdownConverter.ToMarkdown(ed, null))) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering)
 		: HtmlFile(form.FileName != null ? Path.GetFileNameWithoutExtension(form.FileName) : "Untitled", pretty: true);
 
 	// Replaces the document with Markdown or HTML from the source view, as Open does with a file's.
@@ -5747,7 +5854,7 @@ public class EditorApi
 		if (kind == WriterForm.SourceKind.Markdown) {
 			form.Bands = HeaderFooter.FromMarkdown(text) ?? form.DefaultBands();
 			form.SetLineNumbering(LineNumberFormats.FromMarkdown(text) ?? new LineNumbering());
-			MarkdownConverter.Load(ed, text, form.FileName != null ? Path.GetDirectoryName(form.FileName) : Environment.CurrentDirectory);
+			LoadMarkdown(text, form.FileName != null ? Path.GetDirectoryName(form.FileName) : Environment.CurrentDirectory);
 		} else {
 			form.Bands = HeaderFooter.FromHtml(text) ?? form.DefaultBands();
 			form.SetLineNumbering(LineNumberFormats.FromHtml(text) ?? new LineNumbering());
@@ -5822,7 +5929,7 @@ public class EditorApi
 		return count;
 	}
 
-	public int WordCount() => Regex.Matches(ed.Text, @"[\p{L}\p{N}][\p{L}\p{N}'’\-]*").Count;
+	public int WordCount() => Regex.Matches(CrossRefs.PlainText(ed.Text), @"[\p{L}\p{N}][\p{L}\p{N}'’\-]*").Count;    // (not the cross-references' hidden markers)
 	public int CharacterCount() => ed.TextLength;
 
 	/// Changes the case of the selection, keeping its formatting: "upper", "lower", "title", "sentence" or "toggle".
@@ -5876,6 +5983,7 @@ public class EditorApi
 			var para = SelectionRange().Para;
 			if (style != ListStyle.Bullet && (para.ListType & 0xFFFF) == (int)style && para.ListStart == 0) para.ListStart = 1;
 			FitLists();    // (the items' indents: their level's, Paragraph > List levels)
+			LegalLists.BreakChains(doc);    // (right after legal items: numbered from 1, not on from them)
 		} finally {
 			doc.EndEditCollection();
 		}
@@ -6152,6 +6260,7 @@ public class EditorApi
 			throw new InvalidOperationException($"The \"{pdfPrinter}\" printer is not installed (Windows Features: Microsoft Print to PDF).");
 		string full = Path.GetFullPath(path);
 		if (File.Exists(full)) File.Delete(full);
+		form.UpdateReferences();
 		using var guard = new DefaultPrinterGuard(form.Settings);    // (the PDF printer doesn't become the default)
 		using (var printer = form.CreatePrinter(pdfPrinter)) {
 			var document = printer.Document;
@@ -6176,6 +6285,7 @@ public class EditorApi
 
 	/// Prints without a dialog, to the default printer or the printer named. The page setup applies.
 	public void Print(string printerName = "") {
+		form.UpdateReferences();
 		using var printer = form.CreatePrinter(printerName == "" ? null : printerName);
 		printer.Document.PrintController = new StandardPrintController();
 		printer.Document.Print();
@@ -6240,8 +6350,15 @@ public class EditorApi
 			RemoveList();
 			return;
 		}
-		ToggleFromTopLevel(() => ed.ToggleList(ListStyle.Decimal));
-		ForEachSelectedParagraph(para => ApplyLevel(para, para.ListLevelIndex));
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try {
+			ToggleFromTopLevel(() => ed.ToggleList(ListStyle.Decimal));
+			ForEachSelectedParagraph(para => ApplyLevel(para, para.ListLevelIndex));
+			LegalLists.BreakChains(doc);    // (right after legal items: numbered from 1, not on from them)
+		} finally {
+			doc.EndEditCollection();
+		}
 	}
 
 	// Runs a list toggle so that paragraphs that were not list items start at the top level. RichEdit keeps the level of
@@ -6777,6 +6894,40 @@ public class EditorApi
 	/// Makes the document's header and footer the default for new documents (and documents without their own).
 	public void MakeHeaderFooterDefault() => form.MakeDefault(form.Bands);
 
+	// ---- Cross-references to numbered paragraphs (iteration 50)
+
+	/// The numbered paragraphs a cross-reference can refer to (legal items, numbered styles' paragraphs, numbered
+	/// lists), one a line: the number, a tab, the full number (with the levels above: "3(b)"), a tab, and the start of
+	/// the text.
+	public string CrossReferenceTargets => string.Join("\n", CrossRefs.Targets(ed.TextDocument).Select(t => t.Number + "\t" + t.Full + "\t" + t.Text));
+
+	/// Inserts a cross-reference at the caret (in place of the selection) to numbered paragraph index (1: the first, as
+	/// CrossReferenceTargets lists them), showing its number (show "number": "(b)") or its full number ("full": "3(b)"),
+	/// without a trailing period. Its number follows the paragraph's when the paragraphs are renumbered; Word and
+	/// LibreOffice files get it as a REF field. One undo step.
+	public void InsertCrossReference(int index, string show = "number") {
+		var doc = ed.TextDocument;
+		var targets = CrossRefs.Targets(doc);
+		if (index < 1 || index > targets.Count) throw new ArgumentException($"There are {targets.Count} numbered paragraphs (CrossReferenceTargets): {index} isn't one of them.");
+		string how = show.Trim().ToLowerInvariant() switch {
+			"number" or "r" or "" => "r", "full" or "w" => "w",
+			_ => throw new ArgumentException("show is \"number\" or \"full\".")
+		};
+		doc.BeginEditCollection();
+		try {
+			var selection = doc.Selection2;
+			int end = CrossRefs.Insert(doc, doc.Range2(selection.Start, selection.End), targets[index - 1], how);
+			selection.SetRange(end, end);
+			selection.Font.Hidden = tomConstants.tomFalse;    // (typing on after it: not in the marker's hidden format)
+		} finally {
+			doc.EndEditCollection();
+		}
+	}
+
+	/// Brings every cross-reference's number up to date (done by itself as the paragraphs are renumbered, and before
+	/// saving, printing and exporting; F9). Returns how many changed.
+	public int UpdateCrossReferences() => form.UpdateReferences();
+
 	// ---- Window
 
 	/// Shows a message in the status bar.
@@ -7179,6 +7330,7 @@ public sealed class Settings
 	public int TableRows { get; set; } = 3;    // Table > Insert table
 	public int TableColumns { get; set; } = 3;
 	public bool TableHeader { get; set; } = true;
+	public bool CrossReferenceFull { get; set; }    // (iteration 50) Insert > Cross-reference: the full number ("3(b)")
 	public string LegalFormat { get; set; } = "Top";    // legal numbering: Top (1. 1.1), All (1. 1.1.) or None (1 1.1)
 	public Dictionary<string, string> MacroHotkeys { get; set; } = new(StringComparer.OrdinalIgnoreCase);    // macro file name -> keys, e.g. "Ctrl+Alt+1"
 	public int OutlineWidth { get; set; } = 220;    // at 96 dpi
@@ -7877,10 +8029,15 @@ sealed class WriterEditBox : RichEditBox
 	/// Ctrl+click on a link (text or picture): the link's address, to be opened.
 	public Action<string>? OpenLink;
 
+	/// Ctrl+click on a cross-reference (iteration 50): its position, to go to the paragraph it refers to; true if it was one.
+	public Func<int, bool>? FollowReference;
+
 	protected override void OnMouseUp(MouseEventArgs e) {
 		base.OnMouseUp(e);
-		if (e.Button != MouseButtons.Left || ModifierKeys != Keys.Control || OpenLink == null) return;
+		if (e.Button != MouseButtons.Left || ModifierKeys != Keys.Control) return;
 		int position = PositionAt(PointToScreen(e.Location));
+		if (FollowReference?.Invoke(position) == true) return;
+		if (OpenLink == null) return;
 		// the character clicked can be the one after the point (a click on its right half): both are looked at
 		foreach (int at in new[] { position, position - 1 }) {
 			if (at < 0) continue;
@@ -8408,6 +8565,7 @@ sealed class Spelling
 	public List<Error> Check(string text, int offset) {
 		var errors = new List<Error>();
 		if (string.IsNullOrWhiteSpace(text)) return errors;
+		text = CrossRefs.Blanked(text);    // (iteration 50: the cross-references' hidden markers aren't words)
 		var found = checker.Check(text);
 		while (found.Next(out var error) == 0) {
 			int start = (int)error.StartIndex, length = (int)error.Length;
@@ -9090,6 +9248,71 @@ sealed class HeaderFooterDialog : Form
 		FirstHeader = differentFirst.Checked ? firstHeader.Select(b => b.Text).ToArray() : null,
 		FirstFooter = differentFirst.Checked ? firstFooter.Select(b => b.Text).ToArray() : null
 	};
+}
+
+// Insert > Cross-reference (iteration 50): the numbered paragraphs, and whether the reference shows the paragraph's own
+// number or its full number.
+sealed class CrossReferenceDialog : Form
+{
+	readonly ListBox list = new() { IntegralHeight = false };
+	readonly RadioButton number = new() { Text = "Its number", AutoSize = true }, full = new() { Text = "Its full number (with the levels above it)", AutoSize = true };
+	readonly Label shown = new() { AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+	readonly List<CrossRefs.Target> targets;
+
+	/// The paragraph chosen (its index in the targets), and whether the full number is shown.
+	public int? Chosen => list.SelectedIndex >= 0 ? list.SelectedIndex : null;
+	public bool Full => full.Checked;
+
+	public CrossReferenceDialog(List<CrossRefs.Target> targets, bool showFull, int selected) {
+		this.targets = targets;
+		Text = "Cross-reference";
+		FormBorderStyle = FormBorderStyle.Sizable;
+		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
+		StartPosition = FormStartPosition.CenterParent;
+		Size = new Size(LogicalToDeviceUnits(620), LogicalToDeviceUnits(460));
+		MinimumSize = new Size(LogicalToDeviceUnits(380), LogicalToDeviceUnits(300));
+		Padding = new Padding(10);
+
+		var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6 };
+		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+		layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+		for (int i = 0; i < 4; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+		layout.Controls.Add(new Label { Text = "Refer to the numbered paragraph:", AutoSize = true }, 0, 0);
+		list.Dock = DockStyle.Fill;
+		foreach (var t in targets) list.Items.Add(t.Full + "\t" + (t.Text.Length > 90 ? t.Text[..90] + "…" : t.Text));
+		list.UseTabStops = true;
+		layout.Controls.Add(list, 0, 1);
+		var how = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 6, 0, 0) };
+		how.Controls.Add(new Label { Text = "Show:", AutoSize = true });
+		how.Controls.Add(number);
+		how.Controls.Add(full);
+		layout.Controls.Add(how, 0, 2);
+		layout.Controls.Add(shown, 0, 3);
+		layout.Controls.Add(new Label {
+			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(560), 0), Margin = new Padding(3, 4, 3, 6),
+			Text = "The number follows the paragraph's when the paragraphs are renumbered (F9 updates them all). Ctrl+click a cross-reference to go to its paragraph."
+		}, 0, 4);
+		var ok = new Button { Text = "Insert", DialogResult = DialogResult.OK, AutoSize = true };
+		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
+		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		layout.Controls.Add(buttons, 0, 5);
+		Controls.Add(layout);
+		AcceptButton = ok;
+		CancelButton = cancel;
+
+		(showFull ? full : number).Checked = true;
+		list.SelectedIndexChanged += (s, e) => ShowWhat();
+		number.CheckedChanged += (s, e) => ShowWhat();
+		list.DoubleClick += (s, e) => { if (Chosen != null) { DialogResult = DialogResult.OK; Close(); } };
+		if (targets.Count > 0) list.SelectedIndex = Math.Clamp(selected, 0, targets.Count - 1);
+		ShowWhat();
+	}
+
+	void ShowWhat() {
+		var target = Chosen is int i ? targets[i] : null;
+		shown.Text = target == null ? "" : "Inserts: " + CrossRefs.Shown(target, full.Checked ? "w" : "r");
+	}
 }
 
 // OLE drop target placed in front of RichEdit's own: dropped files that pass `accepts` go to `drop` (with the screen

@@ -95,6 +95,7 @@ public static class MarkdownConverter
 		public bool FirstOfList;     // the first item of a list
 		public bool BreakAfter;      // a list item whose last line so far ends in two spaces: a line break if a line follows
 		public bool Legal;           // an item of a legal list (1.1.1)
+		public string? Style;        // a legal list's paragraph style, a numbered style's ([style=...]; iteration 50 of AhkWord)
 	}
 
 	const string RuleText = "────────────────────────────────────────";    // a horizontal rule in the document
@@ -180,6 +181,7 @@ public static class MarkdownConverter
 					// the first item of a top-level list starts a list at its number (LegalLists.Normalize decides whether
 					// that goes on from the list before); the others go on
 					LegalLists.SetLegal(para, block.Level, block.FirstOfList && block.Level == 0 ? LegalLists.Loaded + Math.Max(1, block.Start) : 0);
+					if (block.Style != null) StyleEngine.Tag(para, StyleEngine.IdOf(block.Style));    // (a numbered style's items)
 					anyLegal = true;
 					break;
 				case Kind.ListItem:
@@ -348,7 +350,9 @@ public static class MarkdownConverter
 
 	// ---------------------------------------------------------------- block parser
 
-	sealed class OpenList { public int MarkerIndent, ContentColumn; public bool Ordered; public int Start; public int NumberStyle, Punctuation; public bool Legal; }
+	sealed class OpenList { public int MarkerIndent, ContentColumn; public bool Ordered; public int Start; public int NumberStyle, Punctuation; public bool Legal; public string? Style; }
+	// a legal list's style (a numbered style's), after its first item's [type=legal]
+	static readonly Regex ListStyleMark = new(@"\s*\[style=([^\]\r\n]+)\]\s*$");
 
 	static readonly Regex AlignOpen = new(@"^\s*<(div|p|center)(\s[^>]*)?>\s*$", RegexOptions.IgnoreCase);
 	static readonly Regex AlignClose = new(@"^\s*</(div|p|center)>\s*$", RegexOptions.IgnoreCase);
@@ -550,6 +554,8 @@ public static class MarkdownConverter
 				int contentColumn = indent + marker2.Groups[2].Length + (spaces is >= 1 and <= 4 ? spaces : 1);
 				int punctuation = marker2.Groups[4].Value == ")" ? 0 : tomConstants.tomListPeriod;    // TOM: 0 is "1)"
 				string raw = marker2.Groups[6].Value.Trim();
+				var styleMark = ListStyleMark.Match(raw);
+				if (styleMark.Success) raw = raw[..styleMark.Index].TrimEnd();
 				var type = ListType.Match(raw);
 				if (type.Success) raw = raw[..type.Index].TrimEnd();
 				bool newList = true;
@@ -573,9 +579,11 @@ public static class MarkdownConverter
 					open.Punctuation = parens && ordered ? tomConstants.tomListParentheses : punctuation;
 					// a legal list: [type=legal], or a numbered list nested in one
 					open.Legal = ordered && (type.Success ? type.Groups[1].Value == "legal" : lists.Count > 1 && lists[^2].Legal);
+					// (its numbered style: [style=...], or the list's it is nested in)
+					open.Style = !open.Legal ? null : styleMark.Success ? styleMark.Groups[1].Value.Trim() : lists.Count > 1 ? lists[^2].Style : null;
 				}
 				item = new Block { Kind = Kind.ListItem, Level = lists.Count - 1, Ordered = ordered, Start = open.Start, Raw = raw, Quote = quote, FirstOfList = newList,
-					NumberStyle = open.NumberStyle, Punctuation = open.Punctuation, Legal = open.Legal, BreakAfter = marker2.Groups[6].Value.EndsWith("  ") };
+					NumberStyle = open.NumberStyle, Punctuation = open.Punctuation, Legal = open.Legal, Style = open.Style, BreakAfter = marker2.Groups[6].Value.EndsWith("  ") };
 				Add(item);
 				afterBlank = false;
 				continue;
@@ -1227,6 +1235,8 @@ public static class MarkdownConverter
 				string? typeName = para.Legal ? (level == 0 ? "legal" : null)
 					: para.Punctuation == tomConstants.tomListParentheses ? "(" + TypeOf(para.NumberStyle) + ")"
 					: para.NumberStyle != DefaultNumberStyle(level) ? TypeOf(para.NumberStyle) : null;
+				// (iteration 50) and a numbered style's: [style=Numbered Paragraph] after it
+				if (typeName == "legal" && para.Style != null) typeName += "] [style=" + para.Style;
 				if (para.Ordered && startsList && typeName != null) {
 					int firstBreak = text.IndexOf("\\\n", StringComparison.Ordinal);
 					text = firstBreak < 0 ? text + $" [type={typeName}]" : text.Insert(firstBreak, $" [type={typeName}]");
@@ -1298,6 +1308,7 @@ public static class MarkdownConverter
 					info.Punctuation = LegalLists.NoNumber;
 					legalNumbers ??= LegalLists.Numbers(LegalLists.Paragraphs(doc));
 					info.Number = legalNumbers.TryGetValue(start, out var legalNumber) ? Math.Max(1, legalNumber.Counters[Math.Min(9, info.Level)]) : 1;
+					info.Style = StyleNameOf?.Invoke(doc, start);
 					int skip = LegalLists.Prefix.Match(text).Length;
 					info.Start += skip;
 					info.Text = text[skip..];
@@ -1309,7 +1320,8 @@ public static class MarkdownConverter
 			else if (kind == (int)BlockStyle.Preformatted) info.Kind = "code";
 			else if (kind is >= 1 and <= 6) { info.Kind = "heading"; info.Level = kind; }
 			else if (text.Trim().Length >= 3 && text.Trim().All(ch => ch == '─')) info.Kind = "rule";
-			else if (text.Contains('\t')) info.Kind = "table";
+			// (tabs: a simple table's row; but not the tab after a typed number, "2.<tab>Text", a paragraph: iteration 50)
+			else if (text.Contains('\t') && !(LegalLists.Prefix.Match(text) is { Success: true } typed && text.IndexOf('\t', typed.Length) < 0)) info.Kind = "table";
 			info.Align = para.Alignment is >= 1 and <= 3 ? para.Alignment : 0;
 			if (info.Kind is "paragraph" or "rule" or "heading" && para.LeftIndent >= ListIndent)
 				info.Quote = Math.Max(1, (int)Math.Round(para.LeftIndent / QuoteIndent));
@@ -1330,6 +1342,7 @@ public static class MarkdownConverter
 		public bool LineBreakAfter;    // ends with a line break (\v), not a paragraph mark
 		public int Align, NumberStyle, Punctuation;
 		public bool Legal;
+		public string? Style;    // a legal item's numbered style (StyleNameOf)
 		public RtfTables.Table? RealTable;
 	}
 
@@ -1545,6 +1558,10 @@ public static class MarkdownConverter
 	/// What a paragraph is, when the editor knows (its style): 0 body text, 1-6 a heading, 7 code (BlockStyle.Preformatted);
 	/// null: as its font says.
 	public static Func<ITextDocument2, int, int?>? BlockOf;
+
+	/// The name of the numbered style of a legal item at a position (null: none, a legal item of its own), set by the
+	/// editor: written as [style=...] after a legal list's [type=legal], and given back when it is read.
+	public static Func<ITextDocument2, int, string?>? StyleNameOf;
 
 	static BlockStyle? BlockStyleOf(float size, bool bold, string? name) {
 		if (blockStyleFromFont != null) return (BlockStyle)blockStyleFromFont.Invoke(null, new object?[] { size, bold, name })!;

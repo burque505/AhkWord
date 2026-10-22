@@ -169,6 +169,7 @@ public static class HtmlLists
 		var open = new List<(int? Punctuation, int Start, bool Legal)?>();
 		var firstOfList = new List<bool>();    // each <li>: the first of its list
 		var itemsSeen = new List<int>();       // the open lists' <li> counts
+		var styles = new List<string?>();      // each <li>: its numbered style (data-rte-style; iteration 50)
 		foreach (Match tag in ListTag.Matches(html)) {
 			string name = tag.Groups[2].Value.ToLowerInvariant();
 			bool closing = tag.Groups[1].Value == "/";
@@ -183,6 +184,8 @@ public static class HtmlLists
 			} else if (name == "li" && !closing) {
 				wanted.Add(open.Count > 0 ? open[^1] : null);
 				firstOfList.Add(itemsSeen.Count > 0 && itemsSeen[^1]++ == 0);
+				var styleName = Regex.Match(tag.Groups[3].Value, @"\bdata-rte-style\s*=\s*""([^""]+)""", RegexOptions.IgnoreCase);
+				styles.Add(styleName.Success ? System.Net.WebUtility.HtmlDecode(styleName.Groups[1].Value) : null);
 			}
 		}
 		var doc = editor.TextDocument;
@@ -199,6 +202,7 @@ public static class HtmlLists
 				// whether that goes on from the list before); the others go on
 				bool first = firstOfList[i];
 				LegalLists.SetLegal(para, Math.Max(0, para.ListLevelIndex), first && para.ListLevelIndex <= 0 ? LegalLists.Loaded + w.Start : 0);
+				if (styles[i] is { } styleName) StyleEngine.Tag(para, StyleEngine.IdOf(styleName));    // (a numbered style's item)
 				anyLegal = true;
 				continue;
 			}

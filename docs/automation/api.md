@@ -1749,6 +1749,38 @@ Rte.ShowHeader := value
 
 Whether the document has a header (printed, and in its files).
 
+## Cross-references to numbered paragraphs
+
+### CrossReferenceTargets
+
+```autohotkey
+value := Rte.CrossReferenceTargets
+```
+
+text · read-only
+
+The numbered paragraphs a cross-reference can refer to (legal items, numbered styles' paragraphs, numbered lists), one a line: the number, a tab, the full number (with the levels above: "3(b)"), a tab, and the start of the text.
+
+### InsertCrossReference
+
+```autohotkey
+Rte.InsertCrossReference(index, show = "number")
+```
+
+*index*: number · *show*: text
+
+Inserts a cross-reference at the caret (in place of the selection) to numbered paragraph index (1: the first, as CrossReferenceTargets lists them), showing its number (show "number": "(b)") or its full number ("full": "3(b)"), without a trailing period. Its number follows the paragraph's when the paragraphs are renumbered; Word and LibreOffice files get it as a REF field. One undo step.
+
+### UpdateCrossReferences
+
+```autohotkey
+Rte.UpdateCrossReferences()
+```
+
+returns: number
+
+Brings every cross-reference's number up to date (done by itself as the paragraphs are renumbered, and before saving, printing and exporting; F9). Returns how many changed.
+
 ## Window
 
 ### Activate

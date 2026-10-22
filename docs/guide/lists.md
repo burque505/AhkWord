@@ -60,3 +60,11 @@ Tab at the start of a numbered style's paragraph whose numbering is off (see bel
 ### Numbered styles and Word
 
 A Word document's numbered style (such as its *List Number*) comes in as a numbered style, numbered as Word numbers it, its sub-items as sub-levels. Word, LibreOffice and the built-in converter get real Word list numbering back, each level its format, with the style's indents. Giving a paragraph another style takes its number away; turning a style's numbering off takes its paragraphs' numbers away.
+
+## Cross-references
+
+**Insert > Cross-reference** refers to a numbered paragraph: "see paragraph 3(b)". Choose the paragraph, and whether to show **its number** ("(b)") or **its full number**, with the levels above it ("3(b)"); a trailing period is left out ("1." is "1"), and a lettered or roman sub-level is written in parentheses, as citations have it ("23(e)", "5(a)(iii)"). It works with legal numbering, numbered styles and numbered lists, and with sub-points typed in front of the paragraphs after a numbered one ("e. " at the start of the text): those are offered under their paragraph, as "23(e)".
+
+The number follows the paragraph's: when paragraphs are added, moved or renumbered, the references change with them (in the same undo step). References to an ordinary numbered list's items are brought up to date before saving, printing and exporting, and with **F9** (**Insert > Update**). **Ctrl+click** a reference to go to its paragraph. If the paragraph it referred to is deleted, the reference says "(reference not found)".
+
+References are kept in every format: Word and OpenDocument files get Word's own cross-references (bookmarks and REF fields), which Word and LibreOffice keep up to date too, and references made in Word come in as cross-references; HTML and Markdown get links to anchors. Scripts use `CrossReferenceTargets`, `InsertCrossReference` and `UpdateCrossReferences` (see the [API reference](../automation/api.md)).

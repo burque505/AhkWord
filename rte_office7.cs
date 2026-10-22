@@ -121,7 +121,7 @@ public static class OfficeConverters {
 				try {
 					string result = converter switch {
 						Word => WordConvert(WriteRtf(temp, "document-word.rtf", finish(legalRtf ??= WithNormalStyle(LegalRtf(rtf)))), Path.Combine(temp, "word." + format), format == "docx" ? 16 : 23),    // wdFormatDocumentDefault, wdFormatOpenDocumentText
-						LibreOffice => LibreOfficeConvert(WriteRtf(temp, "document-lo.rtf", finish(ModernBullets(legalRtf ??= WithNormalStyle(LegalRtf(rtf))))), temp, format == "docx" ? "docx:MS Word 2007 XML" : "odt", format),
+						LibreOffice => LibreOfficeConvert(WriteRtf(temp, "document-lo.rtf", finish(ModernNumbers(ModernBullets(legalRtf ??= WithNormalStyle(LegalRtf(rtf)))))), temp, format == "docx" ? "docx:MS Word 2007 XML" : "odt", format),
 						OpenXml => format == "docx" ? OpenXmlWrite(html(), Path.Combine(temp, "openxml.docx")) : throw new InvalidOperationException("writes only .docx"),
 						_ => PandocConvert(WriteHtml(temp, html()), Path.Combine(temp, "pandoc." + format), "html", format, temp),
 					};
@@ -483,7 +483,8 @@ public static class OfficeConverters {
 	// get the wrong numbering (lower-roman shows upper-roman, upper-roman shows bullets), and it leaves out punctuation
 	// such as "a)". Each list paragraph it makes is one <li> of the HTML, in order, so every list (w:num) gets a
 	// numbering definition of its own here, made from its <ol>: style, punctuation (rte_htmllists.cs classes) and start.
-	sealed record HtmlList(string Format, string Punctuation, int Start, int Root = -1, int Depth = 0);    // Root: which legal list (-1: none)
+	// Styled: a numbered style's items (Formats: its levels' formats), not legal ones (iteration 50)
+	sealed record HtmlList(string Format, string Punctuation, int Start, int Root = -1, int Depth = 0, bool Styled = false, string?[]? Formats = null);    // Root: which legal list (-1: none)
 
 	static void RepairNumbering(MainDocumentPart main, string html) {
 		var numbering = main.NumberingDefinitionsPart?.Numbering;
@@ -519,12 +520,46 @@ public static class OfficeConverters {
 			.Where(n => n?.NumberingId?.Val != null).ToList();
 		if (paragraphs.Count != items.Count) return;    // not one paragraph per <li>: leave it as it is
 
+		// (iteration 50) a legal list whose items change between legal ones and a numbered style's (the editor numbers
+		// them on as one): a Word list for each run (Word's has one format a level), its levels its own items' (a legal
+		// list took a numbered style's anywhere in the document), the one after starting where the one before left off
+		bool runs = false;
+		if (LegalItems is { } legalItems && legalItems.Count == items.Count(i => i.Root >= 0)) {
+			runs = true;
+			int k = 0, run = -1, lastRoot = -1;
+			bool lastStyled = false;
+			string?[] formats = new string?[9];
+			int runStart = 1;
+			for (int i = 0; i < items.Count; i++) {
+				if (items[i].Root < 0) continue;
+				var item = legalItems[k++];
+				bool styled = item.Format != null && item.Format != NumberFormats.Legal;
+				if (run < 0 || items[i].Root != lastRoot || styled != lastStyled) {
+					run++;
+					formats = new string?[9];
+					runStart = item.Counters is { Length: > 0 } counters ? Math.Max(1, counters[0]) : items[i].Start;
+				}
+				(lastRoot, lastStyled) = (items[i].Root, styled);
+				if (styled && item.Level < 9) formats[item.Level] ??= item.Format;
+				items[i] = items[i] with { Root = run, Start = runStart, Styled = styled, Formats = formats };
+			}
+		}
+
 		// a legal list is one Word list: all its paragraphs take the numId of its first one, at the level of their depth
+		// (a run whose first paragraph's numId another run has already: a Word list of its own)
 		var rootNum = new Dictionary<int, int>();
+		int nextNum = numbering.Elements<W.NumberingInstance>().Select(n => n.NumberID?.Value ?? 0).DefaultIfEmpty(0).Max() + 1;
 		for (int i = 0; i < paragraphs.Count; i++) {
 			if (items[i].Root < 0) continue;
 			var properties = paragraphs[i]!;
-			if (!rootNum.TryGetValue(items[i].Root, out int numId)) rootNum[items[i].Root] = numId = properties.NumberingId!.Val!.Value;
+			if (!rootNum.TryGetValue(items[i].Root, out int numId)) {
+				numId = properties.NumberingId!.Val!.Value;
+				if (rootNum.ContainsValue(numId)) {
+					numId = nextNum++;
+					numbering.Append(new W.NumberingInstance(new W.AbstractNumId { Val = 0 }) { NumberID = numId });
+				}
+				rootNum[items[i].Root] = numId;
+			}
 			properties.NumberingId = new W.NumberingId { Val = numId };
 			properties.NumberingLevelReference = new W.NumberingLevelReference { Val = Math.Min(8, items[i].Depth) };
 		}
@@ -550,7 +585,8 @@ public static class OfficeConverters {
 			for (int level = 0; level < 9; level++) {
 				bool bullet = use.List.Format == "bullet";
 				string number = "%" + (level + 1);
-				var styled = legal ? StyledLevel(level) : null;    // (a numbered style's format at this level: "(%2)", lower letters)
+				// (a numbered style's format at this level: "(%2)", lower letters; its run's own, or the document's)
+				var styled = !legal ? null : runs ? (use.List.Styled ? StyledLevel(level, use.List.Formats?[level] ?? LegalItems?.FirstOrDefault(i => i.Level == level && i.Format != null)?.Format) : null) : StyledLevel(level);
 				string text = styled?.Text ?? (legal ? LegalText(level)
 					: bullet ? "\u2022" : use.List.Punctuation switch { "paren" => number + ")", "parens" => "(" + number + ")", "plain" => number, _ => number + "." });
 				var lvl = new W.Level { LevelIndex = level };
@@ -582,8 +618,10 @@ public static class OfficeConverters {
 
 	// A numbered style's level in Word's terms (LegalItems: the document's first item at that level that has a format of
 	// its own): "(a)" at the second level is "(%2)" in lower-case letters. null: legal numbering's.
-	static (string Text, string Format)? StyledLevel(int level) {
-		if (LegalItems?.FirstOrDefault(i => i.Level == level && i.Format != null)?.Format is not { } format || format == NumberFormats.Legal) return null;
+	static (string Text, string Format)? StyledLevel(int level) => StyledLevel(level, LegalItems?.FirstOrDefault(i => i.Level == level && i.Format != null)?.Format);
+
+	static (string Text, string Format)? StyledLevel(int level, string? format) {
+		if (format == null || format == NumberFormats.Legal) return null;
 		int at = format.IndexOfAny(new[] { '1', 'a', 'A', 'i', 'I' });
 		if (at < 0) return null;
 		string kind = format[at] switch { 'a' => "lowerLetter", 'A' => "upperLetter", 'i' => "lowerRoman", 'I' => "upperRoman", _ => "decimal" };
@@ -624,7 +662,11 @@ public static class OfficeConverters {
 		var d = new WmlToHtmlConverterSettings(title);
 		var settings = new WmlToHtmlConverterSettings(title, d.ImageHandler, d.TextHandler, d.SymbolHandler, new PageBreakHandler(d.BreakHandler), d.FontHandler,
 			false, "span { white-space: pre-wrap; }", "", d.CssClassPrefix);
-		XElement html = WmlToHtmlConverter.ConvertToHtml(new WmlDocument(input), settings);
+		// (iteration 50: its cross-references as markers, which the HTML keeps as text: CrossRefs)
+		string folder = TempFolder();
+		XElement html;
+		try { html = WmlToHtmlConverter.ConvertToHtml(new WmlDocument(CrossRefs.MarkedDocx(input, folder)), settings); }
+		finally { TryDelete(folder); }
 		DocxLineSpacing.IntoHtml(input, html);    // (before the lists are rebuilt: one block per paragraph, in order)
 		NoNamesAsAltTexts(html);
 		ListsFromMarkers(html);
@@ -693,7 +735,10 @@ public static class OfficeConverters {
 		foreach (var top in html.Descendants(x + "ol").Where(l => !l.Ancestors(x + "ol").Any())) {
 			var tops = top.Elements(x + "li").Select(li => li.Descendants(x + "span").FirstOrDefault(IsMarker)?.Value.Trim() ?? "")
 				.Select(t => Regex.Match(t, @"^(\d+)\.?$")).ToList();
-			if (!legal.Contains(top) && lastTop is int last && tops.Count > 0 && tops[0].Success && int.Parse(tops[0].Groups[1].Value) == last + 1)
+			// (iteration 50: not one whose sub-lists have numbers of their own, such as a numbered style's "a.": a legal
+			// list's sub-levels have compound numbers; that list's numbering went on from the legal one's, as the editor's)
+			bool ownSubLevels = top.Descendants(x + "ol").Any(l => MarkerOf(l) is { } sub && !Regex.IsMatch(sub.Value.Trim(), @"^\d+(\.\d+)+\.?$"));
+			if (!legal.Contains(top) && !ownSubLevels && lastTop is int last && tops.Count > 0 && tops[0].Success && int.Parse(tops[0].Groups[1].Value) == last + 1)
 				foreach (var e in top.DescendantsAndSelf(x + "ol")) legal.Add(e);
 			if (legal.Contains(top)) lastTop = tops.LastOrDefault(t => t.Success) is { } m ? int.Parse(m.Groups[1].Value) : lastTop;
 		}
@@ -791,6 +836,50 @@ public static class OfficeConverters {
 		return text < 0 ? rtf : body.Insert(text, @"{\*\listtable" + list + @"}{\*\listoverridetable" + over + "}\r\n");
 	}
 
+	// Iteration 50: RichEdit's numbered lists the old way too ({\pntext 1.\tab}{\*\pn\pnlvlbody ... \pnstart1\pndec ...}
+	// on its first item, {\pntext 2.\tab} on the others, up to the next \pard): LibreOffice numbers such a list on from
+	// a list-table list before it (legal items: "6." for its first item). Where the RTF has a list table, each such list
+	// gets a list of its own there, starting at its own number.
+	public static string ModernNumbers(string rtf) {
+		if (!rtf.Contains(@"{\*\listtable", StringComparison.Ordinal) || !rtf.Contains(@"\pnlvlbody", StringComparison.Ordinal)) return rtf;
+		var first = new Regex(@"\{\\pntext((?:[^{}])*)\}\s*\{\\\*\\pn\\pnlvlbody((?:[^{}]|\{[^{}]*\})*)\}");
+		int listId = Regex.Matches(rtf, @"\\listid(\d+)").Select(m => int.Parse(m.Groups[1].Value)).DefaultIfEmpty(0).Max() + 1;
+		int ls = Regex.Matches(rtf, @"\\ls(\d+)").Select(m => int.Parse(m.Groups[1].Value)).DefaultIfEmpty(0).Max() + 1;
+		var lists = new System.Text.StringBuilder();
+		var overrides = new System.Text.StringBuilder();
+		var body = new System.Text.StringBuilder();
+		int at = 0;
+		foreach (Match m in first.Matches(rtf)) {
+			if (m.Index < at) continue;
+			string pn = m.Groups[2].Value;
+			int nfc = Regex.IsMatch(pn, @"\\pnucrm\b") ? 1 : Regex.IsMatch(pn, @"\\pnlcrm\b") ? 2 : Regex.IsMatch(pn, @"\\pnucltr\b") ? 3 : Regex.IsMatch(pn, @"\\pnlcltr\b") ? 4 : 0;
+			int start = Regex.Match(pn, @"\\pnstart(\d+)") is { Success: true } s ? int.Parse(s.Groups[1].Value) : 1;
+			string before = Regex.Match(pn, @"\{\\pntxtb\s?([^{}]*)\}").Groups[1].Value, after = Regex.Match(pn, @"\{\\pntxta\s?([^{}]*)\}").Groups[1].Value;
+			if (before.Contains('\\') || after.Contains('\\')) continue;    // (escaped text: left as it is)
+			string text = before + "\\'00" + after;
+			int length = before.Length + 1 + after.Length;
+			lists.Append($@"{{\list\listtemplateid{listId}\listsimple{{\listlevel\levelnfc{nfc}\leveljc0\levelstartat{start}{{\leveltext\'{length:x2}{text};}}{{\levelnumbers\'{before.Length + 1:x2};}}\fi-360\li720}}\listid{listId}}}");
+			overrides.Append($@"{{\listoverride\listid{listId}\listoverridecount0\ls{ls}}}");
+			// this item, and the list's others up to the next \pard
+			int end = rtf.IndexOf(@"\pard", m.Index + m.Length, StringComparison.Ordinal);
+			if (end < 0) end = rtf.Length;
+			body.Append(rtf, at, m.Index - at);
+			body.Append(@"{\listtext").Append(m.Groups[1].Value).Append(@"}\ls").Append(ls).Append(' ');
+			body.Append(Regex.Replace(rtf[(m.Index + m.Length)..end], @"\{\\pntext((?:[^{}])*)\}", n => @"{\listtext" + n.Groups[1].Value + @"}\ls" + ls + " "));
+			at = end;
+			listId++;
+			ls++;
+		}
+		if (lists.Length == 0) return rtf;
+		body.Append(rtf, at, rtf.Length - at);
+		string result = body.ToString();
+		int tableAt = result.IndexOf(@"{\*\listtable", StringComparison.Ordinal), overAt = result.IndexOf(@"{\*\listoverridetable", StringComparison.Ordinal);
+		if (tableAt < 0 || overAt < 0) return rtf;
+		int After(int position, string word) => position + word.Length + (position + word.Length < result.Length && result[position + word.Length] == ' ' ? 1 : 0);
+		result = result.Insert(After(overAt, @"{\*\listoverridetable"), overrides.ToString());
+		return result.Insert(After(tableAt, @"{\*\listtable"), lists.ToString());
+	}
+
 	// ---- legal lists for Word and LibreOffice
 
 	// A marker in place of a legal number: plain ASCII, so that RichEdit writes it as it is (characters the font lacks
@@ -813,6 +902,7 @@ public static class OfficeConverters {
 		var editors = new Dictionary<int, (float First, float Left)>(LegalLists.LoadedIndents);
 		LegalLists.LoadedIndents.Clear();
 		LegalLists.LevelsFromNumbers(doc);
+		LegalLists.BreakChains(doc);    // (iteration 50: a list right after legal items numbered from 1 in this copy too)
 		var had = new Dictionary<int, (float First, float Left)>(LegalLists.LoadedIndents);
 		LegalLists.LoadedIndents.Clear();
 		foreach (var (at, indents) in editors) LegalLists.LoadedIndents[at] = indents;
@@ -827,12 +917,25 @@ public static class OfficeConverters {
 				var para = doc.Range2(legal[i].Start, legal[i].Start).Para;
 				para.SetIndents(own.First, own.Left, para.RightIndent);
 			}
-		var series = (items != null ? items.Select(i => i.Series) : numbers.Values.Select(n => n.Series)).Distinct().ToList();
-		var formats = series.Select(_ => new string?[9]).ToList();    // each series' format for each level (its first item's)
+		// one list for each run of items: a series, and in it the legal items and a numbered style's apart (iteration 50:
+		// Word's list has one format a level, and a series' legal items took a numbered style's; a run after another in
+		// its series starts where that one left off)
+		var runs = new List<(int Series, bool Styled, int Start)>();
+		var runOf = new int[legal.Count];
+		for (int i = 0; i < legal.Count; i++) {
+			int s = items?[i].Series ?? numbers[legal[i].Start].Series;
+			bool styled = items?[i].Format is { } f && f != NumberFormats.Legal;
+			if (runs.Count == 0 || runs[^1].Series != s || runs[^1].Styled != styled) {
+				int[] counters = items?[i].Counters ?? numbers[legal[i].Start].Counters;
+				runs.Add((s, styled, runs.Count == 0 || runs[^1].Series != s ? LegalLists.StartOf(s) : Math.Max(1, counters[0])));
+			}
+			runOf[i] = runs.Count - 1;
+		}
+		var formats = runs.Select(_ => new string?[9]).ToList();    // each run's format for each level (its first item's)
 		var texts = new string[legal.Count];    // each marker's number text, by marker index
 		for (int i = legal.Count - 1; i >= 0; i--) {
 			var p = legal[i];
-			int level = items?[i].Level ?? p.Level, s = series.IndexOf(items?[i].Series ?? numbers[p.Start].Series);
+			int level = items?[i].Level ?? p.Level, s = runOf[i];
 			texts[i] = items?[i].Number ?? numbers[p.Start].Number;
 			if (items?[i].Format is { } format) formats[s][Math.Clamp(level, 0, 8)] = format;    // (from the end: the first item's wins)
 			doc.Range2(p.Start, p.Start + p.PrefixLength).Text = $"{Mark}{level},{s}@@";
@@ -855,8 +958,8 @@ public static class OfficeConverters {
 		// one list per series, its top level starting at the series' number (LibreOffice ignores start overrides)
 		var lists = new System.Text.StringBuilder();
 		var overrides = new System.Text.StringBuilder();
-		for (int k = 0; k < series.Count; k++) {
-			lists.Append(LegalListRtf(listId + k, LegalLists.StartOf(series[k]), formats[k]));
+		for (int k = 0; k < runs.Count; k++) {
+			lists.Append(LegalListRtf(listId + k, runs[k].Start, formats[k]));
 			overrides.Append($@"{{\listoverride\listid{listId + k}\listoverridecount0\ls{firstLs + k}}}");
 		}
 		int tableAt = body.IndexOf(@"{\*\listtable", StringComparison.Ordinal), overAt = body.IndexOf(@"{\*\listoverridetable", StringComparison.Ordinal);

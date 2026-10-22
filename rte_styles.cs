@@ -452,6 +452,19 @@ public static class StyleEngine
 			// A number typed in front with a tab counts where there are list items too (a converter that writes some of
 			// a list's numbers as text); typed numbers alone are the text's own ("1.<tab>" typed by hand).
 			int count = group.Count(), items = group.Count(p => FormatOf(p.ListType) != null);
+			// (iteration 50) Word's RTF of a numbered style whose numbering went on from legal items before it: its items
+			// come as legal items with simple numbers ("4.") and its sub-levels' as typed numbers ("a."), not list items:
+			// the style's numbering "1.", the typed numbers' formats its sub-levels in the order they come (a style with
+			// compound numbers, "2.1", is a legal list's)
+			if (items == 0 && group.Any(p => p.Legal) && group.All(p => !p.Legal || Regex.IsMatch(p.Text, @"^\d+\.\t"))) {
+				var subs = group.Where(p => !p.Legal).Select(p => TypedFormat(p.Text)?.Format).Where(f => f != null && f != "1.").Distinct().ToList();
+				if (subs.Count > 0 && group.Count(p => p.Legal || TypedFormat(p.Text) != null) * 2 > count) {
+					style.Numbering = "1.";
+					style.NumberLevel = Math.Clamp(group.Where(p => p.Legal).Min(p => p.Level) + 1, 1, 9);
+					style.SubLevels = string.Join(",", subs);
+					continue;
+				}
+			}
 			if (items == 0) continue;
 			var numbered = group.Where(p => FormatOf(p.ListType) != null || TypedFormat(p.Text) != null).ToList();
 			if (numbered.Count * 2 <= count) continue;
@@ -492,8 +505,9 @@ public static class StyleEngine
 				int before = i - 1;
 				while (before >= 0 && FormatOf(paragraphs[before].ListType) != null && paragraphs[before].Level > p.Level) before--;
 				bool runStart = listItem && (before < 0 || FormatOf(paragraphs[before].ListType) == null || paragraphs[before].ListType != p.ListType || paragraphs[before].ListStart != p.ListStart);
-				// (a Word item of a deeper level stays there: a sub-level of its style)
-				int itemLevel = Math.Max(level, listItem ? p.Level : level);
+				// (a Word item of a deeper level stays there: a sub-level of its style; a typed number in a sub-level's format
+				// goes to that sub-level)
+				int itemLevel = listItem ? Math.Max(level, p.Level) : Math.Min(8, level + (typed != null ? TypedLevel(style, p.Text)?.Depth ?? 0 : 0));
 				LegalLists.SetStyled(para, itemLevel, runStart ? LegalLists.Loaded + Math.Max(1, p.ListStart) : 0);
 				// (its style's indents, a sub-level's further in, as Word's numbered style draws them: the list's own, as
 				// converters and the typed numbers' conversion leave them, aren't the style's; a style with no indents
@@ -1192,6 +1206,15 @@ public static class StyleHtml
 		for (int k = 0; k < blocks.Count; k++) {
 			var block = blocks[k];
 			string tag = block.Groups[1].Value.ToLowerInvariant();
+			// (iteration 50) a numbered style's item: its style on its <li> (HtmlLists.Load gives it back; its paragraphs
+			// came back in Normal, numbered as legal items)
+			if (tag == "li" && block.Index >= position && StyleEngine.StyleAt(doc, sheet, starts[k]) is { Numbered: true } numbered
+				&& !block.Groups[2].Value.Contains("data-rte-style", StringComparison.Ordinal)) {
+				sb.Append(html, position, block.Index - position);
+				sb.Append("<li").Append(block.Groups[2].Value).Append($" data-rte-style=\"{System.Net.WebUtility.HtmlEncode(numbered.Name)}\">");
+				position = block.Index + block.Length;
+				continue;
+			}
 			if (tag is "li" or "pre" || block.Index < position) continue;
 			int at = starts[k];
 			if (at < story.Length && story[at] is '￹' or '￻') continue;

@@ -1185,6 +1185,34 @@
         <Image Source="icons/thumbnail_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdCrossReference" Id="286" LabelTitle="Cross-reference" Keytip="R" TooltipTitle="Insert a cross-reference" TooltipDescription="Refer to a numbered paragraph (&quot;see paragraph 3(b)&quot;): the number follows the paragraph's when the paragraphs are renumbered. Ctrl+click it to go there.">
+      <Command.LargeImages>
+        <Image Source="icons/crossreference_32.bmp" MinDPI="96" />
+        <Image Source="icons/crossreference_40.bmp" MinDPI="120" />
+        <Image Source="icons/crossreference_48.bmp" MinDPI="144" />
+        <Image Source="icons/crossreference_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/crossreference_16.bmp" MinDPI="96" />
+        <Image Source="icons/crossreference_20.bmp" MinDPI="120" />
+        <Image Source="icons/crossreference_24.bmp" MinDPI="144" />
+        <Image Source="icons/crossreference_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdUpdateReferences" Id="287" LabelTitle="Update" Keytip="U" TooltipTitle="Update cross-references (F9)" TooltipDescription="Brings every cross-reference's number up to date. Done by itself as paragraphs are renumbered, and before saving and printing.">
+      <Command.LargeImages>
+        <Image Source="icons/updatereferences_32.bmp" MinDPI="96" />
+        <Image Source="icons/updatereferences_40.bmp" MinDPI="120" />
+        <Image Source="icons/updatereferences_48.bmp" MinDPI="144" />
+        <Image Source="icons/updatereferences_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/updatereferences_16.bmp" MinDPI="96" />
+        <Image Source="icons/updatereferences_20.bmp" MinDPI="120" />
+        <Image Source="icons/updatereferences_24.bmp" MinDPI="144" />
+        <Image Source="icons/updatereferences_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdLink" Id="284" LabelTitle="Link" Keytip="I" TooltipTitle="Insert hyperlink (Ctrl+K)" TooltipDescription="Insert a link to a web page or file.">
       <Command.LargeImages>
         <Image Source="icons/link_32.bmp" MinDPI="96" />
@@ -2136,8 +2164,10 @@
             <Button CommandName="cmdPicture" />
             <Button CommandName="cmdThumbnail" />
           </Group>
-          <Group CommandName="cmdGroupLinks" SizeDefinition="OneButton">
+          <Group CommandName="cmdGroupLinks" SizeDefinition="ThreeButtons">
             <Button CommandName="cmdLink" />
+            <Button CommandName="cmdCrossReference" />
+            <Button CommandName="cmdUpdateReferences" />
           </Group>
           <Group CommandName="cmdGroupInsertText" SizeDefinition="OneButton">
             <Button CommandName="cmdDateTime" />

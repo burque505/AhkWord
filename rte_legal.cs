@@ -117,14 +117,14 @@ public static class LegalLists
 
 	/// A numbered item as the editor numbers it: its level, its numbered style's format (null: a legal item's), its
 	/// number's text and its series (LegalLists.Numbers).
-	public sealed record Item(int Level, string? Format, string Number, int Series);
+	public sealed record Item(int Level, string? Format, string Number, int Series, int[]? Counters = null);
 
 	/// The document's numbered items, in order.
 	public static List<Item> Items(ITextDocument2 doc) {
 		var paragraphs = Paragraphs(doc);
 		var numbers = Numbers(paragraphs);
 		return paragraphs.Where(p => numbers.ContainsKey(p.Start))
-			.Select(p => new Item(Math.Min(p.Level, 9), StyleFormat(p.Style, Math.Min(p.Level, 9)), numbers[p.Start].Number, numbers[p.Start].Series)).ToList();
+			.Select(p => new Item(Math.Min(p.Level, 9), StyleFormat(p.Style, Math.Min(p.Level, 9)), numbers[p.Start].Number, numbers[p.Start].Series, numbers[p.Start].Counters)).ToList();
 	}
 
 	/// Writes the right number in front of every legal item, and gives nested items their series' ListStart (Shift+Tab
@@ -157,8 +157,45 @@ public static class LegalLists
 			selection.SetRange(newStart, newEnd);
 			changed = true;
 		}
-		return FitIndents(doc) | changed;
+		changed |= FitIndents(doc);
+		changed |= BreakChains(doc);
+		return (AfterRenumber?.Invoke(doc) ?? false) | changed;
 	}
+
+	// RichEdit numbers an ordinary list that comes right after legal items (or a numbered style's) on from them when they
+	// have the same kind of numbers: its first item was "2.". The legal items just before such a list (all of them back
+	// to the paragraph before them: RichEdit goes back past a sub-level's) get another kind (their own numbers are
+	// hidden, so the kind doesn't show), and the others Arabic numbers, as legal items are made with. Returns true if
+	// any changed.
+	public static bool BreakChains(ITextDocument2 doc) {
+		var paragraphs = Paragraphs(doc);
+		bool changed = false, arabicListNext = false;
+		var recount = new HashSet<int>();    // the lists after legal items that changed
+		int next = -1;
+		for (int i = paragraphs.Count - 1; i >= 0; i--) {
+			var p = paragraphs[i];
+			if (!p.Legal) {
+				arabicListNext = p.ListType > 0 && (p.ListType & 0xFFFF) == tomConstants.tomListNumberAsArabic;
+				next = p.ListType > 0 && (p.ListType & 0xFFFF) != tomConstants.tomListNone ? p.Start : -1;
+				continue;
+			}
+			int want = arabicListNext ? tomConstants.tomListNumberAsLCLetter : tomConstants.tomListNumberAsArabic;
+			if ((p.ListType & 0xFFFF) == want) continue;
+			doc.Range2(p.Start, p.Start).Para.ListType = (p.ListType & ~0xFFFF) | want;
+			if (next >= 0) recount.Add(next);
+			changed = true;
+		}
+		// (RichEdit counts a list's numbers again only when a paragraph's list format is set: its first item's, as it is)
+		foreach (int start in recount) {
+			var para = doc.Range2(start, start).Para;
+			para.ListType = para.ListType;
+		}
+		return changed;
+	}
+
+	/// Run after every renumbering (the editor's cross-references follow the new numbers); returns whether it changed
+	/// anything.
+	public static Func<ITextDocument2, bool>? AfterRenumber;
 
 	/// The hanging indent of each level (points): wide enough for that level's widest number in its font and size, so
 	/// that the tab after it goes to the text (a number wider than the indent pushed its text to the next tab stop).
