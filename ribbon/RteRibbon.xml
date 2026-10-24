@@ -1199,6 +1199,20 @@
         <Image Source="icons/crossreference_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdFootnote" Id="288" LabelTitle="Footnote" Keytip="N" TooltipTitle="Insert a footnote (Ctrl+Alt+F)" TooltipDescription="A numbered note at the foot of the page. With the caret on a footnote's number: change its note.">
+      <Command.LargeImages>
+        <Image Source="icons/footnote_32.bmp" MinDPI="96" />
+        <Image Source="icons/footnote_40.bmp" MinDPI="120" />
+        <Image Source="icons/footnote_48.bmp" MinDPI="144" />
+        <Image Source="icons/footnote_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/footnote_16.bmp" MinDPI="96" />
+        <Image Source="icons/footnote_20.bmp" MinDPI="120" />
+        <Image Source="icons/footnote_24.bmp" MinDPI="144" />
+        <Image Source="icons/footnote_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdUpdateReferences" Id="287" LabelTitle="Update" Keytip="U" TooltipTitle="Update cross-references (F9)" TooltipDescription="Brings every cross-reference's number up to date. Done by itself as paragraphs are renumbered, and before saving and printing.">
       <Command.LargeImages>
         <Image Source="icons/updatereferences_32.bmp" MinDPI="96" />
@@ -2164,9 +2178,10 @@
             <Button CommandName="cmdPicture" />
             <Button CommandName="cmdThumbnail" />
           </Group>
-          <Group CommandName="cmdGroupLinks" SizeDefinition="ThreeButtons">
+          <Group CommandName="cmdGroupLinks" SizeDefinition="FourButtons">
             <Button CommandName="cmdLink" />
             <Button CommandName="cmdCrossReference" />
+            <Button CommandName="cmdFootnote" />
             <Button CommandName="cmdUpdateReferences" />
           </Group>
           <Group CommandName="cmdGroupInsertText" SizeDefinition="OneButton">

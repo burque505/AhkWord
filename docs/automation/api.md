@@ -1781,6 +1781,79 @@ returns: number
 
 Brings every cross-reference's number up to date (done by itself as the paragraphs are renumbered, and before saving, printing and exporting; F9). Returns how many changed.
 
+## Footnotes
+
+### DeleteFootnote
+
+```autohotkey
+Rte.DeleteFootnote(number)
+```
+
+*number*: number
+
+Takes footnote number (1: the first) out, its number and its note; the others are numbered again. One undo step.
+
+### FootnoteCount
+
+```autohotkey
+value := Rte.FootnoteCount
+```
+
+number · read-only
+
+The number of footnotes.
+
+### FootnoteList
+
+```autohotkey
+value := Rte.FootnoteList
+```
+
+text · read-only
+
+The document's footnotes, one a line: the number, a tab and the note (its formatting as &lt;b&gt; &lt;i&gt; &lt;u&gt; tags; its paragraphs apart by "`r", so that each note stays on its line). FootnoteText gives one note.
+
+### FootnoteSize
+
+```autohotkey
+value := Rte.FootnoteSize
+Rte.FootnoteSize := value
+```
+
+number
+
+The size of the footnotes' notes (points): the document's Footnote Text style's (set: made if it has none, as a Word document opened has it), else three quarters of the text's (12 points: 9).
+
+### FootnoteText
+
+```autohotkey
+Rte.FootnoteText(number)
+```
+
+*number*: number · returns: text
+
+Footnote number's (1: the first) note: its formatting as &lt;b&gt; &lt;i&gt; &lt;u&gt; tags, its paragraphs apart by "`n".
+
+### InsertFootnote
+
+```autohotkey
+Rte.InsertFootnote(note)
+```
+
+*note*: text
+
+Inserts a footnote at the caret (after the selection) with its note (its paragraphs apart by "`n"; &lt;b&gt; &lt;i&gt; &lt;u&gt; tags for bold, italic and underline): a superscript number in the text, the note at the foot of the page when printed (and on Show Pages' sheets). The footnotes are numbered 1, 2, 3 ... in order. One undo step.
+
+### SetFootnote
+
+```autohotkey
+Rte.SetFootnote(number, note)
+```
+
+*number*: number · *note*: text
+
+Gives footnote number (1: the first) another note (as InsertFootnote's: paragraphs apart by "`n", &lt;b&gt; &lt;i&gt; &lt;u&gt; tags for its formatting). One undo step.
+
 ## Window
 
 ### Activate

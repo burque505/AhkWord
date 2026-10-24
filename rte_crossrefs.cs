@@ -21,7 +21,8 @@ public static class CrossRefs
 	const string Id = @"[A-Za-z_][A-Za-z0-9_]{0,39}";
 	public static readonly Regex TargetMark = new(@"\[\[xref:(" + Id + @")\]\]");
 	public static readonly Regex Reference = new(@"\[\[xref=(" + Id + @")(?:\|(\w*))?\]\]([^\r\[]*?)\[\[/xref\]\]");
-	static readonly Regex AnyMark = new(@"\[\[xref:" + Id + @"\]\]|\[\[xref=" + Id + @"(?:\|\w*)?\]\]|\[\[/xref\]\]");
+	// (and the footnotes' markers, which hold their notes: rte_footnotes.cs)
+	static readonly Regex AnyMark = new(@"\[\[xref:" + Id + @"\]\]|\[\[xref=" + Id + @"(?:\|\w*)?\]\]|\[\[/xref\]\]|\[\[fn\]\]|\[\[fn:(?:[^\]\r]|\](?!\]))*\]\]");
 
 	/// What a reference shows when its target is gone (deleted with its paragraph) or no longer numbered.
 	public const string Missing = "(reference not found)";    // (no "[": Reference wouldn't match it)
@@ -53,7 +54,7 @@ public static class CrossRefs
 	static readonly Regex TypedSub = new(@"^(\((?:[a-z]{1,2}|[A-Z]{1,2}|[ivxlcdm]{1,6}|[IVXLCDM]{1,6})\)|(?:[a-z]{1,2}|[A-Z]{1,2}|[ivxlcdm]{1,6}|[IVXLCDM]{1,6})[.)])[ \t]+");
 
 	/// Whether text has any reference or target (quick: no paragraphs read).
-	public static bool Any(string story) => story.Contains("[[xref", StringComparison.Ordinal);
+	public static bool Any(string story) => story.Contains("[[xref", StringComparison.Ordinal) || story.Contains("[[fn", StringComparison.Ordinal);
 
 	/// The document's numbered paragraphs (legal items, numbered styles' paragraphs, ordinary numbered lists), in order.
 	public static List<Target> Targets(ITextDocument2 doc) {
@@ -205,6 +206,7 @@ public static class CrossRefs
 	public static int AfterLoad(ITextDocument2 doc) {
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 		if (!Any(story)) return 0;
+		if (Footnotes.Any(story)) { Footnotes.AfterLoad(doc); story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? ""; }
 		var marks = AnyMark.Matches(story);
 		foreach (Match m in marks) {
 			var range = doc.Range2(m.Index, m.Index + m.Length);
@@ -239,9 +241,9 @@ public static class CrossRefs
 		// a reference: its number in the field's result (its format inside; the hidden state as it was, after the group)
 		rtf = Regex.Replace(rtf, V + Words + @"\[\[xref=(" + Id + @")(?:\|(\w*))?\]\]" + Words + @"\\v0 ?([^{}]*?)" + V + Words + @"\[\[/xref\]\]" + Words + @"\\v0 ?",
 			m => m.Groups[1].Value + m.Groups[4].Value + @"{\field{\*\fldinst REF " + m.Groups[2].Value + (m.Groups[3].Value == "w" ? @" \\w" : @" \\r") + @" \\h }{\fldrslt "
-				+ m.Groups[5].Value + "}}" + m.Groups[6].Value + m.Groups[7].Value);
+				+ m.Groups[5].Value + "}}" + Footnotes.Delimited(m.Groups[6].Value + m.Groups[7].Value));
 		rtf = Regex.Replace(rtf, V + Words + @"\[\[xref:(" + Id + @")\]\]" + Words + @"\\v0 ?",
-			m => m.Groups[1].Value + @"{\*\bkmkstart " + m.Groups[2].Value + @"}{\*\bkmkend " + m.Groups[2].Value + "}" + m.Groups[3].Value);
+			m => m.Groups[1].Value + @"{\*\bkmkstart " + m.Groups[2].Value + @"}{\*\bkmkend " + m.Groups[2].Value + "}" + Footnotes.Delimited(m.Groups[3].Value));
 		return rtf;
 	}
 
@@ -357,7 +359,8 @@ public static class CrossRefs
 			}
 			foreach (var bookmark in body.Descendants<W.BookmarkStart>().ToList())
 				if (bookmark.Name?.Value is { } name && names.Contains(name)) bookmark.InsertAfterSelf(Marker($"[[xref:{name}]]"));
-			any = names.Count > 0;
+			bool notes = Footnotes.MarkDocx(package);    // (iteration 51: its footnotes too)
+			any = names.Count > 0 || notes;
 			if (any) package.MainDocumentPart!.Document.Save();
 		}
 		return any ? copy : path;

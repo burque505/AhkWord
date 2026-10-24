@@ -21,8 +21,35 @@
 #load "rte_docxstyles.cs"
 #load "rte_pagegaps.cs"
 #load "rte_crossrefs.cs"
+#load "rte_footnotes.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 50 adds to iteration 49:
+// Run it with AhkWord.ahk. Iteration 51 adds to iteration 50:
+//   - Footnotes (Insert > Footnote, Ctrl+Alt+F; rte_footnotes.cs): a superscript number in the text, its note (its
+//     paragraphs, with bold, italic and underline) at the foot of its page: printed, in Print Preview and PDFs, and on Show Pages' sheets,
+//     under a short line, in the document's Footnote Text style (Footnote dialog > Size of all the notes, Modify
+//     Style, Rte.FootnoteSize; a Word or LibreOffice document's notes' size kept: Footnotes.LoadedSize), else the text's
+//     font at three quarters of its size (12 points: 9). The pages make room
+//     for their notes as Word does (DocumentPrinter.CountPages): a page ends at its last line for which the text, the
+//     notes going on from the page before and its own notes up to the last one's first line fit; the notes' lines
+//     that don't fit go on at the next page's foot. Show Pages' sheets show the printed pages' lines, page breaks and all. Numbered 1, 2, 3 ... in order; hover over a
+//     number for its note, Ctrl+click it (or Insert > Footnote on it) to change it, an empty note takes it out.
+//     Scripts: InsertFootnote, FootnoteText, FootnoteList, FootnoteCount, SetFootnote, DeleteFootnote (`n between a
+//     note's paragraphs, <b> <i> <u> for its formatting).
+//     In the editor a footnote is hidden text around its number, its note in it, so it goes wherever its number goes.
+//     RTF (and so Word and LibreOffice files) gets real footnotes (\footnote, with \fet0: else Word made them
+//     endnotes); Word's and LibreOffice's come back as footnotes; the built-in .docx converter writes and reads real
+//     footnotes too; HTML gets links to a list of the notes at its end, Markdown [^1] and "[^1]: note".
+//   - Numbered styles' sub-levels' spacing (Modify Style > Space between sub-levels; ParagraphStyle.SubLevelSpace,
+//     StyleEngine.FitSubLevelSpacing, after every renumbering): None at first (no space after a paragraph with points
+//     under it, nor between the points; the style's space after the last), AfterParagraph, or Each (as before: a
+//     12-point space after every paragraph looked like a blank line between the points). A paragraph's own space after
+//     (set by hand) stays.
+//   - Cross-references' Word fields: the text's own space after them was taken for a control word's delimiter.
+//   - Show Pages: a black streak at the caret's line after Tab on a numbered paragraph, the whole window black a moment
+//     after inserting a footnote: RichEdit, not done laying the change out, left those lines out of the bitmap the
+//     window is painted from (black when new). The bitmap starts with the window's background now, and while RichEdit's
+//     layout is pending (TOM's E_PENDING) the window keeps what it shows and is painted again a moment later.
+// Iteration 50 added to iteration 49:
 //   - Cross-references to numbered paragraphs (Insert > Cross-reference; rte_crossrefs.cs): "see paragraph 3(b)",
 //     to a legal item, a numbered style's paragraph or a numbered list's item, showing its number ("(b)") or its full
 //     number ("3(b)": a letter or roman sub-level in parentheses, as citations have it), without a trailing period;
@@ -508,7 +535,7 @@ enum RibbonCommand : uint
 	ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, StylesMenu = 380,
 	ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384, StyleSetClassic = 385,
 	StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, ApplyMyStyles = 391, CopyStyles = 394, PageBreak = 280, Table = 281,
-	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, CrossReference = 286, UpdateReferences = 287, HeaderFooter = 290, NextSpelling = 295,
+	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, CrossReference = 286, UpdateReferences = 287, Footnote = 288, HeaderFooter = 290, NextSpelling = 295,
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
@@ -575,7 +602,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 50;    // (the About box; make_version.ps1)
+	public const int Iteration = 51;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -805,7 +832,13 @@ class WriterForm : Form
 		Editor.OpenLink = OpenLinkCommand;
 		// (iteration 50) cross-references: their numbers follow the renumbering, in the same undo step; Ctrl+click goes to
 		// the paragraph referred to
-		LegalLists.AfterRenumber = doc => CrossRefs.Update(doc) > 0;
+		// (iteration 51: and the numbered styles' sub-levels' spacing, ParagraphStyle.SubLevelSpace)
+		LegalLists.AfterRenumber = doc => StyleEngine.FitSubLevelSpacing(doc, Styles) | CrossRefs.Update(doc) > 0;
+		// (iteration 51) footnotes: the note in a tooltip over its number; Ctrl+click it to change it; each sheet's notes
+		// at its foot (from the footnotes, read again once the text changed, and the pages as last worked out)
+		Editor.NoteAt = position => DocumentFootnotes().FirstOrDefault(f => position >= f.Start && position <= f.End)?.Text is { } note ? Footnotes.Plain(note) : null;
+		Editor.TextChanged += (s, e) => footnotesRead = null;
+		Editor.NotesOn = page => page >= 1 && page <= sheetNotes.Count && sheetNotes[page - 1].Count > 0 ? (sheetNotes[page - 1], sheetNoteFont.Name, sheetNoteFont.Size) : null;
 		Editor.FollowReference = GoToReferenceTarget;
 		Editor.AltTextOf = position => api.PictureAltText(position);
 		Editor.KeyDown += (s, e) => { if (recorder.Recording) RecordKeyDown(e); };
@@ -918,7 +951,8 @@ class WriterForm : Form
 		// (copy and paste keep the paragraphs' styles: StyleClipboard)
 		Action cut = OnText(() => StyleClipboard.Copy(Editor, Styles, () => WithoutGapsChanging(Editor.Cut)), sourceBox.Cut), copy = OnText(() => StyleClipboard.Copy(Editor, Styles, () => WithoutGaps(Editor.Copy)), sourceBox.Copy),
 			paste = OnText(PasteText, () => sourceBox.Paste(DataFormats.GetFormat(DataFormats.UnicodeText)));
-		cutButton = Button(RibbonCommand.Cut, cut, Keys.Control | Keys.X, M("Cut"));
+		(cutAction, copyAction, pasteAction) = (cut, copy, paste);    // (the right-click menu's too)
+		cutButton =Button(RibbonCommand.Cut, cut, Keys.Control | Keys.X, M("Cut"));
 		copyButton = Button(RibbonCommand.Copy, copy, Keys.Control | Keys.C, M("Copy"));
 		Button(RibbonCommand.Paste, paste, Keys.Control | Keys.V, M("Paste"));
 		Shortcut(Keys.Shift | Keys.Delete, "Cut", cut, M("Cut"));
@@ -1026,6 +1060,7 @@ class WriterForm : Form
 		Button(RibbonCommand.Picture, InsertImageDialog);
 		Button(RibbonCommand.Thumbnail, InsertThumbnailDialog);
 		Button(RibbonCommand.CrossReference, CrossReferenceCommand);
+		Button(RibbonCommand.Footnote, FootnoteCommand, Keys.Control | Keys.Alt | Keys.F);
 		Button(RibbonCommand.UpdateReferences, UpdateReferencesCommand, Keys.F9, M("UpdateCrossReferences"));
 		Button(RibbonCommand.Link, InsertHyperlinkDialog, Keys.Control | Keys.K);
 		Button(RibbonCommand.DateTime, () => { string now = DateTime.Now.ToString("f"); api.InsertText(now); Record(M("InsertText", now)); });
@@ -1731,7 +1766,7 @@ class WriterForm : Form
 		var doc = Editor.TextDocument;
 		doc.BeginEditCollection();
 		int count;
-		try { count = StyleEngine.Restyle(doc, Styles, old, updated); } finally { doc.EndEditCollection(); }
+		try { count = StyleEngine.Restyle(doc, Styles, old, updated); StyleEngine.FitSubLevelSpacing(doc, Styles); } finally { doc.EndEditCollection(); }    // (iteration 51: the sub-levels' spacing as it says now)
 		StylesChanged();
 		return count;
 	}
@@ -1755,6 +1790,7 @@ class WriterForm : Form
 				count += StyleEngine.Restyle(doc, Styles, old, style);
 			}
 			Styles.Set = set.Set;
+			StyleEngine.FitSubLevelSpacing(doc, Styles);
 		} finally {
 			doc.EndEditCollection();
 		}
@@ -2045,7 +2081,7 @@ class WriterForm : Form
 		// (laid out and printed as the document is: the page view's gaps out while the printer is in use)
 		bool gaps = pageGaps.Applied && !gapsOut && !quietGaps;
 		if (gaps) { QuietGaps(pageGaps.Remove); gapsOut = true; }
-		var printer = new DocumentPrinter(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName);
+		var printer = new DocumentPrinter(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName) { NoteStyle = NoteStyle };
 		if (gaps) printer.Disposed += () => { gapsOut = false; QuietGaps(pageGaps.Reapply); };
 		return printer;
 	}
@@ -2154,7 +2190,7 @@ class WriterForm : Form
 		// in between. Iteration 48: LockWindowUpdate did this from iteration 43, but a paint while locked drew nothing and
 		// took the window's need of one with it, so the window kept what it showed before (a table row where it had been,
 		// after opening). WM_SETREDRAW off gave positions as if scrolled to the top.)
-		bool hold = Editor.Visible;
+		bool hold = Editor.Visible && !heldGaps;    // (held already: painted once, after it all: HeldGaps)
 		if (hold) Editor.HoldPaint = true;
 		doc.Undo(-9999995);    // tomSuspend
 		IntPtr mask = SendMask(Editor.Handle, EM_SETEVENTMASK_GAPS, IntPtr.Zero, IntPtr.Zero);
@@ -2183,28 +2219,56 @@ class WriterForm : Form
 				perStep = done / (double)step;
 			}
 			quietGaps = false;
-			if (hold) Editor.HoldPaint = false;
-			// (painted now, all of it: only asked for, the paint was sometimes not done, the window keeping what it showed
-			// before the gaps went in)
-			Editor.Invalidate();
-			Editor.Update();
-			pagePanel.Invalidate();
-			// (iteration 46: the line numbers too, where they are now that the text is back in its place; drawn while the
-			// gaps went in, they were left where the text had been moved to before it)
-			lineGutter.Invalidate();
-			// (iteration 49) and once more when the messages waiting are done: RichEdit sometimes lays the text out again
-			// only then, and the paint just now drew it as it was before (after a recovery copy, whose RTF is read without
-			// the gaps: the text without page 1's top margin, over the header drawn where it belongs), until scrolled
-			if (!repaintPending && IsHandleCreated) {
-				repaintPending = true;
-				BeginInvoke(() => {
-					repaintPending = false;
-					if (quietGaps || !Editor.IsHandleCreated) return;
-					Editor.Invalidate();
-					Editor.Update();
-					lineGutter.Invalidate();
-				});
-			}
+			if (hold) { Editor.HoldPaint = false; RepaintAfterGaps(); }
+		}
+	}
+
+	// Runs body, which takes the gaps out and puts them back (or works them out again), with the editor's painting held
+	// (and the text frozen) until it is all done, then paints once. Iteration 51: each QuietGaps painted when it was done,
+	// so the window showed the text without its gaps, scrolled elsewhere, for a moment in between (a flash at Ctrl+C,
+	// and every few minutes at the recovery copy, which reads the document without them).
+	void HeldGaps(Action body) {
+		using (HoldGaps()) body();
+	}
+
+	// HeldGaps's hold, until disposed.
+	IDisposable HoldGaps() {
+		if (heldGaps || !Editor.IsHandleCreated) return new OnDispose(() => { });
+		heldGaps = true;
+		bool hold = Editor.Visible;
+		if (hold) Editor.HoldPaint = true;
+		var doc = Editor.TextDocument;
+		doc.Freeze();
+		return new OnDispose(() => {
+			if (Editor.IsHandleCreated) doc.Unfreeze();
+			heldGaps = false;
+			if (hold && Editor.IsHandleCreated) { Editor.HoldPaint = false; RepaintAfterGaps(); }
+		});
+	}
+	bool heldGaps;
+
+	// The window painted after the gaps went in or out.
+	void RepaintAfterGaps() {
+		// (painted now, all of it: only asked for, the paint was sometimes not done, the window keeping what it showed
+		// before the gaps went in)
+		Editor.Invalidate();
+		Editor.Update();
+		pagePanel.Invalidate();
+		// (iteration 46: the line numbers too, where they are now that the text is back in its place; drawn while the
+		// gaps went in, they were left where the text had been moved to before it)
+		lineGutter.Invalidate();
+		// (iteration 49) and once more when the messages waiting are done: RichEdit sometimes lays the text out again
+		// only then, and the paint just now drew it as it was before (after a recovery copy, whose RTF is read without
+		// the gaps: the text without page 1's top margin, over the header drawn where it belongs), until scrolled
+		if (!repaintPending && IsHandleCreated) {
+			repaintPending = true;
+			BeginInvoke(() => {
+				repaintPending = false;
+				if (quietGaps || heldGaps || !Editor.IsHandleCreated) return;
+				Editor.Invalidate();
+				Editor.Update();
+				lineGutter.Invalidate();
+			});
 		}
 	}
 
@@ -2272,7 +2336,11 @@ class WriterForm : Form
 		QuietGaps(() => {
 			pageGaps.Remove();
 			List<(int Start, float Height)>? pages = null;
-			try { using var printer = CreatePrinter(); pages = printer.PageHeights(); }
+			try {
+				using var printer = CreatePrinter();
+				pages = printer.PageHeights();
+				(sheetNotes, sheetNoteFont) = (printer.LastNotes, printer.NoteFontUsed);    // (iteration 51: the sheets' notes, as printed)
+			}
 			catch (Exception) { bandPagesStale = true; lastEdit = DateTime.Now; }    // (the printer busy: again in a second)
 			bandStarts = pages?.Select(p => p.Start).ToList();
 			if (pages != null && PageViewActive)
@@ -2284,10 +2352,14 @@ class WriterForm : Form
 	/// mustn't change the text: see WithoutGapsChanging).
 	internal T WithoutGaps<T>(Func<T> read) {
 		if (gapsOut || quietGaps || !pageGaps.Applied) return read();
-		QuietGaps(pageGaps.Remove);
-		gapsOut = true;
-		try { return read(); }
-		finally { gapsOut = false; QuietGaps(pageGaps.Reapply); }
+		T result = default!;
+		HeldGaps(() => {
+			QuietGaps(pageGaps.Remove);
+			gapsOut = true;
+			try { result = read(); }
+			finally { gapsOut = false; QuietGaps(pageGaps.Reapply); }
+		});
+		return result;
 	}
 
 	internal void WithoutGaps(Action read) => WithoutGaps(() => { read(); return 0; });
@@ -2295,10 +2367,12 @@ class WriterForm : Form
 	/// Runs change with the document as it is, without the page view's gaps, which are worked out again after it.
 	internal void WithoutGapsChanging(Action change) {
 		if (gapsOut || quietGaps || !pageGaps.Applied) { change(); return; }
-		QuietGaps(pageGaps.Remove);
-		gapsOut = true;
-		try { change(); }
-		finally { gapsOut = false; pageGaps.Forget(); RecomputeGaps(); }
+		HeldGaps(() => {
+			QuietGaps(pageGaps.Remove);
+			gapsOut = true;
+			try { change(); }
+			finally { gapsOut = false; pageGaps.Forget(); RecomputeGaps(); }
+		});
 	}
 
 	/// For a command that reads or changes paragraph formats: page 1's top margin (space before the first paragraph)
@@ -2308,11 +2382,14 @@ class WriterForm : Form
 		if (gapsOut || quietGaps || !pageGaps.Applied) return new OnDispose(() => { });
 		var doc = Editor.TextDocument;
 		if (!all && !pageGaps.AnyParagraphGapIn(doc.Selection2.Start, doc.Selection2.End)) return new OnDispose(() => { });
+		var held = HoldGaps();    // (painted once, after the gaps are back)
 		QuietGaps(pageGaps.Remove);
 		gapsOut = true;
 		return new OnDispose(() => {
-			gapsOut = false;
-			if (changes) { pageGaps.Forget(); RecomputeGaps(); } else QuietGaps(pageGaps.Reapply);
+			try {
+				gapsOut = false;
+				if (changes) { pageGaps.Forget(); RecomputeGaps(); } else QuietGaps(pageGaps.Reapply);
+			} finally { held.Dispose(); }
 		});
 	}
 
@@ -2424,7 +2501,7 @@ class WriterForm : Form
 		var doc = Editor.TextDocument;
 		if (!Editor.IsHandleCreated || !CrossRefs.Any(Editor.Text)) return 0;
 		doc.BeginEditCollection();
-		try { return CrossRefs.Update(doc); }
+		try { return Footnotes.Update(doc) + CrossRefs.Update(doc); }    // (iteration 51: the footnotes' numbers too)
 		finally { doc.EndEditCollection(); }
 	}
 
@@ -2433,10 +2510,15 @@ class WriterForm : Form
 		SetStatus(changed == 0 ? "The cross-references are up to date." : $"{changed} cross-reference{(changed == 1 ? "" : "s")} updated.");
 	}
 
-	// Ctrl+click on a cross-reference: the caret to the paragraph it refers to.
+	// Ctrl+click on a cross-reference: the caret to the paragraph it refers to (on a footnote's number: its note, to
+	// change).
 	bool GoToReferenceTarget(int position) {
 		var doc = Editor.TextDocument;
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		if (Footnotes.At(story, position) is { } note) {
+			BeginInvoke(() => Run(() => EditFootnote(note)));
+			return true;
+		}
 		if (!CrossRefs.Any(story) || CrossRefs.ReferenceAt(story, position) is not { } name) return false;
 		int at = CrossRefs.TargetPosition(story, name);
 		if (at < 0) { SetStatus("⚠ The paragraph this cross-reference referred to is gone."); return true; }
@@ -2446,6 +2528,65 @@ class WriterForm : Form
 		Editor.ScrollToCaret();
 		SetStatus("The paragraph the cross-reference refers to.");
 		return true;
+	}
+
+	// ---- Footnotes (iteration 51, rte_footnotes.cs)
+
+	List<Footnotes.Footnote>? footnotesRead;    // (the document's footnotes until its text changes)
+
+	/// The document's Footnote Text style's font ("": the text's) and size (null: it has none: NoteSize).
+	internal (string Font, float Size)? NoteStyle => Styles.Find(Footnotes.StyleName) is { Size: > 0 } style ? (style.Font, style.Size) : null;
+
+	/// The size the document's notes have now (points): its Footnote Text style's, else NoteSize of its text's.
+	internal float NoteSizeNow() => Footnotes.NoteFontOf(Editor.TextDocument, DocumentFootnotes(), Editor.Font.Name, Editor.Font.SizeInPoints, NoteStyle).Size;
+
+	/// Gives the document's notes a size (its Footnote Text style, made if it has none; its font the text's).
+	internal void SetNoteStyle(float size) {
+		if (Styles.Find(Footnotes.StyleName) is { } style) style.Size = size;
+		else Styles.Styles.Add(new ParagraphStyle {
+			Name = Footnotes.StyleName, Size = size,
+			Font = Footnotes.NoteFontOf(Editor.TextDocument, DocumentFootnotes(), Editor.Font.Name, Editor.Font.SizeInPoints).Name    // (the notes' text's)
+		});
+		StylesChanged();
+		bandPagesStale = true;    // (the pages laid out again: the notes take more or less room)
+		lastEdit = DateTime.MinValue;
+		Editor.Invalidate();
+	}
+	List<List<Footnotes.NoteLine>> sheetNotes = new();    // each sheet's notes' lines and their font, as the pages were last laid out
+	(string Name, float Size) sheetNoteFont = ("Segoe UI", 9);
+	List<Footnotes.Footnote> DocumentFootnotes() =>
+		footnotesRead ??= Footnotes.All(Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "");
+
+	// Insert > Footnote: a new footnote at the caret, or, with the caret on one, its note to change.
+	void FootnoteCommand() {
+		var doc = Editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		int caret = doc.Selection2.Start;
+		if (Footnotes.At(story, caret) is { } existing) { EditFootnote(existing); return; }
+		using var dlg = new FootnoteDialog("Insert Footnote", "", NoteSizeNow());
+		if (dlg.ShowDialog(this) != DialogResult.OK || Footnotes.Plain(dlg.Note).Trim() == "") return;
+		string note = Footnotes.Paragraphs(Footnotes.ToTags(dlg.Note));
+		NoteSizeFrom(dlg);
+		Run(() => api.InsertFootnote(note), M("InsertFootnote", note));
+		SetStatus("Footnote inserted. Its note is at the foot of the page (Show Pages, printing); hover over its number to see it, Ctrl+click to change it.");
+	}
+
+	// The notes' size the dialog was given another (all the document's notes: its Footnote Text style).
+	void NoteSizeFrom(FootnoteDialog dlg) {
+		if (Math.Abs(dlg.NoteSize - NoteSizeNow()) < 0.05f) return;
+		float size = dlg.NoteSize;
+		Run(() => api.FootnoteSize = size, M("FootnoteSize", size));
+	}
+
+	void EditFootnote(Footnotes.Footnote footnote) {
+		using var dlg = new FootnoteDialog($"Footnote {footnote.Number}", footnote.Text, NoteSizeNow());
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		NoteSizeFrom(dlg);
+		int index = Footnotes.All(Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "").FindIndex(f => f.Start == footnote.Start) + 1;
+		if (index <= 0) return;
+		string note = Footnotes.Paragraphs(Footnotes.ToTags(dlg.Note));
+		if (Footnotes.Plain(dlg.Note).Trim() == "") Run(() => api.DeleteFootnote(index), M("DeleteFootnote", index));
+		else Run(() => api.SetFootnote(index, note), M("SetFootnote", index, note));
 	}
 
 	void CrossReferenceCommand() {
@@ -2944,8 +3085,14 @@ class WriterForm : Form
 
 	// ---------------------------------------------------------------- Iteration 5: spelling
 
-	// The right-click menu: spelling suggestions on a misspelled word, and the table commands in a table (which then act
-	// on the cell clicked). Returns false (the library then shows its formatting toolbar) when neither applies.
+	// The Home tab's Cut, Copy and Paste (styles kept, the page view's gaps left out), for the right-click menu too.
+	Action cutAction = () => { }, copyAction = () => { }, pasteAction = () => { };
+
+	// The right-click menu, as Word's: spelling suggestions on a misspelled word; Cut, Copy and Paste; the footnote's
+	// note on a footnote; Font and Paragraph; in a table, the table commands (which then act on the cell clicked).
+	// Iteration 51: always this menu (it was only on a misspelled word or in a table, else the library's formatting
+	// toolbar, or RichEdit's own spelling menu, which came up in turns), the caret moved by WriterEditBox's right-button
+	// press as RichEdit's own hit-testing has it.
 	bool ShowContextMenu(Point screenPoint, int position) {
 		// a picture: selected (as in Word), with Alt text... in the menu
 		int picture = Editor.PictureAt(screenPoint);
@@ -2963,28 +3110,42 @@ class WriterForm : Form
 			pictureMenu.Show(screenPoint);
 			return true;
 		}
+		var menu = TextMenu(position);
+		menu.Closed += (s, e) => BeginInvoke(menu.Dispose);
+		menu.Show(screenPoint);
+		return true;
+	}
+
+	// The right-click menu for text (position: the character clicked).
+	internal ContextMenuStrip TextMenu(int position) {
+		var tom = Editor.TextDocument.Selection2;    // (WinForms' SelectionLength is short across table rows)
+		// (a click outside the selection moved the caret there already, as in Word: WriterEditBox.OnMouseDown)
 		bool inTable = RtfTables.At(Editor, position) != null;
 		var error = Editor.EnableSpellCheck && Spelling != null ? api.SpellingErrorAt(position) : null;
-		if (!inTable) return error != null && ShowSpellingMenu(screenPoint, error);
-		var tom = Editor.TextDocument.Selection2;    // (WinForms' SelectionLength is short across table rows)
-		// a click outside the selection moves the caret there, as in Word; in the cell the caret is in, it stays
-		var clicked = RtfTables.At(Editor, position);
-		var current = RtfTables.At(Editor, tom.Start);
-		bool sameCell = clicked != null && current != null && clicked.Value.Table.Start == current.Value.Table.Start
-			&& clicked.Value.Row == current.Value.Row && clicked.Value.Cell == current.Value.Cell;
-		if ((position < tom.Start || position > tom.End) && !sameCell) tom.SetRange(position, position);
+		// (the suggestions only with no selection, or the misspelled word's own, as in Word: right-clicked inside a
+		// selection of more, the menu is for the selection)
+		if (error != null && tom.End > tom.Start && (tom.Start < error.Start || tom.End > error.Start + error.Length)) error = null;
 		var menu = new ContextMenuStrip { ShowImageMargin = false };
 		if (error != null) {
 			AddSpellingItems(menu, error);
 			menu.Items.Add(new ToolStripSeparator());
 		}
 		bool selection = tom.End > tom.Start;
-		menu.Items.Add(new ToolStripMenuItem("Cu&t", null, (s, e) => Run(Editor.Cut, M("Cut"))) { Enabled = selection });
-		menu.Items.Add(new ToolStripMenuItem("&Copy", null, (s, e) => Run(Editor.Copy, M("Copy"))) { Enabled = selection });
-		menu.Items.Add(new ToolStripMenuItem("&Paste", null, (s, e) => Run(Editor.Paste, M("Paste"))));
+		menu.Items.Add(new ToolStripMenuItem("Cu&t", null, (s, e) => Run(cutAction, M("Cut"))) { Enabled = selection, ShortcutKeyDisplayString = "Ctrl+X" });
+		menu.Items.Add(new ToolStripMenuItem("&Copy", null, (s, e) => Run(copyAction, M("Copy"))) { Enabled = selection, ShortcutKeyDisplayString = "Ctrl+C" });
+		menu.Items.Add(new ToolStripMenuItem("&Paste", null, (s, e) => Run(pasteAction, M("Paste"))) { ShortcutKeyDisplayString = "Ctrl+V" });
 		menu.Items.Add(new ToolStripSeparator());
 		void Add(string text, Action action, string macro, string keys = "") =>
 			menu.Items.Add(new ToolStripMenuItem(text, null, (s, e) => Run(action, macro)) { ShortcutKeyDisplayString = keys });
+		string story = Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "";
+		if ((Footnotes.At(story, position) ?? Footnotes.At(story, Math.Max(0, position - 1))) is { } footnote) {
+			menu.Items.Add(new ToolStripMenuItem($"Edit &footnote {footnote.Number}...", null, (s, e) => Run(() => EditFootnote(footnote))));
+			menu.Items.Add(new ToolStripSeparator());
+		}
+		menu.Items.Add(new ToolStripMenuItem("&Font...", null, (s, e) => Run(FontDialogCommand)));
+		menu.Items.Add(new ToolStripMenuItem("P&aragraph...", null, (s, e) => Run(ParagraphCommand)));
+		if (!inTable) return menu;
+		menu.Items.Add(new ToolStripSeparator());
 		Add("Insert row &above", () => api.InsertRow(false), M("InsertRow", false));
 		Add("Insert row &below", () => api.InsertRow(true), M("InsertRow", true), "Ctrl+Shift+Ins");
 		Add("Insert column &left", () => api.InsertColumn(false), M("InsertColumn", false));
@@ -2997,9 +3158,7 @@ class WriterForm : Form
 		Add("Delete &table", () => api.DeleteTable(), M("DeleteTable"));
 		menu.Items.Add(new ToolStripSeparator());
 		menu.Items.Add(new ToolStripMenuItem("Table &properties...", null, (s, e) => Run(TablePropertiesCommand)));
-		menu.Closed += (s, e) => BeginInvoke(menu.Dispose);
-		menu.Show(screenPoint);
-		return true;
+		return menu;
 	}
 
 	// The right-click menu on a misspelled word: suggestions, "delete repeated word" and "add to dictionary".
@@ -3886,7 +4045,7 @@ class WriterForm : Form
 		var doc = Editor.TextDocument;
 		bool modified = Editor.Modified;
 		doc.Undo(-9999995);    // tomSuspend
-		try { CrossRefs.Update(doc); }
+		try { Footnotes.Update(doc); CrossRefs.Update(doc); }
 		finally { doc.Undo(-9999994); Editor.Modified = modified; }    // tomResume
 	}
 
@@ -4526,7 +4685,8 @@ public class EditorApi
 	// A style's settings changed: "Name=Value" lines (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent,
 	// RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore,
 	// Contextual, Level, Next, Numbering ("1.", "(a)", "1.1" ...; nothing: none), NumberLevel (1-9), SubLevels ("a., i., (1)";
-	// nothing: the usual ones after Numbering), SubLevelIndent (points each sub-level further in, 36 at first)).
+	// nothing: the usual ones after Numbering), SubLevelIndent (points each sub-level further in, 36 at first), SubLevelSpace
+	// (None, AfterParagraph or Each: the space after a paragraph with sub-levels and between them)).
 	static ParagraphStyle WithSettings(ParagraphStyle style, string settings) {
 		var result = style.Copy();
 		foreach (var line in settings.Split('\n', StringSplitOptions.RemoveEmptyEntries)) {
@@ -4534,7 +4694,7 @@ public class EditorApi
 			if (equals <= 0) continue;
 			string key = line[..equals].Trim(), value = line[(equals + 1)..].Trim();
 			var property = typeof(ParagraphStyle).GetProperty(key, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase)
-				?? throw new ArgumentException($"A style has no \"{key}\" (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent, RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore, Contextual, Level, Next, Numbering, NumberLevel, SubLevels, SubLevelIndent).");
+				?? throw new ArgumentException($"A style has no \"{key}\" (Font, Size, Bold, Italic, Underline, Color, Align, LeftIndent, RightIndent, FirstLine, Before, After, LineSpacing, KeepWithNext, KeepTogether, WidowControl, PageBreakBefore, Contextual, Level, Next, Numbering, NumberLevel, SubLevels, SubLevelIndent, SubLevelSpace).");
 			if (property.Name == "Name" || !property.CanWrite) continue;
 			object converted = property.PropertyType == typeof(bool) ? value is "1" or "true" or "True" or "yes"
 				: property.PropertyType == typeof(float) ? float.Parse(value, CultureInfo.InvariantCulture)
@@ -4547,6 +4707,9 @@ public class EditorApi
 			throw new ArgumentException($"\"{result.Numbering}\" is not a numbering: {string.Join(", ", NumberFormats.All)}, or nothing for none.");
 		if (result.NumberLevel is < 1 or > 9) throw new ArgumentException("NumberLevel is 1 (the top level) to 9.");
 		if (result.SubLevelIndent is < 0 or > 144) throw new ArgumentException("SubLevelIndent is 0 to 144 points.");
+		if (ParagraphStyle.SubLevelSpaces.FirstOrDefault(s => s.Equals(result.SubLevelSpace, StringComparison.OrdinalIgnoreCase)) is not { } space)
+			throw new ArgumentException("SubLevelSpace is None (no space after a paragraph with sub-levels, nor between them), AfterParagraph or Each.");
+		result.SubLevelSpace = space;
 		foreach (var part in result.SubLevels.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
 			if (!NumberFormats.Valid(part) || part == NumberFormats.Legal) throw new ArgumentException($"\"{part}\" is not a sub-level's format (SubLevels: \"a., i., (1)\", or nothing for the usual ones).");
 		result.SubLevels = string.Join(",", result.SubLevels.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
@@ -4792,6 +4955,9 @@ public class EditorApi
 		// (iteration 50) the cross-references' targets where they belong now that the lists are made, and their numbers
 		// as the editor numbers the paragraphs (Word's and LibreOffice's REF fields come with theirs)
 		if (CrossRefs.AfterLoad(ed.TextDocument) > 0) CrossRefs.Update(ed.TextDocument);
+		// (iteration 51) the notes' size the file had (Word's, LibreOffice's): the document's Footnote Text style
+		if (Footnotes.LoadedSize is float loaded && loaded >= 4 && form.Styles.Find(Footnotes.StyleName) == null && Footnotes.Any(Story())) form.SetNoteStyle(loaded);
+		Footnotes.LoadedSize = null;
 		}
 		ed.ClearUndo();
 		ed.Select(0, 0);
@@ -4864,7 +5030,7 @@ public class EditorApi
 			File.WriteAllText(full, WithBands(OfficeConverters.PngPictures(OfficeConverters.WithAltTexts(StyledRtf(OfficeConverters.ListIndentsRtf(RawRtf)), AltTexts())), full), Encoding.Latin1);    // (list indents before the styles: RecoveryRtf)
 		else {
 			string content = extension switch {
-				".md" or ".markdown" => form.WithoutGaps(() => CrossRefs.ToMarkdown(MarkdownConverter.ToMarkdown(ed, ImageFiles(full)))) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering),
+				".md" or ".markdown" => form.WithoutGaps(() => Footnotes.ToMarkdown(CrossRefs.ToMarkdown(MarkdownConverter.ToMarkdown(ed, ImageFiles(full))))) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering),
 				".txt" => CrossRefs.PlainText(ed.Text).Replace("\n", "\r\n"),
 				_ => picturesInside ? HtmlFile(Path.GetFileNameWithoutExtension(full), pretty: true)
 					: PicturesToFiles(HtmlFile(Path.GetFileNameWithoutExtension(full), pretty: true), full)
@@ -4888,7 +5054,7 @@ public class EditorApi
 		// (frozen: the markers put into the text, and taken out one by one, aren't shown)
 		ed.TextDocument.Freeze();
 		try {
-			RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(StyleHtml.MarkHtml(CrossRefs.FromHtml(html)))))), HtmlLists.Load, HtmlLists.Load, TableWidth());
+			RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(StyleHtml.MarkHtml(CrossRefs.FromHtml(Footnotes.FromHtml(html))))))), HtmlLists.Load, HtmlLists.Load, TableWidth());
 			CrossRefs.AfterLoad(ed.TextDocument);
 			StyleHtml.FromMarkers(ed);    // (headings and styles from their tags, not their fonts)
 			if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) + global::LineSpacing.FromMarkers(ed) > 0) ed.ClearUndo();
@@ -4920,7 +5086,7 @@ public class EditorApi
 		string body = form.WithoutGaps(() => {
 			string html = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, global::LineSpacing.ExportHtml(ed, StyleHtml.Export(ed, form.Styles, LineBreaks.ExportHtml(ed, ed.Html))))), out var found);
 			listsCss = found;
-			return CrossRefs.ToHtml(html);
+			return Footnotes.ToHtml(CrossRefs.ToHtml(html));
 		});
 		css = ParagraphCss + listsCss;
 		return body;
@@ -4963,7 +5129,7 @@ public class EditorApi
 
 	// RTF with the document's header, footer, page layout and line numbering, for path.
 	string WithBands(string rtf, string path) =>
-		LineNumberFormats.AddToRtf(HeaderFooter.AddToRtf(CrossRefs.ToWordRtf(rtf), form.Bands, form.PageLayout(), Path.GetFileName(path), path, ed.Font.SizeInPoints), form.Numbering);
+		LineNumberFormats.AddToRtf(HeaderFooter.AddToRtf(Footnotes.ToWordRtf(CrossRefs.ToWordRtf(rtf), ed.Font.Name, ed.Font.SizeInPoints, form.NoteStyle?.Size ?? 0), form.Bands, form.PageLayout(), Path.GetFileName(path), path, ed.Font.SizeInPoints), form.Numbering);
 
 	// ---- Rich Text Format, Word and OpenDocument
 
@@ -5034,6 +5200,7 @@ public class EditorApi
 			if (!value.Contains(@"{\*\rtewriterstyles")) value = PageBreaks.FromPageBreakBefore(value);
 			value = HeaderFooter.StripFromRtf(value);             // (the header and footer are the document's Bands)
 			value = CrossRefs.FromWordRtf(value);                 // (iteration 50: Word's REF fields and bookmarks, which RichEdit drops)
+			value = Footnotes.FromWordRtf(value);                 // (iteration 51: Word's footnotes, which RichEdit shows in the text)
 			value = RtfTables.WordShading(value);                 // (Word's cell backgrounds, which RichEdit ignores)
 			((RichTextBox)ed).Rtf = OfficeConverters.WithoutAltTexts(value);    // (RichEdit would put their accents into the text)
 			OfficeConverters.ContinueWordLists(ed.TextDocument, wordStarts);    // (the numbers after them, as Word has them)
@@ -5144,6 +5311,7 @@ public class EditorApi
 				DocxStyles.IntoDocx(full, ed, form.Styles);    // (the styles, and each paragraph's)
 				// (iteration 50) the cross-references' targets as bookmarks (the converter drops the HTML's empty anchors)
 				CrossRefs.BookmarksIntoDocx(full, CrossRefs.Targets(ed.TextDocument).Where(t => t.Name != null).Select(t => (t.Name!, t.Text)).ToList());
+				Footnotes.IntoDocx(full, Footnotes.All(Story()).Select(f => f.Text).ToList(), form.NoteSizeNow());    // (iteration 51: real footnotes)
 			}
 		} catch (Exception ex) {
 			form.SetStatus("⚠ The header and footer could not be added to " + Path.GetFileName(full) + ": " + ex.Message);
@@ -5803,11 +5971,11 @@ public class EditorApi
 	/// The document as Markdown. With embedImages = 1 (the default) images are data: URIs, so the text is complete on
 	/// its own; with 0 they are written as image1.png, image2.png ... (as when viewing the source).
 	public string GetMarkdown(bool embedImages = true) =>
-		form.WithoutGaps(() => CrossRefs.ToMarkdown(MarkdownConverter.ToMarkdown(ed, embedImages ? null : (number, data, extension) => $"image{number}.{extension}")));
+		form.WithoutGaps(() => Footnotes.ToMarkdown(CrossRefs.ToMarkdown(MarkdownConverter.ToMarkdown(ed, embedImages ? null : (number, data, extension) => $"image{number}.{extension}"))));
 
 	// Markdown into the editor, with its cross-references (iteration 50).
 	void LoadMarkdown(string markdown, string? folder) {
-		MarkdownConverter.Load(ed, CrossRefs.FromMarkdown(markdown), folder);
+		MarkdownConverter.Load(ed, CrossRefs.FromMarkdown(Footnotes.FromMarkdown(markdown)), folder);
 		CrossRefs.AfterLoad(ed.TextDocument);
 	}
 
@@ -5846,7 +6014,7 @@ public class EditorApi
 	// The document as the source view shows it (and a .md / .html file gets it): Markdown with the header and footer
 	// line, or a whole HTML page; pictures as data: URIs.
 	internal string SourceOf(WriterForm.SourceKind kind) => kind == WriterForm.SourceKind.Markdown
-		? form.WithoutGaps(() => CrossRefs.ToMarkdown(MarkdownConverter.ToMarkdown(ed, null))) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering)
+		? form.WithoutGaps(() => Footnotes.ToMarkdown(CrossRefs.ToMarkdown(MarkdownConverter.ToMarkdown(ed, null)))) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering)
 		: HtmlFile(form.FileName != null ? Path.GetFileNameWithoutExtension(form.FileName) : "Untitled", pretty: true);
 
 	// Replaces the document with Markdown or HTML from the source view, as Open does with a file's.
@@ -6928,6 +7096,81 @@ public class EditorApi
 	/// saving, printing and exporting; F9). Returns how many changed.
 	public int UpdateCrossReferences() => form.UpdateReferences();
 
+	// ---- Footnotes (iteration 51)
+
+	/// Inserts a footnote at the caret (after the selection) with its note (its paragraphs apart by "`n"; <b> <i> <u> tags
+	/// for bold, italic and underline): a superscript number in the text, the note at the foot of the page when printed (and on
+	/// Show Pages' sheets). The footnotes are numbered 1, 2, 3 ... in order. One undo step.
+	public void InsertFootnote(string note) {
+		note = Footnotes.FromTags(note);
+		if (string.IsNullOrWhiteSpace(Footnotes.Plain(note))) throw new ArgumentException("A footnote needs a note.");
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try {
+			var selection = doc.Selection2;
+			int end = Footnotes.Insert(doc, doc.Range2(selection.End, selection.End), note);
+			selection.SetRange(end, end);
+			selection.Font.Hidden = tomConstants.tomFalse;    // (typing on after it: not in the note's hidden format, nor superscript)
+			selection.Font.Superscript = tomConstants.tomFalse;
+		} finally {
+			doc.EndEditCollection();
+		}
+	}
+
+	/// The document's footnotes, one a line: the number, a tab and the note (its formatting as <b> <i> <u> tags; its
+	/// paragraphs apart by "`r", so that each note stays on its line). FootnoteText gives one note.
+	public string FootnoteList => string.Join("\n", Footnotes.All(Story()).Select(f => f.Number + "\t" + Footnotes.Paragraphs(Footnotes.ToTags(f.Text), "\r")));
+
+	/// Footnote number's (1: the first) note: its formatting as <b> <i> <u> tags, its paragraphs apart by "`n".
+	public string FootnoteText(int number) {
+		var all = Footnotes.All(Story());
+		if (number < 1 || number > all.Count) throw new ArgumentException($"There are {all.Count} footnotes: {number} isn't one of them.");
+		return Footnotes.Paragraphs(Footnotes.ToTags(all[number - 1].Text));
+	}
+
+	/// The number of footnotes.
+	public int FootnoteCount => Footnotes.All(Story()).Count;
+
+	/// The size of the footnotes' notes (points): the document's Footnote Text style's (set: made if it has none, as
+	/// a Word document opened has it), else three quarters of the text's (12 points: 9).
+	public float FootnoteSize {
+		get => form.NoteSizeNow();
+		set {
+			if (value is < 4 or > 72) throw new ArgumentException("FootnoteSize is 4 to 72 points.");
+			form.SetNoteStyle(value);
+			ed.Modified = true;
+		}
+	}
+
+	/// Gives footnote number (1: the first) another note (as InsertFootnote's: paragraphs apart by "`n", <b> <i> <u> tags
+	/// for its formatting). One undo step.
+	public void SetFootnote(int number, string note) {
+		var all = Footnotes.All(Story());
+		if (number < 1 || number > all.Count) throw new ArgumentException($"There are {all.Count} footnotes: {number} isn't one of them.");
+		note = Footnotes.FromTags(note);
+		if (string.IsNullOrWhiteSpace(Footnotes.Plain(note))) throw new ArgumentException("A footnote needs a note (DeleteFootnote takes one out).");
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try { Footnotes.SetText(doc, all[number - 1], note); }
+		finally { doc.EndEditCollection(); }
+	}
+
+	/// Takes footnote number (1: the first) out, its number and its note; the others are numbered again. One undo step.
+	public void DeleteFootnote(int number) {
+		var all = Footnotes.All(Story());
+		if (number < 1 || number > all.Count) throw new ArgumentException($"There are {all.Count} footnotes: {number} isn't one of them.");
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try {
+			doc.Range2(all[number - 1].Start, all[number - 1].End).Text = "";
+			Footnotes.Update(doc);
+		} finally {
+			doc.EndEditCollection();
+		}
+	}
+
+	string Story() => ed.TextDocument.Range2(0, ed.TextDocument.Range2(0, 0).StoryLength).Text ?? "";
+
 	// ---- Window
 
 	/// Shows a message in the status bar.
@@ -7492,6 +7735,14 @@ sealed class DocumentPrinter : IDisposable
 	readonly LineNumbering numbering;
 	List<List<PrintedLineNumbers.Mark>>? numberMarks;    // each page's line numbers (worked out with the page count)
 	List<int>? pageStarts;                                  // where each page starts (worked out with the page count)
+	List<List<Footnotes.NoteLine>>? pageNotes;              // each page's footnotes' lines (iteration 51; with the page count)
+
+	/// The notes' font the pages were last laid out with, and (PageHeights) each page's notes' lines (iteration 51).
+	public (string Name, float Size) NoteFontUsed { get; private set; }
+
+	/// The document's Footnote Text style's font and size (null: none; Footnotes.NoteFontOf).
+	public (string Font, float Size)? NoteStyle { get; init; }
+	public List<List<Footnotes.NoteLine>> LastNotes { get; private set; } = new();
 	int nextChar, page, pageCount;
 
 	const int EM_FORMATRANGE = 0x0400 + 57;
@@ -7514,7 +7765,7 @@ sealed class DocumentPrinter : IDisposable
 		if (!string.IsNullOrEmpty(printerName)) Document.PrinterSettings.PrinterName = printerName;    // before the page settings
 		Document.DefaultPageSettings.Landscape = settings.Landscape;
 		if (settings.Margins is { Length: 4 } m) Document.DefaultPageSettings.Margins = new Margins(m[0], m[1], m[2], m[3]);
-		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; pageStarts = null; };
+		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; pageStarts = null; pageNotes = null; };
 		Document.PrintPage += PrintPage;
 		Document.EndPrint += (s, e) => SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // frees RichEdit's cache
 	}
@@ -7535,7 +7786,8 @@ sealed class DocumentPrinter : IDisposable
 			};
 			if (pageCount == 0) {
 				pageStarts = new List<int>();
-				pageCount = CountPages(range, end, pageStarts);    // for {pages}, and where each page ends
+				pageNotes = new List<List<Footnotes.NoteLine>>();
+				pageCount = CountPages(range, end, pageStarts, notes: pageNotes);    // for {pages}, and where each page ends
 				numberMarks = Marks(pageStarts, range, e.PageSettings);
 			}
 			range.chrg.cpMin = nextChar;
@@ -7553,6 +7805,13 @@ sealed class DocumentPrinter : IDisposable
 				g.DrawImage(preview, new RectangleF(-hardX, -hardY, e.PageBounds.Width, e.PageBounds.Height));
 			}
 			preview = null;
+		}
+		// (iteration 51) the page's footnotes at the foot of its text area, under a short line
+		if (pageNotes != null && page <= pageNotes.Count && pageNotes[page - 1].Count > 0) {
+			using var noteFont = Footnotes.NoteFont(NoteFontUsed.Name, NoteFontUsed.Size);
+			var on = pageNotes[page - 1];
+			float height = Footnotes.Height(g, on, noteFont);
+			Footnotes.Draw(g, on, new RectangleF(margins.Left - hardX, margins.Bottom - hardY - height, margins.Width, height), noteFont, Color.Black);
 		}
 		// The line numbers left of the text; the header just above the text area and the footer just below it, in the margins.
 		if (numberMarks != null && page <= numberMarks.Count)
@@ -7620,7 +7879,9 @@ sealed class DocumentPrinter : IDisposable
 	public List<(int Start, float Height)> PageHeights() {
 		var starts = new List<int>();
 		var heights = new List<float>();
-		Measuring(range => CountPages(range, editor.TextDocument.Range2(0, 0).StoryLength - 1, starts, heights));
+		var notes = new List<List<Footnotes.NoteLine>>();
+		Measuring(range => CountPages(range, editor.TextDocument.Range2(0, 0).StoryLength - 1, starts, heights, notes));
+		LastNotes = notes;
 		return starts.Select((s, i) => (s, i < heights.Count ? heights[i] : 0f)).ToList();
 	}
 
@@ -7667,7 +7928,7 @@ sealed class DocumentPrinter : IDisposable
 
 	// Lays out the whole document without drawing (EM_FORMATRANGE with wParam 0) to count the pages (and list where
 	// they start), each page ending where the paragraphs' rules have it (PageKeeping).
-	int CountPages(FORMATRANGE range, int end, List<int>? starts = null, List<float>? heights = null) {
+	int CountPages(FORMATRANGE range, int end, List<int>? starts = null, List<float>? heights = null, List<List<Footnotes.NoteLine>>? notes = null) {
 		int count = 0, position = 0;
 		var doc = editor.TextDocument;
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
@@ -7677,6 +7938,34 @@ sealed class DocumentPrinter : IDisposable
 			return lines.Starts(from, to);
 		}
 		var area = range.rc;    // (EM_FORMATRANGE gives back the height it used in rc: each page gets the whole area again)
+		// (iteration 51) the footnotes: room for each page's notes at its foot, as lines (Footnotes.Lines), at most a
+		// little over half the page; the lines that don't fit go on at the foot of the next page, before its own, as in
+		// Word (and on the last page, in the room its text leaves, if there is enough)
+		var footnotes = Footnotes.All(story);
+		Graphics? measure = null;
+		Font? noteFont = null;
+		var (noteName, noteSize) = NoteFontUsed = Footnotes.NoteFontOf(doc, footnotes, editor.Font.Name, editor.Font.SizeInPoints, NoteStyle);
+		float widthUnits = (area.Right - area.Left) / 14.4f;    // (1/100 inch: the measuring graphics' unit)
+		var linesOf = new Dictionary<int, List<Footnotes.NoteLine>>();    // each footnote's lines, by its place
+		List<Footnotes.NoteLine> LinesOf(List<Footnotes.Footnote> on) {
+			var lines = new List<Footnotes.NoteLine>();
+			if (on.Count == 0) return lines;
+			measure ??= Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings);
+			noteFont ??= Footnotes.NoteFont(noteName, noteSize);
+			foreach (var f in on) {
+				if (!linesOf.TryGetValue(f.Start, out var own)) linesOf[f.Start] = own = Footnotes.Lines(measure, new() { f }, widthUnits, noteFont);
+				lines.AddRange(own);
+			}
+			return lines;
+		}
+		int Twips(IReadOnlyList<Footnotes.NoteLine> lines) => lines.Count == 0 ? 0 : (int)Math.Ceiling(Footnotes.Height(measure!, lines, noteFont!) * 14.4f);
+		(List<Footnotes.NoteLine> Shown, List<Footnotes.NoteLine> Left) Split(List<Footnotes.NoteLine> lines, int room) {
+			if (lines.Count == 0) return (lines, new());
+			int fit = Math.Max(1, Footnotes.Fitting(measure!, lines, noteFont!, room / 14.4f));
+			return (lines.Take(fit).ToList(), lines.Skip(fit).ToList());
+		}
+		var carried = new List<Footnotes.NoteLine>();    // a note's lines from the page before
+		List<Footnotes.Footnote> On(int from, int to) => footnotes.Count == 0 ? new() : Footnotes.In(footnotes, from, to >= end ? int.MaxValue : to);
 		try {
 			while (true) {
 				count++;
@@ -7687,10 +7976,60 @@ sealed class DocumentPrinter : IDisposable
 				int laidOut = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
 				int used = range.rc.Bottom - area.Top;
 				int next = PageBreaks.AfterBreak(doc, PageKeeping.Adjust(doc, story, position, laidOut, Lines));
+				// the page's notes (the ones going on from the page before, then its own): the page ends at the last of its
+				// lines (as laid out) for which the text, the notes going on and its own notes up to the last one's first line
+				// fit; the notes' lines that fit below the text are shown, the others go on at the next page's foot (Word's way)
+				var pageArea = area;
+				var shown = new List<Footnotes.NoteLine>();
+				var rest = new List<Footnotes.NoteLine>();
+				if (carried.Count > 0 || On(position, next).Count > 0) {
+					int TextHeight(int to) {
+						range.rc = area;
+						range.chrg.cpMin = position;
+						range.chrg.cpMax = to;
+						SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
+						return range.rc.Bottom - area.Top;
+					}
+					List<Footnotes.NoteLine> NotesTo(int to) => carried.Concat(LinesOf(On(position, to))).ToList();
+					// (what must fit: the lines going on, and each own note's lines up to the last one's first line)
+					int Needed(List<Footnotes.NoteLine> noteLines, int own) {
+						if (noteLines.Count == 0) return 0;
+						int lastFirst = own == 0 ? Math.Min(noteLines.Count, 1) : noteLines.FindLastIndex(l => l.Number != null) + 1;
+						return Twips(noteLines.Take(Math.Max(1, lastFirst)).ToList());
+					}
+					bool Fits(int to, bool whole) => TextHeight(to) + (whole ? Twips(NotesTo(to)) : Needed(NotesTo(to), On(position, to).Count)) <= area.Bottom - area.Top;
+					var ends = (Lines(position, next) ?? Array.Empty<int>()).Where(at => at > position).Append(next).Distinct().OrderBy(at => at).ToList();
+					int Furthest(bool whole) {
+						int best = -1, lo = 0, hi = ends.Count - 1;
+						while (lo <= hi) {
+							int mid = (lo + hi) / 2;
+							if (Fits(ends[mid], whole)) { best = mid; lo = mid + 1; } else hi = mid - 1;
+						}
+						return best;
+					}
+					// the notes whole on the page (Word's way: their references' lines go to the next page with them), unless
+					// that leaves more than a quarter of the page empty against a note going on to the next page (a long one)
+					int whole = Furthest(true), split = Furthest(false);
+					int best = whole;
+					if (split > whole && (whole < 0 || TextHeight(ends[split]) - TextHeight(ends[whole]) > (area.Bottom - area.Top) / 4)) best = split;
+					// (not even one line with its note: the page's first line, its notes as they come)
+					int chosen = best >= 0 ? ends[best] : ends[0];
+					if (chosen < next) {
+						int kept = PageBreaks.AfterBreak(doc, PageKeeping.Adjust(doc, story, position, chosen, Lines));
+						next = kept > position ? kept : chosen;
+					}
+					used = TextHeight(next);
+					laidOut = next;
+					pageArea = area;
+					pageArea.Bottom = area.Top + used;
+					(shown, rest) = Split(NotesTo(next), area.Bottom - area.Top - used);
+				}
+				notes?.Add(shown);
+				carried = rest;
 				if (heights != null) {
 					// (the height of the text the page holds: measured again if a rule ended it earlier)
 					if (next < laidOut && next > position) {
-						range.rc = area;
+						range.rc = pageArea;
 						range.chrg.cpMax = next;
 						SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
 						used = range.rc.Bottom - area.Top;
@@ -7702,6 +8041,8 @@ sealed class DocumentPrinter : IDisposable
 			}
 		} finally {
 			lines?.Dispose();
+			measure?.Dispose();
+			noteFont?.Dispose();
 		}
 		SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);
 		return count;
@@ -8032,6 +8373,18 @@ sealed class WriterEditBox : RichEditBox
 	/// Ctrl+click on a cross-reference (iteration 50): its position, to go to the paragraph it refers to; true if it was one.
 	public Func<int, bool>? FollowReference;
 
+	// The right button: a press outside the selection moves the caret there, as in Word (inside it, the selection stays
+	// for the menu's Cut and Copy). Iteration 51: as RichEdit's own hit-testing has it (TOM), as the menu does; the
+	// library's (WinForms' character index, short of TOM's past hidden text such as footnotes' notes) put the caret
+	// somewhere else, and the menu then came up for what was there.
+	protected override void OnMouseDown(MouseEventArgs e) {
+		if (e.Button != MouseButtons.Right) { base.OnMouseDown(e); return; }
+		if (!Focused) Focus();
+		var selection = TextDocument.Selection2;
+		int position = PositionAt(PointToScreen(e.Location));
+		if (selection.End == selection.Start || position < selection.Start || position > selection.End) selection.SetRange(position, position);
+	}
+
 	protected override void OnMouseUp(MouseEventArgs e) {
 		base.OnMouseUp(e);
 		if (e.Button != MouseButtons.Left || ModifierKeys != Keys.Control) return;
@@ -8075,9 +8428,28 @@ sealed class WriterEditBox : RichEditBox
 		return -1;
 	}
 
+	/// The note of the footnote whose number is at a position (iteration 51; null: none), for the tooltip.
+	public Func<int, string?>? NoteAt;
+	string? tipNote;
+
 	protected override void OnMouseMove(MouseEventArgs e) {
 		base.OnMouseMove(e);
 		int picture = e.Button == MouseButtons.None && AltTextOf != null ? PictureAt(PointToScreen(e.Location)) : -1;
+		// (a footnote's number: its note)
+		if (picture < 0 && e.Button == MouseButtons.None && NoteAt != null) {
+			string? note = null;
+			try {
+				int at = PositionAt(PointToScreen(e.Location));
+				note = NoteAt(at) ?? (at > 0 ? NoteAt(at - 1) : null);
+			} catch (Exception ex) when (ex is COMException or ArgumentException) { }
+			if (note != tipNote) {
+				tipNote = note;
+				tipPicture = -1;
+				if (note == null) pictureTip.Hide(this);
+				else pictureTip.Show(note + "\n(Ctrl+click to change the footnote)", this, e.X + 12, e.Y + 20, 15000);
+			}
+			if (note != null) return;
+		}
 		if (picture == tipPicture) return;
 		tipPicture = picture;
 		if (picture < 0) { pictureTip.Hide(this); return; }
@@ -8277,10 +8649,28 @@ sealed class WriterEditBox : RichEditBox
 				g.DrawString(text, font, ink, area, format);
 			}
 		}
+		// (iteration 51) a sheet's footnotes, at the foot of its text area (above its bottom margin): the lines the printed
+		// page has, in its notes' font at the zoom
+		Font? noteFont = null;
+		void Notes(int page, float bottom) {
+			if (NotesOn?.Invoke(page) is not { } notes || notes.Lines.Count == 0) return;
+			noteFont ??= Footnotes.NoteFont(notes.Font, notes.Size * Math.Max(0.1f, ZoomFactor));
+			float textWidth = Math.Max(1, width - textMargins.Left - textMargins.Right);
+			float height = Footnotes.Height(g, notes.Lines, noteFont);
+			if (bottom < client.Top || bottom - height > client.Bottom) return;
+			Footnotes.Draw(g, notes.Lines, new RectangleF(textMargins.Left, bottom - height, textWidth, height), noteFont, Color.FromArgb(30, 30, 30));
+		}
+		// (iteration 51) the gap blank first, the page's paper: RichEdit draws a selection over the whole of a line, and a
+		// gap is part of one (the next paragraph's space before, or a raised line's foot), so selecting the next page's
+		// first line painted the sheet's foot, the band and the next sheet's top blue
+		using var paper = new SolidBrush(BackColor);
+		try {
 		foreach (var gap in gaps.Gaps) {
 			var (footer, band, header) = gaps.Areas(gap, width, ppp);
 			if (header.Bottom < client.Top || footer.Top > client.Bottom) continue;
+			g.FillRectangle(paper, RectangleF.FromLTRB(0, MathF.Ceiling(footer.Top), width, MathF.Floor(header.Bottom)));
 			if (gap.Page == 0) { Parts(BandParts?.Invoke(true, 1), header); continue; }    // (page 1's top margin: its header)
+			Notes(gap.Page, band.Top - gap.Bottom * ppp);
 			Parts(BandParts?.Invoke(false, gap.Page), new RectangleF(0, band.Top - gap.Bottom * ppp, width, gap.Bottom * ppp));
 			g.FillRectangle(grey, band);
 			g.DrawLine(edge, band.Left, band.Top, band.Right, band.Top);
@@ -8288,14 +8678,21 @@ sealed class WriterEditBox : RichEditBox
 			Parts(BandParts?.Invoke(true, gap.Page + 1), header);
 		}
 		// (iteration 46) the last sheet's end below the text: its footer, grey after it
-		if (LastSheetEnd() is { } end && end.Top < client.Bottom && end.Bottom > client.Top - 1) {
+		if (LastSheetEnd() is { } end && end.Top < client.Bottom + end.Height * 4 && end.Bottom > client.Top - 1) {
+			Notes(gaps.Pages, end.Top);
 			Parts(BandParts?.Invoke(false, gaps.Pages), end);
 			if (end.Bottom < client.Bottom) {
 				g.FillRectangle(grey, RectangleF.FromLTRB(0, end.Bottom, width, client.Bottom));
 				g.DrawLine(edge, 0, end.Bottom, width, end.Bottom);
 			}
 		}
+		} finally {
+			noteFont?.Dispose();
+		}
 	}
+
+	/// Iteration 51: a page's footnotes (1: the first page), for its sheet; null or none: none.
+	public Func<int, (List<Footnotes.NoteLine> Lines, string Font, float Size)?>? NotesOn;
 
 	/// Iteration 46: how much further the view may scroll down past the text's end (pixels): until the last sheet's
 	/// footer, and a little grey after it, are in view (0: no further).
@@ -8360,6 +8757,18 @@ sealed class WriterEditBox : RichEditBox
 	void PaintBuffered() {
 		var paint = new PaintStruct();
 		IntPtr screen = BeginPaint(Handle, ref paint);
+		// (iteration 51) RichEdit not done laying out a change yet (Tab on a numbered paragraph, a footnote inserted): it
+		// would leave those lines out of the bitmap (black on the screen, a moment): the screen kept as it is, and painted
+		// again a little later (a few times at most, then as it comes)
+		if (pendingPaints < 8 && LayoutPending()) {
+			EndPaint(Handle, ref paint);
+			pendingPaints++;
+			pendingTimer ??= MakePendingTimer();
+			pendingTimer.Stop();
+			pendingTimer.Start();
+			return;
+		}
+		pendingPaints = 0;
 		try {
 			var area = Rectangle.FromLTRB(paint.Left, paint.Top, paint.Right, paint.Bottom);
 			area.Intersect(ClientRectangle);
@@ -8369,11 +8778,36 @@ sealed class WriterEditBox : RichEditBox
 		finally { EndPaint(Handle, ref paint); }
 	}
 
+	int pendingPaints;
+	System.Windows.Forms.Timer? pendingTimer;
+
+	System.Windows.Forms.Timer MakePendingTimer() {
+		var timer = new System.Windows.Forms.Timer { Interval = 20 };
+		timer.Tick += (s, e) => { timer.Stop(); if (IsHandleCreated) Invalidate(); };
+		return timer;
+	}
+
+	// Whether RichEdit is still laying text out (TOM's E_PENDING) at the caret or the top of the window.
+	bool LayoutPending() {
+		if (!IsHandleCreated) return false;
+		try {
+			foreach (int at in new[] { TextDocument.Selection2.Start, GetCharIndexFromPosition(new Point(1, 1)) })
+				TextDocument.Range2(at, at).GetPoint(0x20 | 0x200, out _, out _);    // tomStart | tomAllowOffClient
+			return false;
+		} catch (COMException ex) when (ex.HResult == unchecked((int)0x8000000A)) {
+			return true;
+		} catch (Exception ex) when (ex is COMException or ArgumentException) {
+			return false;
+		}
+	}
+
 	// The part area of the window as PaintBuffered puts it on the screen, in a bitmap compatible with dc, to done.
 	void Render(IntPtr dc, Rectangle area, Action<IntPtr> done) {
 		IntPtr memory = CreateCompatibleDC(dc), bitmap = CreateCompatibleBitmap(dc, area.Width, area.Height);
 		IntPtr old = SelectObject(memory, bitmap);
 		try {
+			// (the window's own background first, not the new bitmap's black: lines RichEdit leaves out stay blank)
+			using (var g = Graphics.FromHdc(memory)) g.Clear(BackColor);
 			SetViewportOrgEx(memory, -area.Left, -area.Top, IntPtr.Zero);
 			SendPaint(Handle, WM_PRINTCLIENT, memory, (IntPtr)(PRF_CLIENT | PRF_ERASEBKGND));
 			SetViewportOrgEx(memory, 0, 0, IntPtr.Zero);
@@ -8527,7 +8961,7 @@ sealed class WriterEditBox : RichEditBox
 			long lp = m.LParam.ToInt64();
 			int x = (short)(lp & 0xFFFF), y = (short)((lp >> 16) & 0xFFFF);
 			bool keyboard = x == -1 && y == -1;    // Shift+F10 or the menu key
-			var point = keyboard ? PointToScreen(GetPositionFromCharIndex(SelectionStart)) : new Point(x, y);
+			var point = keyboard ? PointToScreen(GetPositionFromCharIndex(TextDocument.Selection2.Start)) : new Point(x, y);
 			// the character under the mouse as RichEdit's own hit-testing has it (TOM, screen coordinates)
 			int position = keyboard ? TextDocument.Selection2.Start : PositionAt(point);
 			if (ContextMenuHook(point, position)) return;
@@ -9248,6 +9682,116 @@ sealed class HeaderFooterDialog : Form
 		FirstHeader = differentFirst.Checked ? firstHeader.Select(b => b.Text).ToArray() : null,
 		FirstFooter = differentFirst.Checked ? firstFooter.Select(b => b.Text).ToArray() : null
 	};
+}
+
+// Insert > Footnote (iteration 51): a footnote's note, its paragraphs, with their bold, italic and underline.
+sealed class FootnoteDialog : Form
+{
+	readonly RichTextBox text = new() { Multiline = true, WordWrap = true, ScrollBars = RichTextBoxScrollBars.Vertical, DetectUrls = false, Dock = DockStyle.Fill };
+	readonly NumericUpDown size = new() { Minimum = 4, Maximum = 72, DecimalPlaces = 1, Increment = 0.5m, Width = 70 };
+	const FontStyle Formats = FontStyle.Bold | FontStyle.Italic | FontStyle.Underline;
+
+	/// The note, its formatting as Footnotes' marks.
+	public string Note {
+		get {
+			var runs = new List<(string, FontStyle)>();
+			int start = text.SelectionStart, length = text.SelectionLength;
+			for (int i = 0; i < text.TextLength; i++) {
+				text.Select(i, 1);
+				char c = text.Text[i];
+				runs.Add((c is '\r' or '\n' ? Footnotes.ParagraphMark.ToString() : c.ToString(), (text.SelectionFont?.Style ?? FontStyle.Regular) & Formats));
+			}
+			text.Select(start, length);
+			return Footnotes.FromRuns(runs);
+		}
+	}
+
+	// The note into the box, each run in its style.
+	void SetNote(string note) {
+		var runs = Footnotes.Runs(note).Select(r => (Text: r.Text.Replace(Footnotes.ParagraphMark, '\n'), r.Style)).ToList();
+		text.Text = string.Concat(runs.Select(r => r.Text));
+		int at = 0;
+		foreach (var (run, style) in runs) {
+			if (style != FontStyle.Regular) { text.Select(at, run.Length); text.SelectionFont = new Font(text.Font, style); }
+			at += run.Length;
+		}
+		text.Select(text.TextLength, 0);
+		text.SelectionFont = text.Font;
+	}
+
+	// Bold, italic or underline on the selection (off if all of it has it), or for the typing at the caret.
+	void Toggle(FontStyle flag) {
+		int start = text.SelectionStart, length = text.SelectionLength;
+		if (length == 0) {
+			var font = text.SelectionFont ?? text.Font;
+			text.SelectionFont = new Font(font, font.Style ^ flag);
+			return;
+		}
+		bool all = true;
+		for (int i = start; i < start + length && all; i++) { text.Select(i, 1); all = (text.SelectionFont?.Style ?? 0).HasFlag(flag); }
+		for (int i = start; i < start + length; i++) {
+			text.Select(i, 1);
+			var font = text.SelectionFont ?? text.Font;
+			text.SelectionFont = new Font(font, all ? font.Style & ~flag : font.Style | flag);
+		}
+		text.Select(start, length);
+		text.Focus();
+	}
+
+	/// The size of all the document's notes (its Footnote Text style).
+	public float NoteSize => (float)size.Value;
+
+	public FootnoteDialog(string title, string note, float noteSize) {
+		Text = title;
+		FormBorderStyle = FormBorderStyle.Sizable;
+		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
+		StartPosition = FormStartPosition.CenterParent;
+		Size = new Size(LogicalToDeviceUnits(520), LogicalToDeviceUnits(300));
+		MinimumSize = new Size(LogicalToDeviceUnits(360), LogicalToDeviceUnits(240));
+		Padding = new Padding(10);
+		var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+		layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+		layout.Controls.Add(new Label {
+			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(480), 0), Margin = new Padding(3, 0, 3, 6),
+			Text = (note == "" ? "The footnote's note (printed at the foot of the page)" : "The footnote's note (empty: the footnote is taken out)") + ". Enter starts a new paragraph; Ctrl+Enter is OK."
+		}, 0, 0);
+		var formatRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false, Margin = new Padding(0, 0, 0, 3) };
+		foreach (var (label, flag, tip) in new[] { ("B", FontStyle.Bold, "Bold (Ctrl+B)"), ("I", FontStyle.Italic, "Italic (Ctrl+I)"), ("U", FontStyle.Underline, "Underline (Ctrl+U)") }) {
+			var button = new Button { Text = label, Font = new Font(Font, flag), Width = LogicalToDeviceUnits(30), Height = LogicalToDeviceUnits(26), TabStop = false, AccessibleName = tip.Split(' ')[0] };
+			button.Click += (s, e) => Toggle(flag);
+			new ToolTip().SetToolTip(button, tip);
+			formatRow.Controls.Add(button);
+		}
+		text.PreviewKeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) e.IsInputKey = true; };    // (the box's, not the OK button's)
+		text.KeyDown += (s, e) => {
+			FontStyle? flag = e.Control && !e.Alt && !e.Shift ? e.KeyCode switch { Keys.B => FontStyle.Bold, Keys.I => FontStyle.Italic, Keys.U => FontStyle.Underline, _ => null } : null;
+			if (flag is { } f) { Toggle(f); e.SuppressKeyPress = true; e.Handled = true; }
+			else if (e.KeyCode == Keys.Enter && e.Control && !e.Alt) { e.SuppressKeyPress = true; DialogResult = DialogResult.OK; }    // (Enter: a new paragraph, as in Word; Ctrl+Enter: OK)
+		};
+		layout.RowCount = 5;
+		layout.RowStyles.Insert(1, new RowStyle(SizeType.AutoSize));
+		layout.Controls.Add(formatRow, 0, 1);
+		SetNote(note);
+		layout.Controls.Add(text, 0, 2);
+		size.Value = (decimal)Math.Clamp(noteSize, 4, 72);
+		var sizeRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false, Margin = new Padding(0, 6, 0, 0) };
+		sizeRow.Controls.Add(new Label { Text = "Size of all the notes (pt):", AutoSize = true, Margin = new Padding(3, 6, 6, 0) });
+		sizeRow.Controls.Add(size);
+		sizeRow.Controls.Add(new Label { Text = "(the Footnote Text style; Modify Style changes its font too)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(6, 6, 0, 0) });
+		layout.Controls.Add(sizeRow, 0, 3);
+		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
+		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
+		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		layout.Controls.Add(buttons, 0, 4);
+		Controls.Add(layout);
+		AcceptButton = ok;
+		CancelButton = cancel;
+		Shown += (s, e) => { text.Focus(); text.SelectionStart = text.TextLength; };
+	}
 }
 
 // Insert > Cross-reference (iteration 50): the numbered paragraphs, and whether the reference shows the paragraph's own

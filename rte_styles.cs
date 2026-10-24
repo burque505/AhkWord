@@ -63,6 +63,14 @@ public sealed class ParagraphStyle
 	/// How far right each sub-level is indented from the one above it (points; Modify Style > Sub-level indent).
 	public float SubLevelIndent { get; set; } = 36;
 
+	/// Iteration 51: the space after a paragraph of the style that has sub-level items after it: "None" (none after it,
+	/// nor between its sub-levels' items: the style's space after the last of them), "AfterParagraph" (the style's after
+	/// it, none between the sub-levels' items) or "Each" (the style's after every paragraph). Modify Style > Space
+	/// between sub-levels.
+	public string SubLevelSpace { get; set; } = "None";
+
+	public static readonly string[] SubLevelSpaces = { "None", "AfterParagraph", "Each" };
+
 	/// The usual formats one after another, each sub-level taking the next: after "1." come "a.", "i.", "(1)" ...
 	public static readonly string[] SubLevelOrder = { "1.", "a.", "i.", "(1)", "(a)", "(i)", "A.", "I.", "(A)" };
 
@@ -434,6 +442,32 @@ public static class StyleEngine
 		char count = (listType & 0xFFFF) switch { 2 => '1', 3 => 'a', 4 => 'A', 5 => 'i', 6 => 'I', _ => '\0' };
 		if (count == '\0' || (listType & LegalLists.NoNumber) != 0) return null;
 		return (listType & 0x30000) switch { 0x10000 => $"({count})", 0x20000 or 0x30000 => $"{count}.", _ => $"{count})" };
+	}
+
+	/// Iteration 51: numbered styles' items followed by their sub-levels' get the space after them their style says
+	/// (ParagraphStyle.SubLevelSpace); the others the style's own. Only a paragraph whose space after is still its
+	/// style's (or none) is changed: one set by hand keeps it. Returns whether any changed.
+	public static bool FitSubLevelSpacing(ITextDocument2 doc, StyleSheet sheet) {
+		var paragraphs = LegalLists.Paragraphs(doc);
+		bool changed = false;
+		for (int i = 0; i < paragraphs.Count; i++) {
+			var p = paragraphs[i];
+			if (!p.Legal || sheet.ById(p.Style) is not { Numbered: true } style) continue;
+			int top = Math.Clamp(style.NumberLevel, 1, 9) - 1;
+			var next = i + 1 < paragraphs.Count ? paragraphs[i + 1] : null;
+			bool subNext = next is { Legal: true } && next.Style == p.Style && next.Level > top;
+			float want = !subNext ? style.After : style.SubLevelSpace switch {
+				"Each" => style.After,
+				"AfterParagraph" => p.Level > top ? 0 : style.After,
+				_ => 0
+			};
+			var para = doc.Range2(p.Start, p.Start).Para;
+			float now = para.SpaceAfter;
+			if (Math.Abs(now - want) < 0.05f || (Math.Abs(now - style.After) >= 0.05f && Math.Abs(now) >= 0.05f)) continue;
+			para.SpaceAfter = want;
+			changed = true;
+		}
+		return changed;
 	}
 
 	/// After loading: a style all of whose paragraphs are items of the same kind of list (a Word document's numbered
@@ -1355,6 +1389,7 @@ sealed class StyleDialog : Form
 	readonly ComboBox numberLevel = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 70 };
 	readonly TextBox subLevels = new() { Width = 220 };
 	readonly NumericUpDown subLevelIndent = new() { Minimum = 0, Maximum = 144, DecimalPlaces = 1, Increment = 1, Width = 70 };
+	readonly ComboBox subLevelSpace = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 330 };    // (ParagraphStyle.SubLevelSpaces, in order)
 	readonly Panel preview = new() { Height = 120, Dock = DockStyle.Fill, BackColor = SystemColors.Window, BorderStyle = BorderStyle.FixedSingle };
 	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
 	Color color = Color.Black;
@@ -1423,8 +1458,11 @@ sealed class StyleDialog : Form
 			subLevels.PlaceholderText = sample.Numbered ? sample.SubLevelFormats() : "";
 			subLevels.Enabled = sample.Numbered && sample.Numbering != NumberFormats.Legal;
 			subLevelIndent.Enabled = sample.Numbered && sample.Numbering != NumberFormats.Legal;
+			subLevelSpace.Enabled = sample.Numbered && sample.Numbering != NumberFormats.Legal;
 		}
 		subLevelIndent.Value = (decimal)Math.Clamp(style.SubLevelIndent, 0, 144);
+		subLevelSpace.Items.AddRange(new object[] { "None (nor after the paragraph above them)", "After the paragraph above them only", "After each (the space after, above)" });
+		subLevelSpace.SelectedIndex = Math.Max(0, Array.IndexOf(ParagraphStyle.SubLevelSpaces, style.SubLevelSpace));
 		SubLevelHint();
 		numbering.SelectedIndexChanged += (s, e) => { numberLevel.Enabled = numbering.SelectedIndex > 0; SubLevelHint(); };
 		foreach (Control c in new Control[] { font, size, bold, italic, underline, align, left, right, first, before, after, line, numbering, numberLevel })
@@ -1455,6 +1493,8 @@ sealed class StyleDialog : Form
 		Row("Numbering:", numbering, "Level:", numberLevel);
 		Row("Sub-levels:", subLevels, "", new Label { Text = "(Tab, Shift+Tab; empty: the usual)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
 		Row("Sub-level indent (pt):", subLevelIndent, "", new Label { Text = "(each sub-level this much further in)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
+		Row("Space between sub-levels:", subLevelSpace);
+		table.SetColumnSpan(subLevelSpace, 3);
 		var paragraphButton = new Button { Text = "&Paragraph...", AutoSize = true };
 		paragraphButton.Click += (s, e) => ParagraphCommand();
 		Row("", keep, "", paragraphButton);
@@ -1525,7 +1565,8 @@ sealed class StyleDialog : Form
 		KeepTogether = breaks.KeepTogether, WidowControl = breaks.WidowControl, PageBreakBefore = breaks.PageBreakBefore, Contextual = breaks.Contextual,
 		Numbering = numbering.SelectedIndex > 0 ? NumberFormats.All[numbering.SelectedIndex - 1] : "", NumberLevel = numberLevel.SelectedIndex + 1,
 		SubLevels = string.Join(",", subLevels.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)),
-		SubLevelIndent = (float)subLevelIndent.Value
+		SubLevelIndent = (float)subLevelIndent.Value,
+		SubLevelSpace = ParagraphStyle.SubLevelSpaces[Math.Max(0, subLevelSpace.SelectedIndex)]
 	};
 
 	// A sample paragraph in the style, with grey text before and after it (the space and indents to scale).
