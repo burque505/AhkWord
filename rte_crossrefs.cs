@@ -21,8 +21,8 @@ public static class CrossRefs
 	const string Id = @"[A-Za-z_][A-Za-z0-9_]{0,39}";
 	public static readonly Regex TargetMark = new(@"\[\[xref:(" + Id + @")\]\]");
 	public static readonly Regex Reference = new(@"\[\[xref=(" + Id + @")(?:\|(\w*))?\]\]([^\r\[]*?)\[\[/xref\]\]");
-	// (and the footnotes' markers, which hold their notes: rte_footnotes.cs)
-	static readonly Regex AnyMark = new(@"\[\[xref:" + Id + @"\]\]|\[\[xref=" + Id + @"(?:\|\w*)?\]\]|\[\[/xref\]\]|\[\[fn\]\]|\[\[fn:(?:[^\]\r]|\](?!\]))*\]\]");
+	// (and the footnotes' markers, which hold their notes: rte_footnotes.cs; and the tables of contents': rte_toc.cs)
+	static readonly Regex AnyMark = new(@"\[\[xref:" + Id + @"\]\]|\[\[xref=" + Id + @"(?:\|\w*)?\]\]|\[\[/xref\]\]|\[\[fn\]\]|\[\[fn:(?:[^\]\r]|\](?!\]))*\]\]|" + Toc.Marks);
 
 	/// What a reference shows when its target is gone (deleted with its paragraph) or no longer numbered.
 	public const string Missing = "(reference not found)";    // (no "[": Reference wouldn't match it)
@@ -54,7 +54,7 @@ public static class CrossRefs
 	static readonly Regex TypedSub = new(@"^(\((?:[a-z]{1,2}|[A-Z]{1,2}|[ivxlcdm]{1,6}|[IVXLCDM]{1,6})\)|(?:[a-z]{1,2}|[A-Z]{1,2}|[ivxlcdm]{1,6}|[IVXLCDM]{1,6})[.)])[ \t]+");
 
 	/// Whether text has any reference or target (quick: no paragraphs read).
-	public static bool Any(string story) => story.Contains("[[xref", StringComparison.Ordinal) || story.Contains("[[fn", StringComparison.Ordinal);
+	public static bool Any(string story) => story.Contains("[[xref", StringComparison.Ordinal) || story.Contains("[[fn", StringComparison.Ordinal) || Toc.Any(story);
 
 	/// The document's numbered paragraphs (legal items, numbered styles' paragraphs, ordinary numbered lists), in order.
 	public static List<Target> Targets(ITextDocument2 doc) {
@@ -126,7 +126,7 @@ public static class CrossRefs
 	// Where a paragraph's target marker goes: after its number where that is text ("2.1<tab>"); at the end of its text
 	// in a list RichEdit numbers itself (RichEdit draws the number with the paragraph's first character, and a hidden
 	// one hides it: none shown); else at its start.
-	static int MarkAt(ITextRange2 paragraph) {
+	internal static int MarkAt(ITextRange2 paragraph) {
 		string text = paragraph.Text ?? "";
 		var m = LegalLists.Prefix.Match(text.TrimEnd('\r'));
 		if (m.Success) return paragraph.Start + m.Length;
@@ -138,7 +138,7 @@ public static class CrossRefs
 	}
 
 	// Puts text at a position, hidden; returns where it ends.
-	static int Hidden(ITextDocument2 doc, int at, string text) {
+	internal static int Hidden(ITextDocument2 doc, int at, string text) {
 		var range = doc.Range2(at, at);
 		range.Text = text;
 		range.SetRange(at, at + text.Length);
@@ -223,6 +223,7 @@ public static class CrossRefs
 			paragraph.Expand(tomConstants.tomParagraph);
 			Hidden(doc, MarkAt(paragraph), m.Value);
 		}
+		Toc.AfterLoad(doc);    // (iteration 52)
 		return marks.Count;
 	}
 
@@ -237,6 +238,7 @@ public static class CrossRefs
 	/// RTF as RichEdit wrote it, with Word's bookmarks and REF fields for the markers.
 	public static string ToWordRtf(string rtf) {
 		if (!Any(rtf)) return rtf;
+		rtf = Toc.ToWordRtf(Toc.SplitHidden(rtf));    // (iteration 52: the tables of contents; each marker in a hidden run of its own)
 		const string Words = @"((?:\\[a-z]+-?\d* ?)*)", V = @"\\v(?![a-z0-9]) ?";
 		// a reference: its number in the field's result (its format inside; the hidden state as it was, after the group)
 		rtf = Regex.Replace(rtf, V + Words + @"\[\[xref=(" + Id + @")(?:\|(\w*))?\]\]" + Words + @"\\v0 ?([^{}]*?)" + V + Words + @"\[\[/xref\]\]" + Words + @"\\v0 ?",
@@ -250,6 +252,7 @@ public static class CrossRefs
 	/// Word's (and LibreOffice's) RTF with markers for its REF fields and the bookmarks they refer to, before RichEdit
 	/// loads it (it drops both).
 	public static string FromWordRtf(string rtf) {
+		rtf = Toc.FromWordRtf(rtf);    // (iteration 52: Word's TOC fields)
 		if (!rtf.Contains(@"\fldinst", StringComparison.Ordinal) || !rtf.Contains("REF", StringComparison.Ordinal)) return rtf;
 		var names = new HashSet<string>(StringComparer.Ordinal);
 		var sb = new StringBuilder();
@@ -261,7 +264,7 @@ public static class CrossRefs
 			string field = rtf[i..(end + 1)];
 			int inst = field.IndexOf(@"\fldinst", StringComparison.Ordinal), result = field.IndexOf(@"{\fldrslt", StringComparison.Ordinal);
 			if (inst < 0 || result < inst) continue;
-			string instruction = Regex.Replace(field[(inst + 8)..result].Replace(@"\\", "\u0001"), @"\\[a-z]+-?\d* ?|[{}]|\\\*", "").Replace('\u0001', '\\');
+			string instruction = Regex.Replace(field[(inst + 8)..result].Replace("\r", "").Replace("\n", "").Replace(@"\\", "\u0001"), @"\\[a-z]+-?\d* ?|[{}]|\\\*", "").Replace('\u0001', '\\');
 			var reference = Regex.Match(instruction, @"^\s*REF\s+(" + Id + @")(.*)$", RegexOptions.Singleline);
 			if (!reference.Success) continue;
 			int resultEnd = GroupEnd(field, result);
@@ -306,6 +309,7 @@ public static class CrossRefs
 			var body = package.MainDocumentPart?.Document?.Body;
 			if (body == null) return path;
 			var names = new HashSet<string>(StringComparer.Ordinal);
+			bool toc = Toc.MarkDocx(package);    // (iteration 52: its tables of contents, first: their fields go across paragraphs)
 			static W.Run Marker(string text) => new(new W.Text(text) { Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve });
 			// simple fields: <w:fldSimple w:instr="REF _Ref1 \h">result</w:fldSimple>
 			foreach (var simple in body.Descendants<W.SimpleField>().ToList()) {
@@ -360,7 +364,7 @@ public static class CrossRefs
 			foreach (var bookmark in body.Descendants<W.BookmarkStart>().ToList())
 				if (bookmark.Name?.Value is { } name && names.Contains(name)) bookmark.InsertAfterSelf(Marker($"[[xref:{name}]]"));
 			bool notes = Footnotes.MarkDocx(package);    // (iteration 51: its footnotes too)
-			any = names.Count > 0 || notes;
+			any = names.Count > 0 || notes || toc;
 			if (any) package.MainDocumentPart!.Document.Save();
 		}
 		return any ? copy : path;
@@ -386,6 +390,13 @@ public static class CrossRefs
 			int found = wanted == "" ? -1 : paragraphs.FindIndex(from, p => Plain(p.InnerText).Contains(wanted, StringComparison.Ordinal));
 			if (found < 0) continue;
 			var paragraph = paragraphs[found];
+			// (a table of contents' entry has its heading's text: the heading is further on)
+			if (paragraph.Descendants<W.Hyperlink>().Any(l => l.Tooltip?.Value?.StartsWith("toc:", StringComparison.Ordinal) == true)) {
+				found = paragraphs.FindIndex(found + 1, p => Plain(p.InnerText).Contains(wanted, StringComparison.Ordinal)
+					&& !p.Descendants<W.Hyperlink>().Any(l => l.Tooltip?.Value?.StartsWith("toc:", StringComparison.Ordinal) == true));
+				if (found < 0) continue;
+				paragraph = paragraphs[found];
+			}
 			var start = new W.BookmarkStart { Name = name, Id = id.ToString() };
 			var end = new W.BookmarkEnd { Id = id.ToString() };
 			id++;
@@ -401,6 +412,7 @@ public static class CrossRefs
 	/// HTML from the editor with anchors for the targets and links for the references.
 	public static string ToHtml(string html) {
 		if (!Any(html)) return html;
+		html = Toc.ToHtml(html);    // (iteration 52)
 		// (the full number's "w" also in the title: the built-in .docx converter keeps it as the link's tooltip)
 		html = Reference.Replace(html, m => m.Groups[2].Value == "w" ? $"<a href=\"#{m.Groups[1].Value}\" data-xref=\"w\" title=\"xref w\">{m.Groups[3].Value}</a>"
 			: $"<a href=\"#{m.Groups[1].Value}\" data-xref=\"r\">{m.Groups[3].Value}</a>");
@@ -409,6 +421,7 @@ public static class CrossRefs
 
 	/// HTML with markers for the anchors and links ToHtml wrote (and Word's _Ref anchors), before it is loaded.
 	public static string FromHtml(string html) {
+		html = Toc.FromHtml(html);    // (iteration 52)
 		if (!html.Contains("<a", StringComparison.OrdinalIgnoreCase)) return html;
 		var names = new HashSet<string>(StringComparer.Ordinal);
 		html = Regex.Replace(html, @"<a\s+href=""#(" + Id + @")""(?:\s+data-xref=""(\w*)"")?(?:\s+title=""xref (\w*)"")?\s*>(.*?)</a>", m => {
@@ -430,6 +443,7 @@ public static class CrossRefs
 	/// Markdown from the editor with <a id> anchors for the targets and [number](#name) links for the references.
 	public static string ToMarkdown(string markdown) {
 		if (!Any(markdown.Replace("\\", ""))) return markdown;
+		markdown = Toc.ToMarkdown(markdown);    // (iteration 52)
 		markdown = MarkdownReference.Replace(markdown, m => {
 			string name = m.Groups[1].Value.Replace("\\", "");
 			return $"[{m.Groups[3].Value}](#{name}{(m.Groups[2].Value == "w" ? " \"xref w\"" : "")})";
@@ -440,6 +454,7 @@ public static class CrossRefs
 	/// Markdown with markers for its anchors and links to them, before it is loaded (escaped, so that Markdown keeps them
 	/// as text).
 	public static string FromMarkdown(string markdown) {
+		markdown = Toc.FromMarkdown(markdown);    // (iteration 52)
 		if (!markdown.Contains("](#", StringComparison.Ordinal)) return markdown;
 		var names = new HashSet<string>(StringComparer.Ordinal);
 		markdown = Regex.Replace(markdown, @"\[([^\]\r\n]*)\]\(#(" + Id + @")(?:\s+""xref (\w*)"")?\)", m => {

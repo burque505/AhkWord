@@ -1320,10 +1320,12 @@ public static class MarkdownConverter
 			else if (kind == (int)BlockStyle.Preformatted) info.Kind = "code";
 			else if (kind is >= 1 and <= 6) { info.Kind = "heading"; info.Level = kind; }
 			else if (text.Trim().Length >= 3 && text.Trim().All(ch => ch == '─')) info.Kind = "rule";
-			// (tabs: a simple table's row; but not the tab after a typed number, "2.<tab>Text", a paragraph: iteration 50)
-			else if (text.Contains('\t') && !(LegalLists.Prefix.Match(text) is { Success: true } typed && text.IndexOf('\t', typed.Length) < 0)) info.Kind = "table";
+			// (tabs: a simple table's row; but not the tab after a typed number, "2.<tab>Text", a paragraph: iteration 50; nor
+			// a table of contents' entry, the tab before its page: iteration 52)
+			else if (text.Contains('\t') && !(LegalLists.Prefix.Match(text) is { Success: true } typed && text.IndexOf('\t', typed.Length) < 0)
+				&& !text.Contains("[[toc=", StringComparison.Ordinal)) info.Kind = "table";
 			info.Align = para.Alignment is >= 1 and <= 3 ? para.Alignment : 0;
-			if (info.Kind is "paragraph" or "rule" or "heading" && para.LeftIndent >= ListIndent)
+			if (info.Kind is "paragraph" or "rule" or "heading" && para.LeftIndent >= ListIndent && !text.Contains("[[toc=", StringComparison.Ordinal))    // (a table of contents' entry's indent is its level's)
 				info.Quote = Math.Max(1, (int)Math.Round(para.LeftIndent / QuoteIndent));
 			list.Add(info);
 			if (end + 1 >= storyEnd || range.End <= start) break;

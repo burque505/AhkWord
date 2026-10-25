@@ -6,7 +6,7 @@ AhkWord's commands are on a ribbon, the one built into Windows (as in Paint and 
 |---|---|
 | **File** (menu) | New, New from Template, Start Page, Open, Open in New Window, New Window, Save, Save As, Close (Ctrl+W), Print (with Print Preview and Page Setup), Export (PDF, Word, OpenDocument), Exit, and the recent documents |
 | **Home** | Clipboard; Font; Text (change case, underline style, the Font dialog); Paragraph (lists, levels, No numbering, alignment, Line Spacing, List Options, the Paragraph dialog); Styles; Editing (find, replace, select all) |
-| **Insert** | Page Break, Table, Picture, Linked Thumbnail, Link, Cross-reference, Footnote, Update (F9), Date & Time, Insert from Template, Fill In Fields |
+| **Insert** | Page Break, Table of Contents, Table, Picture, Linked Thumbnail, Link, Cross-reference, Footnote, Update (F9), Date & Time, Insert from Template, Fill In Fields |
 | **Layout** | Page Setup, Header & Footer, Line Numbers, Print Preview, Export as PDF |
 | **Review** | Next Spelling Error, Add to Dictionary, Check spelling as you type |
 | **View** | Document View (Rich Text, Markdown, HTML, Side by Side, Wrap source lines, Source line numbers), Print Layout, Show Pages, Wrap to window, Header and footer, Outline, Zoom (Page Width, One Page, Multiple Pages, Zoom In, Zoom Out, 100%) |
@@ -15,7 +15,7 @@ AhkWord's commands are on a ribbon, the one built into Windows (as in Paint and 
 
 The **quick access toolbar** has Save, Undo and Redo; its arrow adds New, Open, Print, Print Preview or Export as PDF.
 
-The **right-click menu** has, as in Word, the spelling suggestions on a misspelled word (when nothing else is selected), then Cut, Copy and Paste, **Edit footnote** on a footnote's number, Font... and Paragraph..., and in a table the table commands. Right-clicking outside the selection moves the caret there first; inside it, the selection stays.
+The **right-click menu** has, as in Word, the spelling suggestions on a misspelled word (when nothing else is selected), then Cut, Copy and Paste, **Edit footnote** on a footnote's number, **Update table** and **Update page numbers only** on a table of contents, Font... and Paragraph..., and in a table the table commands. Right-clicking outside the selection moves the caret there first; inside it, the selection stays.
 
 ## Keyboard
 

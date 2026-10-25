@@ -1213,6 +1213,34 @@
         <Image Source="icons/footnote_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdTableOfContents" Id="289" LabelTitle="Table of Contents" Keytip="TC" TooltipTitle="Insert a table of contents" TooltipDescription="The headings, each with its page, as Word makes it. Update it with F9 (or right-click it). With the caret in one: change its options.">
+      <Command.LargeImages>
+        <Image Source="icons/tableofcontents_32.bmp" MinDPI="96" />
+        <Image Source="icons/tableofcontents_40.bmp" MinDPI="120" />
+        <Image Source="icons/tableofcontents_48.bmp" MinDPI="144" />
+        <Image Source="icons/tableofcontents_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/tableofcontents_16.bmp" MinDPI="96" />
+        <Image Source="icons/tableofcontents_20.bmp" MinDPI="120" />
+        <Image Source="icons/tableofcontents_24.bmp" MinDPI="144" />
+        <Image Source="icons/tableofcontents_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupContents" Id="135" LabelTitle="Contents">
+      <Command.LargeImages>
+        <Image Source="icons/tableofcontents_32.bmp" MinDPI="96" />
+        <Image Source="icons/tableofcontents_40.bmp" MinDPI="120" />
+        <Image Source="icons/tableofcontents_48.bmp" MinDPI="144" />
+        <Image Source="icons/tableofcontents_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/tableofcontents_16.bmp" MinDPI="96" />
+        <Image Source="icons/tableofcontents_20.bmp" MinDPI="120" />
+        <Image Source="icons/tableofcontents_24.bmp" MinDPI="144" />
+        <Image Source="icons/tableofcontents_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdUpdateReferences" Id="287" LabelTitle="Update" Keytip="U" TooltipTitle="Update cross-references (F9)" TooltipDescription="Brings every cross-reference's number up to date. Done by itself as paragraphs are renumbered, and before saving and printing.">
       <Command.LargeImages>
         <Image Source="icons/updatereferences_32.bmp" MinDPI="96" />
@@ -2170,6 +2198,9 @@
         <Tab CommandName="cmdTabInsert">
           <Group CommandName="cmdGroupPages" SizeDefinition="OneButton">
             <Button CommandName="cmdPageBreak" />
+          </Group>
+          <Group CommandName="cmdGroupContents" SizeDefinition="OneButton">
+            <Button CommandName="cmdTableOfContents" />
           </Group>
           <Group CommandName="cmdGroupTables" SizeDefinition="OneButton">
             <Button CommandName="cmdTable" />

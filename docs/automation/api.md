@@ -1781,6 +1781,38 @@ returns: number
 
 Brings every cross-reference's number up to date (done by itself as the paragraphs are renumbered, and before saving, printing and exporting; F9). Returns how many changed.
 
+## Tables of contents
+
+### InsertTableOfContents
+
+```autohotkey
+Rte.InsertTableOfContents(levels = 3, title = "Contents", pageNumbers = 1, rightAlign = 1, leader = "dots")
+```
+
+*levels*: number · *title*: text · *pageNumbers*: 1/0 · *rightAlign*: 1/0 · *leader*: text
+
+Inserts a table of contents at the caret's paragraph (in place of it if it is empty, else before it): the headings of levels 1 to levels (1-6), each with the page it is printed on, under a title ("": none). pageNumbers 0: no page numbers; rightAlign 0: each just after its heading's text, else at the right margin after a leader (dots, dashes, underline or none). With the caret in a table of contents: that table made again with these options. One undo step.
+
+### TableOfContents
+
+```autohotkey
+value := Rte.TableOfContents
+```
+
+text · read-only
+
+The (first) table of contents' entries, one a line: the level, a tab, the heading's text, a tab, the page.
+
+### UpdateTableOfContents
+
+```autohotkey
+Rte.UpdateTableOfContents(pagesOnly = 0)
+```
+
+*pagesOnly*: 1/0 · returns: number
+
+Makes every table of contents again from the headings, with their pages as printed (pagesOnly = 1: only their page numbers brought up to date, as before saving and printing). Returns how many tables were made again (pagesOnly: how many page numbers changed). One undo step.
+
 ## Footnotes
 
 ### DeleteFootnote

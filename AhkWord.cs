@@ -22,8 +22,21 @@
 #load "rte_pagegaps.cs"
 #load "rte_crossrefs.cs"
 #load "rte_footnotes.cs"
+#load "rte_toc.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 51 adds to iteration 50:
+// Run it with AhkWord.ahk. Iteration 52 adds to iteration 51:
+//   - A table of contents (Insert > Table of Contents; rte_toc.cs), as Word's: the headings of levels 1 to 3 (1 to 6),
+//     each with its page as printed at the right margin after dots (or dashes, a line, nothing; or just after the text;
+//     or no page numbers), under a title ("Contents", in TOC Heading), in the styles TOC 1 to TOC 6. Update (F9, or the
+//     table's right-click menu) makes it again from the headings; its page numbers alone are brought up to date before
+//     saving, printing and exporting. Ctrl+click an entry to go to its heading. Insert > Table of Contents with the
+//     caret in a table changes its options. Scripts: InsertTableOfContents, UpdateTableOfContents, TableOfContents.
+//     In the editor the table is paragraphs between hidden markers, each entry with a hidden link to a target at its
+//     heading; RTF (and so Word and LibreOffice files) gets Word's TOC field, its entries HYPERLINK fields to
+//     bookmarks at the headings with PAGEREF fields for the pages, which Word and LibreOffice can update; the built-in
+//     .docx converter the same; HTML and Markdown links to anchors at the headings. All are read back as tables,
+//     Word's and LibreOffice's own too.
+// Iteration 51 added to iteration 50:
 //   - Footnotes (Insert > Footnote, Ctrl+Alt+F; rte_footnotes.cs): a superscript number in the text, its note (its
 //     paragraphs, with bold, italic and underline) at the foot of its page: printed, in Print Preview and PDFs, and on Show Pages' sheets,
 //     under a short line, in the document's Footnote Text style (Footnote dialog > Size of all the notes, Modify
@@ -516,7 +529,7 @@ enum RibbonCommand : uint
 {
 	TabHome = 100, TabInsert = 101, TabLayout = 102, TabReview = 103, TabView = 104, TabTools = 105,
 	TableTools = 106, TabTableLayout = 107, GroupClipboard = 110, GroupFont = 111, GroupText = 112, GroupParagraph = 113,
-	GroupStyles = 114, GroupEditing = 115, GroupPages = 116, GroupTables = 117, GroupIllustrations = 118, GroupLinks = 119,
+	GroupStyles = 114, GroupEditing = 115, GroupPages = 116, GroupTables = 117, GroupIllustrations = 118, GroupLinks = 119, GroupContents = 135,
 	GroupInsertText = 120, GroupPage = 121, GroupProofing = 122, GroupShow = 124, GroupZoom = 125, GroupDocumentView = 126,
 	GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupRowsColumns = 130, GroupDelete = 131, GroupTableFormat = 132,
 	AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144, PrintMenu = 145,
@@ -535,7 +548,7 @@ enum RibbonCommand : uint
 	ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, StylesMenu = 380,
 	ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384, StyleSetClassic = 385,
 	StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, ApplyMyStyles = 391, CopyStyles = 394, PageBreak = 280, Table = 281,
-	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, CrossReference = 286, UpdateReferences = 287, Footnote = 288, HeaderFooter = 290, NextSpelling = 295,
+	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, CrossReference = 286, UpdateReferences = 287, Footnote = 288, TableOfContents = 289, HeaderFooter = 290, NextSpelling = 295,
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
@@ -602,7 +615,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 51;    // (the About box; make_version.ps1)
+	public const int Iteration = 52;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -837,7 +850,9 @@ class WriterForm : Form
 		// (iteration 51) footnotes: the note in a tooltip over its number; Ctrl+click it to change it; each sheet's notes
 		// at its foot (from the footnotes, read again once the text changed, and the pages as last worked out)
 		Editor.NoteAt = position => DocumentFootnotes().FirstOrDefault(f => position >= f.Start && position <= f.End)?.Text is { } note ? Footnotes.Plain(note) : null;
-		Editor.TextChanged += (s, e) => footnotesRead = null;
+		Editor.TextChanged += (s, e) => { footnotesRead = null; leadersRead = null; };
+		// (iteration 52) the tables of contents' leaders, which RichEdit doesn't draw
+		Editor.Leaders = () => leadersRead ??= Toc.Leaders(Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "");
 		Editor.NotesOn = page => page >= 1 && page <= sheetNotes.Count && sheetNotes[page - 1].Count > 0 ? (sheetNotes[page - 1], sheetNoteFont.Name, sheetNoteFont.Size) : null;
 		Editor.FollowReference = GoToReferenceTarget;
 		Editor.AltTextOf = position => api.PictureAltText(position);
@@ -1060,6 +1075,7 @@ class WriterForm : Form
 		Button(RibbonCommand.Picture, InsertImageDialog);
 		Button(RibbonCommand.Thumbnail, InsertThumbnailDialog);
 		Button(RibbonCommand.CrossReference, CrossReferenceCommand);
+		Button(RibbonCommand.TableOfContents, TableOfContentsCommand);
 		Button(RibbonCommand.Footnote, FootnoteCommand, Keys.Control | Keys.Alt | Keys.F);
 		Button(RibbonCommand.UpdateReferences, UpdateReferencesCommand, Keys.F9, M("UpdateCrossReferences"));
 		Button(RibbonCommand.Link, InsertHyperlinkDialog, Keys.Control | Keys.K);
@@ -2224,7 +2240,7 @@ class WriterForm : Form
 	}
 
 	// Runs body, which takes the gaps out and puts them back (or works them out again), with the editor's painting held
-	// (and the text frozen) until it is all done, then paints once. Iteration 51: each QuietGaps painted when it was done,
+	// until it is all done, then paints once. Iteration 51: each QuietGaps painted when it was done,
 	// so the window showed the text without its gaps, scrolled elsewhere, for a moment in between (a flash at Ctrl+C,
 	// and every few minutes at the recovery copy, which reads the document without them).
 	void HeldGaps(Action body) {
@@ -2237,10 +2253,9 @@ class WriterForm : Form
 		heldGaps = true;
 		bool hold = Editor.Visible;
 		if (hold) Editor.HoldPaint = true;
-		var doc = Editor.TextDocument;
-		doc.Freeze();
+		// (iteration 52: not frozen as well, TOM's Freeze: frozen, RichEdit gives where characters were before, and
+		// QuietGaps' scrolling back, which measures where the text went, then did nothing)
 		return new OnDispose(() => {
-			if (Editor.IsHandleCreated) doc.Unfreeze();
 			heldGaps = false;
 			if (hold && Editor.IsHandleCreated) { Editor.HoldPaint = false; RepaintAfterGaps(); }
 		});
@@ -2496,18 +2511,97 @@ class WriterForm : Form
 
 	// ---- Cross-references (iteration 50, rte_crossrefs.cs)
 
-	/// Brings the cross-references' numbers up to date, as one undo step; returns how many changed.
-	internal int UpdateReferences() {
+	/// Brings the cross-references' numbers up to date, as one undo step; returns how many changed. (Iteration 52) The
+	/// tables of contents too: made again from the headings (tables, F9), or only their page numbers (before saving and
+	/// printing).
+	internal int UpdateReferences(bool tables = false) {
 		var doc = Editor.TextDocument;
 		if (!Editor.IsHandleCreated || !CrossRefs.Any(Editor.Text)) return 0;
+		int changed;
 		doc.BeginEditCollection();
-		try { return Footnotes.Update(doc) + CrossRefs.Update(doc); }    // (iteration 51: the footnotes' numbers too)
+		try { changed = Footnotes.Update(doc) + CrossRefs.Update(doc); }    // (iteration 51: the footnotes' numbers too)
 		finally { doc.EndEditCollection(); }
+		return changed + UpdateContents(pagesOnly: !tables);
 	}
 
 	void UpdateReferencesCommand() {
-		int changed = UpdateReferences();
-		SetStatus(changed == 0 ? "The cross-references are up to date." : $"{changed} cross-reference{(changed == 1 ? "" : "s")} updated.");
+		bool contents = Toc.Any(Editor.Text);
+		int changed = UpdateReferences(tables: true);
+		SetStatus(contents ? "The cross-references, footnotes and tables of contents are up to date."
+			: changed == 0 ? "The cross-references are up to date." : $"{changed} cross-reference{(changed == 1 ? "" : "s")} updated.");
+	}
+
+	// ---- Tables of contents (iteration 52, rte_toc.cs)
+
+	/// Makes every table of contents again from the headings (pagesOnly: only their page numbers brought up to date), as
+	/// one undo step; returns how many tables were made again (pagesOnly: how many page numbers changed).
+	internal int UpdateContents(bool pagesOnly = false) {
+		if (!Editor.IsHandleCreated) return 0;
+		var doc = Editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		if (!Toc.Any(story) || pagesOnly && !story.Contains("[[toc=", StringComparison.Ordinal)) return 0;
+		int changed = 0, styles = Styles.Styles.Count;
+		WithoutGapsChanging(() => {
+			doc.BeginEditCollection();
+			try {
+				if (!pagesOnly)
+					foreach (var table in Enumerable.Reverse(Toc.Tables(story))) {
+						Toc.Rebuild(doc, Styles, table, table.Options, TextWidthPoints());
+						changed++;
+					}
+				int numbers = Toc.UpdatePages(doc, PageOf());
+				if (pagesOnly) changed = numbers;
+			} finally { doc.EndEditCollection(); }
+		});
+		if (Styles.Styles.Count != styles) StylesChanged();
+		return changed;
+	}
+
+	/// Inserts a table of contents at the caret's paragraph (Toc.Insert), or, with the caret in one, makes that one
+	/// again with these options; its page numbers as printed. One undo step.
+	internal void InsertContents(Toc.Options options, string title) {
+		var doc = Editor.TextDocument;
+		int styles = Styles.Styles.Count;
+		WithoutGapsChanging(() => {
+			doc.BeginEditCollection();
+			try {
+				string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+				int caret = doc.Selection2.Start;
+				int at = Toc.TableAt(story, caret) is { } table ? Toc.Rebuild(doc, Styles, table, options, TextWidthPoints())
+					: Toc.Insert(doc, Styles, caret, options, title, TextWidthPoints());
+				Toc.UpdatePages(doc, PageOf());
+				// the caret after the table
+				story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+				if (at >= 0 && Toc.Tables(story).FirstOrDefault(t => t.Start == at) is { } made) {
+					int after = story.IndexOf('\r', Math.Max(made.Start, made.End - 1));
+					after = after < 0 ? story.Length : after + 1;
+					doc.Selection2.SetRange(Math.Min(after, story.Length - 1), Math.Min(after, story.Length - 1));
+				}
+			} finally { doc.EndEditCollection(); }
+		});
+		if (Styles.Styles.Count != styles) StylesChanged();
+	}
+
+	// The page each position is printed on (1: the first), as the pages are laid out now.
+	Func<int, int> PageOf() {
+		List<int> starts;
+		using (var printer = CreatePrinter()) starts = printer.PageHeights().Select(p => p.Start).ToList();
+		return at => Math.Max(1, starts.FindLastIndex(s => s <= at) + 1);
+	}
+
+	// The text's width on the page (points): where a table of contents' page numbers go.
+	float TextWidthPoints() => api.PageTextWidth() / 20f;
+
+	void TableOfContentsCommand() {
+		var doc = Editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		var existing = Toc.TableAt(story, doc.Selection2.Start);
+		using var dlg = new TableOfContentsDialog(existing?.Options ?? new Toc.Options(), existing == null);
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		var o = dlg.Options;
+		string title = dlg.TitleText;
+		Run(() => api.InsertTableOfContents(o.Levels, title, o.PageNumbers, o.RightAlign, o.Leader), M("InsertTableOfContents", o.Levels, title, o.PageNumbers, o.RightAlign, o.Leader));
+		SetStatus(existing != null ? "The table of contents was made again with these options." : "Table of contents inserted. Ctrl+click an entry to go to its heading; F9 (or right-click it > Update table) brings it up to date.");
 	}
 
 	// Ctrl+click on a cross-reference: the caret to the paragraph it refers to (on a footnote's number: its note, to
@@ -2517,6 +2611,17 @@ class WriterForm : Form
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 		if (Footnotes.At(story, position) is { } note) {
 			BeginInvoke(() => Run(() => EditFootnote(note)));
+			return true;
+		}
+		// (iteration 52) a table of contents' entry: its heading
+		if (Toc.EntryAt(story, position) is { } heading) {
+			int target = CrossRefs.TargetPosition(story, heading);
+			if (target < 0) { SetStatus("⚠ This entry's heading is gone: update the table of contents (F9)."); return true; }
+			var line = doc.Range2(target, target);
+			line.StartOf(tomConstants.tomParagraph, 0);
+			Editor.Select(line.Start, 0);
+			Editor.ScrollToCaret();
+			SetStatus("The heading of the table of contents' entry.");
 			return true;
 		}
 		if (!CrossRefs.Any(story) || CrossRefs.ReferenceAt(story, position) is not { } name) return false;
@@ -2533,6 +2638,7 @@ class WriterForm : Form
 	// ---- Footnotes (iteration 51, rte_footnotes.cs)
 
 	List<Footnotes.Footnote>? footnotesRead;    // (the document's footnotes until its text changes)
+	List<Toc.Leader>? leadersRead;    // (iteration 52: its tables of contents' leaders, likewise)
 
 	/// The document's Footnote Text style's font ("": the text's) and size (null: it has none: NoteSize).
 	internal (string Font, float Size)? NoteStyle => Styles.Find(Footnotes.StyleName) is { Size: > 0 } style ? (style.Font, style.Size) : null;
@@ -3140,6 +3246,11 @@ class WriterForm : Form
 		string story = Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "";
 		if ((Footnotes.At(story, position) ?? Footnotes.At(story, Math.Max(0, position - 1))) is { } footnote) {
 			menu.Items.Add(new ToolStripMenuItem($"Edit &footnote {footnote.Number}...", null, (s, e) => Run(() => EditFootnote(footnote))));
+			menu.Items.Add(new ToolStripSeparator());
+		}
+		if (Toc.TableAt(story, position) != null) {
+			menu.Items.Add(new ToolStripMenuItem("&Update table", null, (s, e) => Run(() => api.UpdateTableOfContents(false), M("UpdateTableOfContents", false))) { ShortcutKeyDisplayString = "F9" });
+			menu.Items.Add(new ToolStripMenuItem("Update page &numbers only", null, (s, e) => Run(() => api.UpdateTableOfContents(true), M("UpdateTableOfContents", true))));
 			menu.Items.Add(new ToolStripSeparator());
 		}
 		menu.Items.Add(new ToolStripMenuItem("&Font...", null, (s, e) => Run(FontDialogCommand)));
@@ -4040,12 +4151,22 @@ class WriterForm : Form
 	// (iteration 50) Once a document is loaded: its cross-references' numbers as the editor numbers the paragraphs (a
 	// file from Word or LibreOffice has their numbers; RichEdit gives a list its numbers only once it has laid it out),
 	// as part of the loading: no undo step, nothing to save.
+	// (iteration 52) And its tables of contents' page numbers as AhkWord prints the pages (a file's are as another program
+	// laid them out, or, from Word's own converting, all 1).
 	void QuietReferenceUpdate() {
 		if (!Editor.IsHandleCreated || Editor.CanUndo) return;    // (something done since: F9, or saving, updates them)
 		var doc = Editor.TextDocument;
 		bool modified = Editor.Modified;
+		// (the pages first: laying them out takes the page view's gaps out and puts them back, with undo resumed after)
+		var pageOf = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text?.Contains("[[toc=", StringComparison.Ordinal) == true ? PageOf() : null;
 		doc.Undo(-9999995);    // tomSuspend
-		try { Footnotes.Update(doc); CrossRefs.Update(doc); }
+		try {
+			Footnotes.Update(doc);
+			CrossRefs.Update(doc);
+			int styles = Styles.Styles.Count;
+			if (pageOf != null && Toc.Restyle(doc, Styles, TextWidthPoints()) + Toc.FitTabs(doc, TextWidthPoints()) + Toc.UpdatePages(doc, pageOf) > 0) bandPagesStale = true;
+			if (Styles.Styles.Count != styles) BeginInvoke(StylesChanged);
+		}
 		finally { doc.Undo(-9999994); Editor.Modified = modified; }    // tomResume
 	}
 
@@ -5310,7 +5431,11 @@ public class EditorApi
 				DocxLineSpacing.FromEditor(full, ed);    // (HtmlToOpenXml writes "at least" as exactly)
 				DocxStyles.IntoDocx(full, ed, form.Styles);    // (the styles, and each paragraph's)
 				// (iteration 50) the cross-references' targets as bookmarks (the converter drops the HTML's empty anchors)
-				CrossRefs.BookmarksIntoDocx(full, CrossRefs.Targets(ed.TextDocument).Where(t => t.Name != null).Select(t => (t.Name!, t.Text)).ToList());
+				// (iteration 52: the headings' too, the tables of contents' entries going to them, in the document's order)
+				CrossRefs.BookmarksIntoDocx(full, CrossRefs.Targets(ed.TextDocument).Where(t => t.Name != null).Select(t => (t.Start, Name: t.Name!, t.Text))
+					.Concat(Toc.Headings(ed.TextDocument, form.Styles, 6).Where(h => h.Name != null).Select(h => (h.Start, Name: h.Name!, Text: h.Bare)))
+					.GroupBy(t => t.Name).Select(g => g.First()).OrderBy(t => t.Start).Select(t => (t.Name, t.Text)).ToList());
+				Toc.IntoDocx(full);    // (Word's TOC field around the entries)
 				Footnotes.IntoDocx(full, Footnotes.All(Story()).Select(f => f.Text).ToList(), form.NoteSizeNow());    // (iteration 51: real footnotes)
 			}
 		} catch (Exception ex) {
@@ -7094,7 +7219,29 @@ public class EditorApi
 
 	/// Brings every cross-reference's number up to date (done by itself as the paragraphs are renumbered, and before
 	/// saving, printing and exporting; F9). Returns how many changed.
-	public int UpdateCrossReferences() => form.UpdateReferences();
+	public int UpdateCrossReferences() => form.UpdateReferences(tables: true);
+
+	// ---- Tables of contents (iteration 52)
+
+	/// Inserts a table of contents at the caret's paragraph (in place of it if it is empty, else before it): the headings
+	/// of levels 1 to levels (1-6), each with the page it is printed on, under a title ("": none). pageNumbers 0: no
+	/// page numbers; rightAlign 0: each just after its heading's text, else at the right margin after a leader (dots,
+	/// dashes, underline or none). With the caret in a table of contents: that table made again with these options.
+	/// One undo step.
+	public void InsertTableOfContents(int levels = 3, string title = "Contents", bool pageNumbers = true, bool rightAlign = true, string leader = "dots") {
+		if (levels is < 1 or > 6) throw new ArgumentException("levels is 1 to 6: a table of contents takes the headings of levels 1 to that.");
+		leader = (leader ?? "dots").Trim().ToLowerInvariant();
+		if (!Toc.Options.Leaders.Contains(leader)) throw new ArgumentException("The leader is dots, dashes, underline or none.");
+		form.InsertContents(new Toc.Options(levels, pageNumbers, rightAlign, leader), title ?? "");
+	}
+
+	/// Makes every table of contents again from the headings, with their pages as printed (pagesOnly = 1: only their page
+	/// numbers brought up to date, as before saving and printing). Returns how many tables were made again (pagesOnly: how
+	/// many page numbers changed). One undo step.
+	public int UpdateTableOfContents(bool pagesOnly = false) => form.UpdateContents(pagesOnly);
+
+	/// The (first) table of contents' entries, one a line: the level, a tab, the heading's text, a tab, the page.
+	public string TableOfContents => Toc.Listing(ed.TextDocument, form.Styles);
 
 	// ---- Footnotes (iteration 51)
 
@@ -7734,6 +7881,7 @@ sealed class DocumentPrinter : IDisposable
 	readonly PageBands bands;
 	readonly LineNumbering numbering;
 	List<List<PrintedLineNumbers.Mark>>? numberMarks;    // each page's line numbers (worked out with the page count)
+	List<List<(float X1, float X2, float Baseline, float Size, string Kind)>>? pageLeaders;    // each page's leaders (iteration 52)
 	List<int>? pageStarts;                                  // where each page starts (worked out with the page count)
 	List<List<Footnotes.NoteLine>>? pageNotes;              // each page's footnotes' lines (iteration 51; with the page count)
 
@@ -7789,6 +7937,7 @@ sealed class DocumentPrinter : IDisposable
 				pageNotes = new List<List<Footnotes.NoteLine>>();
 				pageCount = CountPages(range, end, pageStarts, notes: pageNotes);    // for {pages}, and where each page ends
 				numberMarks = Marks(pageStarts, range, e.PageSettings);
+				pageLeaders = LeadersOnPages(range, pageStarts);    // (iteration 52)
 			}
 			range.chrg.cpMin = nextChar;
 			// (the page ends where the paragraphs' rules have it: page break before, keep together, widow control, keep with next)
@@ -7813,6 +7962,10 @@ sealed class DocumentPrinter : IDisposable
 			float height = Footnotes.Height(g, on, noteFont);
 			Footnotes.Draw(g, on, new RectangleF(margins.Left - hardX, margins.Bottom - hardY - height, margins.Width, height), noteFont, Color.Black);
 		}
+		// (iteration 52) the tables of contents' leaders, which RichEdit doesn't draw
+		if (pageLeaders != null && page <= pageLeaders.Count)
+			foreach (var (x1, x2, baseline, size, kind) in pageLeaders[page - 1])
+				Toc.DrawLeader(g, kind, margins.Left - hardX + x1 * 100 / 72f, margins.Left - hardX + x2 * 100 / 72f, margins.Top - hardY + baseline * 100 / 72f, size * 100 / 72f, Color.Black);
 		// The line numbers left of the text; the header just above the text area and the footer just below it, in the margins.
 		if (numberMarks != null && page <= numberMarks.Count)
 			PrintedLineNumbers.Draw(g, numberMarks[page - 1], numbering, editor.Font, margins.Left - hardX);
@@ -7910,6 +8063,39 @@ sealed class DocumentPrinter : IDisposable
 		} finally {
 			g.ReleaseHdc(hdc);
 		}
+	}
+
+	// Each page's tables of contents' leaders (iteration 52; null: none): from where on the screen they go across (in
+	// Print Layout the lines break as printed, so the screen's points from the text's left are the page's), on the
+	// baseline of the number's line as laid out for the printer (EM_FORMATRANGE up to the line's start gives its top;
+	// the font's ascent below it): points from the text area's left and top.
+	List<List<(float X1, float X2, float Baseline, float Size, string Kind)>>? LeadersOnPages(FORMATRANGE range, List<int> starts) {
+		if (!settings.PrintLayout || editor is not WriterEditBox box || box.Leaders?.Invoke() is not { Count: > 0 } leaders || starts.Count == 0) return null;
+		float ppp = box.PixelsPerPoint;
+		int left = box.TextArea.Left;
+		var pages = starts.Select(_ => new List<(float, float, float, float, string)>()).ToList();
+		foreach (var leader in leaders) {
+			if (box.LeaderLine(leader) is not { } line) continue;
+			int page = starts.FindLastIndex(s => s <= leader.Number);
+			if (page < 0) continue;
+			// (the top of the number's line: the text laid out up to its start; the baseline the font's ascent below it)
+			var numberLine = editor.TextDocument.Range2(leader.Number, leader.Number);
+			numberLine.Expand(5);    // tomLine
+			float top = 0;
+			if (numberLine.Start > starts[page]) {
+				var measure = range;
+				measure.chrg = new CHARRANGE { cpMin = starts[page], cpMax = numberLine.Start };
+				SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref measure);
+				top = (measure.rc.Bottom - range.rc.Top) / 20f;
+			}
+			string fontName = editor.TextDocument.Range2(leader.Number, leader.Number + 1).Font.Name ?? editor.Font.Name;
+			float ascent;
+			try { using var family = new FontFamily(fontName); ascent = line.Size * family.GetCellAscent(FontStyle.Regular) / family.GetEmHeight(FontStyle.Regular); }
+			catch (ArgumentException) { ascent = line.Size * 0.9f; }
+			pages[page].Add(((line.X1 - left) / ppp, (line.X2 - left) / ppp, top + ascent, line.Size, leader.Kind));
+		}
+		SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // (frees RichEdit's cache)
+		return pages;
 	}
 
 	// Each page's line numbers (null: off), for the text area and page of range, with the printer's information context
@@ -8847,9 +9033,40 @@ sealed class WriterEditBox : RichEditBox
 
 	/// What is drawn over the text: the page view's gaps (or the page breaks), the printed pages' boundaries.
 	public void DrawDrawings(Graphics g) {
+		DrawLeaders(g);
 		if (Gaps is { Applied: true }) DrawGaps(g);
 		else DrawPageBreaks(g);
 		DrawPageBoundaries(g);
+	}
+
+	/// Iteration 52: the tables of contents' leaders, drawn here: RichEdit draws a tab's leader in its advanced layout
+	/// (which it takes on reading RTF) but not always even then, so the entries' tabs have none (Toc.Format, FitTabs) and
+	/// these are drawn instead, on the screen and printed (DocumentPrinter.LeadersOnPages).
+	public Func<IReadOnlyList<Toc.Leader>>? Leaders;
+
+	void DrawLeaders(Graphics g) {
+		if (Leaders?.Invoke() is not { Count: > 0 } leaders) return;
+		int bottom = ClientSize.Height;
+		foreach (var leader in leaders) {
+			if (LeaderLine(leader) is not { } line || line.Baseline < -line.Size || line.Baseline > bottom + line.Size) continue;
+			Toc.DrawLeader(g, leader.Kind, line.X1, line.X2, line.Baseline, line.Size * PixelsPerPoint, ForeColor);
+		}
+	}
+
+	/// Where a leader goes in the window: from its entry's text's end (its tab's start) to its number's start, on the
+	/// number's baseline; the number's size (points). Null: the tab and the number aren't on one line, or not laid out.
+	public (float X1, float X2, float Baseline, float Size)? LeaderLine(Toc.Leader leader) {
+		const int Flags = 0x20 | 24 | 0x100 | 0x200;    // tomStart | TA_BASELINE | tomClientCoord | tomAllowOffClient
+		try {
+			var tab = TextDocument.Range2(leader.Tab, leader.Tab);
+			tab.GetPoint(Flags, out int x1, out int y1);
+			var number = TextDocument.Range2(leader.Number, leader.Number + 1);
+			number.GetPoint(Flags, out int x2, out int y2);
+			if (Math.Abs(y2 - y1) > 2 || x2 <= x1) return null;
+			return (x1, x2, y2, Math.Max(1, number.Font.Size));
+		} catch (Exception ex) when (ex is COMException or ArgumentException) {
+			return null;
+		}
 	}
 
 	const int WM_PRINTCLIENT = 0x0318, PRF_CLIENT = 0x04, PRF_ERASEBKGND = 0x08, SRCCOPY = 0x00CC0020;
@@ -8935,7 +9152,7 @@ sealed class WriterEditBox : RichEditBox
 		if (m.Msg == WM_PAINT) {
 			// (held: not painted now, and the window's need of a paint kept, for the paint after: QuietGaps)
 			if (HoldPaint && IsHandleCreated) return;
-			if (((pageBreaks == null || pageBreaks.Count > 0) || PageStarts is { Count: > 1 } || Gaps is { Applied: true }) && IsHandleCreated && Buffered)
+			if (((pageBreaks == null || pageBreaks.Count > 0) || PageStarts is { Count: > 1 } || Gaps is { Applied: true } || Leaders?.Invoke() is { Count: > 0 }) && IsHandleCreated && Buffered)
 				PaintBuffered();
 			else base.WndProc(ref m);
 			Painted?.Invoke();
@@ -9796,6 +10013,64 @@ sealed class FootnoteDialog : Form
 
 // Insert > Cross-reference (iteration 50): the numbered paragraphs, and whether the reference shows the paragraph's own
 // number or its full number.
+// Insert > Table of Contents (iteration 52): the headings' levels it takes, its page numbers (shown or not, at the right
+// margin after a leader or just after the text), and its title (a new table's only).
+sealed class TableOfContentsDialog : Form
+{
+	readonly NumericUpDown levels = new() { Minimum = 1, Maximum = 6, Width = 50 };
+	readonly CheckBox pages = new() { Text = "Show page numbers", AutoSize = true, Checked = true };
+	readonly CheckBox right = new() { Text = "Right-align page numbers", AutoSize = true, Checked = true };
+	readonly ComboBox leader = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130 };
+	readonly TextBox title = new() { Width = 220 };
+	static readonly (string Value, string Shown)[] Leaders = { ("dots", "Dots ......."), ("dashes", "Dashes -------"), ("underline", "Underline ____"), ("none", "None") };
+
+	public Toc.Options Options => new((int)levels.Value, pages.Checked, right.Checked, Leaders[Math.Max(0, leader.SelectedIndex)].Value);
+	public string TitleText => title.Text.Trim();
+
+	public TableOfContentsDialog(Toc.Options options, bool isNew) {
+		Text = isNew ? "Table of Contents" : "Table of Contents: change this one";
+		FormBorderStyle = FormBorderStyle.FixedDialog;
+		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
+		StartPosition = FormStartPosition.CenterParent;
+		AutoSize = true;
+		AutoSizeMode = AutoSizeMode.GrowAndShrink;
+		Padding = new Padding(12);
+		var layout = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill };
+		void Row(string label, Control control) {
+			layout.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 6, 8, 3) });
+			layout.Controls.Add(control);
+		}
+		levels.Value = Math.Clamp(options.Levels, 1, 6);
+		Row("Show levels (headings 1 to):", levels);
+		layout.Controls.Add(pages); layout.SetColumnSpan(pages, 2);
+		layout.Controls.Add(right); layout.SetColumnSpan(right, 2);
+		foreach (var (_, shown) in Leaders) leader.Items.Add(shown);
+		leader.SelectedIndex = Math.Max(0, Array.FindIndex(Leaders, l => l.Value == options.Leader));
+		Row("Tab leader:", leader);
+		pages.Checked = options.PageNumbers;
+		right.Checked = options.RightAlign;
+		void Enable() { right.Enabled = pages.Checked; leader.Enabled = pages.Checked && right.Checked; }
+		pages.CheckedChanged += (s, e) => Enable();
+		right.CheckedChanged += (s, e) => Enable();
+		Enable();
+		if (isNew) {
+			title.Text = "Contents";
+			Row("Title (empty: none):", title);
+		} else {
+			var note = new Label { Text = "The table at the caret is made again from the headings with these options.", AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(360), 0), Margin = new Padding(3, 8, 3, 3) };
+			layout.Controls.Add(note); layout.SetColumnSpan(note, 2);
+		}
+		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
+		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 10, 0, 0) };
+		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		layout.Controls.Add(buttons); layout.SetColumnSpan(buttons, 2);
+		Controls.Add(layout);
+		AcceptButton = ok;
+		CancelButton = cancel;
+	}
+}
+
 sealed class CrossReferenceDialog : Form
 {
 	readonly ListBox list = new() { IntegralHeight = false };

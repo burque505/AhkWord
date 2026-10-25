@@ -48,3 +48,18 @@ The Styles drop-down shows the document's set ("Styles: Classic"), with "(change
 A document you open keeps its own look: its styles are defined from the file, and the Styles drop-down reads "Styles: The document's". **Apply My Styles** gives it your styles instead (the ones new documents get), keeping the formatting of its own.
 
 Styles, with their whole definitions, are kept in RTF, HTML, Word and OpenDocument files, whichever converter writes or reads them, so a document comes back as it was.
+
+## Table of contents
+
+**Insert > Table of Contents** puts a table of contents at the caret's paragraph (in its place if it is empty, else before it), as Word's: the headings of levels 1 to 3 (Heading 1 to Heading 3), each indented by its level, with the page it is printed on at the right margin after a row of dots, under a title, *Contents*. The dialog chooses:
+
+- **Show levels**: the headings it takes, 1 to 6;
+- **Show page numbers**, and **Right-align page numbers** (else each just after its heading);
+- the **tab leader** before them: dots, dashes, a line, or none;
+- the **title** ("Contents" at first; empty: none), in the style *TOC Heading*.
+
+The entries are in the styles *TOC 1* to *TOC 6* (made when the first table is inserted, as Word's), which Modify Style changes like any other.
+
+The table doesn't follow the headings by itself, as in Word: **F9** (Insert > Update), or right-click it > **Update table**, makes it again from the headings as they are; **Update page numbers only** keeps its entries and brings their pages up to date. The page numbers alone are brought up to date before saving, printing and exporting, and when a document is opened. **Ctrl+click** an entry to go to its heading. Insert > Table of Contents with the caret in a table changes that table's options.
+
+Tables of contents are kept in every format: Word and OpenDocument files get Word's own table of contents (a TOC field, its entries linked to bookmarks at the headings, their pages PAGEREF fields), which Word and LibreOffice can update themselves, and a table of contents made in Word or LibreOffice comes in as one; HTML and Markdown get links to the headings. Scripts use `InsertTableOfContents`, `UpdateTableOfContents` and `TableOfContents` (see the [API reference](../automation/api.md)).
