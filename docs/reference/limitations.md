@@ -7,4 +7,9 @@
 - **On-screen line numbers match the printed ones in Print Layout only.** With Print Layout off, lines wrap at the window's edge, so a line's number on screen can differ from its printed number; printing, Print Preview, PDF and `Rte.PrintedLineAt` always number the printed lines.
 - **Show Pages follows typing a second behind.** The sheets are worked out again a second after typing stops, so while you type, a page's end can sit a few lines from where it will print until then (and after an undo, a sheet's gap can be missing for that second). A page that ends inside a table is marked with a "Page N" line instead of a sheet of its own.
 - **Suppressed line numbers need RTF, or Word or LibreOffice as the converter.** HTML, Markdown, pandoc and the built-in converter keep the line numbering but not which paragraphs are left out. OpenDocument files have no first number: their lines start at 1.
+- **Tab leaders from the Paragraph dialog aren't drawn.** A tab stop's leader (dots, dashes) is kept, and Word and LibreOffice show it, but RichEdit draws one only now and then; AhkWord draws a table of contents' leaders itself, but not other tabs'.
+- **A table of contents' page numbers sit a little inside the right margin** in AhkWord (RichEdit puts a number on a line of its own when its tab is at the margin); Word and LibreOffice get the tab at the margin.
+- **LibreOffice opens AhkWord's PDFs with the text in its own fonts,** as it does any PDF it opens for editing, so lines can run into the margins there. PDF viewers show the pages as printed.
+- **PDF export of a long document takes a while** (some 40 seconds for 100 pages): Microsoft Print to PDF prints it page by page.
+- **x64 Windows only.**
 - **AhkWord.exe shows AutoHotkey's icon in Explorer.** It is AutoHotkey unchanged; the running AhkWord shows its own icon in the window, the taskbar and the tray.

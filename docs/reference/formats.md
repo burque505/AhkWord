@@ -14,7 +14,7 @@
 | Page breaks | yes | yes | yes | yes | yes |
 | Pictures with alt text | yes | yes | yes | yes | yes |
 
-RTF is AhkWord's own format and keeps everything. Markdown is plain text by design, so it has no table formatting or paragraph spacing.
+RTF is AhkWord's own format and keeps everything. Markdown is plain text by design, so it has no table formatting or paragraph spacing. Some formatting plain Markdown has no way to write is kept with the extensions of TheArkive's [M-ArkDown](https://github.com/TheArkive/M-ArkDown_ahk2), whose ideas AhkWord follows with thanks: a list's numbering style as `[type=a]` after its first item, and a picture's size as `(width=200)` after it; colours are written as HTML's `<span style>`, and M-ArkDown's `<c=#F00>` is read too.
 
 ## Word and OpenDocument converters
 

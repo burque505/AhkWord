@@ -2,6 +2,7 @@
 #SingleInstance Off    ; (File > New Window starts this script again: one instance for each window)
 #Include "Csharp-in-AHK.ahk"
 #Include "RteClient2.ahk"
+#Include "AhkWordSetup.ahk"    ; (iteration 54: the .NET AhkWord runs on, asked for if the computer hasn't got it)
 ; AhkWord (RTE Writer until iteration 38), iteration 39: a word processor built on RichEditorNET (AhkWord.cs), hosted
 ; in this AHK process. Iteration 39: the name AhkWord, and file names that stay the same from now on (AhkWord.ahk,
 ; AhkWord.cs); the settings are carried over from %APPDATA%\RTE Writer the first time.
@@ -134,6 +135,8 @@ if FileExist(A_ScriptDir "\images\icon\ahkword.ico")
     TraySetIcon(A_ScriptDir "\images\icon\ahkword.ico")
 
 StartFile := A_Args.Length ? A_Args[1] : ""
+if !AhkWordDotnet()    ; (no .NET, and none to be had now: asked, and the user said not now)
+    ExitApp
 RunCSharpFile(A_ScriptDir "\AhkWord.cs", A_AhkPath, A_ScriptDir, StartFile, A_ScriptFullPath)
 if CSExitCode    ; an unhandled exception in the editor; its message is in the console output
     MsgBox("AhkWord stopped because of an error (" CSExitCode "):`n`n" CSOutput, "AhkWord", "Iconx")

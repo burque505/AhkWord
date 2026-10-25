@@ -785,11 +785,16 @@ public static class OfficeConverters {
 		if (skiaLoaded) return;
 		skiaLoaded = true;
 		string root = Environment.GetEnvironmentVariable("NUGET_PACKAGES") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
+		// (iteration 54) or, first, where the program carries its packages, in NuGet's layout: the folder SkiaSharp.dll is
+		// in is <packages>\skiasharp\<version>\lib\<framework>
+		string? carried = Path.GetDirectoryName(typeof(SkiaSharp.SKImage).Assembly.Location) is { Length: > 0 } lib ? Path.GetFullPath(Path.Combine(lib, "..", "..", "..", "..")) : null;
 		string version = typeof(SkiaSharp.SKImage).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "4.152.0";
-		foreach (var v in new[] { version, "4.152.0" }) {
-			string dll = Path.Combine(root, "skiasharp.nativeassets.win32", v, "runtimes", Environment.Is64BitProcess ? "win-x64" : "win-x86", "native", "libSkiaSharp.dll");
-			if (File.Exists(dll)) { try { NativeLibrary.Load(dll); return; } catch { } }
-		}
+		foreach (var from in new[] { carried, root })
+			foreach (var v in new[] { version, "4.152.0" }) {
+				if (from == null) continue;
+				string dll = Path.Combine(from, "skiasharp.nativeassets.win32", v, "runtimes", Environment.Is64BitProcess ? "win-x64" : "win-x86", "native", "libSkiaSharp.dll");
+				if (File.Exists(dll)) { try { NativeLibrary.Load(dll); return; } catch { } }
+			}
 	}
 
 	// ---- pandoc

@@ -70,8 +70,21 @@ global CSOutput := ""       ; Console output of the last script
 ;     Microsoft.CodeAnalysis.dll
 ;     Microsoft.CodeAnalysis.CSharp.dll
 ;   A standalone .NET install (e.g. C:\Program Files\dotnet) also works as CSDotnetRoot.
+;
+; A PROGRAM THAT CARRIES EVERYTHING (nothing downloaded, nothing written outside its folder): Csharp-in-AHK.ini's
+; [Paths] section can also have these (paths relative to the .ini's folder, or full):
+;   HostDll=lib\host\CSHost-Name.dll   the host assembly, built beforehand (CSharpBuildHost): csc.exe isn't needed then,
+;                                      only RoslynDir's Microsoft.CodeAnalysis.dll and Microsoft.CodeAnalysis.CSharp.dll
+;   PackagesManifest=lib\packages.txt  the packages' files, as "compile|path", "runtime|path" and "native|path" lines
+;                                      (paths relative to the manifest's folder): #:package lines resolve from it, with
+;                                      no NuGet client, no restore and nothing in ~\.nuget
+;   CacheDir=lib\cache                 where the host's runtimeconfig (and a host built here) go, instead of %TEMP%
+; DotnetRoot and RoslynDir may be relative there too.
 global CSDotnetRoot := IsSet(CSDotnetRoot) ? CSDotnetRoot : ""
 global CSRoslynDir := IsSet(CSRoslynDir) ? CSRoslynDir : ""
+global CSHostDll := IsSet(CSHostDll) ? CSHostDll : ""
+global CSPackagesManifest := IsSet(CSPackagesManifest) ? CSPackagesManifest : ""
+global CSCacheDir := IsSet(CSCacheDir) ? CSCacheDir : ""
 
 RunCSharp(Script, Args*) {
     if Script ~= "i)^[^\r\n]+\.cs$" && (Attrib := FileExist(Script)) && !InStr(Attrib, "D")
@@ -113,7 +126,7 @@ _CSharpTakeString(Ptr) {
 }
 
 _CSharpHost() {
-    global CSDotnetRoot, CSRoslynDir
+    global CSDotnetRoot, CSRoslynDir, CSHostDll, CSPackagesManifest, CSCacheDir
     static RunFn := 0
     if RunFn
         return RunFn
@@ -123,10 +136,67 @@ _CSharpHost() {
     Fxr := _CSharpLatestDir(CSDotnetRoot "\host\fxr") "\hostfxr.dll"
     if !NetCore || !FileExist(Fxr)
         throw Error(".NET 8 or later not found (" DotnetFrom "). CSDotnetRoot must be a folder containing host\fxr and shared\Microsoft.NETCore.App.", -1, CSDotnetRoot)
-    if !FileExist(CSRoslynDir "\csc.exe") || !FileExist(CSRoslynDir "\Microsoft.CodeAnalysis.CSharp.dll")
+    ; (a host built beforehand needs no csc.exe, only the compiler's DLLs)
+    if CSHostDll != "" && !FileExist(CSHostDll)
+        throw Error("The C# host was not found (HostDll in Csharp-in-AHK.ini).", -1, CSHostDll)
+    if CSHostDll = "" && !FileExist(CSRoslynDir "\csc.exe") || !FileExist(CSRoslynDir "\Microsoft.CodeAnalysis.CSharp.dll")
         throw Error("Roslyn not found (" RoslynFrom "). CSRoslynDir must be a folder containing csc.exe and Microsoft.CodeAnalysis.CSharp.dll.", -1, CSRoslynDir)
+    ; (the host reads the packages' manifest from the environment: its C# runs before any script)
+    EnvSet("CSHARP_IN_AHK_PACKAGES", CSPackagesManifest)
 
-    Source := "
+    Source := _CSharpHostSource()
+
+    ; The host assembly is compiled once per host source / runtime / compiler version and cached (or built beforehand:
+    ; HostDll). Its runtimeconfig names the runtime found here (a file of its own for each runtime version, so that a
+    ; program carried to another computer, with another .NET, still starts).
+    Cache := CSCacheDir != "" ? CSCacheDir : A_Temp "\CSharp-in-AHK"
+    try DirCreate(Cache)
+    if !InStr(FileExist(Cache), "D")
+        Cache := A_Temp "\CSharp-in-AHK"    ; (a folder that can't be written to: %TEMP% after all)
+    if CSHostDll != "" {
+        Dll := CSHostDll
+        SplitPath(Dll, , , , &Name)
+    } else {
+        Key := Source "|" NetCore "|" CSRoslynDir "|" FileGetVersion(CSRoslynDir "\Microsoft.CodeAnalysis.CSharp.dll")
+        Name := "CSHost-" Format("{:08X}", DllCall("ntdll\RtlComputeCrc32", "uint", 0, "ptr", StrPtr(Key), "uint", StrLen(Key) * 2, "uint"))
+        Dll := Cache "\" Name ".dll"
+        if !FileExist(Dll)
+            _CSharpBuildHost(Source, Cache, Name, NetCore)
+    }
+    SplitPath(Desktop || NetCore, &Version)
+    Config := Cache "\" Name "-" Version ".runtimeconfig.json"
+    if !FileExist(Config) {
+        Framework := Desktop ? "Microsoft.WindowsDesktop.App" : "Microsoft.NETCore.App"
+        F := FileOpen(Config, "w", "UTF-8-RAW"), F.Write('{"runtimeOptions":{"framework":{"name":"' Framework '","version":"' Version '"}}}'), F.Close()
+    }
+
+    ; Start the runtime with hostfxr (https://learn.microsoft.com/dotnet/core/tutorials/netcore-hosting)
+    hFxr := DllCall("LoadLibrary", "str", Fxr, "ptr")
+    Proc := Export => DllCall("GetProcAddress", "ptr", hFxr, "astr", Export, "ptr")
+    Params := Buffer(3 * A_PtrSize, 0)
+    NumPut("ptr", Params.Size, "ptr", 0, "ptr", StrPtr(CSDotnetRoot), Params)
+    Status := DllCall(Proc("hostfxr_initialize_for_runtime_config"), "wstr", Config, "ptr", Params, "ptr*", &Context := 0, "cdecl int")
+    if Status < 0 || !Context
+        throw Error(Format("Failed to initialize the .NET runtime (0x{:08X})", Status & 0xFFFFFFFF), -1, Config)
+    DllCall(Proc("hostfxr_get_runtime_delegate"), "ptr", Context, "int", 7, "ptr*", &LoadAssembly := 0, "cdecl int")    ; hdt_load_assembly
+    DllCall(Proc("hostfxr_get_runtime_delegate"), "ptr", Context, "int", 6, "ptr*", &GetFunction := 0, "cdecl int")     ; hdt_get_function_pointer
+    DllCall(Proc("hostfxr_close"), "ptr", Context, "cdecl int")
+    if !LoadAssembly || !GetFunction
+        throw Error("This .NET runtime does not support in-process hosting (.NET 8 or later is required).", -1)
+    if Status := DllCall(LoadAssembly, "wstr", Dll, "ptr", 0, "ptr", 0, "int")
+        throw Error(Format("Failed to load the C# host (0x{:08X})", Status & 0xFFFFFFFF), -1, Dll)
+    for Method in ["Init", "Run"] {
+        ; delegate_type_name = -1 (UNMANAGEDCALLERSONLY_METHOD)
+        if Status := DllCall(GetFunction, "wstr", "CSHost, " Name, "wstr", Method, "ptr", -1, "ptr", 0, "ptr", 0, "ptr*", &Fn := 0, "int")
+            throw Error(Format("Failed to get CSHost.{} (0x{:08X})", Method, Status & 0xFFFFFFFF), -1)
+        if Method = "Init"
+            DllCall(Fn, "wstr", CSRoslynDir, "int")
+    }
+    return RunFn := Fn
+}
+
+_CSharpHostSource() {
+    static Source := "
     (
     using System;
     using System.Collections;
@@ -332,8 +402,17 @@ _CSharpHost() {
             return name + "|" + (version == "" ? "*" : version);
         }
 
-        // Restores the packages with their dependencies and returns the assemblies to compile against.
+        // Restores the packages with their dependencies and returns the assemblies to compile against. With a manifest
+        // (CSHARP_IN_AHK_PACKAGES: PackagesManifest in Csharp-in-AHK.ini), its files instead: nothing is restored.
         public static List<string> Resolve(List<string> packages) {
+            string manifest = Environment.GetEnvironmentVariable("CSHARP_IN_AHK_PACKAGES");
+            if (!string.IsNullOrEmpty(manifest) && File.Exists(manifest)) {
+                string from = Path.GetDirectoryName(Path.GetFullPath(manifest));
+                return FromLines(File.ReadAllLines(manifest).Where(line => line.Contains('|')).Select(line => {
+                    int bar = line.IndexOf('|');
+                    return line.Substring(0, bar) + "|" + Path.GetFullPath(Path.Combine(from, line.Substring(bar + 1)));
+                }).ToArray());
+            }
             string tfm = "net" + Environment.Version.Major + ".0-windows7.0";    // what the SDK uses for -windows
             var list = packages.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToArray();
             string key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
@@ -359,9 +438,14 @@ _CSharpHost() {
                 }
             }
 
+            return resolved[key] = FromLines(lines);
+        }
+
+        // The assemblies to compile against, from restore result lines (the runtime's and the native ones noted).
+        static List<string> FromLines(string[] lines) {
             framework ??= new(((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")).Split(Path.PathSeparator)
                 .Select(Path.GetFileNameWithoutExtension), StringComparer.OrdinalIgnoreCase);
-            refs = new List<string>();
+            var refs = new List<string>();
             foreach (var line in lines) {
                 int i = line.IndexOf('|');
                 string kind = line.Substring(0, i), path = line.Substring(i + 1), name = Path.GetFileNameWithoutExtension(path);
@@ -370,7 +454,7 @@ _CSharpHost() {
                 else if (kind == "compile") refs.Add(path);
                 else if (kind == "runtime") CSHost.RefPaths[name] = path;
             }
-            return resolved[key] = refs;
+            return refs;
         }
 
         // The last restore result, unless it is missing files or (for versions with *) older than a day.
@@ -580,43 +664,7 @@ _CSharpHost() {
         }
     }
     )"
-
-    ; The host assembly is compiled once per host source / runtime / compiler version and cached.
-    Key := Source "|" NetCore "|" CSRoslynDir "|" FileGetVersion(CSRoslynDir "\Microsoft.CodeAnalysis.CSharp.dll")
-    Name := "CSHost-" Format("{:08X}", DllCall("ntdll\RtlComputeCrc32", "uint", 0, "ptr", StrPtr(Key), "uint", StrLen(Key) * 2, "uint"))
-    Cache := A_Temp "\CSharp-in-AHK"
-    Dll := Cache "\" Name ".dll", Config := Cache "\" Name ".runtimeconfig.json"
-    if !FileExist(Dll)
-        _CSharpBuildHost(Source, Cache, Name, NetCore)
-    if !FileExist(Config) {
-        SplitPath(Desktop || NetCore, &Version)
-        Framework := Desktop ? "Microsoft.WindowsDesktop.App" : "Microsoft.NETCore.App"
-        F := FileOpen(Config, "w", "UTF-8-RAW"), F.Write('{"runtimeOptions":{"framework":{"name":"' Framework '","version":"' Version '"}}}'), F.Close()
-    }
-
-    ; Start the runtime with hostfxr (https://learn.microsoft.com/dotnet/core/tutorials/netcore-hosting)
-    hFxr := DllCall("LoadLibrary", "str", Fxr, "ptr")
-    Proc := Export => DllCall("GetProcAddress", "ptr", hFxr, "astr", Export, "ptr")
-    Params := Buffer(3 * A_PtrSize, 0)
-    NumPut("ptr", Params.Size, "ptr", 0, "ptr", StrPtr(CSDotnetRoot), Params)
-    Status := DllCall(Proc("hostfxr_initialize_for_runtime_config"), "wstr", Config, "ptr", Params, "ptr*", &Context := 0, "cdecl int")
-    if Status < 0 || !Context
-        throw Error(Format("Failed to initialize the .NET runtime (0x{:08X})", Status & 0xFFFFFFFF), -1, Config)
-    DllCall(Proc("hostfxr_get_runtime_delegate"), "ptr", Context, "int", 7, "ptr*", &LoadAssembly := 0, "cdecl int")    ; hdt_load_assembly
-    DllCall(Proc("hostfxr_get_runtime_delegate"), "ptr", Context, "int", 6, "ptr*", &GetFunction := 0, "cdecl int")     ; hdt_get_function_pointer
-    DllCall(Proc("hostfxr_close"), "ptr", Context, "cdecl int")
-    if !LoadAssembly || !GetFunction
-        throw Error("This .NET runtime does not support in-process hosting (.NET 8 or later is required).", -1)
-    if Status := DllCall(LoadAssembly, "wstr", Dll, "ptr", 0, "ptr", 0, "int")
-        throw Error(Format("Failed to load the C# host (0x{:08X})", Status & 0xFFFFFFFF), -1, Dll)
-    for Method in ["Init", "Run"] {
-        ; delegate_type_name = -1 (UNMANAGEDCALLERSONLY_METHOD)
-        if Status := DllCall(GetFunction, "wstr", "CSHost, " Name, "wstr", Method, "ptr", -1, "ptr", 0, "ptr", 0, "ptr*", &Fn := 0, "int")
-            throw Error(Format("Failed to get CSHost.{} (0x{:08X})", Method, Status & 0xFFFFFFFF), -1)
-        if Method = "Init"
-            DllCall(Fn, "wstr", CSRoslynDir, "int")
-    }
-    return RunFn := Fn
+    return Source
 }
 
 _CSharpBuildHost(Source, Cache, Name, NetCore) {
@@ -634,6 +682,20 @@ _CSharpBuildHost(Source, Cache, Name, NetCore) {
         try FileDelete(Base ".dll")
         throw Error("Failed to compile the C# host", -2, FileExist(Base ".log") ? FileRead(Base ".log") : "")
     }
+}
+
+; Builds the host assembly into a folder (as OutDir\Name.dll), with the .NET and compiler that would be used now: for a
+; program that carries everything (HostDll in Csharp-in-AHK.ini). Returns its path.
+CSharpBuildHost(OutDir, Name := "CSHost") {
+    global CSDotnetRoot, CSRoslynDir
+    _CSharpFindPaths(&DotnetFrom, &RoslynFrom)
+    NetCore := _CSharpLatestDir(CSDotnetRoot "\shared\Microsoft.NETCore.App")
+    if !NetCore || !FileExist(CSRoslynDir "\csc.exe")
+        throw Error("Building the host needs .NET (" DotnetFrom ") and csc.exe (" RoslynFrom ").", -1)
+    _CSharpBuildHost(_CSharpHostSource(), OutDir, Name, NetCore)
+    for Extension in [".cs", ".rsp", ".log"]
+        try FileDelete(OutDir "\" Name Extension)
+    return OutDir "\" Name ".dll"
 }
 
 _CSharpIsManaged(Path) {
@@ -669,7 +731,17 @@ _CSharpFindPaths(&DotnetFrom, &RoslynFrom) {
         try CSRoslynDir := _CSharpDownloadRoslyn(), RoslynFrom := "downloaded from nuget.org"
         catch as e
             RoslynFrom := "auto-detection found nothing and the download failed: " e.Message
-    CSDotnetRoot := RTrim(CSDotnetRoot, "\"), CSRoslynDir := RTrim(CSRoslynDir, "\")
+    global CSHostDll, CSPackagesManifest, CSCacheDir
+    if CSHostDll = ""
+        CSHostDll := IniRead(Ini, "Paths", "HostDll", "")
+    if CSPackagesManifest = ""
+        CSPackagesManifest := IniRead(Ini, "Paths", "PackagesManifest", "")
+    if CSCacheDir = ""
+        CSCacheDir := IniRead(Ini, "Paths", "CacheDir", "")
+    ; (relative paths: from the .ini's folder)
+    Full(Path) => Path = "" || Path ~= "^(\\\\|[A-Za-z]:)" ? Path : Dir "\" Path
+    CSDotnetRoot := RTrim(Full(CSDotnetRoot), "\"), CSRoslynDir := RTrim(Full(CSRoslynDir), "\")
+    CSHostDll := Full(CSHostDll), CSPackagesManifest := Full(CSPackagesManifest), CSCacheDir := RTrim(Full(CSCacheDir), "\")
 }
 
 _CSharpDetectDotnet() {

@@ -25,7 +25,15 @@
 #load "rte_toc.cs"
 #load "rte_pdf.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 53 adds to iteration 52:
+// Run it with AhkWord.ahk. Iteration 54 adds to iteration 53:
+//   - A download that carries everything (make_release.ps1): the libraries (lib\packages, as NuGet lays them out, and
+//     their list), the C# compiler's two DLLs (lib\roslyn) and the C# host built beforehand (lib\host), named in
+//     Csharp-in-AHK.ini, so that nothing is downloaded at the first start and nothing written outside AhkWord's folder
+//     (Csharp-in-AHK.ahk: HostDll, PackagesManifest, CacheDir; relative paths). Without .NET 10 on the computer,
+//     AhkWord offers to download it from Microsoft for itself only, checked against Microsoft's SHA-512, into its own
+//     dotnet folder, or to open Microsoft's page (AhkWordSetup.ahk); the "complete" download has it inside.
+//     SkiaSharp's native library is found beside its package there too (OfficeConverters.LoadSkia).
+// Iteration 53 added to iteration 52:
 //   - PDF bookmarks (rte_pdf.cs): Export as PDF puts in a bookmark for each heading, under the one of the level above
 //     it, each opening its page at the heading, and makes each table of contents' entry a link to its heading's page,
 //     as Word's PDFs have them; the file opens with its bookmarks shown. (Microsoft Print to PDF writes the pages only:
@@ -622,7 +630,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 53;    // (the About box; make_version.ps1)
+	public const int Iteration = 54;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;

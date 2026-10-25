@@ -4,7 +4,7 @@
 
 A word processor for Windows, written in C# and run inside AutoHotkey v2, that AutoHotkey scripts can drive while you type.
 
-**Documentation:** [burque505.github.io/AhkWord](https://burque505.github.io/AhkWord/): getting started, the user guide, legal drafting, and the automation API.
+**Documentation:** [burque505.github.io/AhkWord](https://burque505.github.io/AhkWord/): getting started, the user guide, legal drafting, and the automation API. **What's done and what's next:** [ROADMAP.md](ROADMAP.md).
 
 AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET), a .NET wrapper around the Windows RichEdit control, with the Windows Ribbon for its commands. [Csharp-in-AHK](https://github.com/burque505/Csharp-in-AHK) compiles its C# source when it starts and runs it in the AutoHotkey process, so there is no build step and no separate executable.
 
@@ -73,6 +73,7 @@ The commands are on a ribbon, the one built into Windows (as in Paint and WordPa
 - **Table formatting and line spacing stay in the formatted view.** Markdown tables have no column widths, borders or shading, and Markdown has no line spacing or space between paragraphs of its own, so a `.md` file loses them (they are kept in RTF, Word, OpenDocument and HTML).
 - **Tables with long cells are best edited in the formatted view.** A Markdown table row is always a single line, so a table whose cells hold whole paragraphs, such as a two-column block with a signature on one side and a list of names and addresses on the other, becomes very long lines joined with `<br>`. Such tables are written compactly (no padding, `| --- |`) rather than lined up; Tab still moves between their cells, but they are much easier to read and change in the formatted view.
 - **HTML is laid out readably:** one paragraph or heading per line, lists and tables indented. Line breaks between blocks don't change how a browser shows a page, so the files look the same.
+- **Markdown's extras:** formatting plain Markdown has no way to write is kept with the extensions of TheArkive's [M-ArkDown](https://github.com/TheArkive/M-ArkDown_ahk2), whose ideas AhkWord follows with thanks: a list's numbering style as `[type=a]` after its first item, and a picture's size as `(width=200)` after it; colours are written as HTML's `<span style>`, and M-ArkDown's `<c=#F00>` is read too. Other Markdown readers show them as text, or leave them out.
 - **Scripts** can use it too: `Rte.View := "Markdown"`, `Rte.SideBySide := 1`, `Rte.SourceText`.
 
 **Pictures.** In the source view, pictures appear as short names (`embedded-1.png`, ...) instead of their data, and become pictures again when the formatted text is rebuilt. When an HTML or Markdown file is saved, its pictures are written as files to a folder beside it (`document_images\image1.png`, ...) and the file refers to them, which keeps it small and readable. For HTML you can choose **HTML, pictures inside (one file)** in Save As to keep everything in one file instead; files opened that way are saved that way again. For large pictures in a document meant to be read in a browser, consider **Insert > Linked Thumbnail**: a small picture in the page that links to the full-size picture file.
@@ -170,7 +171,7 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 ## Getting started
 
-**Without AutoHotkey:** a release download (on the repository's Releases page) has `AhkWord.exe`, a copy of AutoHotkey v2 under AhkWord's name: install the .NET 10 Desktop Runtime, unzip it, and double-click `AhkWord.exe` (its `START HERE.txt` says the same). `make_release.ps1` makes such a download from the last commit.
+**Without AutoHotkey, nothing to install:** a release download (on the repository's Releases page) carries everything: `AhkWord.exe` (a copy of AutoHotkey v2 under AhkWord's name), the libraries, the C# compiler's DLLs and the C# host, so nothing is downloaded at the first start and nothing written outside its folder but the settings. Unzip it and double-click `AhkWord.exe` (its `START HERE.txt` says the same). Without the .NET 10 Desktop Runtime on the computer, AhkWord offers to download it from Microsoft for itself only (into its folder, checked against Microsoft's checksums), or to open Microsoft's page to install it for all of Windows; `AhkWord-NN-complete.zip` has it inside. `make_release.ps1` makes both downloads from the last commit (`-Working`: from the working tree, to try one out); they get their libraries from the last NuGet restore, so start AhkWord once after a package changes.
 
 **From the repository:**
 
