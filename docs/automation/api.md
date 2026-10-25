@@ -1328,12 +1328,12 @@ Stops sending an event ("*" for all events) to an AHK window.
 ### ExportPdf
 
 ```autohotkey
-Rte.ExportPdf(path)
+Rte.ExportPdf(path, bookmarks = 1)
 ```
 
-*path*: text · returns: text
+*path*: text · *bookmarks*: 1/0 · returns: text
 
-Exports the document as a PDF file through the "Microsoft Print to PDF" printer, and returns its full path. The page setup (File &gt; Page Setup) applies. This can take a few seconds.
+Exports the document as a PDF file through the "Microsoft Print to PDF" printer, and returns its full path. The page setup (File &gt; Page Setup) applies. This can take a few seconds. bookmarks (1, as at first): a bookmark for each heading, under the one of the level above it, and each table of contents' entry a link to its heading (iteration 53); 0: the pages only.
 
 ### Print
 

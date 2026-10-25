@@ -27,7 +27,7 @@ The sheets follow your typing a second behind: they are worked out again a secon
 
 - **View > Zoom > Multiple Pages** shows the printed pages side by side. They are read-only: double-click a page to edit it there.
 - **File > Print > Print Preview** shows the pages as they will print, fitted to the screen, with page buttons and zoom.
-- **File > Print** prints; **Layout > Export as PDF** makes a PDF through *Microsoft Print to PDF*.
+- **File > Print** prints; **Layout > Export as PDF** makes a PDF through *Microsoft Print to PDF*. As Word's, the PDF has a bookmark for each heading, under the one of the level above it, each opening its page at the heading, and it opens with its bookmarks shown; a table of contents' entries are links to their headings' pages. (Scripts: `ExportPdf(path)`, or `ExportPdf(path, 0)` for the pages only.)
 
 Printing follows the paragraphs' line and page break rules (keep with next, keep lines together, widow and orphan control, page break before), as Word does.
 

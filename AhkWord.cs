@@ -23,8 +23,15 @@
 #load "rte_crossrefs.cs"
 #load "rte_footnotes.cs"
 #load "rte_toc.cs"
+#load "rte_pdf.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 52 adds to iteration 51:
+// Run it with AhkWord.ahk. Iteration 53 adds to iteration 52:
+//   - PDF bookmarks (rte_pdf.cs): Export as PDF puts in a bookmark for each heading, under the one of the level above
+//     it, each opening its page at the heading, and makes each table of contents' entry a link to its heading's page,
+//     as Word's PDFs have them; the file opens with its bookmarks shown. (Microsoft Print to PDF writes the pages only:
+//     the bookmarks and links go into the file it wrote, with PDFsharp, where DocumentPrinter.PdfPlaces says the
+//     headings and entries are printed.) Scripts: ExportPdf(path, bookmarks := 1).
+// Iteration 52 added to iteration 51:
 //   - A table of contents (Insert > Table of Contents; rte_toc.cs), as Word's: the headings of levels 1 to 3 (1 to 6),
 //     each with its page as printed at the right margin after dots (or dashes, a line, nothing; or just after the text;
 //     or no page numbers), under a title ("Contents", in TOC Heading), in the styles TOC 1 to TOC 6. Update (F9, or the
@@ -615,7 +622,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 52;    // (the About box; make_version.ps1)
+	public const int Iteration = 53;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -6546,8 +6553,10 @@ public class EditorApi
 	public string SettingsFile => Settings.FilePath;
 
 	/// Exports the document as a PDF file through the "Microsoft Print to PDF" printer, and returns its full path.
-	/// The page setup (File > Page Setup) applies. This can take a few seconds.
-	public string ExportPdf(string path) {
+	/// The page setup (File > Page Setup) applies. This can take a few seconds. bookmarks (1, as at first): a bookmark
+	/// for each heading, under the one of the level above it, and each table of contents' entry a link to its heading
+	/// (iteration 53); 0: the pages only.
+	public string ExportPdf(string path, bool bookmarks = true) {
 		const string pdfPrinter = "Microsoft Print to PDF";
 		if (!PrinterSettings.InstalledPrinters.Cast<string>().Contains(pdfPrinter))
 			throw new InvalidOperationException($"The \"{pdfPrinter}\" printer is not installed (Windows Features: Microsoft Print to PDF).");
@@ -6555,25 +6564,35 @@ public class EditorApi
 		if (File.Exists(full)) File.Delete(full);
 		form.UpdateReferences();
 		using var guard = new DefaultPrinterGuard(form.Settings);    // (the PDF printer doesn't become the default)
+		(List<PdfMarks.Bookmark> Bookmarks, List<PdfMarks.Link> Links) places = (new(), new());
 		using (var printer = form.CreatePrinter(pdfPrinter)) {
 			var document = printer.Document;
 			document.PrinterSettings.PrintToFile = true;
 			document.PrinterSettings.PrintFileName = full;
 			document.PrintController = new StandardPrintController();    // no "Printing..." window
+			// (iteration 53) where the headings and the tables of contents' entries are printed, as this printer lays out
+			// the pages (the gaps of the page view out, as for printing)
+			if (bookmarks) places = printer.PdfPlaces(Toc.Headings(ed.TextDocument, form.Styles, 6));
 			document.Print();
 		}
 		// The printer writes the file in the background; wait until it is complete.
 		var clock = System.Diagnostics.Stopwatch.StartNew();
-		while (clock.ElapsedMilliseconds < 20000) {
+		bool done = false;
+		while (clock.ElapsedMilliseconds < 20000 && !done) {
 			try {
 				if (File.Exists(full)) {
 					using var file = File.Open(full, FileMode.Open, FileAccess.Read, FileShare.None);
-					if (file.Length > 0) return full;
+					done = file.Length > 0;
 				}
 			} catch (IOException) { }
-			Thread.Sleep(100);
+			if (!done) Thread.Sleep(100);
 		}
-		throw new TimeoutException("The PDF printer did not finish the file within 20 s.");
+		if (!done) throw new TimeoutException("The PDF printer did not finish the file within 20 s.");
+		if (places.Bookmarks.Count + places.Links.Count > 0) {
+			try { PdfMarks.Add(full, places.Bookmarks, places.Links); }
+			catch (Exception ex) { form.SetStatus("⚠ The PDF was made, but its bookmarks couldn't be put in: " + ex.Message); }
+		}
+		return full;
 	}
 
 	/// Prints without a dialog, to the default printer or the printer named. The page setup applies.
@@ -8096,6 +8115,54 @@ sealed class DocumentPrinter : IDisposable
 		}
 		SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // (frees RichEdit's cache)
 		return pages;
+	}
+
+	/// Iteration 53: where the headings are printed, for a PDF's bookmarks (each heading's level, text, page from 0 and
+	/// its top in points from the page's top), and the tables of contents' entries, for links to their headings (each
+	/// entry's line across the text area, its page and area, and its heading's page and top): laid out as this printer
+	/// prints the pages (EM_FORMATRANGE up to a paragraph's start gives its top on its page).
+	public (List<PdfMarks.Bookmark> Bookmarks, List<PdfMarks.Link> Links) PdfPlaces(List<Toc.Heading> headings) {
+		var bookmarks = new List<PdfMarks.Bookmark>();
+		var links = new List<PdfMarks.Link>();
+		var doc = editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		var entries = Toc.Entry.Matches(story).Cast<System.Text.RegularExpressions.Match>().ToList();
+		if (headings.Count == 0 && entries.Count == 0) return (bookmarks, links);
+		var settings = Document.DefaultPageSettings;
+		float marginTop = settings.Margins.Top * 0.72f, marginLeft = settings.Margins.Left * 0.72f;
+		float textWidth = (settings.Bounds.Width - settings.Margins.Left - settings.Margins.Right) * 0.72f;
+		Measuring(range => {
+			var starts = new List<int>();
+			CountPages(range, doc.Range2(0, 0).StoryLength - 1, starts);
+			if (starts.Count == 0) return;
+			// a position's page, and the top (points from the page's top) of the line it starts
+			(int Page, float Top) Place(int position) {
+				int page = Math.Max(0, starts.FindLastIndex(s => s <= position));
+				if (position <= starts[page]) return (page, marginTop);
+				var measure = range;
+				measure.chrg = new CHARRANGE { cpMin = starts[page], cpMax = position };
+				SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref measure);
+				return (page, marginTop + (measure.rc.Bottom - range.rc.Top) / 20f);
+			}
+			var headingAt = new Dictionary<string, (int Page, float Top)>(StringComparer.Ordinal);
+			foreach (var heading in headings) {
+				var (page, top) = Place(heading.Start);
+				bookmarks.Add(new PdfMarks.Bookmark(heading.Level, heading.Text, page, top));
+				if (heading.Name != null) headingAt[heading.Name] = (page, top);
+			}
+			foreach (var entry in entries) {
+				if (!headingAt.TryGetValue(entry.Groups[1].Value, out var to)) continue;
+				var paragraph = doc.Range2(entry.Index, entry.Index);
+				paragraph.Expand(4);    // tomParagraph
+				var (page, top) = Place(paragraph.Start);
+				var (endPage, bottom) = Place(Math.Max(paragraph.Start + 1, paragraph.End - 1));
+				// (laid out to its last character, the text ends at the bottom of its last line)
+				float height = endPage == page && bottom > top ? bottom - top : 14;
+				links.Add(new PdfMarks.Link(page, new RectangleF(marginLeft, top, textWidth, height), to.Page, to.Top));
+			}
+			SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // (frees RichEdit's cache)
+		});
+		return (bookmarks, links);
 	}
 
 	// Each page's line numbers (null: off), for the text area and page of range, with the printer's information context
