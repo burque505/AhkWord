@@ -99,6 +99,12 @@ public static class MarkdownConverter
 	}
 
 	const string RuleText = "────────────────────────────────────────";    // a horizontal rule in the document
+	/// Iteration 55: Insert > Horizontal Line's picture's alt text, and the picture's alt text at a position (AhkWord's).
+	public const string RuleAlt = "Horizontal line";
+	public static Func<int, string>? AltTextAt;
+	/// HTML's pictures of a line as <hr>.
+	public static string RulesToHtml(string html) => System.Text.RegularExpressions.Regex.Replace(html,
+		@"<p[^>]*>\s*(?:<span[^>]*>\s*)*<img[^>]*\balt=""" + RuleAlt + @"""[^>]*>\s*(?:</span>\s*)*</p>|<img[^>]*\balt=""" + RuleAlt + @"""[^>]*>", "<hr>");
 	const char ImagePlaceholder = '\uE000';
 	const int QuoteIndent = 36, ListIndent = 18;                             // points
 	static readonly string[] MonospaceFonts = { "Consolas", "Courier New", "Courier", "Lucida Console", "Cascadia Code", "Cascadia Mono", "monospace" };
@@ -1320,6 +1326,7 @@ public static class MarkdownConverter
 			else if (kind == (int)BlockStyle.Preformatted) info.Kind = "code";
 			else if (kind is >= 1 and <= 6) { info.Kind = "heading"; info.Level = kind; }
 			else if (text.Trim().Length >= 3 && text.Trim().All(ch => ch == '─')) info.Kind = "rule";
+			else if (text.Trim() == "\uFFFC" && AltTextAt?.Invoke(start + text.IndexOf('\uFFFC')) == RuleAlt) info.Kind = "rule";    // (iteration 55: Insert > Horizontal Line)
 			// (tabs: a simple table's row; but not the tab after a typed number, "2.<tab>Text", a paragraph: iteration 50; nor
 			// a table of contents' entry, the tab before its page: iteration 52)
 			else if (text.Contains('\t') && !(LegalLists.Prefix.Match(text) is { Success: true } typed && text.IndexOf('\t', typed.Length) < 0)

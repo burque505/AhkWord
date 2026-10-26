@@ -22,7 +22,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 
 - [x] Print Layout (lines break as they will be printed), with Page Width, One Page and Multiple Pages
 - [x] Show Pages: the printed pages as sheets, with their headers, footers and footnotes
-- [x] Headers and footers, with page numbers and a different first page
+- [x] Headers and footers of several lines, with page numbers, a different first page, a font of their own (size, bold, italic, underline) and their distance from the page's edge
 - [x] Line numbers, as Word numbers them, printed and on screen
 - [x] Print Preview, printing, and PDF export with bookmarks for the headings
 
@@ -31,6 +31,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 - [x] RTF, Word (.docx), OpenDocument (.odt), HTML, Markdown and plain text, through Word, LibreOffice, the built-in converter or pandoc
 - [x] Markdown and HTML views: the document's source, edited side by side with the formatted text
 - [x] Templates with fields, parts (signature blocks, captions), and a start page
+- [x] Snippets: AutoHotkey hotstrings that turn an abbreviation (`;sig`) into a formatted part, its fields asked for; exported as a plain-text hotstring script for other programs
 - [x] Autosave and recovery, and a portable mode that keeps everything in AhkWord's own folder
 
 ### Automation
@@ -45,7 +46,6 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 
 ## Next
 
-- [ ] **Snippets as AutoHotkey hotstrings:** type a short abbreviation (`sig`, `cos`) and it becomes a stored passage, a signature block or a certificate of service, drawing on the parts that templates already use
 - [ ] **Script event hooks:** macros that run by themselves when a document is opened or saved, or a style changes, without a script of your own kept running
 - [ ] **A command palette** (Ctrl+K): any command by typing part of its name
 - [ ] **Faster PDF export** for long documents

@@ -1241,6 +1241,34 @@
         <Image Source="icons/tableofcontents_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdHorizontalLine" Id="292" LabelTitle="Horizontal Line" Keytip="H" TooltipTitle="Horizontal line" TooltipDescription="A line across the text, in a paragraph of its own: printed, and kept in Word, OpenDocument and RTF files; Markdown and HTML get a rule.">
+      <Command.LargeImages>
+        <Image Source="icons/horizontalline_32.bmp" MinDPI="96" />
+        <Image Source="icons/horizontalline_40.bmp" MinDPI="120" />
+        <Image Source="icons/horizontalline_48.bmp" MinDPI="144" />
+        <Image Source="icons/horizontalline_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/horizontalline_16.bmp" MinDPI="96" />
+        <Image Source="icons/horizontalline_20.bmp" MinDPI="120" />
+        <Image Source="icons/horizontalline_24.bmp" MinDPI="144" />
+        <Image Source="icons/horizontalline_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSnippets" Id="291" LabelTitle="Snippets..." Keytip="S" TooltipTitle="Snippets" TooltipDescription="Parts with an abbreviation: typed in the document (then Space or Enter, or at once), an abbreviation becomes its part, formatted. Make one from the selection, change them, or export them as a hotstring script for any program.">
+      <Command.LargeImages>
+        <Image Source="icons/snippets_32.bmp" MinDPI="96" />
+        <Image Source="icons/snippets_40.bmp" MinDPI="120" />
+        <Image Source="icons/snippets_48.bmp" MinDPI="144" />
+        <Image Source="icons/snippets_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/snippets_16.bmp" MinDPI="96" />
+        <Image Source="icons/snippets_20.bmp" MinDPI="120" />
+        <Image Source="icons/snippets_24.bmp" MinDPI="144" />
+        <Image Source="icons/snippets_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdUpdateReferences" Id="287" LabelTitle="Update" Keytip="U" TooltipTitle="Update cross-references (F9)" TooltipDescription="Brings every cross-reference's number up to date. Done by itself as paragraphs are renumbered, and before saving and printing.">
       <Command.LargeImages>
         <Image Source="icons/updatereferences_32.bmp" MinDPI="96" />
@@ -2205,9 +2233,10 @@
           <Group CommandName="cmdGroupTables" SizeDefinition="OneButton">
             <Button CommandName="cmdTable" />
           </Group>
-          <Group CommandName="cmdGroupIllustrations" SizeDefinition="TwoButtons">
+          <Group CommandName="cmdGroupIllustrations" SizeDefinition="ThreeButtons">
             <Button CommandName="cmdPicture" />
             <Button CommandName="cmdThumbnail" />
+            <Button CommandName="cmdHorizontalLine" />
           </Group>
           <Group CommandName="cmdGroupLinks" SizeDefinition="FourButtons">
             <Button CommandName="cmdLink" />
@@ -2218,9 +2247,10 @@
           <Group CommandName="cmdGroupInsertText" SizeDefinition="OneButton">
             <Button CommandName="cmdDateTime" />
           </Group>
-          <Group CommandName="cmdGroupTemplates" SizeDefinition="TwoButtons">
+          <Group CommandName="cmdGroupTemplates" SizeDefinition="ThreeButtons">
             <Button CommandName="cmdInsertFromTemplate" />
             <Button CommandName="cmdFillInFields" />
+            <Button CommandName="cmdSnippets" />
           </Group>
         </Tab>
         <Tab CommandName="cmdTabLayout">

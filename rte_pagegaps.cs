@@ -233,26 +233,29 @@ public sealed class PageGaps
 	}
 
 	/// Works the gaps out for the printed pages (where each starts, laid out without gaps, and how tall its text is, in
-	/// points: DocumentPrinter.PageHeights) and puts them in. textArea, bottom, top: the page's text height and margins.
-	public void Apply(List<(int Start, float Height)> pages, float textArea, float bottom, float top) {
+	/// points: DocumentPrinter.PageHeights) and puts them in. textArea, bottom, top: the page's text height and margins;
+	/// (iteration 55) page 1's, if it has others (its own header or footer, taller or shorter).
+	public void Apply(List<(int Start, float Height)> pages, float textArea, float bottom, float top, float? firstTextArea = null, float? firstBottom = null, float? firstTop = null) {
 		var starts = pages.Select(p => p.Start).ToList();
 		var doc = editor.TextDocument;
 		int storyEnd = doc.Range2(0, 0).StoryLength;
 		string story = doc.Range2(0, storyEnd).Text ?? "";
 		Pages = starts.Count;
 		(TextAreaPoints, BottomPoints) = (textArea, bottom);
+		(FirstTextAreaPoints, FirstBottomPoints) = (firstTextArea ?? textArea, firstBottom ?? bottom);
 		var gaps = new List<Gap>();
 		// (iteration 49: an empty document too, its one paragraph mark: its sheet, header and footer shown before typing)
 		if (starts.Count == 0 || story.Length < 1) { Put(gaps); return; }
 		// page 1's top margin: space before the first paragraph (not before a table's first row)
-		if (!InTable(story, 0)) gaps.Add(new Gap(0, 0, 0, 0, 0, 0, 0, top, 0, Paragraph: true));
+		if (!InTable(story, 0)) gaps.Add(new Gap(0, 0, 0, 0, 0, 0, 0, firstTop ?? top, 0, Paragraph: true));
 		for (int k = 1; k < starts.Count; k++) {
 			int at = starts[k];
 			if (at <= 0 || at >= story.Length - 1 || InTable(story, at) || InTable(story, at - 1)) continue;
-			float slack = Math.Max(0, textArea - pages[k - 1].Height);
+			float slack = Math.Max(0, (k == 1 ? FirstTextAreaPoints : textArea) - pages[k - 1].Height);
+			float sheetBottom = k == 1 ? FirstBottomPoints : bottom;    // (iteration 55: page 1's own)
 			// a page that starts with a paragraph: space before it
 			if (story[at - 1] == '\r' && !(at >= 2 && story[at - 2] is RowEnd)) {
-				gaps.Add(new Gap(at, at, at, 0, slack, bottom, BandPoints, top, k, Paragraph: true));
+				gaps.Add(new Gap(at, at, at, 0, slack, sheetBottom, BandPoints, top, k, Paragraph: true));
 				continue;
 			}
 			// in the middle of a paragraph: the line before it raised
@@ -261,8 +264,8 @@ public sealed class PageGaps
 			if (line.End > at) line.End = at;
 			if (TouchesTable(story, line.Start, line.End)) continue;
 			WithoutParagraphMark(line, story);
-			if (RaiseFor(line, slack + bottom + BandPoints + top) is not { } raise) continue;    // (spaced exactly: Print Layout's "Page N" line)
-			gaps.Add(new Gap(line.Start, line.End, at, raise, slack, bottom, BandPoints, top, k));
+			if (RaiseFor(line, slack + sheetBottom + BandPoints + top) is not { } raise) continue;    // (spaced exactly: Print Layout's "Page N" line)
+			gaps.Add(new Gap(line.Start, line.End, at, raise, slack, sheetBottom, BandPoints, top, k));
 		}
 		Put(gaps);
 	}
@@ -270,6 +273,9 @@ public sealed class PageGaps
 	/// The page's text height and bottom margin (points) the gaps were worked out with.
 	public float TextAreaPoints { get; private set; }
 	public float BottomPoints { get; private set; }
+	/// (iteration 55) page 1's
+	public float FirstTextAreaPoints { get; private set; }
+	public float FirstBottomPoints { get; private set; }
 
 	/// Iteration 46: the last sheet's end, which has no gap after it (typing goes on there): the rest of its text area and
 	/// its bottom margin with the footer (the editor's coordinates; null: no gaps). It is drawn below the text, where the
@@ -287,8 +293,9 @@ public sealed class PageGaps
 		var lastLine = doc.Range2(end, end);
 		lastLine.Expand(5);    // tomLine
 		float textEnd = PositionOf(lastLine.Start).Y + LineHeight(lastLine);
-		float sheetEnd = Math.Max(Math.Min(textTop + TextAreaPoints * pixelsPerPoint, textEnd + Math.Max(0, maxBlank)), textEnd);
-		return new RectangleF(0, sheetEnd, width, BottomPoints * pixelsPerPoint);
+		bool firstPage = last.Page == 0;    // (iteration 55: the last page is page 1, which has margins of its own)
+		float sheetEnd = Math.Max(Math.Min(textTop + (firstPage ? FirstTextAreaPoints : TextAreaPoints) * pixelsPerPoint, textEnd + Math.Max(0, maxBlank)), textEnd);
+		return new RectangleF(0, sheetEnd, width, (firstPage ? FirstBottomPoints : BottomPoints) * pixelsPerPoint);
 	}
 
 	// A line's height on the screen (pixels): from its top to the next line's, or (the last line) its text's.

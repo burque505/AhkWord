@@ -24,8 +24,18 @@
 #load "rte_footnotes.cs"
 #load "rte_toc.cs"
 #load "rte_pdf.cs"
+#load "rte_snippets.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 54 adds to iteration 53:
+// Run it with AhkWord.ahk. Iteration 55 adds to iteration 54:
+//   - Snippets (Insert > Snippets; rte_snippets.cs): a part with an abbreviation, typed in the document (then Space,
+//     Enter, Tab or punctuation, or at once) to insert the part, formatted, its fields asked for. The abbreviations are
+//     AutoHotkey hotstrings, which AhkWord.ahk sets up for its own window only and the document in focus (each AhkWord
+//     window by itself; a snippet goes in through the editor: FireSnippet waits until the editor has the abbreviation
+//     and the ending character typed, then swaps them for the part, as one undo step). New from Selection makes a
+//     part of the selection; Export as Script writes the snippets as plain-text hotstrings for any program. Kept in
+//     snippets.json beside the user's own templates. Scripts: Snippets, AddSnippet, RemoveSnippet, InsertSnippet,
+//     SaveSelectionAsSnippet, ExportSnippets.
+// Iteration 54 added to iteration 53:
 //   - A download that carries everything (make_release.ps1): the libraries (lib\packages, as NuGet lays them out, and
 //     their list), the C# compiler's two DLLs (lib\roslyn) and the C# host built beforehand (lib\host), named in
 //     Csharp-in-AHK.ini, so that nothing is downloaded at the first start and nothing written outside AhkWord's folder
@@ -563,7 +573,7 @@ enum RibbonCommand : uint
 	ConvertTyped = 271, IndentParagraph = 272, OutdentParagraph = 273, NumberingMenu = 274, BlockStyle = 275, StylesMenu = 380,
 	ModifyStyle = 381, NewStyle = 382, UpdateStyle = 383, ClearFormatting = 389, DeleteStyle = 384, StyleSetClassic = 385,
 	StyleSetPlain = 386, StyleSetModern = 387, SaveStyles = 388, ApplyMyStyles = 391, CopyStyles = 394, PageBreak = 280, Table = 281,
-	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, CrossReference = 286, UpdateReferences = 287, Footnote = 288, TableOfContents = 289, HeaderFooter = 290, NextSpelling = 295,
+	Picture = 282, Thumbnail = 283, Link = 284, DateTime = 285, CrossReference = 286, UpdateReferences = 287, Footnote = 288, TableOfContents = 289, Snippets = 291, HorizontalLine = 292, HeaderFooter = 290, NextSpelling = 295,
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
@@ -630,7 +640,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 54;    // (the About box; make_version.ps1)
+	public const int Iteration = 55;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -759,6 +769,7 @@ class WriterForm : Form
 		pageGaps = new PageGaps(Editor);
 		Editor.Gaps = pageGaps;
 		Editor.BandParts = GapBandParts;
+		Editor.BandStyleOf = (header, page) => header ? (Bands.HeaderFontOn(page), Bands.HeaderFromEdge, Bands.HeaderLineOn(page)) : (Bands.FooterFontOn(page), Bands.FooterFromEdge, Bands.FooterLineOn(page));
 		pagePanel.Paint += (s, e) => PaintGapBands(e.Graphics);
 		Editor.Painted += FollowGapBands;
 		FitPagePadding();
@@ -871,6 +882,7 @@ class WriterForm : Form
 		Editor.NotesOn = page => page >= 1 && page <= sheetNotes.Count && sheetNotes[page - 1].Count > 0 ? (sheetNotes[page - 1], sheetNoteFont.Name, sheetNoteFont.Size) : null;
 		Editor.FollowReference = GoToReferenceTarget;
 		Editor.AltTextOf = position => api.PictureAltText(position);
+		MarkdownConverter.AltTextAt = position => { try { return api.PictureAltText(position); } catch (Exception) { return ""; } };    // (iteration 55: Insert > Horizontal Line's rule)
 		Editor.KeyDown += (s, e) => { if (recorder.Recording) RecordKeyDown(e); };
 		Editor.KeyPress += (s, e) => {
 			if (recorder.Recording && (e.KeyChar >= ' ' || e.KeyChar == '\t')) { recorder.Type(e.KeyChar); UpdateRecordingLabel(); }
@@ -909,6 +921,9 @@ class WriterForm : Form
 			outlineSplit.SplitterDistance = Math.Clamp(LogicalToDeviceUnits(Settings.OutlineWidth), LogicalToDeviceUnits(100), Math.Max(LogicalToDeviceUnits(100), outlineSplit.Width / 2));
 			RefreshOutline();
 			if (startFile != null) Run(() => api.Open(startFile));
+			// (iteration 55) else the first document as File > New makes one: in the Normal style (its font: Times New
+			// Roman in the Classic set, not the editor's own Segoe UI, which new settings showed)
+			else Run(api.New);
 			Editor.Modified = false;
 			Editor.Focus();
 			UpdateUi();
@@ -1091,6 +1106,8 @@ class WriterForm : Form
 		Button(RibbonCommand.Thumbnail, InsertThumbnailDialog);
 		Button(RibbonCommand.CrossReference, CrossReferenceCommand);
 		Button(RibbonCommand.TableOfContents, TableOfContentsCommand);
+		Button(RibbonCommand.Snippets, SnippetsCommand);
+		Button(RibbonCommand.HorizontalLine, () => Run(() => api.InsertHorizontalLine(), M("InsertHorizontalLine")));
 		Button(RibbonCommand.Footnote, FootnoteCommand, Keys.Control | Keys.Alt | Keys.F);
 		Button(RibbonCommand.UpdateReferences, UpdateReferencesCommand, Keys.F9, M("UpdateCrossReferences"));
 		Button(RibbonCommand.Link, InsertHyperlinkDialog, Keys.Control | Keys.K);
@@ -1521,6 +1538,108 @@ class WriterForm : Form
 		return given;
 	}
 
+	// ---- Snippets (iteration 55, rte_snippets.cs)
+
+	/// The snippets' list (beside the user's own templates).
+	internal string SnippetsFile => Snippets.FileIn(OwnTemplatesFolder);
+	internal List<Snippet> SnippetList() => Snippets.Load(SnippetsFile);
+
+	/// A snippet's part (an RTF template in a Parts folder, or any RTF template of that name), or null.
+	internal TemplateInfo? SnippetPart(Snippet snippet) => TemplateList().OrderBy(t => !t.Part)
+		.FirstOrDefault(t => string.Equals(t.Name, snippet.Part, StringComparison.OrdinalIgnoreCase) && t.Path.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase));
+
+	// Insert > Snippets (iteration 55: a snippet's text typed or pasted in its own dialog, kept as a part)
+	void SnippetsCommand() {
+		var doc = Editor.TextDocument;
+		string? selection = !SourceActive && doc.Selection2.End > doc.Selection2.Start ? WithoutGaps(() => Editor.SelectedRtf ?? "") : null;
+		using var font = new Font(Styles.Normal.Font, Styles.Normal.Size);
+		using var dlg = new SnippetsDialog(SnippetList(), TemplateList, selection, LoadPart, SavePart, font);
+		dlg.Changed += list => Snippets.Save(SnippetsFile, list);
+		dlg.Export += path => Run(() => SetStatus("The snippets were exported to " + api.ExportSnippets(path) + ". Run it with AutoHotkey v2 to have them in any program."));
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		if (dlg.ToInsert is { } insert) {
+			string abbreviation = insert.Abbreviation;
+			Run(() => api.InsertSnippet(abbreviation, "", true), M("InsertSnippet", abbreviation, "", true));
+		}
+	}
+
+	/// A part's RTF by its name (null: there is none).
+	internal string? LoadPart(string name) => SnippetPart(new Snippet("", name)) is { } part && File.Exists(part.Path) ? File.ReadAllText(part.Path, Encoding.Latin1) : null;
+
+	/// Saves a part's RTF: over the part of that name if there is one, else a new one in your own templates' Parts folder.
+	internal void SavePart(string name, string rtf) {
+		string path = SnippetPart(new Snippet("", name))?.Path ?? Path.Combine(OwnTemplatesFolder, "Parts", name + ".rtf");
+		Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+		File.WriteAllText(path + ".tmp", rtf, Encoding.Latin1);
+		File.Move(path + ".tmp", path, overwrite: true);
+	}
+
+	/// A snippet's hotstring fired (AhkWord.ahk, with the ending character typed: "" for one that fires at once): once
+	/// the document (or the source view) has the abbreviation and that character before the caret (the keys that typed
+	/// them may still be on their way), they are taken out and the snippet's part goes in (its fields asked for), as one
+	/// undo step; in the Markdown or HTML view, the part's plain text. Gives up after half a second (the abbreviation
+	/// stays as typed). Returns at once.
+	/// (target: "rich" or "source", the document or the source view, whichever has the focus or not: tests.)
+	internal void FireSnippet(string abbreviation, string ending, string? target = null) {
+		if (SnippetList().FirstOrDefault(s => string.Equals(s.Abbreviation, abbreviation, s.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)) is not { } snippet) return;
+		if (SnippetPart(snippet) is not { } part) { SetStatus($"⚠ The snippet \"{abbreviation}\" inserts the part {snippet.Part}, which isn't in the templates' Parts folders any more."); return; }
+		bool source = target == "source" || target == null && view != SourceKind.None && sourceBox.Focused;
+		if (target == null && !source && !Editor.Focused) return;
+		int tries = 0;
+		var timer = new System.Windows.Forms.Timer { Interval = 15 };
+		timer.Tick += (s, e) => {
+			timer.Stop();
+			if (TryFireSnippet(snippet, part, ending, source) || ++tries >= 33) timer.Dispose();
+			else timer.Start();
+		};
+		timer.Start();
+	}
+
+	// The snippet in place of what typed it, if the text before the caret is that now.
+	bool TryFireSnippet(Snippet snippet, TemplateInfo part, string ending, bool source) {
+		int kept = snippet.KeepEnding && !snippet.Instant && ending != "" ? 1 : 0;
+		if (source) {
+			// (the view's lines end in "\n": made "\r", as Typed has Enter)
+			int caret = sourceBox.CurrentPosition, from = Math.Max(0, caret - 60);
+			string before = sourceBox.GetTextRange(from, caret - from).Replace('\n', '\r');
+			int length = Snippets.Typed(before, before.Length, snippet, ending);
+			if (length < 0) return false;
+			string text = SnippetPlainText(part);
+			var given = FieldValues("Insert " + part.Name, text, null, ask: true);
+			text = Templates.FillText(text, name => given.TryGetValue(name, out var value) ? value : null).Replace("\r\n", "\n").Replace('\r', '\n');
+			int begin = caret - length;
+			sourceBox.DeleteRange(begin, length - kept);
+			sourceBox.InsertText(begin, text);
+			sourceBox.GotoPosition(begin + text.Length + kept);
+			return true;
+		}
+		var doc = Editor.TextDocument;
+		var selection = doc.Selection2;
+		if (selection.End > selection.Start) return false;
+		int at = selection.Start;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		int typedLength = Snippets.Typed(story, at, snippet, ending);
+		if (typedLength < 0) return false;
+		int start = at - typedLength;
+		doc.BeginEditCollection();
+		try {
+			doc.Range2(start, at - kept).Text = "";
+			doc.Selection2.SetRange(start, start);
+			InsertTemplate(part, null, ask: true, inline: true);
+			if (kept > 0) { int after = doc.Selection2.Start; doc.Selection2.SetRange(after + kept, after + kept); }
+		} finally {
+			doc.EndEditCollection();
+		}
+		return true;
+	}
+
+	/// A part's plain text (its RTF read by a RichTextBox of its own; markers left out).
+	internal static string SnippetPlainText(TemplateInfo part) {
+		using var box = new RichTextBox();
+		box.Rtf = File.ReadAllText(part.Path, Encoding.Latin1);
+		return CrossRefs.PlainText(box.Text).TrimEnd('\n', '\r');
+	}
+
 	// File > New from Template: the documents (not the parts) to choose from.
 	void NewFromTemplateCommand() {
 		using var dlg = new TemplatePickerDialog("New from Template", TemplateList().Where(t => !t.Part).ToList(), OwnTemplatesFolder);
@@ -1535,10 +1654,13 @@ class WriterForm : Form
 
 	/// Inserts a template's content at the caret (replacing the selection), in one undo step, and fills in its fields
 	/// (only the inserted ones) as NewFromTemplate does. Returns how many were filled in.
-	internal int InsertTemplate(TemplateInfo template, IDictionary<string, string>? values, bool ask) {
+	/// (inline, iteration 55: a snippet's part goes in where the caret is, without the paragraph mark its text ends with,
+	/// which RichEdit writes for the last paragraph: inserted, that started a new paragraph after every snippet)
+	internal int InsertTemplate(TemplateInfo template, IDictionary<string, string>? values, bool ask, bool inline = false) {
 		if (!template.Path.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase))
 			throw new InvalidOperationException($"Only RTF templates can be inserted; open {Path.GetFileName(template.Path)} and save it as Rich Text Format.");
 		string rtf = HeaderFooter.StripFromRtf(File.ReadAllText(template.Path, Encoding.Latin1));    // (the header and footer stay the document's)
+		if (inline) rtf = Snippets.WithoutFinalParagraph(rtf);
 		var doc = Editor.TextDocument;
 		doc.BeginEditCollection();
 		int filled;
@@ -2108,13 +2230,24 @@ class WriterForm : Form
 
 	// ---------------------------------------------------------------- Iteration 3: printing and PDF
 
-	internal DocumentPrinter CreatePrinter(string? printerName = null) {
-		// (laid out and printed as the document is: the page view's gaps out while the printer is in use)
-		bool gaps = pageGaps.Applied && !gapsOut && !quietGaps;
+	internal DocumentPrinter CreatePrinter(string? printerName = null, bool dialog = false, bool paperOnly = false) {
+		// (laid out and printed as the document is: the page view's gaps out while the printer is in use; not for its paper
+		// alone)
+		bool gaps = !paperOnly && pageGaps.Applied && !gapsOut && !quietGaps;
+		// (iteration 55: the window's painting held until the gaps are back, then painted once: each recovery copy and save
+		// showed the text without its gaps for a moment, a flicker and a jump every minute or so. Not while a dialog shows
+		// or a PDF is made (dialog): the window is painted meanwhile.)
+		var held = gaps && !dialog ? HoldGaps() : null;
 		if (gaps) { QuietGaps(pageGaps.Remove); gapsOut = true; }
-		var printer = new DocumentPrinter(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName) { NoteStyle = NoteStyle };
-		if (gaps) printer.Disposed += () => { gapsOut = false; QuietGaps(pageGaps.Reapply); };
-		return printer;
+		try {
+			var printer = new DocumentPrinter(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName) { NoteStyle = NoteStyle };
+			if (gaps) printer.Disposed += () => { try { gapsOut = false; QuietGaps(pageGaps.Reapply); } finally { held?.Dispose(); } };
+			return printer;
+		} catch {
+			if (gaps) { gapsOut = false; QuietGaps(pageGaps.Reapply); }
+			held?.Dispose();
+			throw;
+		}
 	}
 
 	/// The document's header and footer.
@@ -2144,7 +2277,11 @@ class WriterForm : Form
 		// (the page view showing without its gaps, as back from a source view, which took them out: worked out again)
 		if (pageView && !pageGaps.Applied && !gapsOut && !quietGaps) bandPagesStale = true;
 		if (pageGaps.Lost) { pageGaps.Lost = false; bandPagesStale = true; }    // (gaps editing took apart: worked out again)
-		if (needPages && bandPagesStale && !gapsOut && (DateTime.Now - lastEdit).TotalMilliseconds > 1000) {
+		// (iteration 55) a header or footer that now reaches further or less far: the sheets laid out again at once, not
+		// after the next edit (meanwhile the text was under the header)
+		bool marginsMoved = pageView && pageGaps.Applied && !gapsOut && !quietGaps && pageLayout is { } laidOut && GapMargins(laidOut) != gapsMargins;
+		if (marginsMoved) bandPagesStale = true;
+		if ((needPages || marginsMoved) && bandPagesStale && !gapsOut && (marginsMoved || (DateTime.Now - lastEdit).TotalMilliseconds > 1000)) {
 			bandPagesStale = false;
 			if (pageView) RecomputeGaps();
 			else {
@@ -2176,12 +2313,13 @@ class WriterForm : Form
 		}, RegexOptions.IgnoreCase);
 		var header = PageBands.Parts(bands.HeaderOn(viewPage)).Select(Fill).ToArray();
 		var footer = PageBands.Parts(bands.FooterOn(viewPage)).Select(Fill).ToArray();
-		string shown = $"{visible}|{pageView}|{bands.ShowHeader}|{string.Join("\t", header)}|{bands.ShowFooter}|{string.Join("\t", footer)}";
+		bool headerOn = bands.HeaderOn(viewPage) != null, footerOn = bands.FooterOn(viewPage) != null;
+		string shown = $"{visible}|{pageView}|{headerOn}|{string.Join("\t", header)}|{footerOn}|{string.Join("\t", footer)}|{bands.HeaderFontOn(viewPage)}|{bands.FooterFontOn(viewPage)}|{bands.HeaderLine}|{bands.FooterLine}";
 		if (shown == bandsShown) return;
 		bandsShown = shown;
 		// (in page view each sheet has its own: not the strips)
-		headerStrip.Display(visible && bands.ShowHeader && !pageView, header);
-		footerStrip.Display(visible && bands.ShowFooter && !pageView, footer);
+		headerStrip.Display(visible && headerOn && !pageView, header, bands.HeaderFontOn(viewPage));
+		footerStrip.Display(visible && footerOn && !pageView, footer, bands.FooterFontOn(viewPage));
 		if (pageView) Editor.Invalidate();
 	}    // (the default, once the settings are loaded: in the constructor)
 
@@ -2358,8 +2496,17 @@ class WriterForm : Form
 		return r.ToString();
 	}
 
-	// The pages laid out again (as printed: without gaps) and their gaps put in.
+	// (iteration 55) the sheets' top and bottom margins (points), as printed: a header or footer reaching past its
+	// margin pushes the text in; and those the gaps were put in with
+	(float Top, float Bottom, float FirstTop, float FirstBottom) GapMargins(PageLayout layout) => (Math.Max(layout.Top / 20f, Bands.HeaderReach() * 0.72f), Math.Max(layout.Bottom / 20f, Bands.FooterReach() * 0.72f),
+		Math.Max(layout.Top / 20f, Bands.HeaderReach(1) * 0.72f), Math.Max(layout.Bottom / 20f, Bands.FooterReach(1) * 0.72f));
+	(float Top, float Bottom, float FirstTop, float FirstBottom) gapsMargins;
+
+	// The pages laid out again (as printed: without gaps) and their gaps put in. (Rte.PageViewReport and tests: how many
+	// times.)
+	internal int GapsRecomputed;
 	void RecomputeGaps() {
+		GapsRecomputed++;
 		// (not now: the gaps are out for something else, or the page isn't laid out yet: a moment later, as after typing,
 		// rather than a page view left without its gaps)
 		if (pageLayout is not { } layout || gapsOut) { bandPagesStale = true; return; }
@@ -2374,7 +2521,10 @@ class WriterForm : Form
 			catch (Exception) { bandPagesStale = true; lastEdit = DateTime.Now; }    // (the printer busy: again in a second)
 			bandStarts = pages?.Select(p => p.Start).ToList();
 			if (pages != null && PageViewActive)
-				pageGaps.Apply(pages, (layout.Height - layout.Top - layout.Bottom) / 20f, layout.Bottom / 20f, layout.Top / 20f);
+			{
+				var (top, bottom, firstTop, firstBottom) = gapsMargins = GapMargins(layout);
+				pageGaps.Apply(pages, layout.Height / 20f - top - bottom, bottom, top, layout.Height / 20f - firstTop - firstBottom, firstBottom, firstTop);
+			}
 		});
 	}
 
@@ -2436,7 +2586,7 @@ class WriterForm : Form
 	// The header's or footer's parts for a page, filled in (null: not shown).
 	string[]? GapBandParts(bool header, int page) {
 		var bands = Bands;
-		if (!Settings.ShowBands || (header ? !bands.ShowHeader : !bands.ShowFooter)) return null;
+		if (!Settings.ShowBands || (header ? bands.HeaderOn(page) : bands.FooterOn(page)) == null) return null;    // (iteration 55: the page's own)
 		int pages = pageGaps.Pages > 0 ? pageGaps.Pages : bandStarts?.Count ?? 1;
 		string Fill(string text) => Regex.Replace(text, @"\{(title|file|page|pages|date|time)\}", m => m.Groups[1].Value.ToLowerInvariant() switch {
 			"title" => DocumentName,
@@ -2498,12 +2648,21 @@ class WriterForm : Form
 	/// The header and footer new documents get (File > Header and Footer can make a document's the default).
 	internal PageBands DefaultBands() => new() {
 		ShowHeader = Settings.ShowHeader, Header = Settings.Parts(Settings.Header), ShowFooter = Settings.ShowFooter, Footer = Settings.Parts(Settings.Footer),
-		DifferentFirst = Settings.DifferentFirst, FirstHeader = Settings.Parts(Settings.FirstHeader), FirstFooter = Settings.Parts(Settings.FirstFooter)
+		DifferentFirst = Settings.DifferentFirst, FirstHeader = Settings.Parts(Settings.FirstHeader), FirstFooter = Settings.Parts(Settings.FirstFooter),
+		HeaderFont = Settings.HeaderFont, FooterFont = Settings.FooterFont, HeaderDistance = Settings.HeaderDistance, FooterDistance = Settings.FooterDistance,
+		HeaderLine = Settings.HeaderLine, FooterLine = Settings.FooterLine,
+		ShowFirstHeader = Settings.DifferentFirst ? Settings.ShowFirstHeader : null, ShowFirstFooter = Settings.DifferentFirst ? Settings.ShowFirstFooter : null,
+		FirstHeaderFont = Settings.DifferentFirst ? Settings.FirstHeaderFont : null, FirstFooterFont = Settings.DifferentFirst ? Settings.FirstFooterFont : null,
+		FirstHeaderLine = Settings.DifferentFirst ? Settings.FirstHeaderLine : null, FirstFooterLine = Settings.DifferentFirst ? Settings.FirstFooterLine : null
 	};
 
 	internal void MakeDefault(PageBands bands) {
 		(Settings.ShowHeader, Settings.Header, Settings.ShowFooter, Settings.Footer) = (bands.ShowHeader, Settings.Parts(bands.Header), bands.ShowFooter, Settings.Parts(bands.Footer));
 		(Settings.DifferentFirst, Settings.FirstHeader, Settings.FirstFooter) = (bands.DifferentFirst, Settings.Parts(bands.FirstHeader), Settings.Parts(bands.FirstFooter));
+		(Settings.HeaderFont, Settings.FooterFont, Settings.HeaderDistance, Settings.FooterDistance) = (bands.HeaderFont, bands.FooterFont, bands.HeaderDistance, bands.FooterDistance);
+		(Settings.HeaderLine, Settings.FooterLine) = (bands.HeaderLine, bands.FooterLine);
+		(Settings.ShowFirstHeader, Settings.ShowFirstFooter, Settings.FirstHeaderFont, Settings.FirstFooterFont, Settings.FirstHeaderLine, Settings.FirstFooterLine)
+			= (bands.ShowFirstHeader, bands.ShowFirstFooter, bands.FirstHeaderFont, bands.FirstFooterFont, bands.FirstHeaderLine, bands.FirstFooterLine);
 		Settings.Save();
 	}
 
@@ -2512,7 +2671,7 @@ class WriterForm : Form
 	internal PageLayout PageLayout() {
 		int width = 850, height = 1100;    // 1/100 inch
 		try {
-			using var printer = CreatePrinter();
+			using var printer = CreatePrinter(paperOnly: true);
 			var paper = printer.Document.DefaultPageSettings.PaperSize;
 			(width, height) = (paper.Width, paper.Height);
 		} catch (Exception) {
@@ -2521,7 +2680,7 @@ class WriterForm : Form
 		if (Settings.Landscape) (width, height) = (height, width);
 		int[] m = Settings.Margins is { Length: 4 } margins ? margins : new[] { 100, 100, 100, 100 };
 		static int Twips(int hundredths) => (int)Math.Round(hundredths * 14.4);
-		return new PageLayout(Twips(width), Twips(height), Twips(m[0]), Twips(m[1]), Twips(m[2]), Twips(m[3]), Settings.Landscape);
+		return new PageLayout(Twips(width), Twips(height), Twips(m[0]), Twips(m[1]), Twips(m[2]), Twips(m[3]), Settings.Landscape, Twips(Bands.HeaderFromEdge), Twips(Bands.FooterFromEdge));
 	}
 
 	// ---- Cross-references (iteration 50, rte_crossrefs.cs)
@@ -2728,6 +2887,8 @@ class WriterForm : Form
 	/// The header or footer changed: shown at once (iteration 49), not at the strips' next look, half a second on.
 	internal void BandsChangedNow() {
 		bandsShown = "";
+		pageStartsStale = true;    // (iteration 55: a taller header or footer moves the page breaks)
+		if (!PageViewActive) bandPagesStale = true;
 		UpdateBands();
 	}
 
@@ -3022,7 +3183,7 @@ class WriterForm : Form
 	}
 
 	void PageSetupCommand() {
-		using var printer = CreatePrinter();
+		using var printer = CreatePrinter(dialog: true);
 		using var dlg = new PageSetupDialog { Document = printer.Document, EnableMetric = true };
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		var page = printer.Document.DefaultPageSettings;
@@ -3039,7 +3200,7 @@ class WriterForm : Form
 		UpdateReferences();
 		List<int> starts;
 		using (var measuring = CreatePrinter()) starts = measuring.PageStarts();
-		using var printer = CreatePrinter();
+		using var printer = CreatePrinter(dialog: true);
 		using var preview = new PagePreviewForm(DocumentName, this);
 		int caret = Editor.TextDocument.Selection2.Start;
 		preview.Load += (s, e) => preview.Pages.Show(printer.Document, starts, Math.Max(0, starts.FindLastIndex(start => start <= caret)));
@@ -3056,7 +3217,7 @@ class WriterForm : Form
 
 	void PrintCommand(IWin32Window owner) {
 		UpdateReferences();
-		using var printer = CreatePrinter();
+		using var printer = CreatePrinter(dialog: true);
 		using var dlg = new PrintDialog { Document = printer.Document, UseEXDialog = true };
 		if (dlg.ShowDialog(owner) != DialogResult.OK) return;
 		printer.Document.Print();
@@ -4039,7 +4200,7 @@ class WriterForm : Form
 		RibbonCommand.New, RibbonCommand.NewFromTemplate, RibbonCommand.StartPage, RibbonCommand.NewWindow, RibbonCommand.OpenInNewWindow, RibbonCommand.Open, RibbonCommand.Save, RibbonCommand.SaveAs, RibbonCommand.Close, RibbonCommand.Print, RibbonCommand.PrintPreview,
 		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys,
-		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
+		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.Snippets, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
 		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.WordWrap, RibbonCommand.PrintLayout, RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage,
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
 		RibbonCommand.HeaderFooter, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
@@ -4742,6 +4903,82 @@ public class EditorApi
 	public int InsertTemplate(string template, string fields = "", bool ask = false) =>
 		form.InsertTemplate(TemplateNamed(template, parts: true), FieldLines(fields), ask);
 
+	// ---- Snippets (iteration 55)
+
+	/// The snippets, one a line: the abbreviation, a tab, the part it inserts, a tab, how it fires ("ending": on Space,
+	/// Enter, Tab or punctuation; "ending kept": the character stays after it; "instant": at once), a tab, "case" if the
+	/// abbreviation's case must match (else "any").
+	public string Snippets => string.Join("\n", form.SnippetList().OrderBy(s => s.Abbreviation, StringComparer.OrdinalIgnoreCase)
+		.Select(s => s.Abbreviation + "\t" + s.Part + "\t" + (s.Instant ? "instant" : s.KeepEnding ? "ending kept" : "ending") + "\t" + (s.CaseSensitive ? "case" : "any")));
+
+	/// Gives a part (by name: Rte.Templates(true) lists them; an RTF template) an abbreviation: typed in the document,
+	/// then Space, Enter, Tab or punctuation (instant = 1: at once), it becomes the part. keepEnding = 1: the ending
+	/// character stays after it; caseSensitive = 1: the abbreviation fires only typed with its case. An abbreviation it
+	/// had already is changed.
+	public void AddSnippet(string abbreviation, string part, bool instant = false, bool keepEnding = false, bool caseSensitive = false) {
+		abbreviation = abbreviation.Trim();
+		var list = form.SnippetList();
+		string problem = global::Snippets.Problem(abbreviation, list, abbreviation);
+		if (problem != "") throw new ArgumentException(problem);
+		var snippet = new Snippet(abbreviation, part.Trim(), instant, keepEnding && !instant, caseSensitive);
+		if (form.SnippetPart(snippet) == null) throw new ArgumentException($"There is no part \"{part}\" (an RTF template: Rte.Templates(true) lists them).");
+		list.RemoveAll(s => string.Equals(s.Abbreviation, abbreviation, StringComparison.OrdinalIgnoreCase));
+		list.Add(snippet);
+		global::Snippets.Save(form.SnippetsFile, list);
+	}
+
+	/// Takes a snippet's abbreviation away (its part stays). Returns whether there was one.
+	public bool RemoveSnippet(string abbreviation) {
+		var list = form.SnippetList();
+		bool removed = list.RemoveAll(s => string.Equals(s.Abbreviation, abbreviation.Trim(), StringComparison.OrdinalIgnoreCase)) > 0;
+		if (removed) global::Snippets.Save(form.SnippetsFile, list);
+		return removed;
+	}
+
+	/// Inserts a snippet's part at the caret (as Insert from Template does): fields as for InsertTemplate. Returns how many
+	/// fields were filled in.
+	public int InsertSnippet(string abbreviation, string fields = "", bool ask = false) {
+		var snippet = form.SnippetList().FirstOrDefault(s => string.Equals(s.Abbreviation, abbreviation.Trim(), StringComparison.OrdinalIgnoreCase))
+			?? throw new ArgumentException($"There is no snippet \"{abbreviation}\" (Rte.Snippets lists them).");
+		var part = form.SnippetPart(snippet) ?? throw new FileNotFoundException($"The snippet's part \"{snippet.Part}\" isn't in the templates' Parts folders.");
+		return form.InsertTemplate(part, FieldLines(fields), ask, inline: true);
+	}
+
+	/// Saves the selection, formatting and all, as a new part (in your own templates' Parts folder, as part.rtf), and
+	/// gives it an abbreviation (as AddSnippet).
+	public void SaveSelectionAsSnippet(string part, string abbreviation, bool instant = false, bool keepEnding = false, bool caseSensitive = false) {
+		part = part.Trim();
+		if (part == "" || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) throw new ArgumentException("A part's name can't be empty, nor have \\ / : * ? \" < > | in it.");
+		var selection = ed.TextDocument.Selection2;
+		if (selection.End <= selection.Start) throw new InvalidOperationException("Select the text to save as a snippet first.");
+		string problem = global::Snippets.Problem(abbreviation.Trim(), form.SnippetList(), abbreviation.Trim());
+		if (problem != "") throw new ArgumentException(problem);
+		string folder = Path.Combine(form.OwnTemplatesFolder, "Parts");
+		string file = Path.Combine(folder, part + ".rtf");
+		if (File.Exists(file)) throw new IOException($"There is a part \"{part}\" already ({file}): choose another name, or give it the abbreviation (AddSnippet).");
+		string rtf = form.WithoutGaps(() => ((RichTextBox)ed).SelectedRtf ?? "");
+		Directory.CreateDirectory(folder);
+		File.WriteAllText(file, rtf, Encoding.Latin1);
+		AddSnippet(abbreviation, part, instant, keepEnding, caseSensitive);
+	}
+
+	/// Writes the snippets as an AutoHotkey v2 script of plain-text hotstrings, to use them in any program (their fields
+	/// as their defaults or [their names]). Returns its full path.
+	public string ExportSnippets(string path) {
+		string full = Path.GetFullPath(path);
+		File.WriteAllText(full, global::Snippets.Script(form.SnippetList(), s => form.SnippetPart(s) is { } part ? WriterForm.SnippetPlainText(part) : null), new UTF8Encoding(true));
+		return full;
+	}
+
+	/// For AhkWord.ahk: the snippets' hotstrings, one a line (their AutoHotkey options, a tab, the abbreviation), and the
+	/// file they are kept in (read again when it changes).
+	public string SnippetHotstrings => global::Snippets.Definitions(form.SnippetList());
+	public string SnippetsFile => form.SnippetsFile;
+
+	/// For AhkWord.ahk: a snippet's hotstring fired, with the ending character typed after it ("" for one that fires at
+	/// once). Returns at once; the snippet goes in once the editor has what was typed.
+	public void FireSnippet(string abbreviation, string ending = "") => form.FireSnippet(abbreviation, ending);
+
 	/// Fills in the {{fields}} left in the document: fields as for NewFromTemplate. Returns how many were filled in.
 	public int FillFields(string fields = "", bool ask = false) => form.FillFields(FieldLines(fields), ask);
 
@@ -5222,7 +5459,7 @@ public class EditorApi
 		string body = form.WithoutGaps(() => {
 			string html = HtmlLists.Export(ed, RtfTables.ExportHtml(ed, PageBreaks.ExportHtml(ed, global::LineSpacing.ExportHtml(ed, StyleHtml.Export(ed, form.Styles, LineBreaks.ExportHtml(ed, ed.Html))))), out var found);
 			listsCss = found;
-			return Footnotes.ToHtml(CrossRefs.ToHtml(html));
+			return MarkdownConverter.RulesToHtml(Footnotes.ToHtml(CrossRefs.ToHtml(html)));
 		});
 		css = ParagraphCss + listsCss;
 		return body;
@@ -6573,7 +6810,7 @@ public class EditorApi
 		form.UpdateReferences();
 		using var guard = new DefaultPrinterGuard(form.Settings);    // (the PDF printer doesn't become the default)
 		(List<PdfMarks.Bookmark> Bookmarks, List<PdfMarks.Link> Links) places = (new(), new());
-		using (var printer = form.CreatePrinter(pdfPrinter)) {
+		using (var printer = form.CreatePrinter(pdfPrinter, dialog: true)) {
 			var document = printer.Document;
 			document.PrinterSettings.PrintToFile = true;
 			document.PrinterSettings.PrintFileName = full;
@@ -7143,7 +7380,8 @@ public class EditorApi
 
 	void BandsChanged() { ed.Modified = true; form.BandsChangedNow(); }
 
-	/// Sets the document's header (left, center and right parts) and shows it.
+	/// Sets the document's header (left, center and right parts) and shows it. A part can have several lines ("`n"
+	/// between them).
 	public void SetHeader(string left = "", string center = "", string right = "") {
 		form.Bands.Header = new[] { left, center, right };
 		form.Bands.ShowHeader = true;
@@ -7170,10 +7408,10 @@ public class EditorApi
 	}
 
 	/// The header's left, center and right parts, one per line.
-	public string HeaderParts => string.Join("\n", PageBands.Parts(form.Bands.Header));
+	public string HeaderParts => string.Join("\n", PageBands.Parts(form.Bands.Header).Select(BandText.Plain));
 
 	/// The footer's left, center and right parts, one per line.
-	public string FooterParts => string.Join("\n", PageBands.Parts(form.Bands.Footer));
+	public string FooterParts => string.Join("\n", PageBands.Parts(form.Bands.Footer).Select(BandText.Plain));
 
 	/// Whether the first page has a header and footer of its own (SetFirstHeader, SetFirstFooter). Empty
 	/// parts leave the first page without one, as on a letter's or a pleading's first page.
@@ -7182,12 +7420,14 @@ public class EditorApi
 		set { form.Bands.DifferentFirst = value; BandsChanged(); }
 	}
 
-	/// Sets the first page's header (left, center and right parts): the first page gets its own (DifferentFirstPage).
-	/// The header is shown (ShowHeader), on the other pages too: with their parts empty, only the first page has one.
+	/// Sets the first page's header (left, center and right parts): the first page gets its own (DifferentFirstPage),
+	/// shown (ShowFirstHeader). (Iteration 55) The other pages are as they were: ShowHeader off, only the first page has
+	/// one.
 	public void SetFirstHeader(string left = "", string center = "", string right = "") {
 		form.Bands.FirstHeader = new[] { left, center, right };
 		form.Bands.FirstFooter = PageBands.Parts(form.Bands.FirstFooter);
-		form.Bands.DifferentFirst = form.Bands.ShowHeader = true;
+		form.Bands.DifferentFirst = true;
+		form.Bands.ShowFirstHeader = true;
 		BandsChanged();
 	}
 
@@ -7195,8 +7435,45 @@ public class EditorApi
 	public void SetFirstFooter(string left = "", string center = "", string right = "") {
 		form.Bands.FirstFooter = new[] { left, center, right };
 		form.Bands.FirstHeader = PageBands.Parts(form.Bands.FirstHeader);
-		form.Bands.DifferentFirst = form.Bands.ShowFooter = true;
+		form.Bands.DifferentFirst = true;
+		form.Bands.ShowFirstFooter = true;
 		BandsChanged();
+	}
+
+	/// Iteration 55: whether the first page has a header (with DifferentFirstPage; the other pages: ShowHeader).
+	public bool ShowFirstHeader {
+		get => form.Bands.ShowHeaderOn(1);
+		set { form.Bands.ShowFirstHeader = value; BandsChanged(); }
+	}
+
+	/// Whether the first page has a footer (with DifferentFirstPage; the other pages: ShowFooter).
+	public bool ShowFirstFooter {
+		get => form.Bands.ShowFooterOn(1);
+		set { form.Bands.ShowFirstFooter = value; BandsChanged(); }
+	}
+
+	/// The first page's header font, as SetHeaderFont (with DifferentFirstPage; an empty name: plain).
+	public void SetFirstHeaderFont(string name = "", double size = 10, bool bold = false, bool italic = false, bool underline = false) {
+		form.Bands.FirstHeaderFont = name.Trim() == "" ? BandFont.Plain : new BandFont { Name = name.Trim(), Size = (float)Math.Clamp(size, 4, 72), Bold = bold, Italic = italic, Underline = underline };
+		BandsChanged();
+	}
+
+	/// The first page's footer font, as SetHeaderFont.
+	public void SetFirstFooterFont(string name = "", double size = 10, bool bold = false, bool italic = false, bool underline = false) {
+		form.Bands.FirstFooterFont = name.Trim() == "" ? BandFont.Plain : new BandFont { Name = name.Trim(), Size = (float)Math.Clamp(size, 4, 72), Bold = bold, Italic = italic, Underline = underline };
+		BandsChanged();
+	}
+
+	/// A line below the first page's header (with DifferentFirstPage).
+	public bool FirstHeaderLine {
+		get => form.Bands.HeaderLineOn(1);
+		set { form.Bands.FirstHeaderLine = value; BandsChanged(); }
+	}
+
+	/// A line above the first page's footer.
+	public bool FirstFooterLine {
+		get => form.Bands.FooterLineOn(1);
+		set { form.Bands.FirstFooterLine = value; BandsChanged(); }
 	}
 
 	/// The first page's header parts, one per line (empty lines if it has none of its own).
@@ -7210,6 +7487,91 @@ public class EditorApi
 		get => form.Settings.ShowBands;
 		set { form.Settings.ShowBands = value; form.Settings.Save(); }
 	}
+
+	/// Iteration 55: the header's font: its name, size in points, bold, italic and underline (all of its parts, the first
+	/// page's too); printed, on Show Pages' sheets, and in Word and OpenDocument files. An empty name: Segoe UI 8 pt in
+	/// grey, as before fonts could be chosen.
+	public void SetHeaderFont(string name = "", double size = 10, bool bold = false, bool italic = false, bool underline = false) {
+		form.Bands.HeaderFont = name.Trim() == "" ? null : new BandFont { Name = name.Trim(), Size = (float)Math.Clamp(size, 4, 72), Bold = bold, Italic = italic, Underline = underline };
+		BandsChanged();
+	}
+
+	/// The footer's font, as SetHeaderFont.
+	public void SetFooterFont(string name = "", double size = 10, bool bold = false, bool italic = false, bool underline = false) {
+		form.Bands.FooterFont = name.Trim() == "" ? null : new BandFont { Name = name.Trim(), Size = (float)Math.Clamp(size, 4, 72), Bold = bold, Italic = italic, Underline = underline };
+		BandsChanged();
+	}
+
+	/// Iteration 55: from the page's top edge to the header, in inches (Word's "Header from top"; 0.5 by default). A
+	/// header reaching past the top margin pushes the text down, as in Word.
+	public double HeaderFromTop {
+		get => form.Bands.HeaderFromEdge / 100.0;
+		set { int d = (int)Math.Round(Math.Clamp(value, 0, 5) * 100); form.Bands.HeaderDistance = d == PageBands.DefaultDistance ? null : d; BandsChanged(); }
+	}
+
+	/// From the page's bottom edge to the footer's last line, in inches (Word's "Footer from bottom"; 0.5 by default).
+	public double FooterFromBottom {
+		get => form.Bands.FooterFromEdge / 100.0;
+		set { int d = (int)Math.Round(Math.Clamp(value, 0, 5) * 100); form.Bands.FooterDistance = d == PageBands.DefaultDistance ? null : d; BandsChanged(); }
+	}
+
+	/// Iteration 55: a line below the header (Word's border below its paragraphs).
+	public bool HeaderLine {
+		get => form.Bands.HeaderLine;
+		set { form.Bands.HeaderLine = value; BandsChanged(); }
+	}
+
+	/// A line above the footer.
+	public bool FooterLine {
+		get => form.Bands.FooterLine;
+		set { form.Bands.FooterLine = value; BandsChanged(); }
+	}
+
+	/// Iteration 55: a horizontal line across the text, in a paragraph of its own (Insert > Horizontal Line): a picture of
+	/// a line, as Word's, so that it is printed and kept in every format; Markdown gets a rule (---) and HTML an <hr>.
+	public void InsertHorizontalLine() {
+		var doc = ed.TextDocument;
+		var selection = doc.Selection2;
+		float width = Math.Max(72, PageTextWidth() / 20f - 2);
+		int pixels = (int)Math.Round(width * 96 / 72), height = 8;
+		using var bitmap = new Bitmap(pixels, height);
+		using (var g = Graphics.FromImage(bitmap)) {
+			g.Clear(Color.White);    // (not transparent: RichEdit draws that black)
+			using var brush = new SolidBrush(Color.FromArgb(128, 128, 128));
+			g.FillRectangle(brush, 0, 3, pixels, 2);
+		}
+		using var png = new MemoryStream();
+		bitmap.Save(png, System.Drawing.Imaging.ImageFormat.Png);
+		doc.BeginEditCollection();
+		try {
+			selection.Text = "";
+			var paragraph = doc.Range2(selection.Start, selection.Start);
+			paragraph.Expand(tomConstants.tomParagraph);
+			if (selection.Start > paragraph.Start) { selection.Text = "\r"; selection.Collapse(tomConstants.tomCollapseEnd); }
+			int oldWidth = ed.DefaultImageWidth, oldHeight = ed.DefaultImageHeight;
+			try {
+				ed.DefaultImageWidth = pixels;
+				ed.DefaultImageHeight = height;
+				png.Position = 0;
+				ed.InsertImage(png, MarkdownConverter.RuleAlt);
+			} finally {
+				ed.DefaultImageWidth = oldWidth;
+				ed.DefaultImageHeight = oldHeight;
+			}
+			int after = doc.Selection2.Start;
+			string next = doc.Range2(after, after + 1).Text ?? "";
+			if (next != "\r") { doc.Range2(after, after).Text = "\r"; }
+			doc.Selection2.SetRange(after + 1, after + 1);
+		} finally {
+			doc.EndEditCollection();
+		}
+	}
+
+	/// The header's font ("Times New Roman 10 pt, bold"), empty without one of its own.
+	public string HeaderFont => form.Bands.HeaderFont?.Describe() ?? "";
+
+	/// The footer's font, as HeaderFont.
+	public string FooterFont => form.Bands.FooterFont?.Describe() ?? "";
 
 	/// Makes the document's header and footer the default for new documents (and documents without their own).
 	public void MakeHeaderFooterDefault() => form.MakeDefault(form.Bands);
@@ -7765,6 +8127,18 @@ public sealed class Settings
 	public bool DifferentFirst { get; set; }    // (iteration 49) the first page's own header and footer
 	public string[] FirstHeader { get; set; } = { "", "", "" };
 	public string[] FirstFooter { get; set; } = { "", "", "" };
+	public BandFont? HeaderFont { get; set; }    // (iteration 55) null: Segoe UI 8 pt in grey
+	public BandFont? FooterFont { get; set; }
+	public int? HeaderDistance { get; set; }    // (iteration 55) 1/100 inch from the page's edge (null: half an inch)
+	public int? FooterDistance { get; set; }
+	public bool HeaderLine { get; set; }    // (iteration 55) a line below the header, above the footer
+	public bool FooterLine { get; set; }
+	public bool? ShowFirstHeader { get; set; }    // (iteration 55) the first page's own (null: as the other pages)
+	public bool? ShowFirstFooter { get; set; }
+	public BandFont? FirstHeaderFont { get; set; }
+	public BandFont? FirstFooterFont { get; set; }
+	public bool? FirstHeaderLine { get; set; }
+	public bool? FirstFooterLine { get; set; }
 	public static string[] DefaultHeader => new[] { "{title}", "", "{date}" };
 	public static string[] DefaultFooter => new[] { "", "Page {page} of {pages}", "" };
 
@@ -7921,7 +8295,6 @@ sealed class DocumentPrinter : IDisposable
 	int nextChar, page, pageCount;
 
 	const int EM_FORMATRANGE = 0x0400 + 57;
-	const float BandHeight = 25, BandGap = 20;    // header / footer line height and distance from the text, 1/100 inch
 
 	[StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
 	[StructLayout(LayoutKind.Sequential)] struct CHARRANGE { public int cpMin, cpMax; }
@@ -7939,16 +8312,27 @@ sealed class DocumentPrinter : IDisposable
 		Document.DocumentName = title;
 		if (!string.IsNullOrEmpty(printerName)) Document.PrinterSettings.PrinterName = printerName;    // before the page settings
 		Document.DefaultPageSettings.Landscape = settings.Landscape;
-		if (settings.Margins is { Length: 4 } m) Document.DefaultPageSettings.Margins = new Margins(m[0], m[1], m[2], m[3]);
+		// (iteration 55) a header or footer reaching past its margin pushes the text in, as in Word
+		if (settings.Margins is { Length: 4 } m) {
+			int top = Math.Max(m[2], bands.HeaderReach()), bottom = Math.Max(m[3], bands.FooterReach());
+			Document.DefaultPageSettings.Margins = new Margins(m[0], m[1], top, bottom);
+			(firstTopShift, firstBottomShift) = (Math.Max(m[2], bands.HeaderReach(1)) - top, Math.Max(m[3], bands.FooterReach(1)) - bottom);
+		}
 		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; pageStarts = null; pageNotes = null; };
 		Document.PrintPage += PrintPage;
 		Document.EndPrint += (s, e) => SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // frees RichEdit's cache
 	}
 
+	// (iteration 55) page 1's text area against the others' (1/100 inch): its own header or footer reaches further or less
+	// far
+	int firstTopShift, firstBottomShift;
+	RECT FirstArea(RECT r) => new() { Left = r.Left, Right = r.Right, Top = r.Top + (int)Math.Round(firstTopShift * 14.4), Bottom = r.Bottom - (int)Math.Round(firstBottomShift * 14.4) };
+
 	void PrintPage(object? sender, PrintPageEventArgs e) {
 		page++;
 		var g = e.Graphics!;
-		var margins = e.MarginBounds;
+		var allMargins = e.MarginBounds;
+		var margins = page == 1 ? Rectangle.FromLTRB(allMargins.Left, allMargins.Top + firstTopShift, allMargins.Right, allMargins.Bottom - firstBottomShift) : allMargins;
 		float hardX = e.PageSettings.HardMarginX, hardY = e.PageSettings.HardMarginY;
 		int start = nextChar;
 		int end = editor.TextDocument.Range2(0, 0).StoryLength - 1;    // without the final paragraph mark
@@ -7956,7 +8340,7 @@ sealed class DocumentPrinter : IDisposable
 		try {
 			var range = new FORMATRANGE {
 				hdc = hdc, hdcTarget = hdc,
-				rc = Twips(margins, hardX, hardY), rcPage = Twips(e.PageBounds, hardX, hardY),
+				rc = Twips(allMargins, hardX, hardY), rcPage = Twips(e.PageBounds, hardX, hardY),
 				chrg = new CHARRANGE { cpMin = nextChar, cpMax = -1 }
 			};
 			if (pageCount == 0) {
@@ -7964,8 +8348,11 @@ sealed class DocumentPrinter : IDisposable
 				pageNotes = new List<List<Footnotes.NoteLine>>();
 				pageCount = CountPages(range, end, pageStarts, notes: pageNotes);    // for {pages}, and where each page ends
 				numberMarks = Marks(pageStarts, range, e.PageSettings);
+				if (numberMarks is { Count: > 0 } && firstTopShift != 0)    // (page 1's lines lower or higher)
+					numberMarks[0] = numberMarks[0].Select(mark => mark with { Baseline = mark.Baseline + (int)Math.Round(firstTopShift * 14.4) }).ToList();
 				pageLeaders = LeadersOnPages(range, pageStarts);    // (iteration 52)
 			}
+			range.rc = Twips(margins, hardX, hardY);    // (page 1's own)
 			range.chrg.cpMin = nextChar;
 			// (the page ends where the paragraphs' rules have it: page break before, keep together, widow control, keep with next)
 			range.chrg.cpMax = pageStarts != null && page < pageStarts.Count ? pageStarts[page] : -1;
@@ -7996,10 +8383,30 @@ sealed class DocumentPrinter : IDisposable
 		// The line numbers left of the text; the header just above the text area and the footer just below it, in the margins.
 		if (numberMarks != null && page <= numberMarks.Count)
 			PrintedLineNumbers.Draw(g, numberMarks[page - 1], numbering, editor.Font, margins.Left - hardX);
-		if (bands.HeaderOn(page) is { } header)    // (iteration 49: the first page's own, if it has one)
-			DrawBand(g, header, new RectangleF(margins.Left - hardX, Math.Max(5, margins.Top - BandGap - BandHeight) - hardY, margins.Width, BandHeight));
-		if (bands.FooterOn(page) is { } footer)
-			DrawBand(g, footer, new RectangleF(margins.Left - hardX, margins.Bottom + BandGap - hardY, margins.Width, BandHeight));
+		// (iteration 55) the header that far from the page's top edge, the footer's last line that far from its bottom edge
+		// (in the band's font: black, as Word prints it; grey without a font of its own, as before; words in their own)
+		if (bands.HeaderOn(page) is { } header) {    // (iteration 49: the first page's own, if it has one)
+			var texts = Settings.Parts(header).Select(Fill).ToArray();
+			var font = bands.HeaderFontOn(page);
+			float height = BandText.Draw(g, texts, font ?? BandFont.Plain, margins.Left - hardX, margins.Width, bands.HeaderFromEdge - hardY, 1, PageBands.IsPlain(font) ? Brushes.DimGray : Brushes.Black, Brushes.Black);
+			if (bands.HeaderLineOn(page) && PageBands.LineCount(header) > 0) {    // (iteration 55: the line below it)
+				float y = bands.HeaderFromEdge - hardY + height + PageBands.RuleGap;
+				using var pen = new Pen(Color.Black, PageBands.RuleWidth);
+				g.DrawLine(pen, margins.Left - hardX, y, margins.Right - hardX, y);
+			}
+		}
+		if (bands.FooterOn(page) is { } footer) {
+			var texts = Settings.Parts(footer).Select(Fill).ToArray();
+			var own = bands.FooterFontOn(page);
+			var font = own ?? BandFont.Plain;
+			float height = BandText.Height(texts, font, f => f.GetHeight(g));
+			float top = e.PageBounds.Height - bands.FooterFromEdge - height - hardY;
+			BandText.Draw(g, texts, font, margins.Left - hardX, margins.Width, top, 1, PageBands.IsPlain(own) ? Brushes.DimGray : Brushes.Black, Brushes.Black);
+			if (bands.FooterLineOn(page) && PageBands.LineCount(footer) > 0) {    // (iteration 55: the line above it)
+				using var pen = new Pen(Color.Black, PageBands.RuleWidth);
+				g.DrawLine(pen, margins.Left - hardX, top - PageBands.RuleGap, margins.Right - hardX, top - PageBands.RuleGap);
+			}
+		}
 		e.HasMorePages = nextChar > start && nextChar < end;
 	}
 
@@ -8146,11 +8553,12 @@ sealed class DocumentPrinter : IDisposable
 			// a position's page, and the top (points from the page's top) of the line it starts
 			(int Page, float Top) Place(int position) {
 				int page = Math.Max(0, starts.FindLastIndex(s => s <= position));
-				if (position <= starts[page]) return (page, marginTop);
+				float pageTop = marginTop + (page == 0 ? firstTopShift * 0.72f : 0);    // (iteration 55: page 1's own)
+				if (position <= starts[page]) return (page, pageTop);
 				var measure = range;
 				measure.chrg = new CHARRANGE { cpMin = starts[page], cpMax = position };
 				SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref measure);
-				return (page, marginTop + (measure.rc.Bottom - range.rc.Top) / 20f);
+				return (page, pageTop + (measure.rc.Bottom - range.rc.Top) / 20f);
 			}
 			var headingAt = new Dictionary<string, (int Page, float Top)>(StringComparer.Ordinal);
 			foreach (var heading in headings) {
@@ -8198,7 +8606,7 @@ sealed class DocumentPrinter : IDisposable
 			lines ??= new PrintedLines(editor, Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings), range.rc.Right - range.rc.Left);
 			return lines.Starts(from, to);
 		}
-		var area = range.rc;    // (EM_FORMATRANGE gives back the height it used in rc: each page gets the whole area again)
+		var otherArea = range.rc;    // (EM_FORMATRANGE gives back the height it used in rc: each page gets the whole area again)
 		// (iteration 51) the footnotes: room for each page's notes at its foot, as lines (Footnotes.Lines), at most a
 		// little over half the page; the lines that don't fit go on at the foot of the next page, before its own, as in
 		// Word (and on the last page, in the room its text leaves, if there is enough)
@@ -8206,7 +8614,7 @@ sealed class DocumentPrinter : IDisposable
 		Graphics? measure = null;
 		Font? noteFont = null;
 		var (noteName, noteSize) = NoteFontUsed = Footnotes.NoteFontOf(doc, footnotes, editor.Font.Name, editor.Font.SizeInPoints, NoteStyle);
-		float widthUnits = (area.Right - area.Left) / 14.4f;    // (1/100 inch: the measuring graphics' unit)
+		float widthUnits = (otherArea.Right - otherArea.Left) / 14.4f;    // (1/100 inch: the measuring graphics' unit)
 		var linesOf = new Dictionary<int, List<Footnotes.NoteLine>>();    // each footnote's lines, by its place
 		List<Footnotes.NoteLine> LinesOf(List<Footnotes.Footnote> on) {
 			var lines = new List<Footnotes.NoteLine>();
@@ -8230,6 +8638,7 @@ sealed class DocumentPrinter : IDisposable
 		try {
 			while (true) {
 				count++;
+				var area = count == 1 ? FirstArea(otherArea) : otherArea;    // (iteration 55: page 1's own)
 				starts?.Add(position);
 				range.rc = area;
 				range.chrg.cpMin = position;
@@ -8307,28 +8716,6 @@ sealed class DocumentPrinter : IDisposable
 		}
 		SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);
 		return count;
-	}
-
-	// Each part gets its own column: the center part the width it needs (at most half the line), the left and right
-	// parts what is left on either side. Text that does not fit is shortened in the middle ("C:\Users\...\Report.html").
-	void DrawBand(Graphics g, string[] parts, RectangleF band) {
-		string[] texts = Settings.Parts(parts).Select(Fill).ToArray();
-		using var font = new Font("Segoe UI", 8f);
-		const float gap = 12;    // 1/100 inch between columns
-		float centerWidth = texts[1] == "" ? 0 : Math.Min(g.MeasureString(texts[1], font).Width + 4, band.Width / 2);
-		float sideWidth = Math.Max(0, (band.Width - centerWidth) / 2 - (centerWidth > 0 ? gap : gap / 2));
-		var columns = new[] {
-			new RectangleF(band.Left, band.Top, sideWidth, band.Height),
-			new RectangleF(band.Left + (band.Width - centerWidth) / 2, band.Top, centerWidth, band.Height),
-			new RectangleF(band.Right - sideWidth, band.Top, sideWidth, band.Height)
-		};
-		var alignments = new[] { StringAlignment.Near, StringAlignment.Center, StringAlignment.Far };
-		for (int i = 0; i < 3; i++) {
-			if (texts[i] == "" || columns[i].Width <= 0) continue;
-			using var format = new StringFormat { Alignment = alignments[i], LineAlignment = StringAlignment.Center,
-				Trimming = StringTrimming.EllipsisPath, FormatFlags = StringFormatFlags.NoWrap };
-			g.DrawString(texts[i], font, Brushes.DimGray, columns[i], format);
-		}
 	}
 
 	string Fill(string text) {
@@ -8874,6 +9261,9 @@ sealed class WriterEditBox : RichEditBox
 	/// The page view's gaps (rte_pagegaps.cs), and the header's and footer's parts for a page (null: not shown).
 	public PageGaps? Gaps;
 	public Func<bool, int, string[]?>? BandParts;
+	/// (iteration 55) the header's (true) or footer's font (null: Segoe UI in grey, as before) and its distance from the
+	/// sheet's edge (1/100 inch).
+	public Func<bool, int, (BandFont? Font, int Distance, bool Line)>? BandStyleOf;
 
 	/// Where a character is (its line's top), from RichEdit itself, in view or not. RichTextBox's own gives (0, 0) for
 	/// a character past its Text's length, which can be shorter than the document (a Word document's last page): what
@@ -8899,15 +9289,24 @@ sealed class WriterEditBox : RichEditBox
 		using var grey = new SolidBrush(PrintLayoutPage.Surround);
 		using var edge = new Pen(Color.FromArgb(200, 200, 200));
 		using var ink = new SolidBrush(Color.FromArgb(105, 105, 105));
-		using var font = new Font("Segoe UI", Math.Max(6f, 8.5f * ppp / (DeviceDpi / 72f)), GraphicsUnit.Point);
-		void Parts(string[]? parts, RectangleF area) {
+		float zoom = ppp / (DeviceDpi / 72f);
+		using var black = new SolidBrush(Color.FromArgb(30, 30, 30));
+		// (iteration 55) the header that far below the sheet's top, the footer's last line that far above its bottom, a
+		// line below the other; in the page's font (the first page can have its own)
+		void Parts(string[]? parts, RectangleF area, bool isHeader, int page) {
 			if (parts is not { Length: 3 } || area.Height <= 0) return;
-			area = new RectangleF(textMargins.Left, area.Top, Math.Max(1, width - textMargins.Left - textMargins.Right), area.Height);    // (above and below the text, not in the margins)
-			var format = new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
-			foreach (var (text, align) in new[] { (parts[0], StringAlignment.Near), (parts[1], StringAlignment.Center), (parts[2], StringAlignment.Far) }) {
-				if (string.IsNullOrWhiteSpace(text)) continue;
-				format.Alignment = align;
-				g.DrawString(text, font, ink, area, format);
+			var (own, distance, line) = BandStyleOf?.Invoke(isHeader, page) ?? (null, PageBands.DefaultDistance, false);
+			var band = own ?? BandFont.Plain;
+			float from = distance * 0.72f * ppp;
+			float height = BandText.Height(parts, band, f => f.GetHeight(g), zoom);
+			float top = isHeader ? area.Top + from : area.Bottom - from - height;
+			float left = textMargins.Left, textWidth = Math.Max(1, width - textMargins.Left - textMargins.Right);    // (above and below the text, not in the margins)
+			BandText.Draw(g, parts, band, left, textWidth, top, zoom, PageBands.IsPlain(own) ? ink : black, black);
+			// (iteration 55) the line below the header, above the footer
+			if (line && PageBands.LineCount(parts) > 0) {
+				float gap = PageBands.RuleGap * 0.72f * ppp, y = isHeader ? top + height + gap : top - gap;
+				using var pen = new Pen(black, Math.Max(1, PageBands.RuleWidth * 0.72f * ppp));
+				g.DrawLine(pen, left, y, left + textWidth, y);
 			}
 		}
 		// (iteration 51) a sheet's footnotes, at the foot of its text area (above its bottom margin): the lines the printed
@@ -8930,18 +9329,18 @@ sealed class WriterEditBox : RichEditBox
 			var (footer, band, header) = gaps.Areas(gap, width, ppp);
 			if (header.Bottom < client.Top || footer.Top > client.Bottom) continue;
 			g.FillRectangle(paper, RectangleF.FromLTRB(0, MathF.Ceiling(footer.Top), width, MathF.Floor(header.Bottom)));
-			if (gap.Page == 0) { Parts(BandParts?.Invoke(true, 1), header); continue; }    // (page 1's top margin: its header)
+			if (gap.Page == 0) { Parts(BandParts?.Invoke(true, 1), header, true, 1); continue; }    // (page 1's top margin: its header)
 			Notes(gap.Page, band.Top - gap.Bottom * ppp);
-			Parts(BandParts?.Invoke(false, gap.Page), new RectangleF(0, band.Top - gap.Bottom * ppp, width, gap.Bottom * ppp));
+			Parts(BandParts?.Invoke(false, gap.Page), new RectangleF(0, band.Top - gap.Bottom * ppp, width, gap.Bottom * ppp), false, gap.Page);
 			g.FillRectangle(grey, band);
 			g.DrawLine(edge, band.Left, band.Top, band.Right, band.Top);
 			g.DrawLine(edge, band.Left, band.Bottom - 1, band.Right, band.Bottom - 1);
-			Parts(BandParts?.Invoke(true, gap.Page + 1), header);
+			Parts(BandParts?.Invoke(true, gap.Page + 1), header, true, gap.Page + 1);
 		}
 		// (iteration 46) the last sheet's end below the text: its footer, grey after it
 		if (LastSheetEnd() is { } end && end.Top < client.Bottom + end.Height * 4 && end.Bottom > client.Top - 1) {
 			Notes(gaps.Pages, end.Top);
-			Parts(BandParts?.Invoke(false, gaps.Pages), end);
+			Parts(BandParts?.Invoke(false, gaps.Pages), end, false, gaps.Pages);
 			if (end.Bottom < client.Bottom) {
 				g.FillRectangle(grey, RectangleF.FromLTRB(0, end.Bottom, width, client.Bottom));
 				g.DrawLine(edge, 0, end.Bottom, width, end.Bottom);
@@ -9815,17 +10214,24 @@ sealed class BandStrip : Control
 		tip.SetToolTip(this, (header ? "Header" : "Footer") + " (as on the first page). Click to change it. It is printed on every page, and saved in Word and OpenDocument files.");
 	}
 
-	protected override void OnFontChanged(EventArgs e) { base.OnFontChanged(e); Height = LogicalToDeviceUnits(10) + Font.Height; }
-	protected override void OnCreateControl() { base.OnCreateControl(); Height = LogicalToDeviceUnits(10) + Font.Height; }
+	protected override void OnFontChanged(EventArgs e) { base.OnFontChanged(e); FitHeight(); }
+	protected override void OnCreateControl() { base.OnCreateControl(); FitHeight(); }
+	// (iteration 55) a line per line of the longest part, the band's font at the strip's size (words in theirs, in
+	// proportion)
+	float Scale => Font.SizeInPoints / (band ?? BandFont.Plain).Size;
+	void FitHeight() => Height = LogicalToDeviceUnits(10) + (int)Math.Ceiling(Math.Max(Font.Height, BandText.Height(parts, band ?? BandFont.Plain, f => f.GetHeight(DeviceDpi), Scale)));
 
 	/// Whether it is shown (Visible is also false while the window is not).
 	public bool Shown { get; private set; }
 
-	public void Display(bool show, string[] parts) {
+	public void Display(bool show, string[] parts, BandFont? font = null) {
 		this.parts = parts;
+		band = font;
+		FitHeight();
 		Shown = Visible = show;
 		Invalidate();
 	}
+	BandFont? band;
 
 	/// Space at either side, as the editor's text has (Print Layout: the page's margins are the editor's own).
 	public (int Left, int Right) Inset {
@@ -9842,12 +10248,10 @@ sealed class BandStrip : Control
 		int lineY = header ? area.Bottom - 1 : area.Top;
 		g.DrawLine(pen, area.Left, lineY, area.Right - LogicalToDeviceUnits(16), lineY);
 		var text = new Rectangle(area.Left, header ? area.Top : area.Top + gap, area.Width - LogicalToDeviceUnits(16), area.Height - gap);
-		var color = SystemColors.GrayText;
-		const TextFormatFlags flags = TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter;
-		int third = text.Width / 3;
-		TextRenderer.DrawText(g, parts[0], Font, new Rectangle(text.Left, text.Top, third, text.Height), color, flags | TextFormatFlags.Left);
-		TextRenderer.DrawText(g, parts[1], Font, new Rectangle(text.Left + third, text.Top, text.Width - 2 * third, text.Height), color, flags | TextFormatFlags.HorizontalCenter);
-		TextRenderer.DrawText(g, parts[2], Font, new Rectangle(text.Right - third, text.Top, third, text.Height), color, flags | TextFormatFlags.Right);
+		using var plain = new SolidBrush(band != null ? SystemColors.WindowText : SystemColors.GrayText);
+		using var formatted = new SolidBrush(SystemColors.WindowText);
+		g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+		BandText.Draw(g, parts, band ?? BandFont.Plain, text.Left, text.Width, text.Top + LogicalToDeviceUnits(3), Scale, plain, formatted);
 	}
 
 	protected override void Dispose(bool disposing) {
@@ -9858,13 +10262,43 @@ sealed class BandStrip : Control
 
 sealed class HeaderFooterDialog : Form
 {
-	readonly CheckBox showHeader = new() { Text = "Show a header", AutoSize = true };
-	readonly CheckBox showFooter = new() { Text = "Show a footer", AutoSize = true };
+	// (iteration 55) a header's or footer's controls: shown or not, its three parts (rich text: words and lines in fonts of
+	// their own, BandText's marks), its font (null: Segoe UI 8 pt in grey) and its line
+	sealed class BandBox
+	{
+		public readonly bool IsHeader, First;
+		public readonly CheckBox Show = new() { AutoSize = true };
+		public readonly RichTextBox[] Parts = Enumerable.Range(0, 3).Select(_ => new RichTextBox {
+			Multiline = true, WordWrap = false, ScrollBars = RichTextBoxScrollBars.Vertical, DetectUrls = false, HideSelection = false
+		}).ToArray();
+		public BandFont? Font;
+		public readonly Label FontLabel = new() { AutoSize = true, Anchor = AnchorStyles.Left };
+		public readonly CheckBox Line = new() { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(16, 7, 3, 0) };
+		public readonly FlowLayoutPanel FontRow = new() { AutoSize = true, WrapContents = false, Margin = new Padding(0, 4, 0, 0) };
+		public string Name => (First ? "First page " : "") + (IsHeader ? "header" : "footer");
+		public BandBox(bool isHeader, bool first) {
+			(IsHeader, First) = (isHeader, first);
+			Show.Text = (isHeader ? "Show a header" : "Show a footer") + (first ? " on the first page" : "");
+			Line.Text = isHeader ? "Line below the header" : "Line above the footer";
+		}
+	}
+
+	readonly BandBox header = new(true, false), footer = new(false, false), firstHeader = new(true, true), firstFooter = new(false, true);
+	BandBox[] Bands => new[] { header, footer, firstHeader, firstFooter };
 	readonly CheckBox makeDefault = new() { Text = "Use for new documents too", AutoSize = true, Margin = new Padding(3, 6, 3, 0) };
-	readonly TextBox[] header = { new(), new(), new() }, footer = { new(), new(), new() };
-	// (iteration 49) the first page's own
-	readonly CheckBox differentFirst = new() { Text = "Different first page (empty parts: none on the first page)", AutoSize = true };
-	readonly TextBox[] firstHeader = { new(), new(), new() }, firstFooter = { new(), new(), new() };
+	// (iteration 49) the first page's own; (iteration 55) in every way, on a tab of its own
+	readonly CheckBox differentFirst = new() { Text = "Different first page: page 1 has a header and footer of its own (or none), the other pages theirs", AutoSize = true, Margin = new Padding(3, 4, 3, 4) };
+	readonly TabControl tabs = new();
+	readonly TabPage otherTab = new(), firstTab = new();
+	readonly FlowLayoutPanel firstPanel = new() { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+	// (iteration 55) from the page's edges, in inches or centimetres as the region measures
+	readonly NumericUpDown headerDistance = new() { DecimalPlaces = 2, Width = 70, AccessibleName = "Header from top" }, footerDistance = new() { DecimalPlaces = 2, Width = 70, AccessibleName = "Footer from bottom" };
+	readonly bool metric = System.Globalization.RegionInfo.CurrentRegion.IsMetric;
+	decimal ToUnits(int hundredths) => metric ? Math.Round(hundredths * 0.0254m, 2) : hundredths / 100m;
+	int FromUnits(decimal value) => (int)Math.Round(metric ? value / 0.0254m : value * 100);
+	// the part box the selection buttons format (the last one typed in)
+	RichTextBox? lastPart;
+	RichFormat.Buttons styleButtons = null!;
 
 	/// Whether the header and footer become the default for new documents.
 	public bool MakeDefault => makeDefault.Checked;
@@ -9880,13 +10314,25 @@ sealed class HeaderFooterDialog : Form
 		Padding = new Padding(10);
 
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
-		layout.Controls.Add(Band("Header (above the text)", showHeader, header));
-		layout.Controls.Add(Band("Footer (below the text)", showFooter, footer));
-		layout.Controls.Add(FirstPage());
+		layout.Controls.Add(SelectionRow());
+		layout.Controls.Add(differentFirst);
+		var otherPanel = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
+		otherPanel.Controls.Add(Band(header));
+		otherPanel.Controls.Add(Band(footer));
+		firstPanel.Controls.Add(Band(firstHeader));
+		firstPanel.Controls.Add(Band(firstFooter));
+		otherTab.Controls.Add(otherPanel);
+		firstTab.Controls.Add(firstPanel);
+		tabs.TabPages.Add(otherTab);
+		tabs.TabPages.Add(firstTab);
+		var inside = new Size(Math.Max(otherPanel.PreferredSize.Width, firstPanel.PreferredSize.Width), Math.Max(otherPanel.PreferredSize.Height, firstPanel.PreferredSize.Height));
+		tabs.Size = new Size(inside.Width + LogicalToDeviceUnits(24), inside.Height + tabs.ItemSize.Height + LogicalToDeviceUnits(40));
+		layout.Controls.Add(tabs);
+		layout.Controls.Add(Position());
 		layout.Controls.Add(new Label {
-			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(560), 0), Margin = new Padding(3, 6, 3, 6),
+			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(760), 0), Margin = new Padding(3, 6, 3, 6),
 			Text = "Fields: {title} document name, {file} full path, {page} page number, {pages} number of pages, {date}, {time}.\n"
-				+ "Example: Page {page} of {pages}\n"
+				+ "Example: Page {page} of {pages}. Enter starts a new line in a part; a blank line at the end leaves space below a header.\n"
 				+ "They are printed, and saved with the document: Word and OpenDocument files get them as their own header and footer."
 		});
 		layout.Controls.Add(makeDefault);
@@ -9901,79 +10347,223 @@ sealed class HeaderFooterDialog : Form
 		Controls.Add(layout);
 		AcceptButton = ok;
 		CancelButton = cancel;
+		differentFirst.CheckedChanged += (s, e) => EnableAll();
+		foreach (var band in Bands) foreach (var box in band.Parts) Wire(box);
 		LoadFrom(bands);
 	}
 
 	PageBands defaults_ = new();
 
-	GroupBox Band(string title, CheckBox show, TextBox[] parts) {
+	// (iteration 55) B, I, U and Font... for the selected words, in the part box last typed in; with nothing selected, for
+	// the whole header or footer
+	FlowLayoutPanel SelectionRow() {
+		var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(3, 0, 3, 4) };
+		row.Controls.Add(new Label { Text = "Selected words:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 3, 0) });
+		// (iteration 55: buttons that stay pressed while the selection, or the caret's typing, has it)
+		styleButtons = new RichFormat.Buttons(row, Font, LogicalToDeviceUnits, Apply);
+		var font = new Button { Text = "Font...", AutoSize = true, TabStop = false, AccessibleName = "Selection font" };
+		font.Click += (s, e) => ChooseSelectionFont();
+		row.Controls.Add(font);
+		row.Controls.Add(new Label { Text = "Select words in a part to give them a font, size, bold, italic or underline of their own; with nothing selected, these format the whole header or footer.",
+			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(520), 0), Anchor = AnchorStyles.Left, Margin = new Padding(6, 2, 0, 0) });
+		return row;
+	}
+
+	void Wire(RichTextBox box) {
+		box.Enter += (s, e) => { lastPart = box; styleButtons.Show(box); };
+		box.SelectionChanged += (s, e) => { if (box == lastPart) styleButtons.Show(box); };
+		box.PreviewKeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) e.IsInputKey = true; };    // (a new line, not OK)
+		box.KeyDown += (s, e) => {
+			FontStyle? flag = e.Control && !e.Alt && !e.Shift ? e.KeyCode switch { Keys.B => FontStyle.Bold, Keys.I => FontStyle.Italic, Keys.U => FontStyle.Underline, _ => null } : null;
+			if (flag is { } f) { lastPart = box; Toggle(f); e.SuppressKeyPress = e.Handled = true; }
+		};
+	}
+
+	BandBox BandOf(RichTextBox box) => Bands.First(b => b.Parts.Contains(box));
+	static BandFont FontOrPlain(BandBox band) => band.Font ?? BandFont.Plain;
+
+	// (Ctrl+B, I, U: on unless all of the selection has it already, as Word does)
+	void Toggle(FontStyle flag) {
+		if (lastPart is { } box) Apply(flag, !RichFormat.Has(box, flag));
+	}
+
+	// B, I or U on or off: for the selected words; with nothing selected, for the whole header or footer
+	void Apply(FontStyle flag, bool on) {
+		if (lastPart is not { } box) { styleButtons.Show(null); return; }
+		if (box.SelectionLength == 0) {
+			var band = BandOf(box);
+			var style = on ? FontOrPlain(band).Style | flag : FontOrPlain(band).Style & ~flag;
+			ChangeBand(band, FontOrPlain(band) with { Bold = style.HasFlag(FontStyle.Bold), Italic = style.HasFlag(FontStyle.Italic), Underline = style.HasFlag(FontStyle.Underline) });
+		} else RichFormat.Set(box, flag, on);
+		box.Focus();
+		styleButtons.Show(box);
+	}
+
+	void ChooseSelectionFont() {
+		if (lastPart is not { } box) return;
+		if (box.SelectionLength == 0) { ChooseFont(BandOf(box)); return; }
+		var current = box.SelectionFont is { } f ? FontOf(f) : FontOrPlain(BandOf(box));
+		if (Pick(current) is not { } chosen) return;
+		int start = box.SelectionStart, length = box.SelectionLength;
+		box.SelectionFont = chosen.Create(chosen.Size);
+		box.Select(start, length);
+		box.Focus();
+	}
+
+	// Windows' font dialog (null: cancelled)
+	BandFont? Pick(BandFont current) {
+		using var dlg = new FontDialog { ShowColor = false, ShowEffects = true, FontMustExist = true, AllowVerticalFonts = false, MinSize = 4, MaxSize = 72 };
+		using var font = current.Create(current.Size);    // (alive while the dialog is open: it reads the font when it opens)
+		dlg.Font = font;
+		return dlg.ShowDialog(this) == DialogResult.OK ? FontOf(dlg.Font) : null;
+	}
+
+	static BandFont FontOf(Font font) => BandFont.From(font) with { Size = (float)Math.Round(font.SizeInPoints * 2) / 2 };
+
+	void ChooseFont(BandBox band) {
+		if (Pick(band.Font is { } f && !PageBands.IsPlain(f) ? f : new BandFont { Name = "Times New Roman", Size = 10 }) is { } chosen) ChangeBand(band, chosen);
+	}
+
+	// The whole header's or footer's font (null: plain): its parts shown again in it, words with their own as they were.
+	// plain: the words' own fonts dropped too.
+	void ChangeBand(BandBox band, BandFont? font, bool plain = false) {
+		var old = FontOrPlain(band);
+		var parts = band.Parts.Select(b => GetPart(b, old)).ToList();
+		band.Font = font;
+		for (int i = 0; i < 3; i++) SetPart(band.Parts[i], plain ? BandText.Plain(parts[i]) : parts[i], FontOrPlain(band));
+		ShowFonts();
+	}
+
+	// A part into its box: the text in the band's font, words with their own in theirs.
+	static void SetPart(RichTextBox box, string part, BandFont band) {
+		box.Font = band.Create(band.Size);
+		var runs = BandText.Runs(part);
+		box.Text = string.Concat(runs.Select(r => r.Text));
+		int at = 0;
+		foreach (var (text, format) in runs) {
+			if (format != null) { box.Select(at, text.Length); box.SelectionFont = BandText.Resolve(band, format).Create(format.Size); }
+			at += text.Length;
+		}
+		box.Select(0, 0);
+	}
+
+	// A part from its box: a character in the band's font has no mark, others their font's.
+	static string GetPart(RichTextBox box, BandFont band) {
+		string text = box.Text;
+		if (text == "") return "";
+		int start = box.SelectionStart, length = box.SelectionLength;
+		var runs = new List<(string, RunFormat?)>();
+		for (int i = 0; i < text.Length; i++) {
+			box.Select(i, 1);
+			runs.Add((text[i].ToString(), box.SelectionFont is { } f ? BandText.FormatOf(band, FontOf(f)) : null));
+		}
+		box.Select(start, length);
+		return PageBands.Parts(new[] { BandText.FromRuns(runs) })[0];
+	}
+
+	GroupBox Band(BandBox band) {
+		string title = band.IsHeader ? "Header (above the text)" : "Footer (below the text)";
 		var box = new GroupBox { Text = title, AutoSize = true, Padding = new Padding(8), Dock = DockStyle.Fill };
 		var table = new TableLayoutPanel { ColumnCount = 3, AutoSize = true, Dock = DockStyle.Fill };
-		table.Controls.Add(show, 0, 0);
-		table.SetColumnSpan(show, 3);
+		table.Controls.Add(band.Show, 0, 0);
+		table.SetColumnSpan(band.Show, 3);
 		string[] labels = { "Left", "Center", "Right" };
+		string name = band.First ? (band.IsHeader ? "First page header" : "First page footer") : (band.IsHeader ? "Header" : "Footer");
 		for (int i = 0; i < 3; i++) {
 			table.Controls.Add(new Label { Text = labels[i], AutoSize = true }, i, 1);
-			parts[i].Width = LogicalToDeviceUnits(180);
-			table.Controls.Add(parts[i], i, 2);
+			var part = band.Parts[i];
+			part.Height = 3 * Font.Height + LogicalToDeviceUnits(10);    // (three lines in view; Enter a new one)
+			part.Width = LogicalToDeviceUnits(260);
+			part.AccessibleName = name + ", " + labels[i].ToLowerInvariant();
+			table.Controls.Add(part, i, 2);
 		}
-		show.CheckedChanged += (s, e) => { foreach (var part in parts) part.Enabled = show.Checked; EnableFirst(); };
+		// Font... for all of it (name, size, bold, italic, underline), Plain (Segoe UI 8 pt in grey, the words' own fonts
+		// dropped too), the line
+		var fontButton = new Button { Text = "Font...", AutoSize = true, AccessibleName = name + " font" };
+		var plainButton = new Button { Text = "Plain", AutoSize = true, AccessibleName = name + " font plain" };
+		fontButton.Click += (s, e) => ChooseFont(band);
+		plainButton.Click += (s, e) => ChangeBand(band, null, plain: true);
+		band.Line.AccessibleName = name + " line";
+		band.FontRow.Controls.AddRange(new Control[] { fontButton, plainButton, band.FontLabel, band.Line });
+		table.Controls.Add(band.FontRow, 0, 3);
+		table.SetColumnSpan(band.FontRow, 3);
+		band.Show.CheckedChanged += (s, e) => EnableAll();
 		box.Controls.Add(table);
 		return box;
 	}
 
-	// The first page's header and footer: a row of three parts each.
-	GroupBox FirstPage() {
-		var box = new GroupBox { Text = "First page", AutoSize = true, Padding = new Padding(8), Dock = DockStyle.Fill };
-		var table = new TableLayoutPanel { ColumnCount = 4, AutoSize = true, Dock = DockStyle.Fill };
-		table.Controls.Add(differentFirst, 0, 0);
-		table.SetColumnSpan(differentFirst, 4);
-		string[] labels = { "Left", "Center", "Right" };
-		for (int i = 0; i < 3; i++) table.Controls.Add(new Label { Text = labels[i], AutoSize = true }, i + 1, 1);
-		foreach (var (row, name, parts) in new[] { (2, "Header", firstHeader), (3, "Footer", firstFooter) }) {
-			table.Controls.Add(new Label { Text = name, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
-			for (int i = 0; i < 3; i++) {
-				parts[i].Width = LogicalToDeviceUnits(160);
-				parts[i].AccessibleName = "First page " + name.ToLowerInvariant() + ", " + labels[i].ToLowerInvariant();
-				table.Controls.Add(parts[i], i + 1, row);
-			}
+	// Header from top, Footer from bottom (Word's names; the same on every page)
+	GroupBox Position() {
+		var box = new GroupBox { Text = "Position (from the page's edge, on every page)", AutoSize = true, Padding = new Padding(8), Dock = DockStyle.Fill };
+		var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Fill };
+		string unit = metric ? "cm" : "in";
+		foreach (var box2 in new[] { headerDistance, footerDistance }) {
+			(box2.Maximum, box2.Increment) = metric ? (12.7m, 0.1m) : (5m, 0.05m);
+			box2.Width = LogicalToDeviceUnits(70);
 		}
-		differentFirst.CheckedChanged += (s, e) => EnableFirst();
-		box.Controls.Add(table);
+		Label L(string text) => new() { Text = text, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 6, 3, 0) };
+		row.Controls.AddRange(new Control[] { L("Header from top:"), headerDistance, L(unit + "      Footer from bottom:"), footerDistance, L(unit) });
+		box.Controls.Add(row);
 		return box;
 	}
 
-	void EnableFirst() {
-		foreach (var part in firstHeader) part.Enabled = differentFirst.Checked && showHeader.Checked;
-		foreach (var part in firstFooter) part.Enabled = differentFirst.Checked && showFooter.Checked;
+	void ShowFonts() {
+		foreach (var band in Bands) band.FontLabel.Text = PageBands.IsPlain(band.Font) ? "Plain: Segoe UI 8 pt, grey" : band.Font!.Describe();
+	}
+
+	// Each band's parts and font row as its Show box has it; the first page's tab only with a first page of its own.
+	void EnableAll() {
+		bool first = differentFirst.Checked;
+		otherTab.Text = first ? "Other pages" : "All pages";
+		firstTab.Text = first ? "First page" : "First page (off: check Different first page)";
+		firstPanel.Enabled = first;
+		foreach (var band in Bands) {
+			foreach (var part in band.Parts) part.Enabled = band.Show.Checked;
+			band.FontRow.Enabled = band.Show.Checked;
+		}
 	}
 
 	void LoadFrom(PageBands bands) {
-		showHeader.Checked = bands.ShowHeader;
-		showFooter.Checked = bands.ShowFooter;
-		var h = PageBands.Parts(bands.Header);
-		var f = PageBands.Parts(bands.Footer);
-		var fh = PageBands.Parts(bands.FirstHeader);
-		var ff = PageBands.Parts(bands.FirstFooter);
 		differentFirst.Checked = bands.DifferentFirst;
-		for (int i = 0; i < 3; i++) {
-			header[i].Text = h[i];
-			footer[i].Text = f[i];
-			firstHeader[i].Text = fh[i];
-			firstFooter[i].Text = ff[i];
-			header[i].Enabled = showHeader.Checked;
-			footer[i].Enabled = showFooter.Checked;
+		void Load(BandBox band, bool show, string[]? parts, BandFont? font, bool line) {
+			band.Show.Checked = show;
+			band.Font = font;
+			band.Line.Checked = line;
+			var p = PageBands.Parts(parts);
+			for (int i = 0; i < 3; i++) SetPart(band.Parts[i], p[i], FontOrPlain(band));
 		}
-		EnableFirst();
+		Load(header, bands.ShowHeader, bands.Header, bands.HeaderFont, bands.HeaderLine);
+		Load(footer, bands.ShowFooter, bands.Footer, bands.FooterFont, bands.FooterLine);
+		// (the first page's: its own, or until it has them, the other pages' settings and no text)
+		Load(firstHeader, bands.DifferentFirst ? bands.ShowHeaderOn(1) : bands.ShowHeader, bands.FirstHeader, bands.DifferentFirst ? bands.HeaderFontOn(1) : bands.HeaderFont, bands.DifferentFirst ? bands.HeaderLineOn(1) : bands.HeaderLine);
+		Load(firstFooter, bands.DifferentFirst ? bands.ShowFooterOn(1) : bands.ShowFooter, bands.FirstFooter, bands.DifferentFirst ? bands.FooterFontOn(1) : bands.FooterFont, bands.DifferentFirst ? bands.FooterLineOn(1) : bands.FooterLine);
+		ShowFonts();
+		headerDistance.Value = Math.Min(headerDistance.Maximum, ToUnits(bands.HeaderFromEdge));
+		footerDistance.Value = Math.Min(footerDistance.Maximum, ToUnits(bands.FooterFromEdge));
+		EnableAll();
 	}
 
-	public PageBands Result() => new() {
-		ShowHeader = showHeader.Checked, Header = header.Select(b => b.Text).ToArray(),
-		ShowFooter = showFooter.Checked, Footer = footer.Select(b => b.Text).ToArray(),
-		DifferentFirst = differentFirst.Checked,
-		FirstHeader = differentFirst.Checked ? firstHeader.Select(b => b.Text).ToArray() : null,
-		FirstFooter = differentFirst.Checked ? firstFooter.Select(b => b.Text).ToArray() : null
-	};
+	static string[] Typed(BandBox band) => band.Parts.Select(b => GetPart(b, FontOrPlain(band))).ToArray();
+	// the first page's font: null when it is the other pages' (as files from before have it), plain set as such
+	BandFont? FirstFont(BandBox first, BandBox other) => Equals(first.Font, other.Font) ? null : first.Font ?? BandFont.Plain;
+
+	public PageBands Result() {
+		bool first = differentFirst.Checked;
+		return new() {
+			ShowHeader = header.Show.Checked, Header = Typed(header),
+			ShowFooter = footer.Show.Checked, Footer = Typed(footer),
+			HeaderFont = PageBands.IsPlain(header.Font) ? null : header.Font, FooterFont = PageBands.IsPlain(footer.Font) ? null : footer.Font,
+			HeaderLine = header.Line.Checked, FooterLine = footer.Line.Checked,
+			DifferentFirst = first,
+			FirstHeader = first ? Typed(firstHeader) : null,
+			FirstFooter = first ? Typed(firstFooter) : null,
+			ShowFirstHeader = first ? firstHeader.Show.Checked : null, ShowFirstFooter = first ? firstFooter.Show.Checked : null,
+			FirstHeaderFont = first ? FirstFont(firstHeader, header) : null, FirstFooterFont = first ? FirstFont(firstFooter, footer) : null,
+			FirstHeaderLine = first ? firstHeader.Line.Checked : null, FirstFooterLine = first ? firstFooter.Line.Checked : null,
+			HeaderDistance = FromUnits(headerDistance.Value) is var hd && hd != PageBands.DefaultDistance ? hd : null,
+			FooterDistance = FromUnits(footerDistance.Value) is var fd && fd != PageBands.DefaultDistance ? fd : null
+		};
+	}
 }
 
 // Insert > Footnote (iteration 51): a footnote's note, its paragraphs, with their bold, italic and underline.

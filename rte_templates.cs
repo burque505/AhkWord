@@ -93,6 +93,14 @@ public static class Templates
 		}
 		return count;
 	}
+
+	/// The values in a plain text's fields, as Fill puts them in a document's (iteration 55: a snippet in the Markdown or
+	/// HTML view).
+	public static string FillText(string text, Func<string, string?> value) => Field.Replace(text, m => {
+		string? filled = value(m.Groups[1].Value);
+		if (string.IsNullOrEmpty(filled)) filled = m.Groups[2].Success && m.Groups[2].Value != "" ? m.Groups[2].Value : null;
+		return filled ?? m.Value;
+	});
 }
 
 // The fields of a template (or a document), asked for: one box each, filled with the field's default, or for a field

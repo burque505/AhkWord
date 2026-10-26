@@ -19,16 +19,6 @@ text · read-only
 
 ## Documents
 
-### ApplyMyStyles
-
-```autohotkey
-Rte.ApplyMyStyles()
-```
-
-returns: number
-
-Apply My Styles: the document gets your styles, the ones new documents get (saved with SaveStylesAsDefault, else your style set's): each of its styles that you have takes your definition, and its paragraphs your look (formatting of their own stays); styles of the document's own that you haven't got stay. One undo step. Returns how many paragraphs were restyled.
-
 ### AutosaveSeconds
 
 ```autohotkey
@@ -39,6 +29,76 @@ Rte.AutosaveSeconds := value
 number
 
 Seconds between the recovery copies written while the document has unsaved changes (0: none; at least 10). Remembered.
+
+### InsertTemplate
+
+```autohotkey
+Rte.InsertTemplate(template, fields = "", ask = 0)
+```
+
+*template*: text · *fields*: text · *ask*: 1/0 · returns: number
+
+Inserts a template's content at the caret (a part, by name, such as "Signature Block", or a document, or a file's path), its fields filled in: fields as for NewFromTemplate. Returns how many fields were filled in.
+
+### New
+
+```autohotkey
+Rte.New()
+```
+
+Starts a new, empty document (unsaved changes are discarded).
+
+### Portable
+
+```autohotkey
+value := Rte.Portable
+```
+
+1/0 · read-only
+
+Whether AhkWord runs in portable mode (a file named "portable" or "portable.txt" beside it): its settings, recovery copies and the converters' state are in its data folder.
+
+### RecoveryFolder
+
+```autohotkey
+value := Rte.RecoveryFolder
+```
+
+text · read-only
+
+The folder of the recovery copies (beside the settings).
+
+### Templates
+
+```autohotkey
+Rte.Templates(parts = 0)
+```
+
+*parts*: 1/0 · returns: text
+
+The templates' names, one a line: the documents (File &gt; New from Template), or with parts = true the parts (pieces for Insert from Template, in the Parts folders).
+
+## Snippets
+
+### AddSnippet
+
+```autohotkey
+Rte.AddSnippet(abbreviation, part, instant = 0, keepEnding = 0, caseSensitive = 0)
+```
+
+*abbreviation*: text · *part*: text · *instant*: 1/0 · *keepEnding*: 1/0 · *caseSensitive*: 1/0
+
+Gives a part (by name: Rte.Templates(true) lists them; an RTF template) an abbreviation: typed in the document, then Space, Enter, Tab or punctuation (instant = 1: at once), it becomes the part. keepEnding = 1: the ending character stays after it; caseSensitive = 1: the abbreviation fires only typed with its case. An abbreviation it had already is changed.
+
+### ApplyMyStyles
+
+```autohotkey
+Rte.ApplyMyStyles()
+```
+
+returns: number
+
+Apply My Styles: the document gets your styles, the ones new documents get (saved with SaveStylesAsDefault, else your style set's): each of its styles that you have takes your definition, and its paragraphs your look (formatting of their own stays); styles of the document's own that you haven't got stay. One undo step. Returns how many paragraphs were restyled.
 
 ### ClearFormatting
 
@@ -76,6 +136,16 @@ Rte.DeleteStyle(name)
 
 Deletes one of your own styles; its paragraphs become Normal (one undo step).
 
+### ExportSnippets
+
+```autohotkey
+Rte.ExportSnippets(path)
+```
+
+*path*: text · returns: text
+
+Writes the snippets as an AutoHotkey v2 script of plain-text hotstrings, to use them in any program (their fields as their defaults or [their names]). Returns its full path.
+
 ### FileConverter
 
 ```autohotkey
@@ -106,6 +176,16 @@ Rte.FillFields(fields = "", ask = 0)
 
 Fills in the {{fields}} left in the document: fields as for NewFromTemplate. Returns how many were filled in.
 
+### FireSnippet
+
+```autohotkey
+Rte.FireSnippet(abbreviation, ending = "")
+```
+
+*abbreviation*: text · *ending*: text
+
+For AhkWord.ahk: a snippet's hotstring fired, with the ending character typed after it ("" for one that fires at once). Returns at once; the snippet goes in once the editor has what was typed.
+
 ### GetHtml
 
 ```autohotkey
@@ -127,15 +207,15 @@ text
 
 The document as HTML (get), or replaced by HTML (set); see GetHtml and SetHtml.
 
-### InsertTemplate
+### InsertSnippet
 
 ```autohotkey
-Rte.InsertTemplate(template, fields = "", ask = 0)
+Rte.InsertSnippet(abbreviation, fields = "", ask = 0)
 ```
 
-*template*: text · *fields*: text · *ask*: 1/0 · returns: number
+*abbreviation*: text · *fields*: text · *ask*: 1/0 · returns: number
 
-Inserts a template's content at the caret (a part, by name, such as "Signature Block", or a document, or a file's path), its fields filled in: fields as for NewFromTemplate. Returns how many fields were filled in.
+Inserts a snippet's part at the caret (as Insert from Template does): fields as for InsertTemplate. Returns how many fields were filled in.
 
 ### ModifyStyle
 
@@ -146,14 +226,6 @@ Rte.ModifyStyle(name, settings)
 *name*: text · *settings*: text · returns: number
 
 Changes a style: settings as "Name=Value" lines ("Font=Georgia\nSize=12\nBefore=6"); its paragraphs change too (one undo step). Returns how many paragraphs have it.
-
-### New
-
-```autohotkey
-Rte.New()
-```
-
-Starts a new, empty document (unsaved changes are discarded).
 
 ### NewFromTemplate
 
@@ -195,25 +267,15 @@ Rte.Open(path, via = "")
 
 Opens an .html/.htm, .md/.markdown, .rtf, .docx/.doc, .odt or .txt file (unsaved changes are discarded). Word and OpenDocument files are converted by Word, openxml, LibreOffice or pandoc (see Converters and LastConverter); via names the converter(s) to use, e.g. "openxml" (Save then uses them too).
 
-### Portable
+### RemoveSnippet
 
 ```autohotkey
-value := Rte.Portable
+Rte.RemoveSnippet(abbreviation)
 ```
 
-1/0 · read-only
+*abbreviation*: text · returns: 1/0
 
-Whether AhkWord runs in portable mode (a file named "portable" or "portable.txt" beside it): its settings, recovery copies and the converters' state are in its data folder.
-
-### RecoveryFolder
-
-```autohotkey
-value := Rte.RecoveryFolder
-```
-
-text · read-only
-
-The folder of the recovery copies (beside the settings).
+Takes a snippet's abbreviation away (its part stays). Returns whether there was one.
 
 ### Save
 
@@ -234,6 +296,16 @@ Rte.SaveAs(path, via = "")
 *path*: text · *via*: text · returns: text
 
 Saves as HTML, Markdown, RTF, Word, OpenDocument or text, chosen by the extension (.html, .md, .rtf, .docx, .odt, .txt), and returns the full path. .docx and .odt are converted (see Converters and LastConverter); via names the converter(s) to use, e.g. "openxml". HTML and Markdown pictures are saved as files in a &lt;name&gt;_images folder; via = "inside" keeps an HTML file's pictures inside it (as data: URIs), as one file.
+
+### SaveSelectionAsSnippet
+
+```autohotkey
+Rte.SaveSelectionAsSnippet(part, abbreviation, instant = 0, keepEnding = 0, caseSensitive = 0)
+```
+
+*part*: text · *abbreviation*: text · *instant*: 1/0 · *keepEnding*: 1/0 · *caseSensitive*: 1/0
+
+Saves the selection, formatting and all, as a new part (in your own templates' Parts folder, as part.rtf), and gives it an abbreviation (as AddSnippet).
 
 ### SaveStylesAsDefault
 
@@ -262,6 +334,34 @@ Rte.SetStyle(name)
 *name*: text
 
 Gives the paragraphs the selection is in a style (by name: Rte.Styles() lists them), in one undo step: their formatting becomes the style's, except formatting given to part of a paragraph (a bold word).
+
+### SnippetHotstrings
+
+```autohotkey
+value := Rte.SnippetHotstrings
+```
+
+text · read-only
+
+For AhkWord.ahk: the snippets' hotstrings, one a line (their AutoHotkey options, a tab, the abbreviation), and the file they are kept in (read again when it changes).
+
+### Snippets
+
+```autohotkey
+value := Rte.Snippets
+```
+
+text · read-only
+
+The snippets, one a line: the abbreviation, a tab, the part it inserts, a tab, how it fires ("ending": on Space, Enter, Tab or punctuation; "ending kept": the character stays after it; "instant": at once), a tab, "case" if the abbreviation's case must match (else "any").
+
+### SnippetsFile
+
+```autohotkey
+value := Rte.SnippetsFile
+```
+
+text · read-only
 
 ### StartPage
 
@@ -315,16 +415,6 @@ Rte.StylesIn(path)
 *path*: text · returns: text
 
 Iteration 40: the paragraph styles a document has (AhkWord's own RTF and HTML, a Word .docx, other RTF), one name a line, without opening it.
-
-### Templates
-
-```autohotkey
-Rte.Templates(parts = 0)
-```
-
-*parts*: 1/0 · returns: text
-
-The templates' names, one a line: the documents (File &gt; New from Template), or with parts = true the parts (pieces for Insert from Template, in the Parts folders).
 
 ### TemplatesFolder
 
@@ -1628,6 +1718,17 @@ Rte.DifferentFirstPage := value
 
 Whether the first page has a header and footer of its own (SetFirstHeader, SetFirstFooter). Empty parts leave the first page without one, as on a letter's or a pleading's first page.
 
+### FirstFooterLine
+
+```autohotkey
+value := Rte.FirstFooterLine
+Rte.FirstFooterLine := value
+```
+
+1/0
+
+A line above the first page's footer.
+
 ### FirstFooterParts
 
 ```autohotkey
@@ -1637,6 +1738,17 @@ value := Rte.FirstFooterParts
 text · read-only
 
 The first page's footer parts, one per line.
+
+### FirstHeaderLine
+
+```autohotkey
+value := Rte.FirstHeaderLine
+Rte.FirstHeaderLine := value
+```
+
+1/0
+
+A line below the first page's header (with DifferentFirstPage).
 
 ### FirstHeaderParts
 
@@ -1648,6 +1760,38 @@ text · read-only
 
 The first page's header parts, one per line (empty lines if it has none of its own).
 
+### FooterFont
+
+```autohotkey
+value := Rte.FooterFont
+```
+
+text · read-only
+
+The footer's font, as HeaderFont.
+
+### FooterFromBottom
+
+```autohotkey
+value := Rte.FooterFromBottom
+Rte.FooterFromBottom := value
+```
+
+number
+
+From the page's bottom edge to the footer's last line, in inches (Word's "Footer from bottom"; 0.5 by default).
+
+### FooterLine
+
+```autohotkey
+value := Rte.FooterLine
+Rte.FooterLine := value
+```
+
+1/0
+
+A line above the footer.
+
 ### FooterParts
 
 ```autohotkey
@@ -1657,6 +1801,16 @@ value := Rte.FooterParts
 text · read-only
 
 The footer's left, center and right parts, one per line.
+
+### HeaderFont
+
+```autohotkey
+value := Rte.HeaderFont
+```
+
+text · read-only
+
+The header's font ("Times New Roman 10 pt, bold"), empty without one of its own.
 
 ### HeaderFooterVisible
 
@@ -1669,6 +1823,28 @@ Rte.HeaderFooterVisible := value
 
 Whether the header and footer are shown above and below the text (View &gt; Header and footer).
 
+### HeaderFromTop
+
+```autohotkey
+value := Rte.HeaderFromTop
+Rte.HeaderFromTop := value
+```
+
+number
+
+Iteration 55: from the page's top edge to the header, in inches (Word's "Header from top"; 0.5 by default). A header reaching past the top margin pushes the text down, as in Word.
+
+### HeaderLine
+
+```autohotkey
+value := Rte.HeaderLine
+Rte.HeaderLine := value
+```
+
+1/0
+
+Iteration 55: a line below the header (Word's border below its paragraphs).
+
 ### HeaderParts
 
 ```autohotkey
@@ -1678,6 +1854,14 @@ value := Rte.HeaderParts
 text · read-only
 
 The header's left, center and right parts, one per line.
+
+### InsertHorizontalLine
+
+```autohotkey
+Rte.InsertHorizontalLine()
+```
+
+Iteration 55: a horizontal line across the text, in a paragraph of its own (Insert &gt; Horizontal Line): a picture of a line, as Word's, so that it is printed and kept in every format; Markdown gets a rule (---) and HTML an &lt;hr&gt;.
 
 ### MakeHeaderFooterDefault
 
@@ -1697,6 +1881,16 @@ Rte.SetFirstFooter(left = "", center = "", right = "")
 
 Sets the first page's footer (left, center and right parts), as SetFirstHeader.
 
+### SetFirstFooterFont
+
+```autohotkey
+Rte.SetFirstFooterFont(name = "", size = 10, bold = 0, italic = 0, underline = 0)
+```
+
+*name*: text · *size*: number · *bold*: 1/0 · *italic*: 1/0 · *underline*: 1/0
+
+The first page's footer font, as SetHeaderFont.
+
 ### SetFirstHeader
 
 ```autohotkey
@@ -1705,7 +1899,17 @@ Rte.SetFirstHeader(left = "", center = "", right = "")
 
 *left*: text · *center*: text · *right*: text
 
-Sets the first page's header (left, center and right parts): the first page gets its own (DifferentFirstPage). The header is shown (ShowHeader), on the other pages too: with their parts empty, only the first page has one.
+Sets the first page's header (left, center and right parts): the first page gets its own (DifferentFirstPage), shown (ShowFirstHeader). (Iteration 55) The other pages are as they were: ShowHeader off, only the first page has one.
+
+### SetFirstHeaderFont
+
+```autohotkey
+Rte.SetFirstHeaderFont(name = "", size = 10, bold = 0, italic = 0, underline = 0)
+```
+
+*name*: text · *size*: number · *bold*: 1/0 · *italic*: 1/0 · *underline*: 1/0
+
+The first page's header font, as SetHeaderFont (with DifferentFirstPage; an empty name: plain).
 
 ### SetFooter
 
@@ -1717,6 +1921,16 @@ Rte.SetFooter(left = "", center = "", right = "")
 
 Sets the document's footer (left, center and right parts) and shows it.
 
+### SetFooterFont
+
+```autohotkey
+Rte.SetFooterFont(name = "", size = 10, bold = 0, italic = 0, underline = 0)
+```
+
+*name*: text · *size*: number · *bold*: 1/0 · *italic*: 1/0 · *underline*: 1/0
+
+The footer's font, as SetHeaderFont.
+
 ### SetHeader
 
 ```autohotkey
@@ -1725,7 +1939,39 @@ Rte.SetHeader(left = "", center = "", right = "")
 
 *left*: text · *center*: text · *right*: text
 
-Sets the document's header (left, center and right parts) and shows it.
+Sets the document's header (left, center and right parts) and shows it. A part can have several lines ("`n" between them).
+
+### SetHeaderFont
+
+```autohotkey
+Rte.SetHeaderFont(name = "", size = 10, bold = 0, italic = 0, underline = 0)
+```
+
+*name*: text · *size*: number · *bold*: 1/0 · *italic*: 1/0 · *underline*: 1/0
+
+Iteration 55: the header's font: its name, size in points, bold, italic and underline (all of its parts, the first page's too); printed, on Show Pages' sheets, and in Word and OpenDocument files. An empty name: Segoe UI 8 pt in grey, as before fonts could be chosen.
+
+### ShowFirstFooter
+
+```autohotkey
+value := Rte.ShowFirstFooter
+Rte.ShowFirstFooter := value
+```
+
+1/0
+
+Whether the first page has a footer (with DifferentFirstPage; the other pages: ShowFooter).
+
+### ShowFirstHeader
+
+```autohotkey
+value := Rte.ShowFirstHeader
+Rte.ShowFirstHeader := value
+```
+
+1/0
+
+Iteration 55: whether the first page has a header (with DifferentFirstPage; the other pages: ShowHeader).
 
 ### ShowFooter
 

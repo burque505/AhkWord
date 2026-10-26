@@ -49,3 +49,29 @@ Your Templates folder is yours: updating AhkWord replaces the program's folder, 
 
 !!! tip "Templates for a firm"
     A firm can keep its templates (one per court, its letterhead, its standard agreements) in a shared folder, and copy them into each person's Templates folder when they change. Each person's own templates and remembered details stay their own.
+
+## Snippets
+
+A **snippet** is a part with an abbreviation: type the abbreviation in the document, then **Space**, **Enter**, **Tab** or punctuation, and it becomes the part, formatted, its fields asked for, as Insert from Template inserts it. Type `;sig` and a space, and your signature block is there.
+
+**Insert > Snippets...** lists them, and makes and changes them:
+
+- **New:** give it an abbreviation, and type or paste (Ctrl+V) its text in the box, formatted with B, I, U and Font... Fields such as `{{Your Name}}` are asked for when it goes in. The text is kept as a part, named after the abbreviation unless you give it another name.
+- **New from Selection:** the same, with the text selected in the document in the box: a signature block, a standard clause, any text, formatting and all.
+- **Change:** its abbreviation, how it fires, and its text, in the same box. Choosing one of your parts (or a built-in one) by name shows its text; changing it there changes the part.
+- **Remove** and **Insert Now**.
+
+Each snippet chooses how it **fires**:
+
+- **On an ending character** (as at first): Space, Enter, Tab or punctuation after the abbreviation. **Keep the ending character** leaves it after the snippet; without it (as at first), `;sig` and Enter inserts the block with no empty line after it.
+- **At once,** as soon as the abbreviation is typed (AutoHotkey's `*`).
+- **Case-sensitive:** the abbreviation fires only typed as it is.
+
+!!! tip "Abbreviations that aren't words"
+    An abbreviation that is also a word (`cos`, `sig`, `re`) would fire whenever you type the word: start it with a mark, such as `;cos`, `;sig`. The dialog warns about common words.
+
+Snippets are AutoHotkey **hotstrings**, which `AhkWord.ahk` sets up for its own window: they work in AhkWord's document (and, as plain text, in the Markdown and HTML views), not in its dialogs, nor in other programs. With several AhkWord windows open, a snippet fires only in the one you type in. Undo takes the snippet back to what you typed.
+
+**In other programs:** **Export as Script** writes the snippets as a small AutoHotkey v2 script of plain-text hotstrings (their fields as their defaults, or `[their names]`). Run it with AutoHotkey beside your own scripts, and narrow it to some programs with `#HotIf` if you like. It needs no AhkWord.
+
+The snippets are kept in `snippets.json` beside your own templates (in AhkWord's folder in portable mode), shared by all AhkWord windows: one made in one window works in the others too. Scripts use `Rte.Snippets`, `AddSnippet`, `RemoveSnippet`, `InsertSnippet`, `SaveSelectionAsSnippet` and `ExportSnippets` (see the [API reference](../automation/api.md)).
