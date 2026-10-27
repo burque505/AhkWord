@@ -28,7 +28,11 @@
 #load "rte_hooks.cs"
 #load "rte_palette.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 57 adds to iteration 56:
+// Run it with AhkWord.ahk. Iteration 58 adds to iteration 57:
+//   - Export as PDF (and printing) show their progress in the status bar, page by page, and Esc stops them (while
+//     AhkWord's window is in front: DocumentPrinter.Progress and CancelRequested); a stopped export leaves no file.
+//     After the last page, what is going on: Windows finishing the file, AhkWord adding the bookmarks.
+// Iteration 57 added to iteration 56:
 //   - The command palette (Ctrl+Shift+P, Tools > Command Palette, the quick access toolbar; rte_palette.cs): type part
 //     of a command's name. The ribbon's commands, as the ribbon names and places them (RteRibbon.xml), with their
 //     shortcuts, run as their buttons do (registered by Button, Toggle and Check); the macros, styles, snippets and
@@ -654,7 +658,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 57;    // (the About box; make_version.ps1)
+	public const int Iteration = 58;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1480,6 +1484,24 @@ class WriterForm : Form
 	}
 
 	public void SetStatus(string text) => statusText.Text = text;
+
+	/// (iteration 58) Progress in the status bar, painted at once: while a document prints, no messages are handled.
+	internal void ShowProgress(string text) {
+		statusText.Text = text;
+		statusText.GetCurrentParent()?.Update();
+	}
+
+	/// Whether Esc was pressed since the last time asked, with AhkWord's window in front (a long print or export: Esc
+	/// stops it).
+	internal bool EscPressed() {
+		bool pressed = (GetAsyncKeyState(0x1B) & 0x8001) != 0;    // VK_ESCAPE: down now, or pressed since
+		return pressed && GetForegroundWindow() == Handle;
+	}
+	/// Whether a print or export should stop: Esc (tests: PrintStopOverride, asked instead).
+	internal bool PrintStop() => PrintStopOverride?.Invoke() ?? EscPressed();
+	internal Func<bool>? PrintStopOverride;
+	[DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
+	[DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
 
 	static void Restart(System.Windows.Forms.Timer timer) {
 		timer.Stop();
@@ -3343,10 +3365,14 @@ class WriterForm : Form
 	void PrintCommand(IWin32Window owner) {
 		UpdateReferences();
 		using var printer = CreatePrinter(dialog: true);
+		// (iteration 58) page by page in the status bar; Esc stops it
+		printer.Progress = (page, pages) => ShowProgress(page < pages ? $"Printing: page {page} of {pages}. Esc stops it." : "Printing: handing the pages to the printer…");
+		printer.CancelRequested = PrintStop;
 		using var dlg = new PrintDialog { Document = printer.Document, UseEXDialog = true };
 		if (dlg.ShowDialog(owner) != DialogResult.OK) return;
+		EscPressed();    // (an Esc from before, the dialog's: not this one's)
 		printer.Document.Print();
-		SetStatus("Sent to " + printer.Document.PrinterSettings.PrinterName);
+		SetStatus(printer.Cancelled ? "Printing stopped (Esc): the pages printed so far may come out." : "Sent to " + printer.Document.PrinterSettings.PrinterName);
 	}
 
 	void ExportPdfDialog() {
@@ -3359,6 +3385,8 @@ class WriterForm : Form
 		Cursor = Cursors.WaitCursor;
 		try {
 			SetStatus("Exported " + api.ExportPdf(dlg.FileName));
+		} catch (OperationCanceledException ex) {
+			SetStatus(ex.Message);
 		} finally {
 			Cursor = Cursors.Default;
 		}
@@ -7087,7 +7115,24 @@ public class EditorApi
 			// (iteration 53) where the headings and the tables of contents' entries are printed, as this printer lays out
 			// the pages (the gaps of the page view out, as for printing)
 			if (bookmarks) places = printer.PdfPlaces(Toc.Headings(ed.TextDocument, form.Styles, 6));
+			// (iteration 58) page by page in the status bar; Esc stops it
+			form.EscPressed();    // (an Esc from before: not this one's)
+			// (after the last page, the printer puts the file together, which takes a while for a long document: said)
+			printer.Progress = (page, pages) => form.ShowProgress(page < pages ? $"Exporting as PDF: page {page} of {pages}. Esc stops it."
+				: $"Exporting as PDF: Windows is finishing the file ({pages} page{(pages == 1 ? "" : "s")})…");
+			printer.CancelRequested = form.PrintStop;
 			document.Print();
+			if (printer.Cancelled) {
+				// (the printer writes what it had in the background: the part file deleted once it is let go of, or comes)
+				var wait = System.Diagnostics.Stopwatch.StartNew();
+				while (wait.ElapsedMilliseconds < 8000) {
+					if (File.Exists(full)) {
+						try { File.Delete(full); if (!File.Exists(full)) break; } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+					} else if (wait.ElapsedMilliseconds > 2000) break;
+					Thread.Sleep(100);
+				}
+				throw new OperationCanceledException("The PDF export was stopped (Esc): no file was made.");
+			}
 		}
 		// The printer writes the file in the background; wait until it is complete.
 		var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -7103,6 +7148,7 @@ public class EditorApi
 		}
 		if (!done) throw new TimeoutException("The PDF printer did not finish the file within 20 s.");
 		if (places.Bookmarks.Count + places.Links.Count > 0) {
+			form.ShowProgress("Exporting as PDF: adding the bookmarks and links…");
 			try { PdfMarks.Add(full, places.Bookmarks, places.Links); }
 			catch (Exception ex) { form.SetStatus("⚠ The PDF was made, but its bookmarks couldn't be put in: " + ex.Message); }
 		}
@@ -8724,7 +8770,16 @@ sealed class DocumentPrinter : IDisposable
 			}
 		}
 		e.HasMorePages = nextChar > start && nextChar < end;
+		// (iteration 58) the page done, told; a stop asked for: no more pages
+		Progress?.Invoke(page, Math.Max(page, pageCount));
+		if (e.HasMorePages && CancelRequested?.Invoke() == true) { Cancelled = true; e.Cancel = true; e.HasMorePages = false; }
 	}
+
+	/// Iteration 58: told after each page is printed (the page, the pages in all); asked after each whether to stop
+	/// (Cancelled then true).
+	public Action<int, int>? Progress;
+	public Func<bool>? CancelRequested;
+	public bool Cancelled { get; private set; }
 
 	Bitmap? preview;
 	const int PreviewScale = 2;    // the preview's picture of a page: twice the screen's resolution

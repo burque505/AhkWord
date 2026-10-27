@@ -38,6 +38,16 @@ The sheets follow your typing a second behind: they are worked out again a secon
 - **View > Zoom > Multiple Pages** shows the printed pages side by side. They are read-only: double-click a page to edit it there.
 - **File > Print > Print Preview** shows the pages as they will print, fitted to the screen, with page buttons and zoom.
 - **File > Print** prints; **Layout > Export as PDF** makes a PDF through *Microsoft Print to PDF*. As Word's, the PDF has a bookmark for each heading, under the one of the level above it, each opening its page at the heading, and it opens with its bookmarks shown; a table of contents' entries are links to their headings' pages. (Scripts: `ExportPdf(path)`, or `ExportPdf(path, 0)` for the pages only.)
+- While a PDF is made or a document prints, the status bar shows the page it is on (*Exporting as PDF: page 12 of 100*), and **Esc** stops it; a stopped export leaves no file. A long document takes a while, about 0.4 seconds a page, most of it Microsoft Print to PDF's own work.
+
+### Export as PDF, or print to a PDF printer
+
+Other PDF printers, such as CutePDF, PDF24 or PDFCreator, appear in **File > Print** like any printer once installed, and AhkWord prints to them as it prints on paper. They often make smaller files than Microsoft Print to PDF, and some are faster. What they can't have is **bookmarks and links**: Export as PDF adds those to the file Microsoft Print to PDF writes, but other PDF printers ask where to save in a dialog of their own, so AhkWord can't find the file to add them.
+
+- **Export as PDF:** bookmarks for the headings, and the table of contents' entries as links. Best for long documents that will be read on screen.
+- **Print to a PDF printer:** often a smaller file, without bookmarks or links.
+
+(Some PDF printers' installers offer other software along the way: read each step before clicking Next.)
 
 Printing follows the paragraphs' line and page break rules (keep with next, keep lines together, widow and orphan control, page break before), as Word does.
 

@@ -21,6 +21,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 ### Pages and printing
 
 - [x] Print Layout (lines break as they will be printed), with Page Width, One Page and Multiple Pages
+- [x] Printing and PDF export show their progress, page by page, and Esc stops them
 - [x] Show Pages: the printed pages as sheets, with their headers, footers and footnotes
 - [x] Headers and footers of several lines, with page numbers, a different first page, a font of their own (size, bold, italic, underline) and their distance from the page's edge
 - [x] Line numbers, as Word numbers them, printed and on screen
@@ -48,7 +49,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 
 ## Next
 
-- [ ] **Faster PDF export** for long documents
+- [ ] **PDF export in the background:** keep working while a long document's PDF is made (it can't be much faster: most of the time is Microsoft Print to PDF's own work)
 - [ ] **Updates for AhkWord's own copy of .NET:** when AhkWord downloaded .NET for itself, an offer to update it when Microsoft releases a fix (a .NET installed for all of Windows gets these from Windows Update)
 
 ## Later, perhaps
