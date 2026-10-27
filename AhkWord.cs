@@ -26,8 +26,14 @@
 #load "rte_pdf.cs"
 #load "rte_snippets.cs"
 #load "rte_hooks.cs"
+#load "rte_palette.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 56 adds to iteration 55:
+// Run it with AhkWord.ahk. Iteration 57 adds to iteration 56:
+//   - The command palette (Ctrl+Shift+P, Tools > Command Palette, the quick access toolbar; rte_palette.cs): type part
+//     of a command's name. The ribbon's commands, as the ribbon names and places them (RteRibbon.xml), with their
+//     shortcuts, run as their buttons do (registered by Button, Toggle and Check); the macros, styles, snippets and
+//     recent files too. Greyed out where the ribbon greys them out; the ones used last first. Scripts: PaletteItems.
+// Iteration 56 added to iteration 55:
 //   - Event hooks (Tools > Event Hooks; rte_hooks.cs): a macro that AhkWord runs by itself when it starts, a document
 //     is opened, made, saved, printed or closed, or a style is changed, told the event and the file or style
 //     (A_Args, AHKWORD_EVENT, AHKWORD_EVENT_DETAIL): no script of the user's kept running. BeforeSave and Closing wait
@@ -585,7 +591,7 @@ enum RibbonCommand : uint
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
 	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
@@ -648,7 +654,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 56;    // (the About box; make_version.ps1)
+	public const int Iteration = 57;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1169,6 +1175,7 @@ class WriterForm : Form
 		Toggle(RibbonCommand.RecordMacro, ToggleRecording, Keys.Control | Keys.Shift | Keys.R);
 		Button(RibbonCommand.MacroHotkeys, MacroHotkeysCommand);
 		Button(RibbonCommand.EventHooks, EventHooksCommand);
+		Button(RibbonCommand.CommandPalette, CommandPaletteCommand, Keys.Control | Keys.Shift | Keys.P);
 		Button(RibbonCommand.RunScript, RunScriptDialog);
 		Button(RibbonCommand.MacrosFolder, OpenMacrosFolder);
 		Button(RibbonCommand.AutomationApi, () => ShowText("Automation API (RteClient2.ahk: Rte.<Name>(...))", api.Help()));
@@ -1202,6 +1209,7 @@ class WriterForm : Form
 		var button = new RibbonButton(ribbon, (uint)id);
 		button.ExecuteEvent += (s, e) => BeginInvoke(() => Command(id, action, macro));
 		if (keys != Keys.None) { Shortcut(keys, CommandName(id), action, macro); keyCommands[keys] = id; }
+		paletteCommands[id] = (() => Command(id, action, macro), () => button.Enabled, null);
 		return button;
 	}
 
@@ -1210,6 +1218,7 @@ class WriterForm : Form
 		button.ExecuteEvent += (s, e) => BeginInvoke(() => Command(id, action, macro));
 		if (keys != Keys.None) { Shortcut(keys, CommandName(id), action, macro); keyCommands[keys] = id; }
 		toggleButtons[id] = button;
+		paletteCommands[id] = (() => Command(id, action, macro), () => button.Enabled, () => button.BooleanValue);
 	}
 
 	void Check(RibbonCommand id, Action action, Keys keys = Keys.None) {
@@ -1217,6 +1226,103 @@ class WriterForm : Form
 		box.ExecuteEvent += (s, e) => BeginInvoke(() => Command(id, action, null));
 		if (keys != Keys.None) { Shortcut(keys, CommandName(id), action); keyCommands[keys] = id; }
 		checkBoxes[id] = box;
+		paletteCommands[id] = (() => Command(id, action, null), () => box.Enabled, () => box.BooleanValue);
+	}
+
+	// ---- The command palette (iteration 57, rte_palette.cs)
+
+	// each ribbon command: run as its button runs it, whether it can run now, and (toggles, check boxes) whether it is on
+	readonly Dictionary<RibbonCommand, (Action Run, Func<bool> Enabled, Func<bool>? On)> paletteCommands = new();
+	Dictionary<uint, RibbonLabels.Label>? ribbonLabels;
+
+	/// What the palette lists: the ribbon's commands (but the palette), the macros, the styles, the snippets, the
+	/// recent files.
+	internal List<PaletteItem> PaletteItems() {
+		ribbonLabels ??= RibbonLabels.Load(Path.Combine(appDir, "ribbon", "RteRibbon.xml"));
+		var keysOf = keyCommands.GroupBy(k => k.Value).ToDictionary(g => g.Key, g => ShortcutText(g.First().Key));
+		var items = new List<PaletteItem>();
+		foreach (var (id, command) in paletteCommands) {
+			if (id == RibbonCommand.CommandPalette) continue;
+			var label = ribbonLabels.TryGetValue((uint)id, out var l) ? l : null;
+			string name = label?.Text is { Length: > 0 } text ? text : CommandName(id);
+			if (command.On != null) {
+				bool? on = null;
+				try { on = command.On(); } catch (Exception) { }
+				if (on is bool b) name += b ? "  (on)" : "  (off)";
+			}
+			items.Add(new PaletteItem(name, label?.Where ?? "", label?.Tooltip ?? "", keysOf.TryGetValue(id, out var k) ? k : "", command.Enabled, command.Run, "cmd:" + id));
+		}
+		// (the Font block is one ribbon control, not buttons: its commands, as their keys run them, in the source views too)
+		foreach (var (fontName, keys, run, call) in new (string, Keys, Action, string)[] {
+			("Bold", Keys.Control | Keys.B, api.ToggleBold, M("ToggleBold")), ("Italic", Keys.Control | Keys.I, api.ToggleItalic, M("ToggleItalic")),
+			("Underline", Keys.Control | Keys.U, () => api.ToggleUnderline(), M("ToggleUnderline")), ("Strikethrough", Keys.None, api.ToggleStrikeThrough, M("ToggleStrikeThrough")),
+			("Superscript", Keys.Control | Keys.Shift | Keys.Oemplus, api.ToggleSuperscript, M("ToggleSuperscript")), ("Subscript", Keys.Control | Keys.Oemplus, api.ToggleSubscript, M("ToggleSubscript")),
+			("Increase Font Size", Keys.Control | Keys.OemCloseBrackets, () => api.IncreaseFontSize(), M("IncreaseFontSize")),
+			("Decrease Font Size", Keys.Control | Keys.OemOpenBrackets, () => api.DecreaseFontSize(), M("DecreaseFontSize")) }) {
+			var (key, action, macro) = (keys, run, call);
+			items.Add(new PaletteItem(fontName, "Home > Font", "", key == Keys.None ? "" : ShortcutText(key), () => key != Keys.None || !SourceActive, () => {
+				LeaveOverlays();
+				if (SourceActive && key != Keys.None && sourceKeys.TryGetValue(key, out var inSource)) inSource();
+				else Run(action, macro);
+			}, "font:" + fontName));
+		}
+		foreach (var file in MacroPaths())
+			items.Add(new PaletteItem("Run macro: " + Path.GetFileNameWithoutExtension(file), "Tools > Macros", "", MacroHotkeyFor(file), () => true,
+				() => { LeaveOverlays(); Run(() => RunMacroFromUi(file)); }, "macro:" + Path.GetFileName(file)));
+		foreach (var style in Styles.Styles) {
+			string styleName = style.Name;
+			items.Add(new PaletteItem("Style: " + styleName, "Home > Styles", "", "", () => !SourceActive,
+				() => Run(() => api.SetStyle(styleName), M("SetStyle", styleName)), "style:" + styleName));
+		}
+		foreach (var snippet in SnippetList()) {
+			string abbreviation = snippet.Abbreviation;
+			items.Add(new PaletteItem($"Snippet: {abbreviation}  →  {snippet.Part}", "Insert > Snippets", "", "", () => true,
+				() => Run(() => api.InsertSnippet(abbreviation, "", true), M("InsertSnippet", abbreviation, "", true)), "snippet:" + abbreviation));
+		}
+		foreach (var path in Settings.RecentFiles) {
+			string file = path;
+			items.Add(new PaletteItem("Open: " + Path.GetFileName(file), Path.GetDirectoryName(file) ?? "", "", "", () => File.Exists(file),
+				() => Run(() => OpenRecent(file)), "open:" + file));
+		}
+		return items;
+	}
+
+	// the macros in the macros folder (their files), and a macro's hotkey ("" if none)
+	List<string> MacroPaths() => Directory.Exists(MacrosDir) ? Directory.GetFiles(MacrosDir, "*.ahk").OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList() : new();
+	string MacroHotkeyFor(string file) => Settings.MacroHotkeys.FirstOrDefault(h => string.Equals(h.Key, Path.GetFileName(file), StringComparison.OrdinalIgnoreCase)).Value ?? "";
+
+	static string ShortcutText(Keys keys) {
+		var parts = new List<string>();
+		if (keys.HasFlag(Keys.Control)) parts.Add("Ctrl");
+		if (keys.HasFlag(Keys.Shift)) parts.Add("Shift");
+		if (keys.HasFlag(Keys.Alt)) parts.Add("Alt");
+		var key = keys & Keys.KeyCode;
+		parts.Add(key switch {
+			>= Keys.D0 and <= Keys.D9 => ((char)('0' + (key - Keys.D0))).ToString(),
+			Keys.Oemplus => "+", Keys.OemMinus => "-", Keys.Oemcomma => ",", Keys.OemPeriod => ".",
+			Keys.Next => "Page Down", Keys.Prior => "Page Up", Keys.Return => "Enter",
+			_ => key.ToString()
+		});
+		return string.Join("+", parts);
+	}
+
+	PaletteForm? palette;
+
+	// Ctrl+Shift+P: the palette over the window; what is chosen runs once it has closed (a dialog it opens belongs to
+	// the window, not to the palette)
+	void CommandPaletteCommand() {
+		if (palette is { IsDisposed: false }) { palette.Activate(); return; }
+		palette = new PaletteForm(PaletteItems(), Settings.PaletteRecent);
+		palette.FormClosed += (s, e) => {
+			var chosen = palette?.Chosen;
+			palette?.Dispose();
+			palette = null;
+			if (chosen == null) return;
+			Settings.PaletteRecent = Settings.PaletteRecent.Where(k => k != chosen.Key).Prepend(chosen.Key).Take(30).ToList();
+			Settings.Save();
+			BeginInvoke(() => { Activate(); Editor.Focus(); chosen.Run(); });
+		};
+		palette.ShowOver(this);
 	}
 
 	// A ribbon command. While the source editor is in use, formatting commands insert Markdown or HTML there (or say
@@ -2702,6 +2808,13 @@ class WriterForm : Form
 	/// printing).
 	internal int UpdateReferences(bool tables = false) {
 		var doc = Editor.TextDocument;
+		// (iteration 57) the markers' case put back first (Change Case made "[[xreF:_TOC1]]" of them before it left hidden
+		// text alone)
+		if (Editor.IsHandleCreated && Editor.Text.Contains("[[", StringComparison.Ordinal)) {
+			doc.BeginEditCollection();
+			try { CrossRefs.RepairCase(doc); }
+			finally { doc.EndEditCollection(); }
+		}
 		if (!Editor.IsHandleCreated || !CrossRefs.Any(Editor.Text)) return 0;
 		int changed;
 		doc.BeginEditCollection();
@@ -4290,7 +4403,7 @@ class WriterForm : Form
 	static readonly HashSet<RibbonCommand> SourceDocumentCommands = new() {
 		RibbonCommand.New, RibbonCommand.NewFromTemplate, RibbonCommand.StartPage, RibbonCommand.NewWindow, RibbonCommand.OpenInNewWindow, RibbonCommand.Open, RibbonCommand.Save, RibbonCommand.SaveAs, RibbonCommand.Close, RibbonCommand.Print, RibbonCommand.PrintPreview,
 		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
-		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys, RibbonCommand.EventHooks,
+		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys, RibbonCommand.EventHooks, RibbonCommand.CommandPalette,
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.Snippets, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
 		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.WordWrap, RibbonCommand.PrintLayout, RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage,
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
@@ -6551,10 +6664,23 @@ public class EditorApi
 		if (string.IsNullOrEmpty(text)) throw new ArgumentException("There is nothing to find.");
 		var options = (matchCase ? RichTextBoxFinds.MatchCase : 0) | (wholeWord ? RichTextBoxFinds.WholeWord : 0);
 		int from = ed.SelectionStart + ed.SelectionLength;
-		int index = from < ed.TextLength ? ed.Find(text, from, options) : -1;
-		if (index < 0) index = ed.Find(text, 0, options);
-		if (index >= 0) ed.ScrollToCaret();
+		int index = from < ed.TextLength ? FindVisible(text, from, options) : -1;
+		if (index < 0) index = FindVisible(text, 0, options);
+		if (index >= 0) { ed.Select(index, text.Length); ed.ScrollToCaret(); }
 		return index;
+	}
+
+	// The next match from a position that is all in text you see (-1: none), not selected. (Iteration 57) A match in
+	// hidden text, the markers of cross-references, tables of contents and footnotes and a footnote's note, isn't one:
+	// Replace All of "toc" took the table of contents apart, changing its markers.
+	int FindVisible(string text, int from, RichTextBoxFinds options) {
+		while (from < ed.TextLength) {
+			int index = ed.Find(text, from, options | RichTextBoxFinds.NoHighlight);
+			if (index < 0) return -1;
+			if (ed.TextDocument.Range2(index, index + text.Length).Font.Hidden == tomConstants.tomFalse) return index;
+			from = index + 1;
+		}
+		return -1;
 	}
 
 	/// Replaces every occurrence and returns the number of replacements.
@@ -6562,12 +6688,19 @@ public class EditorApi
 		if (string.IsNullOrEmpty(text)) throw new ArgumentException("There is nothing to find.");
 		var options = (matchCase ? RichTextBoxFinds.MatchCase : 0) | (wholeWord ? RichTextBoxFinds.WholeWord : 0);
 		int count = 0, position = 0;
-		while (position < ed.TextLength) {
-			int index = ed.Find(text, position, options);
-			if (index < 0) break;
-			ed.SelectedText = replacement;
-			count++;
-			position = index + replacement.Length;
+		// (iteration 57: the text you see only, not the hidden markers; and as one undo step)
+		ed.TextDocument.BeginEditCollection();
+		try {
+			while (position < ed.TextLength) {
+				int index = FindVisible(text, position, options);
+				if (index < 0) break;
+				ed.Select(index, text.Length);
+				ed.SelectedText = replacement;
+				count++;
+				position = index + replacement.Length;
+			}
+		} finally {
+			ed.TextDocument.EndEditCollection();
 		}
 		return count;
 	}
@@ -6585,7 +6718,39 @@ public class EditorApi
 			"toggle" => tomConstants.tomToggleCase,
 			_ => throw new ArgumentException("Case must be upper, lower, title, sentence or toggle.")
 		};
-		SelectionRange().ChangeCase(type);
+		// (iteration 57: TOM's ChangeCase is no undo step, so Ctrl+Z undid what came before it. The new text is worked out
+		// with it while undo is held, the text put back, and then the characters that change put in as one undo step,
+		// each keeping its own formatting)
+		var doc = ed.TextDocument;
+		var range = SelectionRange();
+		int start = range.Start;
+		string before = range.Text ?? "", after;
+		if (before.Length == 0) return;
+		doc.Undo(-9999995);    // tomSuspend
+		try {
+			range.ChangeCase(type);
+			after = range.Text ?? "";
+			if (after.Length != before.Length) return;    // (a letter that became two: as TOM made it, without an undo step)
+			PutText(doc, start, after, before);    // (back as it was)
+		} finally {
+			doc.Undo(-9999994);    // tomResume
+		}
+		doc.BeginEditCollection();
+		try { PutText(doc, start, before, after, skipHidden: true); }
+		finally { doc.EndEditCollection(); }
+		doc.Selection2.SetRange(start, start + before.Length);
+	}
+
+	// The text from start, now as it is, made as it should be: the characters that differ, one by one (each keeps its
+	// formatting). skipHidden: hidden text left as it is (the cross-references', tables of contents' and footnotes'
+	// markers, a footnote's note: a marker in another case is no marker, as Change Case made "[[xreF:_TOC1]]")
+	static void PutText(ITextDocument2 doc, int start, string now, string want, bool skipHidden = false) {
+		for (int i = 0; i < want.Length; i++) {
+			if (want[i] == now[i] || want[i] == '\r' || now[i] == '\r') continue;
+			var range = doc.Range2(start + i, start + i + 1);
+			if (skipHidden && range.Font.Hidden == tomConstants.tomTrue) continue;
+			range.Text = want[i].ToString();
+		}
 	}
 
 	// ---- Formatting (these wrap RichEditBox methods of the same name)
@@ -7353,6 +7518,9 @@ public class EditorApi
 	/// The hooks, one per line: "Event=macro" (" (off)" after one switched off).
 	public string EventHookList => string.Join("\n", form.Settings.EventHooks.Select(h => h.Key + "=" + h.Value
 		+ (EventHooks.IsOn(form.Settings.EventHooksOff, EventHooks.Parse(h.Key)) ? "" : " (off)")));
+
+	/// Iteration 57: what the command palette lists (Ctrl+Shift+P), one per line: "name<tab>where<tab>shortcut".
+	public string PaletteItems => string.Join("\n", form.PaletteItems().Select(i => i.Name + "\t" + i.Where + "\t" + i.Shortcut));
 
 	/// The events a hook can run on, one per line.
 	public string HookEventNames => string.Join("\n", Enum.GetNames<HookEvent>());
@@ -8258,7 +8426,8 @@ public sealed class Settings
 	public string LegalFormat { get; set; } = "Top";    // legal numbering: Top (1. 1.1), All (1. 1.1.) or None (1 1.1)
 	public Dictionary<string, string> MacroHotkeys { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 	public Dictionary<string, string> EventHooks { get; set; } = new();    // (iteration 56) event name -> macro (rte_hooks.cs)
-	public List<string> EventHooksOff { get; set; } = new();    // the hooks switched off (their macros kept): event names    // macro file name -> keys, e.g. "Ctrl+Alt+1"
+	public List<string> EventHooksOff { get; set; } = new();
+	public List<string> PaletteRecent { get; set; } = new();    // (iteration 57) the palette's items used last, newest first (their keys)    // the hooks switched off (their macros kept): event names    // macro file name -> keys, e.g. "Ctrl+Alt+1"
 	public int OutlineWidth { get; set; } = 220;    // at 96 dpi
 	public int? PrinterModeToRestore { get; set; }
 	public int AutosaveSeconds { get; set; } = 60;

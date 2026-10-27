@@ -1614,6 +1614,16 @@ text · read-only
 
 The macros, one per line: file name and hotkey (if any), separated by a tab.
 
+### PaletteItems
+
+```autohotkey
+value := Rte.PaletteItems
+```
+
+text · read-only
+
+Iteration 57: what the command palette lists (Ctrl+Shift+P), one per line: "name&lt;tab&gt;where&lt;tab&gt;shortcut".
+
 ### SetEventHook
 
 ```autohotkey

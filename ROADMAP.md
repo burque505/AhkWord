@@ -38,6 +38,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 
 - [x] An automation API for AutoHotkey scripts (`Rte.InsertText(...)`), from other scripts or AhkWord.ahk itself, with events (`Rte.On("Saved", ...)`)
 - [x] Macro recording, macro hotkeys, and macros in AhkWord's folder
+- [x] A command palette (Ctrl+Shift+P): any command, macro, style, snippet or recent document by typing part of its name
 - [x] Event hooks: macros that run by themselves when AhkWord starts, a document is opened, made, saved, printed or closed, or a style changes, without a script of your own kept running
 
 ### Getting AhkWord
@@ -47,7 +48,6 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 
 ## Next
 
-- [ ] **A command palette** (Ctrl+K): any command by typing part of its name
 - [ ] **Faster PDF export** for long documents
 - [ ] **Updates for AhkWord's own copy of .NET:** when AhkWord downloaded .NET for itself, an offer to update it when Microsoft releases a fix (a .NET installed for all of Windows gets these from Windows Update)
 

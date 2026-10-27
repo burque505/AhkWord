@@ -11,5 +11,6 @@
 - **A table of contents' page numbers sit a little inside the right margin** in AhkWord (RichEdit puts a number on a line of its own when its tab is at the margin); Word and LibreOffice get the tab at the margin.
 - **LibreOffice opens AhkWord's PDFs with the text in its own fonts,** as it does any PDF it opens for editing, so lines can run into the margins there. PDF viewers show the pages as printed.
 - **PDF export of a long document takes a while** (some 40 seconds for 100 pages): Microsoft Print to PDF prints it page by page.
+- **Find and Replace don't look in footnotes' notes.** A note is kept inside its footnote's marker, which Find and Replace leave alone (as they do the markers of cross-references and tables of contents), so a word only in a note isn't found; change it in the note's own dialog (right-click its number, Edit footnote).
 - **x64 Windows only.**
 - **AhkWord.exe shows AutoHotkey's icon in Explorer.** It is AutoHotkey unchanged; the running AhkWord shows its own icon in the window, the taskbar and the tray.

@@ -10,12 +10,24 @@ AhkWord's commands are on a ribbon, the one built into Windows (as in Paint and 
 | **Layout** | Page Setup, Header & Footer, Line Numbers, Print Preview, Export as PDF |
 | **Review** | Next Spelling Error, Add to Dictionary, Check spelling as you type |
 | **View** | Document View (Rich Text, Markdown, HTML, Side by Side, Wrap source lines, Source line numbers), Print Layout, Show Pages, Wrap to window, Header and footer, Outline, Zoom (Page Width, One Page, Multiple Pages, Zoom In, Zoom Out, 100%) |
-| **Tools** | Macros, Record Macro, Macro Hotkeys, Event Hooks, Run Script, Macros Folder, Automation API, About |
+| **Tools** | Macros, Record Macro, Macro Hotkeys, Event Hooks, Run Script, Macros Folder, Command Palette, Automation API, About |
 | **Table Tools** | while the caret is in a table: rows and columns, Properties, Borders, Shading, delete |
 
-The **quick access toolbar** has Save, Undo and Redo; its arrow adds New, Open, Print, Print Preview or Export as PDF.
+The **quick access toolbar** has Save, Undo, Redo and the Command Palette; its arrow adds New, Open, Print, Print Preview or Export as PDF.
 
 The **right-click menu** has, as in Word, the spelling suggestions on a misspelled word (when nothing else is selected), then Cut, Copy and Paste, **Edit footnote** on a footnote's number, **Update table** and **Update page numbers only** on a table of contents, Font... and Paragraph..., and in a table the table commands. Right-clicking outside the selection moves the caret there first; inside it, the selection stays.
+
+## The command palette
+
+Press ++ctrl+shift+p++ (or Tools > Command Palette, or its magnifier on the quick access toolbar), type part of a command's name, and press ++enter++. It finds any ribbon command, shown with the tab and group it is on and its shortcut, so it is also a way to learn where things are; and your macros, the styles, your snippets and the recent documents. ++up++ and ++down++ choose, ++esc++ closes it.
+
+- Every word you type has to match: `insert table`, `page num`, `heading 2`. A command's name counts first, then its place on the ribbon, then its tooltip, so `margins` finds Page Setup.
+- A command the ribbon has greyed out (Undo with nothing to undo, the table commands outside a table) is greyed out here too, marked *(not now)*.
+- Toggles say whether they are on: *Print Layout (on)*.
+- With nothing typed, the ones you used last come first.
+- A command runs exactly as its button does: in the Markdown or HTML view it does what the button does there, and a macro being recorded records it.
+
+++ctrl+k++ stays Insert Link, as in Word.
 
 ## Keyboard
 
@@ -34,6 +46,7 @@ Press ++alt++ to see the KeyTips: ++h++ Home, ++n++ Insert, ++p++ Layout, ++r++ 
 | ++ctrl+enter++ | page break |
 | ++shift+enter++ | line break |
 | ++ctrl+k++ | link |
+| ++ctrl+shift+p++ | the command palette |
 | ++ctrl+w++ | close the document |
 | ++f7++ | next spelling error |
 | ++ctrl+alt+f++ | footnote |

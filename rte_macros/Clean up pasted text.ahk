@@ -9,6 +9,13 @@ if Rte.SelectionLength = 0 {
     ExitApp
 }
 Text := StrReplace(StrReplace(Rte.SelectedText, "`r`n", "`r"), "`n", "`r")
+; (iteration 57) footnotes, cross-references and a table of contents keep hidden markers in the text ([[fn]], [[xref:...]],
+; [[toc=...]]): put back as plain text, they would be no markers, shown as text, and the notes, references and links gone
+if RegExMatch(Text, "\[\[(?:/?xref[:=\]]|/?tocs?[:=\]]|pg\]\]|/?toc\]\]|fn[\]:])") {
+    Rte.SetStatus("Clean up pasted text: the selection has footnotes, cross-references or a table of contents, which it "
+        . "would take apart. Select only the pasted text, then run it again.")
+    ExitApp
+}
 Before := Text
 Text := RegExReplace(Text, "[ \t]+", " ")                      ; runs of spaces and tabs
 Text := RegExReplace(Text, " ?`r ?", "`r")                      ; spaces at the ends of lines

@@ -34,7 +34,7 @@ var fluent = new Dictionary<string, string> {
 	["viewrich"] = "document_text", ["sidebyside"] = "layout_column_two",
 	["tablesettings"] = "table_settings", ["linespacing"] = "text_line_spacing", ["pagewidth"] = "document_width", ["printlayout"] = "document_one_page", ["onepage"] = "page_fit", ["multiplepages"] = "document_multiple", ["close"] = "document_dismiss", ["newtemplate"] = "document_add", ["startpage"] = "home", ["newwindow"] = "window_new", ["stylesmenu"] = "text_edit_style", ["modifystyle"] = "edit", ["newstyle"] = "add", ["updatestyle"] = "arrow_sync", ["deletestyle"] = "delete", ["savestyles"] = "save", ["clearformatting"] = "text_clear_formatting", ["paragraphsettings"] = "text_paragraph", ["applystyles"] = "paint_brush_arrow_down", ["openwindow"] = "folder_open", ["inserttemplate"] = "document_text", ["fillfields"] = "textbox", ["borderall"] = "border_all", ["borderoutside"] = "border_outside",
 	["borderinside"] = "border_inside", ["bordernone"] = "border_none", ["paintbucket"] = "paint_bucket",
-	["macros"] = "play", ["record"] = "record", ["hotkeys"] = "keyboard", ["runscript"] = "script", ["macrosfolder"] = "folder_open", ["eventhooks"] = "flash", ["api"] = "plug_connected",
+	["macros"] = "play", ["record"] = "record", ["hotkeys"] = "keyboard", ["runscript"] = "script", ["macrosfolder"] = "folder_open", ["eventhooks"] = "flash", ["commandpalette"] = "search", ["api"] = "plug_connected",
 	["insertabove"] = "table_stack_above", ["insertbelow"] = "table_stack_below", ["insertleft"] = "table_stack_left", ["insertright"] = "table_stack_right",
 	["deleterow"] = "table_delete_row", ["deletecolumn"] = "table_delete_column", ["deletetable"] = "table_dismiss",
 };

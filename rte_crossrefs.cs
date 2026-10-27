@@ -203,7 +203,26 @@ public static class CrossRefs
 
 	/// After loading (HTML, Markdown, Word's RTF): the markers hidden, and a target's marker put after its paragraph's
 	/// number where it went in front of it. Returns how many markers there are.
+	// (iteration 57) a marker's keyword in another case, and its _Ref / _Toc id: what Change Case made of them before it
+	// left hidden text alone ("[[xreF:_TOC363317]]")
+	static readonly Regex MisCased = new(@"(?<=\[\[/?)(?:xref|tocs|toc|pg|fn)(?=[:=\]])|(?<=\[\[(?:xref[:=]|toc=))_(?:ref|toc)(?=\d)", RegexOptions.IgnoreCase);
+
+	/// Puts back the markers' case (their keywords lower case, _Ref / _Toc ids as AhkWord and Word make them), as one
+	/// character after another (each keeps its formatting: hidden); returns how many characters changed.
+	public static int RepairCase(ITextDocument2 doc) {
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		if (story.IndexOf("[[", StringComparison.Ordinal) < 0) return 0;
+		int changed = 0;
+		foreach (Match m in MisCased.Matches(story)) {
+			string want = m.Value.StartsWith('_') ? (m.Value.Equals("_ref", StringComparison.OrdinalIgnoreCase) ? "_Ref" : "_Toc") : m.Value.ToLowerInvariant();
+			for (int i = 0; i < want.Length; i++)
+				if (story[m.Index + i] != want[i]) { doc.Range2(m.Index + i, m.Index + i + 1).Text = want[i].ToString(); changed++; }
+		}
+		return changed;
+	}
+
 	public static int AfterLoad(ITextDocument2 doc) {
+		RepairCase(doc);    // (iteration 57)
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 		if (!Any(story)) return 0;
 		if (Footnotes.Any(story)) { Footnotes.AfterLoad(doc); story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? ""; }

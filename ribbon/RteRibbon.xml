@@ -1598,6 +1598,20 @@
         <Image Source="icons/eventhooks_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdCommandPalette" Id="318" LabelTitle="Command Palette" Keytip="C" TooltipTitle="Command palette (Ctrl+Shift+P)" TooltipDescription="Type part of a command's name and press Enter: any ribbon command, a macro, a style, a snippet or a recent file.">
+      <Command.LargeImages>
+        <Image Source="icons/commandpalette_32.bmp" MinDPI="96" />
+        <Image Source="icons/commandpalette_40.bmp" MinDPI="120" />
+        <Image Source="icons/commandpalette_48.bmp" MinDPI="144" />
+        <Image Source="icons/commandpalette_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/commandpalette_16.bmp" MinDPI="96" />
+        <Image Source="icons/commandpalette_20.bmp" MinDPI="120" />
+        <Image Source="icons/commandpalette_24.bmp" MinDPI="144" />
+        <Image Source="icons/commandpalette_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdMacrosFolder" Id="314" LabelTitle="Macros Folder" Keytip="F" TooltipTitle="Open macros folder">
       <Command.LargeImages>
         <Image Source="icons/macrosfolder_32.bmp" MinDPI="96" />
@@ -1907,6 +1921,7 @@
             <Button CommandName="cmdSave" />
             <Button CommandName="cmdUndo" />
             <Button CommandName="cmdRedo" />
+            <Button CommandName="cmdCommandPalette" />
             <Button CommandName="cmdNew" ApplicationDefaults.IsChecked="false" />
             <Button CommandName="cmdOpen" ApplicationDefaults.IsChecked="false" />
             <Button CommandName="cmdPrint" ApplicationDefaults.IsChecked="false" />
@@ -2335,7 +2350,8 @@
             <Button CommandName="cmdRunScript" />
             <Button CommandName="cmdMacrosFolder" />
           </Group>
-          <Group CommandName="cmdGroupAutomation" SizeDefinition="TwoButtons">
+          <Group CommandName="cmdGroupAutomation" SizeDefinition="ThreeButtons">
+            <Button CommandName="cmdCommandPalette" />
             <Button CommandName="cmdAutomationApi" />
             <Button CommandName="cmdAbout" />
           </Group>
