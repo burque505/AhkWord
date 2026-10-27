@@ -27,8 +27,12 @@
 #load "rte_snippets.cs"
 #load "rte_hooks.cs"
 #load "rte_palette.cs"
+#load "rte_extensions.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 59 adds to iteration 58:
+// Run it with AhkWord.ahk. Iteration 60 adds to iteration 59:
+//   - An extension point (rte_extensions.cs): empty in AhkWord; a build with more features puts its own there, which
+//     loads its files and is called once the window is open (AhkWordExtensions.Started).
+// Iteration 59 added to iteration 58:
 //   - AhkWord's own .NET (its dotnet folder) kept up to date (AhkWordSetup.ahk, before .NET is loaded): Microsoft's
 //     list of .NET 10 releases fetched once a week in the background; a newer .NET offered at the next start (Update
 //     now, Later, Skip), downloaded and checked as the first one, put in in one move (the old folder renamed away first:
@@ -663,7 +667,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 59;    // (the About box; make_version.ps1)
+	public const int Iteration = 60;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -949,6 +953,7 @@ class WriterForm : Form
 			else { StartingUp = true; try { Run(api.New); } finally { StartingUp = false; } }
 			Editor.Modified = false;
 			Editor.Focus();
+			AhkWordExtensions.Started(this);    // (iteration 60: what a build with more features adds; nothing in AhkWord)
 			BeginInvoke(() => RunHook(HookEvent.Started));    // (iteration 56: once the window is ready)
 			UpdateUi();
 			UpdateTitle();
