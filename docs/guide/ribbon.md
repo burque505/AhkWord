@@ -10,7 +10,7 @@ AhkWord's commands are on a ribbon, the one built into Windows (as in Paint and 
 | **Layout** | Page Setup, Header & Footer, Line Numbers, Print Preview, Export as PDF |
 | **Review** | Next Spelling Error, Add to Dictionary, Check spelling as you type |
 | **View** | Document View (Rich Text, Markdown, HTML, Side by Side, Wrap source lines, Source line numbers), Print Layout, Show Pages, Wrap to window, Header and footer, Outline, Zoom (Page Width, One Page, Multiple Pages, Zoom In, Zoom Out, 100%) |
-| **Tools** | Macros, Record Macro, Macro Hotkeys, Run Script, Macros Folder, Automation API, About |
+| **Tools** | Macros, Record Macro, Macro Hotkeys, Event Hooks, Run Script, Macros Folder, Automation API, About |
 | **Table Tools** | while the caret is in a table: rows and columns, Properties, Borders, Shading, delete |
 
 The **quick access toolbar** has Save, Undo and Redo; its arrow adds New, Open, Print, Print Preview or Export as PDF.

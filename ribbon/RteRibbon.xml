@@ -1584,6 +1584,20 @@
         <Image Source="icons/runscript_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdEventHooks" Id="317" LabelTitle="Event Hooks" Keytip="E" TooltipTitle="Event hooks" TooltipDescription="Macros that run by themselves when AhkWord starts, a document is opened, made, saved, printed or closed, or a style changes: no script of your own kept running.">
+      <Command.LargeImages>
+        <Image Source="icons/eventhooks_32.bmp" MinDPI="96" />
+        <Image Source="icons/eventhooks_40.bmp" MinDPI="120" />
+        <Image Source="icons/eventhooks_48.bmp" MinDPI="144" />
+        <Image Source="icons/eventhooks_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/eventhooks_16.bmp" MinDPI="96" />
+        <Image Source="icons/eventhooks_20.bmp" MinDPI="120" />
+        <Image Source="icons/eventhooks_24.bmp" MinDPI="144" />
+        <Image Source="icons/eventhooks_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdMacrosFolder" Id="314" LabelTitle="Macros Folder" Keytip="F" TooltipTitle="Open macros folder">
       <Command.LargeImages>
         <Image Source="icons/macrosfolder_32.bmp" MinDPI="96" />
@@ -2315,6 +2329,7 @@
             </DropDownGallery>
             <ToggleButton CommandName="cmdRecordMacro" />
             <Button CommandName="cmdMacroHotkeys" />
+            <Button CommandName="cmdEventHooks" />
           </Group>
           <Group CommandName="cmdGroupScripts" SizeDefinition="TwoButtons">
             <Button CommandName="cmdRunScript" />

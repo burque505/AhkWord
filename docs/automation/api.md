@@ -1532,16 +1532,6 @@ Sets a list level (1-9) of the document, and of new documents too unless forNewD
 
 ## Keys and macros
 
-### IsRecording
-
-```autohotkey
-value := Rte.IsRecording
-```
-
-1/0 · read-only
-
-Whether a macro is being recorded.
-
 ### Key
 
 ```autohotkey
@@ -1551,6 +1541,68 @@ Rte.Key(key, count = 1)
 *key*: text · *count*: number
 
 Presses a key, as recorded macros do: Left, Right, Up, Down, Home, End, Backspace, Delete, Enter or Tab, optionally with Ctrl+ and/or Shift+ ("Ctrl+Shift+Left"). Shift extends the selection; Ctrl moves by words, paragraphs or the whole document (Home/End). count repeats the key.
+
+### RunMacro
+
+```autohotkey
+Rte.RunMacro(name)
+```
+
+*name*: text
+
+Runs a macro from the rte_macros folder by name (without .ahk); it runs as a separate script.
+
+## Event hooks
+
+### EventHook
+
+```autohotkey
+Rte.EventHook(eventName)
+```
+
+*eventName*: text · returns: text
+
+The macro hooked to an event ("" if none).
+
+### EventHookList
+
+```autohotkey
+value := Rte.EventHookList
+```
+
+text · read-only
+
+The hooks, one per line: "Event=macro" (" (off)" after one switched off).
+
+### EventHookOn
+
+```autohotkey
+Rte.EventHookOn(eventName)
+```
+
+*eventName*: text · returns: 1/0
+
+Whether an event's hook is on (true also when it has no macro).
+
+### HookEventNames
+
+```autohotkey
+value := Rte.HookEventNames
+```
+
+text · read-only
+
+The events a hook can run on, one per line.
+
+### IsRecording
+
+```autohotkey
+value := Rte.IsRecording
+```
+
+1/0 · read-only
+
+Whether a macro is being recorded.
 
 ### Macros
 
@@ -1562,15 +1614,25 @@ text · read-only
 
 The macros, one per line: file name and hotkey (if any), separated by a tab.
 
-### RunMacro
+### SetEventHook
 
 ```autohotkey
-Rte.RunMacro(name)
+Rte.SetEventHook(eventName, macro)
 ```
 
-*name*: text
+*eventName*: text · *macro*: text
 
-Runs a macro from the rte_macros folder by name (without .ahk); it runs as a separate script.
+Hooks a macro (a name in the macros folder, or a full path; "" for none) to an event: Started, Opened, NewDocument, BeforeSave, Saved, StyleChanged, Printed or Closing (Tools &gt; Event Hooks).
+
+### SetEventHookOn
+
+```autohotkey
+Rte.SetEventHookOn(eventName, on)
+```
+
+*eventName*: text · *on*: 1/0
+
+Switches an event's hook on or off (off: its macro stays hooked, and doesn't run).
 
 ### SetMacroHotkey
 

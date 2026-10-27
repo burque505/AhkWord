@@ -25,8 +25,16 @@
 #load "rte_toc.cs"
 #load "rte_pdf.cs"
 #load "rte_snippets.cs"
+#load "rte_hooks.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 55 adds to iteration 54:
+// Run it with AhkWord.ahk. Iteration 56 adds to iteration 55:
+//   - Event hooks (Tools > Event Hooks; rte_hooks.cs): a macro that AhkWord runs by itself when it starts, a document
+//     is opened, made, saved, printed or closed, or a style is changed, told the event and the file or style
+//     (A_Args, AHKWORD_EVENT, AHKWORD_EVENT_DETAIL): no script of the user's kept running. BeforeSave and Closing wait
+//     for their macro (its Rte calls answered meanwhile, the window taking no input); an event doesn't start its macro
+//     again while it runs. Kept in the settings (EventHooks). Scripts: SetEventHook, EventHook, EventHookList,
+//     HookEventNames.
+// Iteration 55 added to iteration 54:
 //   - Snippets (Insert > Snippets; rte_snippets.cs): a part with an abbreviation, typed in the document (then Space,
 //     Enter, Tab or punctuation, or at once) to insert the part, formatted, its fields asked for. The abbreviations are
 //     AutoHotkey hotstrings, which AhkWord.ahk sets up for its own window only and the document in focus (each AhkWord
@@ -577,7 +585,7 @@ enum RibbonCommand : uint
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
 	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
@@ -640,7 +648,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 55;    // (the About box; make_version.ps1)
+	public const int Iteration = 56;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -923,9 +931,10 @@ class WriterForm : Form
 			if (startFile != null) Run(() => api.Open(startFile));
 			// (iteration 55) else the first document as File > New makes one: in the Normal style (its font: Times New
 			// Roman in the Classic set, not the editor's own Segoe UI, which new settings showed)
-			else Run(api.New);
+			else { StartingUp = true; try { Run(api.New); } finally { StartingUp = false; } }
 			Editor.Modified = false;
 			Editor.Focus();
+			BeginInvoke(() => RunHook(HookEvent.Started));    // (iteration 56: once the window is ready)
 			UpdateUi();
 			UpdateTitle();
 			UpdateWordCount();
@@ -1159,6 +1168,7 @@ class WriterForm : Form
 		};
 		Toggle(RibbonCommand.RecordMacro, ToggleRecording, Keys.Control | Keys.Shift | Keys.R);
 		Button(RibbonCommand.MacroHotkeys, MacroHotkeysCommand);
+		Button(RibbonCommand.EventHooks, EventHooksCommand);
 		Button(RibbonCommand.RunScript, RunScriptDialog);
 		Button(RibbonCommand.MacrosFolder, OpenMacrosFolder);
 		Button(RibbonCommand.AutomationApi, () => ShowText("Automation API (RteClient2.ahk: Rte.<Name>(...))", api.Help()));
@@ -1910,6 +1920,7 @@ class WriterForm : Form
 	/// Changes a style (old to updated) in the sheet and in its paragraphs, in one undo step; returns how many paragraphs
 	/// have it.
 	internal int ChangeStyle(ParagraphStyle old, ParagraphStyle updated) {
+		BeginInvoke(() => RunHook(HookEvent.StyleChanged, updated.Name));    // (iteration 56: once it is done)
 		using var _ = FirstParagraphAsIs(changes: true, all: true);
 		int index = Styles.Styles.FindIndex(s => string.Equals(s.Name, old.Name, StringComparison.OrdinalIgnoreCase));
 		if (index < 0) throw new ArgumentException($"There is no style \"{old.Name}\".");
@@ -1931,6 +1942,7 @@ class WriterForm : Form
 	/// paragraphs with it; formatting of their own stays); styles the sheet hasn't got stay. Returns how many
 	/// paragraphs were restyled.
 	internal int UseStyles(StyleSheet set) {
+		BeginInvoke(() => RunHook(HookEvent.StyleChanged, "(style set)"));    // (iteration 56)
 		using var _ = FirstParagraphAsIs(changes: true, all: true);
 		var doc = Editor.TextDocument;
 		int count = 0;
@@ -3655,6 +3667,7 @@ class WriterForm : Form
 	}
 
 	void OnFormClosing(object? sender, FormClosingEventArgs e) {
+		RunHook(HookEvent.Closing, FileName ?? "");    // (iteration 56: waits for its macro, which can still save)
 		if (!discardOnClose && !ConfirmDiscard()) e.Cancel = true;
 		discardOnClose = false;
 		if (!e.Cancel) SaveSettings();    // here, while the editor still reports its zoom (not after the window has closed)
@@ -3842,19 +3855,97 @@ class WriterForm : Form
 	// ---------------------------------------------------------------- Macros (AHK scripts run as separate processes)
 
 	string MacrosDir => Path.Combine(appDir, "rte_macros");
+	internal string MacrosFolderPath => MacrosDir;
 
 	void RunScriptDialog() {
 		using var dlg = new OpenFileDialog { Title = "Run AHK script", Filter = "AutoHotkey scripts (*.ahk)|*.ahk", InitialDirectory = Directory.Exists(MacrosDir) ? MacrosDir : appDir };
 		if (dlg.ShowDialog(this) == DialogResult.OK) Run(() => RunMacroFromUi(dlg.FileName));
 	}
 
-	internal void RunScript(string path) {
+	internal System.Diagnostics.Process? RunScript(string path, params string[] arguments) {
 		if (ahkPath == "" || !File.Exists(ahkPath)) throw new InvalidOperationException("AutoHotkey was not found; start AhkWord with AhkWord.ahk.");
 		var start = new System.Diagnostics.ProcessStartInfo(ahkPath) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(path)! };
 		start.ArgumentList.Add(path);
+		foreach (var argument in arguments) start.ArgumentList.Add(argument);
 		start.Environment["RTE_WRITER_HWND"] = server.Handle.ToInt64().ToString(CultureInfo.InvariantCulture);
-		System.Diagnostics.Process.Start(start);
+		// (iteration 56: a hook's event and what it was about, also as A_Args)
+		if (arguments.Length > 0) start.Environment["AHKWORD_EVENT"] = arguments[0];
+		if (arguments.Length > 1) start.Environment["AHKWORD_EVENT_DETAIL"] = arguments[1];
+		var process = System.Diagnostics.Process.Start(start);
 		SetStatus("Running " + Path.GetFileName(path));
+		return process;
+	}
+
+	// ---------------------------------------------------------------- Iteration 56: event hooks (rte_hooks.cs)
+
+	/// While the first document is made at the start (its hook is Started, not NewDocument).
+	internal bool StartingUp;
+
+	// the hooks' macros running now, by event (an event doesn't start its macro again while it runs)
+	readonly Dictionary<HookEvent, System.Diagnostics.Process> hooksRunning = new();
+	/// (tests) the hooks started, "Event: macro", and whether a waiting one timed out
+	internal readonly List<string> HooksStarted = new();
+
+	/// Runs the macro hooked to an event, if there is one (detail: the file, style, printer). BeforeSave and Closing wait
+	/// for it to finish (at most EventHooks.WaitSeconds; meanwhile the window takes no input, but the macro's Rte calls
+	/// are done); the others don't.
+	internal void RunHook(HookEvent e, string detail = "") {
+		if (EventHooks.MacroFor(Settings.EventHooks, e) is not { } macro || !EventHooks.IsOn(Settings.EventHooksOff, e)) return;
+		RunHookMacro(e, macro, detail);
+	}
+
+	internal void RunHookMacro(HookEvent e, string macro, string detail) {
+		if (hooksRunning.TryGetValue(e, out var running)) {
+			if (!HasEnded(running)) return;    // (its own event, from the macro itself: not again)
+			hooksRunning.Remove(e);
+		}
+		string path = EventHooks.PathOf(macro, MacrosDir);
+		if (!File.Exists(path)) { SetStatus($"⚠ The {e} hook's macro, {macro}, isn't there any more (Tools > Event Hooks)."); return; }
+		System.Diagnostics.Process? process;
+		try { process = RunScript(path, e.ToString(), detail); }
+		catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { SetStatus($"⚠ The {e} hook couldn't run: {ex.Message}"); return; }
+		if (process == null) return;
+		hooksRunning[e] = process;
+		HooksStarted.Add($"{e}: {macro}");
+		SetStatus($"{e}: running the {Path.GetFileNameWithoutExtension(macro)} macro.");
+		if (!EventHooks.Waits(e)) return;
+		// (waits: the macro's calls are answered meanwhile, the window takes no typing or clicks)
+		bool enabled = Enabled, focused = Editor.Focused;
+		Enabled = false;
+		UseWaitCursor = true;
+		var watch = System.Diagnostics.Stopwatch.StartNew();
+		try {
+			while (!HasEnded(process) && watch.Elapsed.TotalSeconds < EventHooks.WaitSeconds) {
+				Application.DoEvents();
+				process.WaitForExit(15);
+			}
+		} finally {
+			UseWaitCursor = false;
+			Enabled = enabled;
+			if (focused && !IsDisposed) Editor.Focus();
+		}
+		if (!HasEnded(process)) {
+			HooksStarted.Add($"{e}: {macro} (still running after {EventHooks.WaitSeconds} s)");
+			SetStatus($"⚠ The {e} hook's macro, {Path.GetFileNameWithoutExtension(macro)}, was still running after {EventHooks.WaitSeconds} seconds: AhkWord went on without waiting.");
+		} else SetStatus($"{e}: the {Path.GetFileNameWithoutExtension(macro)} macro is done.");
+	}
+
+	static bool HasEnded(System.Diagnostics.Process process) {
+		try { return process.HasExited; } catch (InvalidOperationException) { return true; }
+	}
+
+	// Tools > Event Hooks
+	void EventHooksCommand() {
+		using var dlg = new EventHooksDialog(Settings.EventHooks, Settings.EventHooksOff, MacrosDir, (e, macro) => RunHookMacro(e, macro, e switch {
+			HookEvent.StyleChanged => Styles.Normal.Name, HookEvent.Printed => "", HookEvent.Started or HookEvent.NewDocument => "", _ => FileName ?? ""
+		}));
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		Settings.EventHooks = dlg.Result;
+		Settings.EventHooksOff = dlg.Off;
+		Settings.Save();
+		int count = Settings.EventHooks.Count;
+		SetStatus(count == 0 ? "No event hooks." : $"{count} event hook{(count == 1 ? "" : "s")}: " + string.Join(", ", Settings.EventHooks.Select(h => $"{h.Key} runs {Path.GetFileNameWithoutExtension(h.Value)}"
+			+ (EventHooks.IsOn(Settings.EventHooksOff, EventHooks.Parse(h.Key)) ? "" : " (off)"))) + ".");
 	}
 
 	// ---------------------------------------------------------------- Iteration 6: recording macros
@@ -4199,7 +4290,7 @@ class WriterForm : Form
 	static readonly HashSet<RibbonCommand> SourceDocumentCommands = new() {
 		RibbonCommand.New, RibbonCommand.NewFromTemplate, RibbonCommand.StartPage, RibbonCommand.NewWindow, RibbonCommand.OpenInNewWindow, RibbonCommand.Open, RibbonCommand.Save, RibbonCommand.SaveAs, RibbonCommand.Close, RibbonCommand.Print, RibbonCommand.PrintPreview,
 		RibbonCommand.PageSetup, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Exit,
-		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys,
+		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys, RibbonCommand.EventHooks,
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.Snippets, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
 		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.WordWrap, RibbonCommand.PrintLayout, RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage,
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
@@ -4849,6 +4940,7 @@ public class EditorApi
 		form.SetFileName(null);
 		form.DocumentLoaded(WriterForm.SourceKind.None, null);
 		form.Events.Raise(EditorEvent.Opened);
+		if (!form.StartingUp) form.RunHook(HookEvent.NewDocument);    // (iteration 56; the first document at the start: Started)
 	}
 
 	/// Seconds between the recovery copies written while the document has unsaved changes (0: none; at least 10).
@@ -5099,6 +5191,7 @@ public class EditorApi
 	/// A new style, from the paragraph at the caret (with settings, as ModifyStyle takes them, on top), given to the
 	/// paragraphs the selection is in.
 	public void NewStyle(string name, string settings = "") {
+		form.BeginInvoke(() => form.RunHook(HookEvent.StyleChanged, name));    // (iteration 56)
 		using var _ = form.FirstParagraphAsIs(changes: true);
 		name = name.Trim();
 		if (name == "" || name.Contains('@') || name.Contains(';') || name.Contains('{') || name.Contains('}')) throw new ArgumentException("A style's name can't be empty, nor have @ ; { } in it.");
@@ -5133,6 +5226,7 @@ public class EditorApi
 
 	/// Deletes one of your own styles; its paragraphs become Normal (one undo step).
 	public void DeleteStyle(string name) {
+		form.BeginInvoke(() => form.RunHook(HookEvent.StyleChanged, name));    // (iteration 56)
 		var style = form.Styles.Find(name) ?? throw new ArgumentException($"There is no style \"{name}\".");
 		if (StyleSets.Get("Classic").Find(style.Name) != null) throw new ArgumentException($"{style.Name} is one of the usual styles, which stay.");
 		var doc = ed.TextDocument;
@@ -5171,6 +5265,7 @@ public class EditorApi
 	/// of their own stays); others are added. With forNewDocuments they go into your default styles too (the ones new
 	/// documents get), the others of those staying as they are. Returns how many styles were copied.
 	public int CopyStyles(string path, string names = "", bool forNewDocuments = false) {
+		form.BeginInvoke(() => form.RunHook(HookEvent.StyleChanged, names == "" ? "(styles from " + Path.GetFileName(path) + ")" : names));    // (iteration 56)
 		path = Path.GetFullPath(path);
 		var source = StyleImport.From(path) ?? throw new InvalidOperationException($"No styles found in {Path.GetFileName(path)}.");
 		var wanted = names.Split(new[] { ',', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -5342,6 +5437,7 @@ public class EditorApi
 		form.AddRecent(full);
 		form.DocumentLoaded(sourceText == null ? WriterForm.SourceKind.None : extension is ".md" or ".markdown" ? WriterForm.SourceKind.Markdown : WriterForm.SourceKind.Html, sourceText);
 		form.Events.Raise(EditorEvent.Opened);
+		form.RunHook(HookEvent.Opened, full);    // (iteration 56)
 	}
 
 	// While a document is loaded: no undo steps (they are cleared once it is), and no change notifications, which would
@@ -5376,6 +5472,7 @@ public class EditorApi
 	/// via = "inside" keeps an HTML file's pictures inside it (as data: URIs), as one file.
 	public string SaveAs(string path, string via = "") {
 		string full = Path.GetFullPath(path);
+		form.RunHook(HookEvent.BeforeSave, full);    // (iteration 56: waits for its macro)
 		string extension = Path.GetExtension(full).ToLowerInvariant();
 		LastConverter = "";
 		// HTML and Markdown keep their pictures in document_images\ next to the file, except HTML saved with "inside"
@@ -5390,6 +5487,7 @@ public class EditorApi
 		form.SetFileName(full);
 		form.AddRecent(full);
 		form.Events.Raise(EditorEvent.Saved);
+		form.RunHook(HookEvent.Saved, full);    // (iteration 56)
 		return full;
 	}
 
@@ -6802,6 +6900,12 @@ public class EditorApi
 	/// for each heading, under the one of the level above it, and each table of contents' entry a link to its heading
 	/// (iteration 53); 0: the pages only.
 	public string ExportPdf(string path, bool bookmarks = true) {
+		string pdf = ExportPdfFile(path, bookmarks);
+		form.BeginInvoke(() => form.RunHook(HookEvent.Printed, pdf));    // (iteration 56)
+		return pdf;
+	}
+
+	string ExportPdfFile(string path, bool bookmarks) {
 		const string pdfPrinter = "Microsoft Print to PDF";
 		if (!PrinterSettings.InstalledPrinters.Cast<string>().Contains(pdfPrinter))
 			throw new InvalidOperationException($"The \"{pdfPrinter}\" printer is not installed (Windows Features: Microsoft Print to PDF).");
@@ -6846,6 +6950,7 @@ public class EditorApi
 		using var printer = form.CreatePrinter(printerName == "" ? null : printerName);
 		printer.Document.PrintController = new StandardPrintController();
 		printer.Document.Print();
+		form.BeginInvoke(() => form.RunHook(HookEvent.Printed, printer.Document.PrinterSettings.PrinterName));    // (iteration 56)
 	}
 
 	// ---- Iteration 8: list levels (Paragraph > List levels)
@@ -7211,6 +7316,46 @@ public class EditorApi
 
 	/// Runs a macro from the rte_macros folder by name (without .ahk); it runs as a separate script.
 	public void RunMacro(string name) => form.RunScript(form.MacroPath(name));
+
+	// ---- Event hooks (iteration 56, rte_hooks.cs): macros run by AhkWord when something happens
+
+	/// Hooks a macro (a name in the macros folder, or a full path; "" for none) to an event: Started, Opened,
+	/// NewDocument, BeforeSave, Saved, StyleChanged, Printed or Closing (Tools > Event Hooks).
+	public void SetEventHook(string eventName, string macro) {
+		var e = EventHooks.Parse(eventName);
+		var hooks = form.Settings.EventHooks.Where(h => !string.Equals(h.Key, e.ToString(), StringComparison.OrdinalIgnoreCase)).ToDictionary(h => h.Key, h => h.Value);
+		if (macro.Trim() != "") {
+			string name = macro.Trim();
+			if (!File.Exists(EventHooks.PathOf(name, form.MacrosFolderPath)) && File.Exists(EventHooks.PathOf(name + ".ahk", form.MacrosFolderPath))) name += ".ahk";
+			if (!File.Exists(EventHooks.PathOf(name, form.MacrosFolderPath))) throw new FileNotFoundException($"There is no macro \"{macro}\" in the macros folder ({form.MacrosFolderPath}).");
+			hooks[e.ToString()] = name;
+		}
+		form.Settings.EventHooks = hooks;
+		if (macro.Trim() == "") form.Settings.EventHooksOff = form.Settings.EventHooksOff.Where(o => !string.Equals(o, e.ToString(), StringComparison.OrdinalIgnoreCase)).ToList();
+		form.Settings.Save();
+	}
+
+	/// Switches an event's hook on or off (off: its macro stays hooked, and doesn't run).
+	public void SetEventHookOn(string eventName, bool on) {
+		var e = EventHooks.Parse(eventName);
+		var off = form.Settings.EventHooksOff.Where(o => !string.Equals(o, e.ToString(), StringComparison.OrdinalIgnoreCase)).ToList();
+		if (!on) off.Add(e.ToString());
+		form.Settings.EventHooksOff = off;
+		form.Settings.Save();
+	}
+
+	/// Whether an event's hook is on (true also when it has no macro).
+	public bool EventHookOn(string eventName) => EventHooks.IsOn(form.Settings.EventHooksOff, EventHooks.Parse(eventName));
+
+	/// The macro hooked to an event ("" if none).
+	public string EventHook(string eventName) => EventHooks.MacroFor(form.Settings.EventHooks, EventHooks.Parse(eventName)) ?? "";
+
+	/// The hooks, one per line: "Event=macro" (" (off)" after one switched off).
+	public string EventHookList => string.Join("\n", form.Settings.EventHooks.Select(h => h.Key + "=" + h.Value
+		+ (EventHooks.IsOn(form.Settings.EventHooksOff, EventHooks.Parse(h.Key)) ? "" : " (off)")));
+
+	/// The events a hook can run on, one per line.
+	public string HookEventNames => string.Join("\n", Enum.GetNames<HookEvent>());
 
 	/// The macros, one per line: file name and hotkey (if any), separated by a tab.
 	public string Macros => string.Join("\n", form.MacroFiles().Select(f => f + "\t" + (form.HotkeyOf(f) is Keys k ? HotkeyBox.Describe(k) : "")));
@@ -8111,7 +8256,9 @@ public sealed class Settings
 	public bool TableHeader { get; set; } = true;
 	public bool CrossReferenceFull { get; set; }    // (iteration 50) Insert > Cross-reference: the full number ("3(b)")
 	public string LegalFormat { get; set; } = "Top";    // legal numbering: Top (1. 1.1), All (1. 1.1.) or None (1 1.1)
-	public Dictionary<string, string> MacroHotkeys { get; set; } = new(StringComparer.OrdinalIgnoreCase);    // macro file name -> keys, e.g. "Ctrl+Alt+1"
+	public Dictionary<string, string> MacroHotkeys { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+	public Dictionary<string, string> EventHooks { get; set; } = new();    // (iteration 56) event name -> macro (rte_hooks.cs)
+	public List<string> EventHooksOff { get; set; } = new();    // the hooks switched off (their macros kept): event names    // macro file name -> keys, e.g. "Ctrl+Alt+1"
 	public int OutlineWidth { get; set; } = 220;    // at 96 dpi
 	public int? PrinterModeToRestore { get; set; }
 	public int AutosaveSeconds { get; set; } = 60;

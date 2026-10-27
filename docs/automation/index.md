@@ -49,10 +49,43 @@ With several AhkWord windows open, a script talks to the one used last. A macro 
 - **Clean up pasted text:** joins lines broken in the middle of sentences, tidies spaces, and makes quotes and dashes typographic.
 - **My signature:** inserts your name, title, phone and e-mail (asked for once, then remembered).
 - **Collect from anywhere:** select text in any program and press Win+Shift+C to add it, with its source and time, to the end of the document.
-- **PDF on save:** each save also makes a PDF beside the document.
+- **PDF on save:** each save also makes a PDF beside the document. It is a Saved hook: run it from Tools > Macros, or with a hotkey from Macro Hotkeys, to switch it on or off (it asks before taking the place of another Saved hook).
 - **Folder to PDF:** makes a PDF of every document in a folder.
 - **Arrange windows:** puts the open AhkWord windows side by side on the screen, each page fitted to its window's width.
+- **Open AutoHotkey Dash:** AutoHotkey's Dash, for its help, Window Spy and **Editor settings**, the program that edits macros (see [Getting started](../getting-started.md#which-program-opens-a-macro-to-edit-it)). It needs AutoHotkey installed.
 - An auto-save, a word goal tracker, an event monitor, document statistics, and Title Case for the selection.
+
+## Event hooks
+
+**Tools > Event Hooks** gives an event a macro that AhkWord runs by itself when it happens. Unlike a script with `Rte.On`, nothing has to keep running: the macro starts, does its work and ends.
+
+| Event | When | `A_Args[2]` |
+|---|---|---|
+| Started | AhkWord's window has opened, with its first document | |
+| Opened | a document was opened | its file |
+| NewDocument | File > New | |
+| BeforeSave | a document is about to be saved: AhkWord waits for the macro | the file |
+| Saved | a document was saved | its file |
+| StyleChanged | a style was changed, made, deleted or copied, or the style set changed | the style |
+| Printed | the document was printed or exported as PDF | the printer, or the PDF |
+| Closing | the window is about to close: AhkWord waits for the macro | the file |
+
+The macro gets the event's name in `A_Args[1]` (and in the environment variable `AHKWORD_EVENT`), and what it was about in `A_Args[2]` (`AHKWORD_EVENT_DETAIL`). It works on the window the event happened in through `Rte`, as any macro does. **BeforeSave** and **Closing** wait for their macro, for up to 15 seconds, so that it can change the document before it is saved, or save it before the window closes; the other events don't wait. While an event's macro is running, that event doesn't start it again, so a Saved hook that saves doesn't run in a loop.
+
+Untick **On** beside a macro to keep it chosen without it running: a PDF on each save only some of the time, say; tick it again to have it back. In the dialog, **New...** makes a macro for the event (`On Saved.ahk`, say) from a starting script with an example in it, and opens it for editing; **Run Now** tries the macro as the event would run it. Scripts use `SetEventHook("Saved", "On Saved.ahk")`, `SetEventHookOn("Saved", false)` (so a hotkey can switch a hook), `EventHookOn`, `EventHook`, `EventHookList` and `HookEventNames`.
+
+An example, a Saved hook that keeps a dated copy of each save in a `Backups` folder beside the document:
+
+```autohotkey
+#Requires AutoHotkey v2.0
+#Include "..\RteClient2.ahk"
+SavedFile := A_Args.Length >= 2 ? A_Args[2] : ""
+if SavedFile != "" {
+    SplitPath(SavedFile, , &Dir, &Ext, &Stem)
+    DirCreate(Dir "\Backups")
+    FileCopy(SavedFile, Dir "\Backups\" Stem " " FormatTime(, "yyyy-MM-dd HHmm") "." Ext, true)
+}
+```
 
 ## Hotkeys in AhkWord.ahk
 

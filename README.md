@@ -12,6 +12,31 @@ AhkWord is built on [RichEditorNET](https://github.com/ellipticbit/RichEditorNET
 
 *[`examples/Showcase.rtf`](examples/Showcase.rtf), made entirely with the editor's own commands. The file has line numbers turned on (Layout > Line Numbers), which this picture doesn't show.*
 
+## New to AutoHotkey?
+
+[AutoHotkey](https://www.autohotkey.com/) is a free scripting language for Windows, for hotkeys, abbreviations and small programs. AhkWord runs on it, but **you don't need to know it, or install it, to write documents**: a release download carries it as `AhkWord.exe`.
+
+What AutoHotkey adds is that AhkWord can be automated, if you want that:
+
+- **Macros** (Tools > Macros): scripts that do things in the document for you. **Record Macro** writes one from what you type and click, so you can make one without writing any code.
+- **Snippets** (Insert > Snippets): type an abbreviation such as `;sig` and it becomes your signature block.
+- **Macro hotkeys** and **event hooks** (Tools > Event Hooks): a macro on a key, or run by itself when a document is opened or saved.
+
+Macros are plain-text files ending in `.ahk`, in the `rte_macros` folder beside AhkWord.
+
+**Which program opens a macro to edit it?** **Edit** in AhkWord uses the program Windows has for editing `.ahk` files, the one Explorer's right-click **Edit script** opens:
+
+- With AutoHotkey installed, AutoHotkey asks you the first time which editor to use (Notepad, or a code editor it finds), and remembers your answer for your Windows user. To choose another later, open the **AutoHotkey Dash** (the *Open AutoHotkey Dash* macro, or the Start menu) and click **Editor settings**.
+- Without AutoHotkey installed, AhkWord opens the macro in **Notepad**. (The Dash comes with AutoHotkey; AhkWord's own copy doesn't have it.)
+
+[Getting started](https://burque505.github.io/AhkWord/getting-started/) has the same, with a picture of the Dash.
+
+Any text editor will do. A code editor with AutoHotkey support colours the code and catches mistakes, for example Visual Studio Code with an AutoHotkey v2 extension, or Notepad++.
+
+**Learning more:** **Tools > Automation API** lists everything a macro can ask AhkWord to do, a recorded macro shows the calls for what you did, and AutoHotkey's own [documentation](https://www.autohotkey.com/docs/v2/) covers the language.
+
+**A caution:** a macro is a program, and it can do anything a program can on your computer. Run, or hook to an event, only macros you wrote yourself or got from someone you trust.
+
 > **Work in progress.** AhkWord was called **RTE Writer** until iteration 38. On its first start it copies your settings, templates and recovery copies from `%APPDATA%\RTE Writer` into `%APPDATA%\AhkWord` (the old folder is left as it was), and scripts written for RTE Writer keep working.
 
 ## Features
@@ -95,6 +120,7 @@ Rte.On("Saved", (e) => TrayTip(Rte.FileName, "Saved"))
 - **Calls** wait for the editor and return its result. `Rte.Post(...)` queues a call and returns at once. **Tools > Automation API** in the editor lists everything that can be called.
 - **Events** (`TextChanged`, `SelectionChanged`, `ModifiedChanged`, `Saved`, `Opened`, `Closed`, `AsyncError`) are delivered to callbacks registered with `Rte.On`.
 - **Macros:** the **Macros** button on the Tools tab runs the scripts in [`rte_macros`](rte_macros), and **Macro Hotkeys** gives any of them a hotkey. **Record Macro** (Ctrl+Shift+R) records typing and ribbon commands as a new macro script.
+- **Event hooks** (Tools > Event Hooks): a macro that AhkWord runs by itself when it starts, a document is opened, made, saved, printed or closed, or a style changes, each one switched on or off; BeforeSave and Closing wait for their macro. No script of your own has to keep running, as one with `Rte.On` must.
 - **Hotkeys in the host script:** `AhkWord.ahk` itself defines a couple of hotkeys (Ctrl+Alt+D inserts the date, Ctrl+Alt+W shows word counts). Add your own there.
 
 The example macros include:
@@ -102,9 +128,10 @@ The example macros include:
 - **Clean up pasted text:** joins lines broken in the middle of sentences, tidies spaces, and makes quotes and dashes typographic.
 - **My signature:** inserts your name, title, phone and e-mail (asked for once, then remembered).
 - **Collect from anywhere:** select text in any program and press Win+Shift+C to add it, with its source and time, to the end of the document.
-- **PDF on save:** each save also makes a PDF beside the document.
+- **PDF on save:** each save also makes a PDF beside the document. It is an event hook: run it from Tools > Macros (or give it a hotkey) to switch it on or off.
 - **Folder to PDF:** makes a PDF of every document in a folder.
 - **Arrange windows:** puts the open AhkWord windows side by side on the screen (three or fewer in columns, more in a grid), each page fitted to its window's width. Give it a hotkey with Macro Hotkeys.
+- **Open AutoHotkey Dash:** AutoHotkey's Dash, for its help, Window Spy and Editor settings (with AutoHotkey installed).
 - An auto-save, a word goal tracker, an event monitor, document statistics, and Title Case for the selection.
 
 ## Making templates
@@ -181,7 +208,7 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 Settings are kept in `%APPDATA%\AhkWord\settings.json`, with the recovery copies beside them in `Recovery`. Set the environment variable `AHKWORD_SETTINGS` (or `RTE_WRITER_SETTINGS`, its old name) to a file path to keep them elsewhere, or `AHKWORD_DATA` to a folder to keep all of AhkWord's files there (settings, templates, recovery copies, the converters' state), as portable mode does.
 
-**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `AhkWord.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
+**Portable mode:** put an empty file named `portable` (or `portable.txt`) beside `AhkWord.ahk`. The settings, the recovery copies and the converters' state (LibreOffice's profile, the log) are then kept in a `data` folder beside it instead of `%APPDATA%` and `%LOCALAPPDATA%`, so the folder can be carried to another computer with them. Macros are already kept beside the program, in `rte_macros`, so macros, snippets and event hooks all go with the folder, and the hooks run on any computer, with or without AutoHotkey; only the program that edits a macro is each computer's own (see [New to AutoHotkey?](#new-to-autohotkey)). The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run it before downloads them once.
 
 ## Files
 
