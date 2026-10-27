@@ -28,7 +28,12 @@
 #load "rte_hooks.cs"
 #load "rte_palette.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 58 adds to iteration 57:
+// Run it with AhkWord.ahk. Iteration 59 adds to iteration 58:
+//   - AhkWord's own .NET (its dotnet folder) kept up to date (AhkWordSetup.ahk, before .NET is loaded): Microsoft's
+//     list of .NET 10 releases fetched once a week in the background; a newer .NET offered at the next start (Update
+//     now, Later, Skip), downloaded and checked as the first one, put in in one move (the old folder renamed away first:
+//     refused while another window runs on it). An empty no-update-check file beside AhkWord turns the look off.
+// Iteration 58 added to iteration 57:
 //   - Export as PDF (and printing) show their progress in the status bar, page by page, and Esc stops them (while
 //     AhkWord's window is in front: DocumentPrinter.Progress and CancelRequested); a stopped export leaves no file.
 //     After the last page, what is going on: Windows finishing the file, AhkWord adding the bookmarks.
@@ -658,7 +663,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 58;    // (the About box; make_version.ps1)
+	public const int Iteration = 59;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;

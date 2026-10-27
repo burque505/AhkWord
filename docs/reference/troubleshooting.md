@@ -2,7 +2,11 @@
 
 ## AhkWord doesn't start
 
-**Nothing happens for a while on the first start.** That is expected: the first start downloads AhkWord's components and compiles it, with nothing shown until the window opens. Give it a minute or two.
+**Nothing happens for a few seconds on the first start.** That is expected: the first start compiles AhkWord, with nothing shown until the window opens. (Run from the repository rather than a release download, it also downloads its components the first time, which can take a minute or two.)
+
+**"Windows protected your PC"** (SmartScreen) the first time: AhkWord isn't signed. Click **More info**, then **Run anyway**; Windows doesn't ask again for that copy.
+
+**"Smart App Control blocked an app that may be unsafe".** Smart App Control, which some new Windows 11 PCs have on, blocks programs that aren't signed by a publisher it knows, with no Run anyway. `AhkWord.exe` is AutoHotkey under AhkWord's name, and AutoHotkey isn't signed, so it is blocked, as any AutoHotkey script would be. Smart App Control is in **Windows Security > App & browser control > Smart App Control settings**. Turning it off lets AhkWord run, but think before you do: on many versions of Windows 11 it can't be turned on again afterwards without resetting Windows. A signed AhkWord, which needs no change to the setting, is on the [roadmap](https://github.com/burque505/AhkWord/blob/main/ROADMAP.md).
 
 **An error about .NET.** AhkWord needs the .NET 10 Desktop Runtime; an older .NET is not enough. Install it with `winget install Microsoft.DotNet.DesktopRuntime.10` and start AhkWord again.
 

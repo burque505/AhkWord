@@ -10,6 +10,13 @@
 ;     is installed in Windows, no administrator is needed, and deleting AhkWord's folder takes it away with the rest.
 ;   - Install it for all of Windows: Microsoft's download page opens (AhkWord closes; start it again after).
 ;   - Not now: AhkWord closes, and asks again next time. Nothing is ever downloaded without being asked for.
+; (Iteration 59) AhkWord's own .NET kept up to date: Microsoft fixes .NET about once a month, often for security, and
+; Windows Update doesn't know a .NET in AhkWord's folder. At most once a week AhkWord fetches Microsoft's list of .NET
+; 10 releases in the background (curl, not waited for: the start never waits for the internet), into its .NET folder;
+; at the next start, if the list has a newer .NET 10 than the folder's, it asks, before .NET is loaded: Update now
+; (downloaded and checked as the first time), Later (asks again next time), or Skip this version. The new .NET goes
+; in in one move: the old folder renamed out of the way first (which fails while another AhkWord window runs on it:
+; then nothing changes), the new one put in its place, the old one deleted.
 
 ; Makes sure there is a .NET for AhkWord; returns false if there isn't one (and AhkWord should close).
 AhkWordDotnet() {
@@ -19,7 +26,9 @@ AhkWordDotnet() {
     if _AhkWordHasDesktop(_CSharpDetectDotnet())
         return true    ; (the computer's own: Csharp-in-AHK finds it)
     Own := A_ScriptDir "\dotnet"
+    try DirDelete(Own ".old", true)    ; (left by an update while another window still ran on it)
     if _AhkWordHasDesktop(Own) {
+        _AhkWordDotnetUpdate(Own)    ; (iteration 59)
         CSDotnetRoot := Own
         return true
     }
@@ -124,13 +133,110 @@ _AhkWordFetchDotnet(Into, Show := false) {
         }
         if !_AhkWordHasDesktop(Unpacked) || _CSharpLatestDir(Unpacked "\shared\Microsoft.NETCore.App") = ""
             throw Error("The runtime could not be unpacked.")
-        try DirDelete(Into, true)
-        DirMove(Unpacked, Into)
+        _AhkWordSwapDotnet(Unpacked, Into)
     } finally {
         if Window
             Window.Destroy()
         try DirDelete(Temp, true)
     }
+}
+
+; (Iteration 59) The new .NET (unpacked in New) in Into's place, in one move: Into renamed out of the way first (Into.old;
+; that fails while a program runs on it, and then nothing has changed), New moved in, the old one deleted (left, if a
+; file of it is still in use, for the next start). Throws if Into couldn't be moved.
+_AhkWordSwapDotnet(New, Into) {
+    if !DirExist(Into) {
+        DirMove(New, Into)
+        return
+    }
+    Old := Into ".old"
+    try DirDelete(Old, true)
+    try DirMove(Into, Old)
+    catch
+        throw Error("AhkWord's .NET is in use (another AhkWord window is open?). Close every AhkWord window, then start AhkWord again to update it.")
+    try DirMove(New, Into)
+    catch as e {
+        DirMove(Old, Into)    ; (back as it was)
+        throw e
+    }
+    try DirDelete(Old, true)
+}
+
+; (Iteration 59) The .NET in a folder: its Windows Desktop runtime's version ("10.0.13"), or "".
+_AhkWordDotnetVersion(Dir) {
+    Desktop := _CSharpLatestDir(Dir "\shared\Microsoft.WindowsDesktop.App")
+    if Desktop = ""
+        return ""
+    SplitPath(Desktop, &Version)
+    return Version
+}
+
+; (Iteration 59) What Microsoft's list of .NET 10 releases says (the file List): {Latest, Security, Date}, or 0.
+_AhkWordReleaseInfo(List) {
+    try Json := FileRead(List, "UTF-8")
+    catch
+        return 0
+    if !RegExMatch(Json, '"latest-runtime"\s*:\s*"(10\.\d+\.\d+)"', &Latest)
+        return 0
+    Security := RegExMatch(Json, '"latest-release-security"\s*:\s*true') > 0
+    Date := RegExMatch(Json, '"latest-release-date"\s*:\s*"(\d{4}-\d\d-\d\d)"', &D) ? D[1] : ""
+    return {Latest: Latest[1], Security: Security, Date: Date}
+}
+
+; (Iteration 59) AhkWord's own .NET (in Own): a newer one offered if Microsoft's list, fetched before, has one; the
+; list fetched again in the background if it is a week old or more (used at the next start).
+_AhkWordDotnetUpdate(Own) {
+    List := Own "\ahkword-releases.json", Skip := Own "\ahkword-skip.txt"
+    ; (a list fetched last time: in use now if it came whole)
+    if FileExist(List ".new") {
+        if _AhkWordReleaseInfo(List ".new") {
+            try FileMove(List ".new", List, true)
+        } else {
+            try FileDelete(List ".new")
+        }
+    }
+    Have := _AhkWordDotnetVersion(Own)
+    Info := FileExist(List) ? _AhkWordReleaseInfo(List) : 0
+    if Info && Have != "" && VerCompare(Info.Latest, Have) > 0 && !(FileExist(Skip) && Trim(FileRead(Skip)) = Info.Latest) {
+        Choice := _AhkWordAskUpdate(Have, Info)
+        if Choice = "skip" {
+            try FileOpen(Skip, "w").Write(Info.Latest)
+        } else if Choice = "update" {
+            try {
+                _AhkWordFetchDotnet(Own, true)
+                try FileDelete(Skip)
+                MsgBox("AhkWord now runs on .NET " _AhkWordDotnetVersion(Own) ".", "AhkWord", "Iconi T4")
+            } catch as e
+                MsgBox("AhkWord could not update .NET, and goes on with " Have ":`n`n" e.Message, "AhkWord", "Iconx")
+        }
+    }
+    ; (Microsoft's list again, at most once a week, by curl in the background: not waited for; never with a file named
+    ; no-update-check beside AhkWord)
+    if FileExist(A_ScriptDir "\no-update-check") || FileExist(A_ScriptDir "\no-update-check.txt")
+        return
+    Age := FileExist(List) ? DateDiff(A_Now, FileGetTime(List, "M"), "Days") : 999
+    if Age >= 7 && !FileExist(List ".new")
+        try Run('"' A_WinDir '\System32\curl.exe" -sSfL --max-time 60 -o "' List '.new" "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json"', , "Hide")
+}
+
+; (Iteration 59) The question: "update", "skip" or "" (later).
+_AhkWordAskUpdate(Have, Info) {
+    Choice := ""
+    When := Info.Date != "" ? " (" FormatTime(StrReplace(Info.Date, "-") "000000", "d MMMM yyyy") ")" : ""
+    Ask := Gui("-MinimizeBox", "AhkWord: a .NET update")
+    Ask.SetFont("s10", "Segoe UI")
+    Ask.AddText("w460", "Microsoft has released .NET " Info.Latest When (Info.Security ? ", a security update" : "") ". AhkWord has its own copy of .NET, " Have ", which Windows Update doesn't update.")
+    Ask.AddText("w460 y+8", "AhkWord can download the new one from Microsoft (about 70 MB, checked against Microsoft's checksums, as the first time) and put it in place of the old one.")
+    Update := Ask.AddButton("w460 y+14 Default", "Update now (recommended)")
+    Later := Ask.AddButton("w460", "Later (ask again next time)")
+    SkipIt := Ask.AddButton("w460", "Skip " Info.Latest)
+    Update.OnEvent("Click", (*) => (Choice := "update", Ask.Destroy()))
+    Later.OnEvent("Click", (*) => Ask.Destroy())
+    SkipIt.OnEvent("Click", (*) => (Choice := "skip", Ask.Destroy()))
+    Ask.OnEvent("Close", (*) => Ask.Destroy())
+    Ask.Show()
+    WinWaitClose(Ask.Hwnd)
+    return Choice
 }
 
 ; A file's SHA-512, in hexadecimal (Windows' certutil).

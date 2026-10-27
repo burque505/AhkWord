@@ -49,7 +49,15 @@ if (-not $restore) { throw "No NuGet restore has all of AhkWord's packages ($($w
 $assets = Get-Content (Join-Path $restore.FullName "assets.txt") | Where-Object { $_ -notmatch '\.pdb$' }
 
 # .NET for the complete download: the latest .NET 10 Desktop Runtime, fetched (and checked) once
-$dotnetCache = Get-ChildItem $releases -Directory -Filter "dotnet-10.*" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+$dotnetCache = Get-ChildItem $releases -Directory -Filter "dotnet-10.*" -ErrorAction SilentlyContinue | Sort-Object { [version]($_.Name -replace '^dotnet-', '') } -Descending | Select-Object -First 1
+# (iteration 59) fetched again when Microsoft has released a newer one (a security fix, most months)
+try {
+	$latest = (Invoke-RestMethod "https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json" -TimeoutSec 30)."latest-runtime"
+	if ($dotnetCache -and $latest -and [version]$latest -gt [version]($dotnetCache.Name -replace '^dotnet-', '')) {
+		"Microsoft has released .NET $latest (the cache has $($dotnetCache.Name -replace '^dotnet-', '')): fetching it."
+		$dotnetCache = $null
+	}
+} catch { "Note: Microsoft's list of .NET releases couldn't be read; the cached .NET is used." }
 New-Item -ItemType Directory -Force $releases | Out-Null
 $work = Join-Path ([IO.Path]::GetTempPath()) ("ahkword-release-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
 New-Item -ItemType Directory -Force $work | Out-Null

@@ -45,16 +45,17 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 ### Getting AhkWord
 
 - [x] A download that needs nothing installed: AhkWord carries its libraries and offers to download .NET for itself; a complete download has .NET inside
+- [x] AhkWord's own copy of .NET kept up to date: Microsoft's fixes offered as they come out
 - [x] Documentation: [burque505.github.io/AhkWord](https://burque505.github.io/AhkWord/)
 
 ## Next
 
+- [ ] **A signed AhkWord:** `AhkWord.exe` and its prebuilt C# host signed, so that Windows' Smart App Control (on by default on some new Windows 11 PCs) lets it run, and SmartScreen doesn't warn on the first start. Unsigned, as AutoHotkey itself is, Smart App Control blocks it with no way round but turning the setting off.
 - [ ] **PDF export in the background:** keep working while a long document's PDF is made (it can't be much faster: most of the time is Microsoft Print to PDF's own work)
-- [ ] **Updates for AhkWord's own copy of .NET:** when AhkWord downloaded .NET for itself, an offer to update it when Microsoft releases a fix (a .NET installed for all of Windows gets these from Windows Update)
 
 ## Later, perhaps
 
 - [ ] Tab leaders set in the Paragraph dialog drawn (RichEdit keeps them, and Word shows them, but AhkWord draws only a table of contents' leaders)
 - [ ] Merged table cells
-- [ ] A winget package, and a signed AhkWord.exe, so that Windows doesn't warn on the first start
+- [ ] A winget package
 - [ ] Windows on ARM

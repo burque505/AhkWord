@@ -18,6 +18,14 @@
 
     The complete download has .NET in its `dotnet` folder already, so it asks nothing.
 
+    **Keeping AhkWord's own .NET up to date.** Microsoft fixes .NET about once a month, often for security, and Windows Update doesn't know about a .NET in AhkWord's folder. So, when AhkWord runs on its own `dotnet` folder, it looks at Microsoft's list of .NET 10 releases once a week, in the background (a small file, about 40 KB, from Microsoft; starting AhkWord never waits for it). When the list has a newer .NET than the folder's, the next start asks:
+
+    - **Update now** (recommended): the new .NET is downloaded and checked as the first one was, and put in place of the old one. If another AhkWord window is still open, it can't be replaced: nothing changes, and AhkWord says to close the other windows and start it again.
+    - **Later**: it asks again next time.
+    - **Skip** that version: it asks again when Microsoft releases the next one.
+
+    Nothing but that list is ever fetched without asking. To have AhkWord not look at all, put an empty file named `no-update-check` beside `AhkWord.exe`. A .NET installed for all of Windows is kept up to date by Windows Update, and AhkWord leaves it to that.
+
 === "From the repository (AutoHotkey installed)"
 
     1. Install **AutoHotkey v2**, 64-bit, from [autohotkey.com](https://www.autohotkey.com/), and the **.NET 10 Desktop Runtime** (64-bit), once per computer: in a terminal, `winget install Microsoft.DotNet.DesktopRuntime.10`, or download it for x64 from [dotnet.microsoft.com](https://dotnet.microsoft.com/download/dotnet/10.0). An older .NET (9 or before) is not enough.
