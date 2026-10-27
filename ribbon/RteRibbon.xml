@@ -263,6 +263,34 @@
         <Image Source="icons/runscript_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdGroupExtensions" Id="136" LabelTitle="Extensions">
+      <Command.LargeImages>
+        <Image Source="icons/extensions_32.bmp" MinDPI="96" />
+        <Image Source="icons/extensions_40.bmp" MinDPI="120" />
+        <Image Source="icons/extensions_48.bmp" MinDPI="144" />
+        <Image Source="icons/extensions_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/extensions_16.bmp" MinDPI="96" />
+        <Image Source="icons/extensions_20.bmp" MinDPI="120" />
+        <Image Source="icons/extensions_24.bmp" MinDPI="144" />
+        <Image Source="icons/extensions_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdExtensions" Id="395" LabelTitle="Extensions" Keytip="X" TooltipTitle="Extensions" TooltipDescription="Commands added by an extension of AhkWord.">
+      <Command.LargeImages>
+        <Image Source="icons/extensions_32.bmp" MinDPI="96" />
+        <Image Source="icons/extensions_40.bmp" MinDPI="120" />
+        <Image Source="icons/extensions_48.bmp" MinDPI="144" />
+        <Image Source="icons/extensions_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/extensions_16.bmp" MinDPI="96" />
+        <Image Source="icons/extensions_20.bmp" MinDPI="120" />
+        <Image Source="icons/extensions_24.bmp" MinDPI="144" />
+        <Image Source="icons/extensions_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdGroupAutomation" Id="129" LabelTitle="Automation">
       <Command.LargeImages>
         <Image Source="icons/api_32.bmp" MinDPI="96" />
@@ -2354,6 +2382,13 @@
             <Button CommandName="cmdCommandPalette" />
             <Button CommandName="cmdAutomationApi" />
             <Button CommandName="cmdAbout" />
+          </Group>
+          <Group CommandName="cmdGroupExtensions" SizeDefinition="OneButton" ApplicationModes="1">
+            <DropDownGallery CommandName="cmdExtensions" Type="Items" TextPosition="Right" HasLargeItems="false">
+              <DropDownGallery.MenuLayout>
+                <VerticalMenuLayout Rows="20" Gripper="Vertical" />
+              </DropDownGallery.MenuLayout>
+            </DropDownGallery>
           </Group>
         </Tab>
       </Ribbon.Tabs>

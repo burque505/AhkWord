@@ -29,7 +29,11 @@
 #load "rte_palette.cs"
 #load "rte_extensions.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 60 adds to iteration 59:
+// Run it with AhkWord.ahk. Iteration 61 adds to iteration 60:
+//   - Hooks for what the extension point loads: AddExtensionCommand (Tools > Extensions, shown once there is one, and
+//     the command palette), FieldSource (values for template fields before the dialog asks), SetExtensionStatus (a
+//     place in the status bar).
+// Iteration 60 added to iteration 59:
 //   - An extension point (rte_extensions.cs): empty in AhkWord; a build with more features puts its own there, which
 //     loads its files and is called once the window is open (AhkWordExtensions.Started).
 // Iteration 59 added to iteration 58:
@@ -583,7 +587,7 @@ enum RibbonCommand : uint
 	TableTools = 106, TabTableLayout = 107, GroupClipboard = 110, GroupFont = 111, GroupText = 112, GroupParagraph = 113,
 	GroupStyles = 114, GroupEditing = 115, GroupPages = 116, GroupTables = 117, GroupIllustrations = 118, GroupLinks = 119, GroupContents = 135,
 	GroupInsertText = 120, GroupPage = 121, GroupProofing = 122, GroupShow = 124, GroupZoom = 125, GroupDocumentView = 126,
-	GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupRowsColumns = 130, GroupDelete = 131, GroupTableFormat = 132,
+	GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupExtensions = 136, GroupRowsColumns = 130, GroupDelete = 131, GroupTableFormat = 132,
 	AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144, PrintMenu = 145,
 	New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204, PrintPreview = 205,
 	PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210, NewFromTemplate = 212,
@@ -604,7 +608,7 @@ enum RibbonCommand : uint
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
 	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
@@ -667,7 +671,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 60;    // (the About box; make_version.ps1)
+	public const int Iteration = 61;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -688,6 +692,7 @@ class WriterForm : Form
 	RibbonFontControl fontControl = null!;
 	RibbonComboBox blockCombo = null!;
 	RibbonDropDownGallery macrosGallery = null!;
+	RibbonDropDownGallery extensionsGallery = null!;
 	RibbonRecentItems recentItems = null!;
 	RibbonTabGroup tableTools = null!;
 	RibbonDropDownColorPicker shadingPicker = null!;
@@ -860,7 +865,7 @@ class WriterForm : Form
 		sourceSplit.SplitterMoved += (s, e) => { if (sideBySide && sourceSplit.Width > 0) Settings.SourceSplit = (int)Math.Round(sourceSplit.SplitterDistance * 100.0 / sourceSplit.Width); };
 		outlineSplit.Panel1Collapsed = !Settings.ShowOutline;
 		var status = new StatusStrip();
-		status.Items.AddRange(new ToolStripItem[] { recordingLabel, statusText, positionLabel, wordsLabel, modeLabel, automationLabel });
+		status.Items.AddRange(new ToolStripItem[] { recordingLabel, statusText, extensionLabel, positionLabel, wordsLabel, modeLabel, automationLabel });
 		recordingLabel.Font = new Font(status.Font, FontStyle.Bold);
 		recordingLabel.Click += (s, e) => Run(ToggleRecording);
 		BuildRibbon();
@@ -1194,6 +1199,14 @@ class WriterForm : Form
 		Button(RibbonCommand.MacrosFolder, OpenMacrosFolder);
 		Button(RibbonCommand.AutomationApi, () => ShowText("Automation API (RteClient2.ahk: Rte.<Name>(...))", api.Help()));
 		Button(RibbonCommand.About, ShowAbout);
+		extensionsGallery = new RibbonDropDownGallery(ribbon, (uint)RibbonCommand.Extensions);
+		extensionsGallery.ItemsSourceReady += (s, e) => FillExtensionsGallery();
+		extensionsGallery.ExecuteEvent += (s, e) => {
+			if (GalleryItemEventArgs.Create(extensionsGallery, e).SelectedItem is { } item && item.SelectedItemIndex >= 0 && item.SelectedItemIndex < extensionCommands.Count) {
+				var command = extensionCommands[item.SelectedItemIndex];
+				BeginInvoke(() => { LeaveOverlays(); Run(command.Run); });
+			}
+		};
 
 		BuildSourceCommands();
 
@@ -1293,6 +1306,8 @@ class WriterForm : Form
 			items.Add(new PaletteItem($"Snippet: {abbreviation}  →  {snippet.Part}", "Insert > Snippets", "", "", () => true,
 				() => Run(() => api.InsertSnippet(abbreviation, "", true), M("InsertSnippet", abbreviation, "", true)), "snippet:" + abbreviation));
 		}
+		foreach (var command in extensionCommands)
+			items.Add(new PaletteItem(command.Name, "Tools > Extensions", command.Description, "", () => true, () => Run(command.Run), "ext:" + command.Name));
 		foreach (var path in Settings.RecentFiles) {
 			string file = path;
 			items.Add(new PaletteItem("Open: " + Path.GetFileName(file), Path.GetDirectoryName(file) ?? "", "", "", () => File.Exists(file),
@@ -1446,6 +1461,37 @@ class WriterForm : Form
 	}
 
 	List<string> galleryLabels = new();
+
+	// ---- Extensions (iteration 61: hooks for what rte_extensions.cs loads; AhkWord itself adds none)
+
+	public sealed record ExtensionCommand(string Name, string Description, Action Run);
+	readonly List<ExtensionCommand> extensionCommands = new();
+	readonly ToolStripStatusLabel extensionLabel = new() { Visible = false };
+
+	/// Values for template fields (a field's name -> its value, or null if it isn't known), asked before the Fill In
+	/// Fields dialog: a field given a value here isn't asked for.
+	public Func<string, string?>? FieldSource { get; set; }
+
+	/// Adds a command to Tools > Extensions (shown once there is one) and to the command palette; it runs as a ribbon
+	/// command does (an error shows in the status bar).
+	public void AddExtensionCommand(string name, string description, Action run) {
+		extensionCommands.RemoveAll(c => c.Name == name);
+		extensionCommands.Add(new ExtensionCommand(name, description, run));
+		if (ribbon.Initialized) ribbon.SetModes(0, 1);    // (the Extensions group is in mode 1)
+		FillExtensionsGallery();
+	}
+
+	/// An extension's own place in the status bar, beside the messages ("" hides it).
+	public void SetExtensionStatus(string text) {
+		extensionLabel.Text = text;
+		extensionLabel.Visible = text != "";
+	}
+
+	void FillExtensionsGallery() {
+		if (extensionsGallery == null || !ribbon.Initialized || extensionsGallery.ItemsSource is not { } items) return;
+		items.Clear();
+		foreach (var command in extensionCommands) items.Add(new GalleryItemPropertySet { Label = command.Name, CategoryID = Constants.UI_Collection_InvalidIndex });
+	}
 
 	// A cheap test for the Table Tools tab, made on every selection change: RichEdit marks paragraphs in table rows
 	// (api.InTable() reads the whole document).
@@ -1667,6 +1713,9 @@ class WriterForm : Form
 	// fill in).
 	Dictionary<string, string> FieldValues(string title, string text, IDictionary<string, string>? values, bool ask) {
 		var given = new Dictionary<string, string>(values ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+		if (FieldSource != null)    // (iteration 61: an extension's values, such as a matter's, before asking)
+			foreach (var (name, _) in Templates.Fields(text))
+				if (!given.ContainsKey(name) && FieldSource(name) is { } known) given[name] = known;
 		var asked = Templates.Fields(text).Where(f => !given.ContainsKey(f.Name)).ToList();
 		if (ask && asked.Count > 0) {
 			using var dlg = new TemplateFieldsDialog(title, asked, Settings.TemplateValues, () => { Settings.TemplateValues.Clear(); Settings.Save(); });

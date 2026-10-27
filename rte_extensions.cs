@@ -3,6 +3,10 @@
 // A build of AhkWord with more features (its own repository) puts its own version of this file here: it #loads its
 // files, and Started adds their commands to the window. Everything else stays as in AhkWord, so the two stay one code
 // base, and AhkWord's changes merge into it as they are. (Iteration 60)
+//
+// What Started can use (iteration 61): form.AddExtensionCommand (Tools > Extensions and the command palette),
+// form.FieldSource (values for template fields before the Fill In Fields dialog asks), form.SetExtensionStatus (a
+// place in the status bar).
 static class AhkWordExtensions
 {
 	/// The window is open, with its first document: an extension sets itself up here.
