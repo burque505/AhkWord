@@ -27,6 +27,7 @@
 #load "rte_snippets.cs"
 #load "rte_hooks.cs"
 #load "rte_palette.cs"
+#load "rte_sections.cs"
 #load "rte_extensions.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
 // Run it with AhkWord.ahk. Iteration 62 adds to iteration 61:
@@ -614,7 +615,7 @@ enum RibbonCommand : uint
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
 	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
@@ -1141,6 +1142,7 @@ class WriterForm : Form
 
 		// Insert
 		Button(RibbonCommand.PageBreak, () => api.InsertPageBreak(), Keys.None, M("InsertPageBreak"));    // Ctrl+Enter: ProcessCmdKey
+		Button(RibbonCommand.SectionBreak, () => api.InsertSectionBreak(), Keys.None, M("InsertSectionBreak"));    // (iteration 63)
 		Button(RibbonCommand.Table, InsertTableDialog);
 		Button(RibbonCommand.Picture, InsertImageDialog);
 		Button(RibbonCommand.Thumbnail, InsertThumbnailDialog);
@@ -1488,30 +1490,49 @@ class WriterForm : Form
 	public Func<string, string?>? RenderTemplateText { get; set; }
 
 	// the header's and footer's parts (each page's, the first page's)
-	IEnumerable<string[]> BandParts() {
-		yield return Bands.Header;
-		yield return Bands.Footer;
-		if (Bands.FirstHeader != null) yield return Bands.FirstHeader;
-		if (Bands.FirstFooter != null) yield return Bands.FirstFooter;
+	static IEnumerable<string[]> BandParts(PageBands bands) {
+		yield return bands.Header;
+		yield return bands.Footer;
+		if (bands.FirstHeader != null) yield return bands.FirstHeader;
+		if (bands.FirstFooter != null) yield return bands.FirstFooter;
 	}
+
+	// (iteration 63) the document's header and footer, and those of the sections that have their own
+	IEnumerable<string[]> BandParts() => BandParts(Bands).Concat(Sections.Breaks(Editor.TextDocument)
+		.Where(b => !b.Settings.Same && b.Settings.Bands != null).SelectMany(b => BandParts(b.Settings.Bands!)));
+
+	/// The text whose fields are asked for: the document's (iteration 63: without the section breaks' markers, whose
+	/// headers and footers are the bands'), then the header's and footer's parts.
+	string FieldText() => Sections.Mark.Replace(Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "", "") + "\n" + BandsText();
 
 	/// The header's and footer's parts as one text (their fields asked for with the document's).
 	string BandsText() => string.Join("\n", BandParts().SelectMany(parts => parts));
 
 	/// Fills in the header's and footer's parts (iteration 62): an extension's template language, then AhkWord's own
-	/// fields (value: a field's value, or null). Returns how many parts changed.
+	/// fields (value: a field's value, or null); (iteration 63) the sections' own too. Returns how many parts changed.
 	int FillBands(Func<string, string?> value) {
-		int changed = 0;
-		foreach (var parts in BandParts())
-			for (int i = 0; i < parts.Length; i++) {
-				string part = parts[i] ?? "";
-				string filled = Templates.FillText(RenderTemplateText?.Invoke(part) ?? part, value);
-				if (filled == part) continue;
-				parts[i] = filled;
-				changed++;
-			}
-		if (changed > 0) { Editor.Modified = true; BandsChangedNow(); }
-		return changed;
+		int Fill(PageBands bands) {
+			int changed = 0;
+			foreach (var parts in BandParts(bands))
+				for (int i = 0; i < parts.Length; i++) {
+					string part = parts[i] ?? "";
+					string filled = Templates.FillText(RenderTemplateText?.Invoke(part) ?? part, value);
+					if (filled == part) continue;
+					parts[i] = filled;
+					changed++;
+				}
+			return changed;
+		}
+		int count = Fill(Bands);
+		var doc = Editor.TextDocument;
+		foreach (var b in Sections.Breaks(doc).Where(b => !b.Settings.Same && b.Settings.Bands != null).Reverse()) {    // (the last first: the markers before stay where they are)
+			int changed = Fill(b.Settings.Bands!);
+			if (changed == 0) continue;
+			Sections.Write(doc, b, b.Settings);
+			count += changed;
+		}
+		if (count > 0) { Editor.Modified = true; BandsChangedNow(); }
+		return count;
 	}
 
 	// the document filled in by the extension's template language, as one undo step; false if it isn't in it
@@ -1757,7 +1778,7 @@ class WriterForm : Form
 		api.OpenTemplate(template.Path);
 		if (RenderTemplate?.Invoke(Editor.Rtf, ask) is string rendered) Editor.Rtf = rendered;    // (iteration 62: an extension's template language)
 		var doc = Editor.TextDocument;
-		var given = FieldValues("New from " + template.Name, (doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "") + "\n" + BandsText(), values, ask);
+		var given = FieldValues("New from " + template.Name, FieldText(), values, ask);
 		int filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null);
 		filled += FillBands(name => given.TryGetValue(name, out var value) ? value : null);    // (iteration 62)
 		Editor.ClearUndo();
@@ -1941,7 +1962,7 @@ class WriterForm : Form
 	void FillFieldsCommand() {
 		var doc = Editor.TextDocument;
 		bool rendered = RenderDocument(ask: true);    // (iteration 62: an extension's template language first)
-		if (Templates.Fields((doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "") + "\n" + BandsText()).Count == 0) {
+		if (Templates.Fields(FieldText()).Count == 0) {
 			bool bands = FillBands(_ => null) > 0;    // (an extension's language in the header or footer)
 			SetStatus(rendered || bands ? "The template was filled in." : "There are no {{fields}} to fill in in this document (fields are written {{Name}} or {{Name|default}}).");
 			return;
@@ -1955,7 +1976,7 @@ class WriterForm : Form
 	internal int FillFields(IDictionary<string, string>? values, bool ask, bool rendered = false) {
 		if (!rendered) RenderDocument(ask);
 		var doc = Editor.TextDocument;
-		var given = FieldValues("Fill In Fields", (doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "") + "\n" + BandsText(), values, ask);
+		var given = FieldValues("Fill In Fields", FieldText(), values, ask);
 		int filled;
 		doc.BeginEditCollection();
 		try { filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null); }
@@ -2505,7 +2526,9 @@ class WriterForm : Form
 		var held = gaps && !dialog ? HoldGaps() : null;
 		if (gaps) { QuietGaps(pageGaps.Remove); gapsOut = true; }
 		try {
-			var printer = new DocumentPrinter(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName) { NoteStyle = NoteStyle };
+			var printer = new DocumentPrinter(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName) {
+				NoteStyle = NoteStyle, PageSections = Sections.Resolve(Editor.TextDocument, Bands)    // (iteration 63)
+			};
 			if (gaps) printer.Disposed += () => { try { gapsOut = false; QuietGaps(pageGaps.Reapply); } finally { held?.Dispose(); } };
 			return printer;
 		} catch {
@@ -2568,23 +2591,26 @@ class WriterForm : Form
 			catch (Exception) { pageStarts = null; }
 			lineGutter.PageStarts = pageStarts;
 		}
-		string Fill(string text) => Regex.Replace(text, @"\{(title|file|page|pages|date|time)\}", m => m.Groups[1].Value.ToLowerInvariant() switch {
+		var (pageBands, on, shownPage, sectionPages) = PageOf(viewPage);    // (iteration 63: the page's section's)
+		bands = pageBands;
+		string Fill(string text) => Regex.Replace(text, @"\{(title|file|page|pages|sectionpages|date|time)\}", m => m.Groups[1].Value.ToLowerInvariant() switch {
 			"title" => DocumentName,
 			"file" => FileName ?? DocumentName,
-			"page" => viewPage.ToString(CultureInfo.CurrentCulture),
+			"page" => shownPage.ToString(CultureInfo.CurrentCulture),
 			"pages" => bandStarts?.Count.ToString(CultureInfo.CurrentCulture) ?? "?",
+			"sectionpages" => sectionPages.ToString(CultureInfo.CurrentCulture),
 			"date" => DateTime.Now.ToShortDateString(),
 			_ => DateTime.Now.ToShortTimeString()
 		}, RegexOptions.IgnoreCase);
-		var header = PageBands.Parts(bands.HeaderOn(viewPage)).Select(Fill).ToArray();
-		var footer = PageBands.Parts(bands.FooterOn(viewPage)).Select(Fill).ToArray();
-		bool headerOn = bands.HeaderOn(viewPage) != null, footerOn = bands.FooterOn(viewPage) != null;
-		string shown = $"{visible}|{pageView}|{headerOn}|{string.Join("\t", header)}|{footerOn}|{string.Join("\t", footer)}|{bands.HeaderFontOn(viewPage)}|{bands.FooterFontOn(viewPage)}|{bands.HeaderLine}|{bands.FooterLine}";
+		var header = PageBands.Parts(bands.HeaderOn(on)).Select(Fill).ToArray();
+		var footer = PageBands.Parts(bands.FooterOn(on)).Select(Fill).ToArray();
+		bool headerOn = bands.HeaderOn(on) != null, footerOn = bands.FooterOn(on) != null;
+		string shown = $"{visible}|{pageView}|{headerOn}|{string.Join("\t", header)}|{footerOn}|{string.Join("\t", footer)}|{bands.HeaderFontOn(on)}|{bands.FooterFontOn(on)}|{bands.HeaderLine}|{bands.FooterLine}";
 		if (shown == bandsShown) return;
 		bandsShown = shown;
 		// (in page view each sheet has its own: not the strips)
-		headerStrip.Display(visible && headerOn && !pageView, header, bands.HeaderFontOn(viewPage));
-		footerStrip.Display(visible && footerOn && !pageView, footer, bands.FooterFontOn(viewPage));
+		headerStrip.Display(visible && headerOn && !pageView, header, bands.HeaderFontOn(on));
+		footerStrip.Display(visible && footerOn && !pageView, footer, bands.FooterFontOn(on));
 		if (pageView) Editor.Invalidate();
 	}    // (the default, once the settings are loaded: in the constructor)
 
@@ -2788,7 +2814,20 @@ class WriterForm : Form
 			if (pages != null && PageViewActive)
 			{
 				var (top, bottom, firstTop, firstBottom) = gapsMargins = GapMargins(layout);
-				pageGaps.Apply(pages, layout.Height / 20f - top - bottom, bottom, top, layout.Height / 20f - firstTop - firstBottom, firstBottom, firstTop);
+				// (iteration 63) each page's own margins: its section's header and footer, the section's first page its own
+				Func<int, (float, float, float)>? marginsOf = null;
+				var sections = Sections.Resolve(Editor.TextDocument, Bands);
+				if (sections.Count > 1) {
+					var numbers = Sections.Number(pages.Select(p => p.Start).ToList(), sections);
+					marginsOf = k => {
+						var n = numbers[Math.Min(k, numbers.Count - 1)];
+						var b = sections[n.Section].Bands;
+						int on = n.InSection == 1 ? 1 : 2;
+						float t = Math.Max(layout.Top / 20f, b.HeaderReach(on) * 0.72f), bo = Math.Max(layout.Bottom / 20f, b.FooterReach(on) * 0.72f);
+						return (layout.Height / 20f - t - bo, bo, t);
+					};
+				}
+				pageGaps.Apply(pages, layout.Height / 20f - top - bottom, bottom, top, layout.Height / 20f - firstTop - firstBottom, firstBottom, firstTop, marginsOf);
 			}
 		});
 	}
@@ -2850,19 +2889,40 @@ class WriterForm : Form
 
 	// The header's or footer's parts for a page, filled in (null: not shown).
 	string[]? GapBandParts(bool header, int page) {
-		var bands = Bands;
-		if (!Settings.ShowBands || (header ? bands.HeaderOn(page) : bands.FooterOn(page)) == null) return null;    // (iteration 55: the page's own)
+		var (bands, on, shown, sectionPages) = PageOf(page);    // (iteration 63: the page's section's)
+		if (!Settings.ShowBands || (header ? bands.HeaderOn(on) : bands.FooterOn(on)) == null) return null;    // (iteration 55: the page's own)
 		int pages = pageGaps.Pages > 0 ? pageGaps.Pages : bandStarts?.Count ?? 1;
-		string Fill(string text) => Regex.Replace(text, @"\{(title|file|page|pages|date|time)\}", m => m.Groups[1].Value.ToLowerInvariant() switch {
+		string Fill(string text) => Regex.Replace(text, @"\{(title|file|page|pages|sectionpages|date|time)\}", m => m.Groups[1].Value.ToLowerInvariant() switch {
 			"title" => DocumentName,
 			"file" => FileName ?? DocumentName,
-			"page" => page.ToString(CultureInfo.CurrentCulture),
+			"page" => shown.ToString(CultureInfo.CurrentCulture),
 			"pages" => pages.ToString(CultureInfo.CurrentCulture),
+			"sectionpages" => sectionPages.ToString(CultureInfo.CurrentCulture),
 			"date" => DateTime.Now.ToShortDateString(),
 			_ => DateTime.Now.ToShortTimeString()
 		}, RegexOptions.IgnoreCase);
-		return (header ? bands.HeaderOn(page) : bands.FooterOn(page))!.Select(Fill).ToArray();
+		return (header ? bands.HeaderOn(on) : bands.FooterOn(on))!.Select(Fill).ToArray();
 	}
+
+	// (iteration 63) a page's (from 1) section's header and footer, its place in the section (1: the section's first),
+	// its number as shown and its section's pages; worked out again when the text or the pages change
+	(PageBands Bands, int InSection, int Shown, int SectionPages) PageOf(int page) {
+		var starts = bandStarts;
+		int length = Editor.TextLength;
+		if (pageOfCache == null || !ReferenceEquals(pageOfStarts, starts) || pageOfLength != length || !ReferenceEquals(pageOfBands, Bands)) {
+			(pageOfStarts, pageOfLength, pageOfBands) = (starts, length, Bands);
+			var sections = Sections.Resolve(Editor.TextDocument, Bands);
+			pageOfCache = (sections, starts is { Count: > 0 } ? Sections.Number(starts, sections) : null);
+		}
+		var (all, numbers) = pageOfCache.Value;
+		if (numbers == null || numbers.Count == 0) return (Bands, page, page, starts?.Count ?? page);
+		var n = numbers[Math.Clamp(page - 1, 0, numbers.Count - 1)];
+		return (all[n.Section].Bands, n.InSection, n.Shown, n.SectionPages);
+	}
+	(List<PageSection>, List<Sections.PageNumber>?)? pageOfCache;
+	List<int>? pageOfStarts;
+	int pageOfLength;
+	PageBands? pageOfBands;
 
 	// The bands between the sheets where they cross the page's margins (outside the editor, which draws its part).
 	void PaintGapBands(Graphics g) {
@@ -3165,6 +3225,23 @@ class WriterForm : Form
 	}
 
 	void HeaderFooterCommand() {
+		// (iteration 63) the caret in a section after a break: that section's
+		var doc = Editor.TextDocument;
+		if (Sections.BreakFor(doc, doc.Selection2.Start) is { } sectionBreak) {
+			var breaks = Sections.Breaks(doc);
+			int index = breaks.FindIndex(b => b.MarkStart == sectionBreak.MarkStart) + 1;
+			var resolved = Sections.Resolve(breaks, Bands);
+			using var sectionDialog = new HeaderFooterDialog(Sections.CopyBands(resolved[index].Bands), DefaultBands(), sectionBreak.Settings, index + 1);
+			if (sectionDialog.ShowDialog(this) != DialogResult.OK) return;
+			doc.BeginEditCollection();
+			try { Sections.Write(doc, sectionBreak, sectionDialog.SectionResult()!); }
+			finally { doc.EndEditCollection(); }
+			Editor.Modified = true;
+			BandsChangedNow();
+			if (sectionDialog.MakeDefault) MakeDefault(sectionDialog.Result());
+			SetStatus($"Header, footer and page numbers set for section {index + 1}.");
+			return;
+		}
 		using var dlg = new HeaderFooterDialog(Bands, DefaultBands());
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		var bands = dlg.Result();
@@ -6328,6 +6405,27 @@ public class EditorApi
 		selection.SetRange(start, end);
 	}
 
+	/// Iteration 63: inserts a section break at the caret (replacing the selection): a page break after which a new
+	/// section starts, with its own header and footer (at first the section before's: "same as previous") and its page
+	/// numbers starting again at 1 (File > Header and Footer changes them, where the caret is).
+	public void InsertSectionBreak() {
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try { Sections.Insert(ed); }
+		finally { doc.EndEditCollection(); }
+		form.BandsChangedNow();
+		form.SetStatus("Section break inserted: the next page starts a new section, its page numbers from 1. File > Header and Footer (with the caret in it) gives it its own footer.");
+	}
+
+	/// The sections: where each starts (characters), whether its page numbers start again and at what, and whether its
+	/// header and footer are the section before's ("same as previous"). The first section is the document's own.
+	public string SectionList() {
+		var lines = new List<string> { "0 restart 1 own" };
+		foreach (var b in Sections.Breaks(ed.TextDocument))
+			lines.Add($"{b.SectionStart} {(b.Settings.Restart ? "restart " + b.Settings.Start : "continue")} {(b.Settings.Same ? "same" : "own")}");
+		return string.Join("\n", lines);
+	}
+
 	/// Inserts a page break at the caret (replacing the selection): the text after it starts a new page when printed,
 	/// and in Word and LibreOffice. A numbered list it splits goes on with its numbers after it. Ctrl+Enter.
 	public void InsertPageBreak() {
@@ -8789,6 +8887,17 @@ sealed class DocumentPrinter : IDisposable
 	[DllImport("user32")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref FORMATRANGE lParam);
 	[DllImport("user32")] static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
+	/// Iteration 63: the document's sections (null: one, with the bands given): each page has its section's header and
+	/// footer (the section's first page its own first-page ones), text area and page number.
+	public IReadOnlyList<PageSection>? PageSections {
+		get => sections;
+		init => sections = value is { Count: > 0 } ? value : null;
+	}
+	IReadOnlyList<PageSection>? sections;
+	IReadOnlyList<PageSection> AllSections => sections ?? new[] { new PageSection(0, bands, true, 1) };
+	List<Sections.PageNumber>? pageNumbers;    // (each page's section and number: worked out with the page count)
+	int[]? baseMargins;                        // (the page setup's margins: left, right, top, bottom)
+
 	public DocumentPrinter(RichEditBox editor, string title, string path, Settings settings, PageBands bands, LineNumbering numbering, string? printerName) {
 		this.numbering = numbering.Copy();
 		this.editor = editor;
@@ -8803,23 +8912,35 @@ sealed class DocumentPrinter : IDisposable
 		if (settings.Margins is { Length: 4 } m) {
 			int top = Math.Max(m[2], bands.HeaderReach()), bottom = Math.Max(m[3], bands.FooterReach());
 			Document.DefaultPageSettings.Margins = new Margins(m[0], m[1], top, bottom);
-			(firstTopShift, firstBottomShift) = (Math.Max(m[2], bands.HeaderReach(1)) - top, Math.Max(m[3], bands.FooterReach(1)) - bottom);
+			baseMargins = m.ToArray();
 		}
-		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; pageStarts = null; pageNotes = null; };
+		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; pageStarts = null; pageNotes = null; pageNumbers = null; };
 		Document.PrintPage += PrintPage;
 		Document.EndPrint += (s, e) => SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // frees RichEdit's cache
 	}
 
-	// (iteration 55) page 1's text area against the others' (1/100 inch): its own header or footer reaches further or less
-	// far
-	int firstTopShift, firstBottomShift;
-	RECT FirstArea(RECT r) => new() { Left = r.Left, Right = r.Right, Top = r.Top + (int)Math.Round(firstTopShift * 14.4), Bottom = r.Bottom - (int)Math.Round(firstBottomShift * 14.4) };
+	// (iteration 55) a page's text area against the page setup's (1/100 inch): its header or footer reaches further or
+	// less far; (iteration 63) its section's, the section's first page its own first-page ones
+	(int Top, int Bottom) Shift(int position) {
+		if (baseMargins is not { } m) return (0, 0);
+		var all = AllSections;
+		var section = all[Sections.IndexAt(all, position)];
+		int on = position <= section.Start ? 1 : 2;    // (a page starting where its section does: the section's first)
+		int top = Math.Max(m[2], section.Bands.HeaderReach(on)) - Document.DefaultPageSettings.Margins.Top;
+		int bottom = Math.Max(m[3], section.Bands.FooterReach(on)) - Document.DefaultPageSettings.Margins.Bottom;
+		return (top, bottom);
+	}
+	RECT AreaAt(RECT r, int position) {
+		var (top, bottom) = Shift(position);
+		return new() { Left = r.Left, Right = r.Right, Top = r.Top + (int)Math.Round(top * 14.4), Bottom = r.Bottom - (int)Math.Round(bottom * 14.4) };
+	}
 
 	void PrintPage(object? sender, PrintPageEventArgs e) {
 		page++;
 		var g = e.Graphics!;
 		var allMargins = e.MarginBounds;
-		var margins = page == 1 ? Rectangle.FromLTRB(allMargins.Left, allMargins.Top + firstTopShift, allMargins.Right, allMargins.Bottom - firstBottomShift) : allMargins;
+		var (shiftTop, shiftBottom) = Shift(nextChar);    // (iteration 63: the page's section's)
+		var margins = Rectangle.FromLTRB(allMargins.Left, allMargins.Top + shiftTop, allMargins.Right, allMargins.Bottom - shiftBottom);
 		float hardX = e.PageSettings.HardMarginX, hardY = e.PageSettings.HardMarginY;
 		int start = nextChar;
 		int end = editor.TextDocument.Range2(0, 0).StoryLength - 1;    // without the final paragraph mark
@@ -8835,8 +8956,10 @@ sealed class DocumentPrinter : IDisposable
 				pageNotes = new List<List<Footnotes.NoteLine>>();
 				pageCount = CountPages(range, end, pageStarts, notes: pageNotes);    // for {pages}, and where each page ends
 				numberMarks = Marks(pageStarts, range, e.PageSettings);
-				if (numberMarks is { Count: > 0 } && firstTopShift != 0)    // (page 1's lines lower or higher)
-					numberMarks[0] = numberMarks[0].Select(mark => mark with { Baseline = mark.Baseline + (int)Math.Round(firstTopShift * 14.4) }).ToList();
+				for (int i = 0; numberMarks != null && i < numberMarks.Count && i < pageStarts.Count; i++)    // (a page's lines lower or higher: its section's)
+					if (Shift(pageStarts[i]).Top is int down and not 0)
+						numberMarks[i] = numberMarks[i].Select(mark => mark with { Baseline = mark.Baseline + (int)Math.Round(down * 14.4) }).ToList();
+				pageNumbers = Sections.Number(pageStarts, AllSections);    // (iteration 63)
 				pageLeaders = LeadersOnPages(range, pageStarts);    // (iteration 52)
 			}
 			range.rc = Twips(margins, hardX, hardY);    // (page 1's own)
@@ -8872,24 +8995,29 @@ sealed class DocumentPrinter : IDisposable
 			PrintedLineNumbers.Draw(g, numberMarks[page - 1], numbering, editor.Font, margins.Left - hardX);
 		// (iteration 55) the header that far from the page's top edge, the footer's last line that far from its bottom edge
 		// (in the band's font: black, as Word prints it; grey without a font of its own, as before; words in their own)
-		if (bands.HeaderOn(page) is { } header) {    // (iteration 49: the first page's own, if it has one)
+		// (iteration 63) the page's section's header and footer; its place in the section (1: the section's first page)
+		var number = pageNumbers != null && page <= pageNumbers.Count ? pageNumbers[page - 1] : new Sections.PageNumber(0, page, Math.Max(page, pageCount), page);
+		var bands = AllSections[Math.Min(number.Section, AllSections.Count - 1)].Bands;
+		int inSection = number.InSection;
+		(shownPage, sectionPages) = (number.Shown, number.SectionPages);
+		if (bands.HeaderOn(inSection) is { } header) {    // (iteration 49: the first page's own, if it has one)
 			var texts = Settings.Parts(header).Select(Fill).ToArray();
-			var font = bands.HeaderFontOn(page);
+			var font = bands.HeaderFontOn(inSection);
 			float height = BandText.Draw(g, texts, font ?? BandFont.Plain, margins.Left - hardX, margins.Width, bands.HeaderFromEdge - hardY, 1, PageBands.IsPlain(font) ? Brushes.DimGray : Brushes.Black, Brushes.Black);
-			if (bands.HeaderLineOn(page) && PageBands.LineCount(header) > 0) {    // (iteration 55: the line below it)
+			if (bands.HeaderLineOn(inSection) && PageBands.LineCount(header) > 0) {    // (iteration 55: the line below it)
 				float y = bands.HeaderFromEdge - hardY + height + PageBands.RuleGap;
 				using var pen = new Pen(Color.Black, PageBands.RuleWidth);
 				g.DrawLine(pen, margins.Left - hardX, y, margins.Right - hardX, y);
 			}
 		}
-		if (bands.FooterOn(page) is { } footer) {
+		if (bands.FooterOn(inSection) is { } footer) {
 			var texts = Settings.Parts(footer).Select(Fill).ToArray();
-			var own = bands.FooterFontOn(page);
+			var own = bands.FooterFontOn(inSection);
 			var font = own ?? BandFont.Plain;
 			float height = BandText.Height(texts, font, f => f.GetHeight(g));
 			float top = e.PageBounds.Height - bands.FooterFromEdge - height - hardY;
 			BandText.Draw(g, texts, font, margins.Left - hardX, margins.Width, top, 1, PageBands.IsPlain(own) ? Brushes.DimGray : Brushes.Black, Brushes.Black);
-			if (bands.FooterLineOn(page) && PageBands.LineCount(footer) > 0) {    // (iteration 55: the line above it)
+			if (bands.FooterLineOn(inSection) && PageBands.LineCount(footer) > 0) {    // (iteration 55: the line above it)
 				using var pen = new Pen(Color.Black, PageBands.RuleWidth);
 				g.DrawLine(pen, margins.Left - hardX, top - PageBands.RuleGap, margins.Right - hardX, top - PageBands.RuleGap);
 			}
@@ -8956,6 +9084,24 @@ sealed class DocumentPrinter : IDisposable
 		var starts = new List<int>();
 		Measuring(range => CountPages(range, editor.TextDocument.Range2(0, 0).StoryLength - 1, starts));
 		return starts;
+	}
+
+	/// Iteration 63: each page as laid out: where it starts, its section, its number as shown, its section's page count,
+	/// and its footer's parts filled in (left|center|right; "" without one).
+	public List<(int Start, int Section, int Shown, int SectionPages, string Footer)> PagePlan() {
+		var starts = new List<int>();
+		Measuring(range => CountPages(range, editor.TextDocument.Range2(0, 0).StoryLength - 1, starts));
+		pageCount = starts.Count;
+		var numbers = Sections.Number(starts, AllSections);
+		var plan = new List<(int, int, int, int, string)>();
+		for (int i = 0; i < starts.Count; i++) {
+			var n = numbers[i];
+			(shownPage, sectionPages) = (n.Shown, n.SectionPages);
+			var bandsOf = AllSections[n.Section].Bands;
+			string footer = bandsOf.FooterOn(n.InSection) is { } parts ? string.Join("|", Settings.Parts(parts).Select(Fill)) : "";
+			plan.Add((starts[i], n.Section, n.Shown, n.SectionPages, footer));
+		}
+		return plan;
 	}
 
 	/// Where each printed page starts, and how tall its text is (points), laid out for the printer.
@@ -9049,7 +9195,7 @@ sealed class DocumentPrinter : IDisposable
 			// a position's page, and the top (points from the page's top) of the line it starts
 			(int Page, float Top) Place(int position) {
 				int page = Math.Max(0, starts.FindLastIndex(s => s <= position));
-				float pageTop = marginTop + (page == 0 ? firstTopShift * 0.72f : 0);    // (iteration 55: page 1's own)
+				float pageTop = marginTop + Shift(starts[page]).Top * 0.72f;    // (iteration 55: page 1's own; 63: its section's)
 				if (position <= starts[page]) return (page, pageTop);
 				var measure = range;
 				measure.chrg = new CHARRANGE { cpMin = starts[page], cpMax = position };
@@ -9134,7 +9280,7 @@ sealed class DocumentPrinter : IDisposable
 		try {
 			while (true) {
 				count++;
-				var area = count == 1 ? FirstArea(otherArea) : otherArea;    // (iteration 55: page 1's own)
+				var area = AreaAt(otherArea, position);    // (iteration 55: page 1's own; 63: the page's section's)
 				starts?.Add(position);
 				range.rc = area;
 				range.chrg.cpMin = position;
@@ -9214,14 +9360,17 @@ sealed class DocumentPrinter : IDisposable
 		return count;
 	}
 
+	int shownPage = 1, sectionPages = 1;    // (iteration 63: the page's number as shown, its section's page count)
+
 	string Fill(string text) {
 		if (string.IsNullOrEmpty(text)) return "";
 		var now = DateTime.Now;
-		return Regex.Replace(text, @"\{(title|file|page|pages|date|time)\}", m => m.Groups[1].Value.ToLowerInvariant() switch {
+		return Regex.Replace(text, @"\{(title|file|page|pages|sectionpages|date|time)\}", m => m.Groups[1].Value.ToLowerInvariant() switch {
 			"title" => title,
 			"file" => path != "" ? path : title,
-			"page" => page.ToString(CultureInfo.CurrentCulture),
+			"page" => shownPage.ToString(CultureInfo.CurrentCulture),
 			"pages" => pageCount.ToString(CultureInfo.CurrentCulture),
+			"sectionpages" => sectionPages.ToString(CultureInfo.CurrentCulture),
 			"date" => now.ToShortDateString(),
 			_ => now.ToShortTimeString()
 		}, RegexOptions.IgnoreCase);
@@ -10799,8 +10948,24 @@ sealed class HeaderFooterDialog : Form
 	/// Whether the header and footer become the default for new documents.
 	public bool MakeDefault => makeDefault.Checked;
 
-	public HeaderFooterDialog(PageBands bands, PageBands defaultBands) {
+	// (iteration 63) a section after a break: the same header and footer as the section before's, or its own; its page
+	// numbers starting again (at what number) or going on
+	readonly CheckBox sameAsPrevious = new() { Text = "Same as the section before", AutoSize = true, Margin = new Padding(12, 6, 3, 0) };
+	readonly CheckBox restart = new() { Text = "Page numbers start again at", AutoSize = true, Margin = new Padding(16, 6, 0, 0) };
+	readonly NumericUpDown startAt = new() { Minimum = 0, Maximum = 99999, Width = 70, AccessibleName = "First page number", Margin = new Padding(3, 3, 3, 0) };
+	readonly SectionSettings? section;
+
+	/// Iteration 63: a section's settings as the dialog has them (null: the document's own header and footer, the first
+	/// section's): Same, or its own header and footer (Result), and its numbering.
+	public SectionSettings? SectionResult() => section == null ? null : new SectionSettings {
+		Same = sameAsPrevious.Checked, Bands = sameAsPrevious.Checked ? null : Result(), Restart = restart.Checked, Start = (int)startAt.Value
+	};
+
+	/// The document's header and footer (section: a section after a break, its number from 1 and its settings; bands are
+	/// then its header and footer as they are now, the section before's when it is the same).
+	public HeaderFooterDialog(PageBands bands, PageBands defaultBands, SectionSettings? section = null, int sectionNumber = 0) {
 		defaults_ = defaultBands;
+		this.section = section;
 		Text = "Header and Footer";
 		FormBorderStyle = FormBorderStyle.FixedDialog;
 		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
@@ -10810,6 +10975,21 @@ sealed class HeaderFooterDialog : Form
 		Padding = new Padding(10);
 
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
+		if (section != null) {
+			Text = $"Header and Footer: Section {sectionNumber}";
+			var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(3, 0, 3, 6) };
+			row.Controls.Add(new Label { Text = $"Section {sectionNumber} (the caret's):", AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, 7, 3, 0) });
+			row.Controls.Add(sameAsPrevious);
+			row.Controls.Add(restart);
+			row.Controls.Add(startAt);
+			layout.Controls.Add(row);
+			sameAsPrevious.Checked = section.Same;
+			restart.Checked = section.Restart;
+			startAt.Value = Math.Clamp(section.Start, 0, 99999);
+			startAt.Enabled = restart.Checked;
+			restart.CheckedChanged += (s, e) => startAt.Enabled = restart.Checked;
+			new ToolTip().SetToolTip(sameAsPrevious, "Ticked, this section prints the header and footer of the section before (Word's Link to Previous); untick it to give it its own.");
+		}
 		layout.Controls.Add(SelectionRow());
 		layout.Controls.Add(differentFirst);
 		var otherPanel = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
@@ -10827,7 +11007,7 @@ sealed class HeaderFooterDialog : Form
 		layout.Controls.Add(Position());
 		layout.Controls.Add(new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(760), 0), Margin = new Padding(3, 6, 3, 6),
-			Text = "Fields: {title} document name, {file} full path, {page} page number, {pages} number of pages, {date}, {time}.\n"
+			Text = "Fields: {title} document name, {file} full path, {page} page number, {pages} number of pages, {sectionpages} pages in the section, {date}, {time}.\n"
 				+ "Example: Page {page} of {pages}. Enter starts a new line in a part; a blank line at the end leaves space below a header.\n"
 				+ "They are printed, and saved with the document: Word and OpenDocument files get them as their own header and footer."
 		});
@@ -10846,6 +11026,13 @@ sealed class HeaderFooterDialog : Form
 		differentFirst.CheckedChanged += (s, e) => EnableAll();
 		foreach (var band in Bands) foreach (var box in band.Parts) Wire(box);
 		LoadFrom(bands);
+		if (section != null) {
+			// (the same as the section before's: shown, not to change; typing in it gives the section its own)
+			void Same() { tabs.Enabled = differentFirst.Enabled = !sameAsPrevious.Checked; }
+			sameAsPrevious.CheckedChanged += (s, e) => Same();
+			Same();
+			differentFirst.Text = "Different first page: the section's first page has a header and footer of its own (or none), its other pages theirs";
+		}
 	}
 
 	PageBands defaults_ = new();

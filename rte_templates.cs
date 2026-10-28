@@ -83,8 +83,10 @@ public static class Templates
 	public static int Fill(ITextDocument2 doc, Func<string, string?> value, int start = 0, int end = int.MaxValue) {
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 		int count = 0;
+		var markers = Sections.Mark.Matches(story).Cast<Match>().ToList();    // (iteration 63: a section break's header and footer are filled as the bands are)
 		foreach (Match m in Field.Matches(story).Reverse()) {
 			if (m.Index < start || m.Index + m.Length > end) continue;
+			if (markers.Any(k => m.Index >= k.Index && m.Index < k.Index + k.Length)) continue;
 			string? text = value(m.Groups[1].Value);
 			if (string.IsNullOrEmpty(text)) text = m.Groups[2].Success && m.Groups[2].Value != "" ? m.Groups[2].Value : null;
 			if (text == null) continue;

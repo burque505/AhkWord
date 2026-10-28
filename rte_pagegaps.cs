@@ -235,24 +235,30 @@ public sealed class PageGaps
 	/// Works the gaps out for the printed pages (where each starts, laid out without gaps, and how tall its text is, in
 	/// points: DocumentPrinter.PageHeights) and puts them in. textArea, bottom, top: the page's text height and margins;
 	/// (iteration 55) page 1's, if it has others (its own header or footer, taller or shorter).
-	public void Apply(List<(int Start, float Height)> pages, float textArea, float bottom, float top, float? firstTextArea = null, float? firstBottom = null, float? firstTop = null) {
+	/// (iteration 63) marginsOf: each page's own (from 0: its text height, bottom and top margins, as its section's header
+	/// and footer have them), over the others.
+	public void Apply(List<(int Start, float Height)> pages, float textArea, float bottom, float top, float? firstTextArea = null, float? firstBottom = null, float? firstTop = null,
+		Func<int, (float TextArea, float Bottom, float Top)>? marginsOf = null) {
 		var starts = pages.Select(p => p.Start).ToList();
 		var doc = editor.TextDocument;
 		int storyEnd = doc.Range2(0, 0).StoryLength;
 		string story = doc.Range2(0, storyEnd).Text ?? "";
 		Pages = starts.Count;
-		(TextAreaPoints, BottomPoints) = (textArea, bottom);
-		(FirstTextAreaPoints, FirstBottomPoints) = (firstTextArea ?? textArea, firstBottom ?? bottom);
+		(float TextArea, float Bottom, float Top) Of(int k) => marginsOf?.Invoke(k) ?? (k == 0 ? (firstTextArea ?? textArea, firstBottom ?? bottom, firstTop ?? top) : (textArea, bottom, top));
+		(TextAreaPoints, BottomPoints) = starts.Count > 0 && marginsOf != null ? (Of(starts.Count - 1).TextArea, Of(starts.Count - 1).Bottom) : (textArea, bottom);
+		(FirstTextAreaPoints, FirstBottomPoints) = (Of(0).TextArea, Of(0).Bottom);
 		var gaps = new List<Gap>();
 		// (iteration 49: an empty document too, its one paragraph mark: its sheet, header and footer shown before typing)
 		if (starts.Count == 0 || story.Length < 1) { Put(gaps); return; }
 		// page 1's top margin: space before the first paragraph (not before a table's first row)
-		if (!InTable(story, 0)) gaps.Add(new Gap(0, 0, 0, 0, 0, 0, 0, firstTop ?? top, 0, Paragraph: true));
+		if (!InTable(story, 0)) gaps.Add(new Gap(0, 0, 0, 0, 0, 0, 0, Of(0).Top, 0, Paragraph: true));
 		for (int k = 1; k < starts.Count; k++) {
 			int at = starts[k];
 			if (at <= 0 || at >= story.Length - 1 || InTable(story, at) || InTable(story, at - 1)) continue;
-			float slack = Math.Max(0, (k == 1 ? FirstTextAreaPoints : textArea) - pages[k - 1].Height);
-			float sheetBottom = k == 1 ? FirstBottomPoints : bottom;    // (iteration 55: page 1's own)
+			// (the page before's rest and bottom margin, this page's top: iteration 55, page 1's own; 63, each section's)
+			float slack = Math.Max(0, Of(k - 1).TextArea - pages[k - 1].Height);
+			float sheetBottom = Of(k - 1).Bottom;
+			top = Of(k).Top;
 			// a page that starts with a paragraph: space before it
 			if (story[at - 1] == '\r' && !(at >= 2 && story[at - 2] is RowEnd)) {
 				gaps.Add(new Gap(at, at, at, 0, slack, sheetBottom, BandPoints, top, k, Paragraph: true));

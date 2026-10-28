@@ -90,7 +90,7 @@ public static class PageBreaks
 			int at = positions[k];
 			if (tables.Any(t => at >= t.Start && at < t.End)) continue;
 			if (at + 1 >= s.Length || s[at + 1] != '\r') doc.Range2(at + 1, at + 1).Text = "\r";
-			if (at > 0 && s[at - 1] != '\r') { doc.Range2(at, at).Text = "\r"; at++; }
+			if (at > 0 && s[at - 1] != '\r' && !Sections.IsMarkerBefore(s, at)) { doc.Range2(at, at).Text = "\r"; at++; }    // (iteration 63: a section break's marker stays with it)
 			MakePlain(editor, at);
 			count++;
 		}

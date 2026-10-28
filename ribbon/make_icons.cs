@@ -26,7 +26,7 @@ var fluent = new Dictionary<string, string> {
 	["bullets"] = "text_bullet_list_ltr", ["numbering"] = "text_number_list_ltr",
 	["outdent"] = "text_indent_decrease_ltr", ["indent"] = "text_indent_increase_ltr", ["listoptions"] = "options",
 	["alignleft"] = "text_align_left", ["aligncenter"] = "text_align_center", ["alignright"] = "text_align_right", ["justify"] = "text_align_justify",
-	["pagebreak"] = "document_page_break", ["table"] = "table", ["picture"] = "image", ["thumbnail"] = "image_multiple",
+	["pagebreak"] = "document_page_break", ["sectionbreak"] = "document_split_hint", ["table"] = "table", ["picture"] = "image", ["thumbnail"] = "image_multiple",
 	["link"] = "link", ["crossreference"] = "number_symbol_square", ["updatereferences"] = "arrow_sync", ["footnote"] = "text_footnote", ["tableofcontents"] = "document_bullet_list", ["snippets"] = "text_expand", ["horizontalline"] = "divider_short", ["datetime"] = "calendar_clock", ["headerfooter"] = "document_header_footer",
 	["nextspelling"] = "text_proofing_tools", ["dictionary"] = "book_add",
 	["structured"] = "text_header_1", ["freeform"] = "text_font_size",

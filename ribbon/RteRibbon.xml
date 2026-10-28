@@ -1157,6 +1157,20 @@
         <Image Source="icons/applystyles_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdSectionBreak" Id="396" LabelTitle="Section Break" Keytip="SB" TooltipTitle="Section break" TooltipDescription="Start a new section on a new page: its own header and footer (File &gt; Header and Footer), its page numbers from 1. For a package of papers in one document.">
+      <Command.LargeImages>
+        <Image Source="icons/sectionbreak_32.bmp" MinDPI="96" />
+        <Image Source="icons/sectionbreak_40.bmp" MinDPI="120" />
+        <Image Source="icons/sectionbreak_48.bmp" MinDPI="144" />
+        <Image Source="icons/sectionbreak_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/sectionbreak_16.bmp" MinDPI="96" />
+        <Image Source="icons/sectionbreak_20.bmp" MinDPI="120" />
+        <Image Source="icons/sectionbreak_24.bmp" MinDPI="144" />
+        <Image Source="icons/sectionbreak_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdPageBreak" Id="280" LabelTitle="Page Break" Keytip="B" TooltipTitle="Page break (Ctrl+Enter)" TooltipDescription="Start a new page here.">
       <Command.LargeImages>
         <Image Source="icons/pagebreak_32.bmp" MinDPI="96" />
@@ -2281,8 +2295,9 @@
           </Group>
         </Tab>
         <Tab CommandName="cmdTabInsert">
-          <Group CommandName="cmdGroupPages" SizeDefinition="OneButton">
+          <Group CommandName="cmdGroupPages" SizeDefinition="TwoButtons">
             <Button CommandName="cmdPageBreak" />
+            <Button CommandName="cmdSectionBreak" />
           </Group>
           <Group CommandName="cmdGroupContents" SizeDefinition="OneButton">
             <Button CommandName="cmdTableOfContents" />
