@@ -233,8 +233,13 @@ sealed class TemplatePickerDialog : Form
 {
 	readonly ListBox list = new() { IntegralHeight = false, Dock = DockStyle.Fill };
 	readonly List<TemplateInfo> templates;
+	// (iteration 63) inserting: the template as a new section of the document, with its own header and footer
+	readonly CheckBox asSection = new() { Text = "As a new section, with the template's own header and footer (page numbers from 1)", AutoSize = true, Dock = DockStyle.Bottom, Padding = new Padding(0, 6, 0, 0) };
 
-	public TemplatePickerDialog(string title, IReadOnlyList<TemplateInfo> templates, string ownFolder) {
+	/// Whether the template goes in as a new section (sectionOption: the check box shown, ticked as given).
+	public bool AsSection => asSection.Checked;
+
+	public TemplatePickerDialog(string title, IReadOnlyList<TemplateInfo> templates, string ownFolder, bool? sectionOption = null) {
 		this.templates = templates.ToList();
 		Text = title;
 		FormBorderStyle = FormBorderStyle.Sizable;
@@ -261,6 +266,10 @@ sealed class TemplatePickerDialog : Form
 		var body = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12) };
 		body.Controls.Add(list);
 		body.Controls.Add(note);
+		if (sectionOption is bool ticked) {
+			asSection.Checked = ticked;
+			body.Controls.Add(asSection);
+		}
 		body.Controls.Add(buttons);
 		Controls.Add(body);
 		AcceptButton = ok;

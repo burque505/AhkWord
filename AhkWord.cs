@@ -1930,36 +1930,47 @@ class WriterForm : Form
 
 	// Insert > Insert from Template: the parts first, then the documents.
 	void InsertTemplateCommand() {
-		using var dlg = new TemplatePickerDialog("Insert from Template", InsertChoices(), OwnTemplatesFolder);
-		if (dlg.ShowDialog(this) == DialogResult.OK && dlg.Chosen is { } template) InsertTemplate(template, null, ask: true);
+		using var dlg = new TemplatePickerDialog("Insert from Template", InsertChoices(), OwnTemplatesFolder, insertAsSection);
+		if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Chosen is not { } template) return;
+		insertAsSection = dlg.AsSection;    // (remembered while AhkWord runs)
+		InsertTemplate(template, null, ask: true, asSection: dlg.AsSection);
 	}
+	bool insertAsSection;
 
 	/// Inserts a template's content at the caret (replacing the selection), in one undo step, and fills in its fields
 	/// (only the inserted ones) as NewFromTemplate does. Returns how many were filled in.
 	/// (inline, iteration 55: a snippet's part goes in where the caret is, without the paragraph mark its text ends with,
 	/// which RichEdit writes for the last paragraph: inserted, that started a new paragraph after every snippet)
-	internal int InsertTemplate(TemplateInfo template, IDictionary<string, string>? values, bool ask, bool inline = false) {
+	internal int InsertTemplate(TemplateInfo template, IDictionary<string, string>? values, bool ask, bool inline = false, bool asSection = false) {
 		if (!template.Path.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase))
 			throw new InvalidOperationException($"Only RTF templates can be inserted; open {Path.GetFileName(template.Path)} and save it as Rich Text Format.");
-		string rtf = HeaderFooter.StripFromRtf(File.ReadAllText(template.Path, Encoding.Latin1));    // (the header and footer stay the document's)
+		string file = File.ReadAllText(template.Path, Encoding.Latin1);
+		string rtf = HeaderFooter.StripFromRtf(file);    // (the header and footer stay the document's)
 		if (RenderTemplate?.Invoke(rtf, ask) is string rendered) rtf = rendered;    // (iteration 62)
 		if (inline) rtf = Snippets.WithoutFinalParagraph(rtf);
+		// (iteration 63) as a new section: its own header and footer, the template's (the section before's if it has none)
+		var bands = asSection ? HeaderFooter.FromRtf(file) : null;
 		var doc = Editor.TextDocument;
 		doc.BeginEditCollection();
 		int filled;
 		try {
+			if (asSection) Sections.Insert(Editor, new SectionSettings { Same = bands == null, Bands = bands, Restart = true, Start = 1 });
 			int start = doc.Selection2.Start;
 			Editor.SelectedRtf = rtf;
 			int end = doc.Selection2.Start;
 			string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
-			var given = FieldValues("Insert " + template.Name, story[Math.Min(start, story.Length)..Math.Min(end, story.Length)], values, ask);
+			string asked = story[Math.Min(start, story.Length)..Math.Min(end, story.Length)];
+			if (bands != null) asked += "\n" + string.Join("\n", BandParts(bands).SelectMany(parts => parts));    // (its header's and footer's fields too)
+			var given = FieldValues("Insert " + template.Name, asked, values, ask);
 			int before = Editor.TextLength;
 			filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null, start, end);
 			Editor.Select(Math.Max(start, end + Editor.TextLength - before), 0);    // (after what was inserted)
+			if (bands != null) filled += FillBands(name => given.TryGetValue(name, out var value) ? value : null);
 		} finally {
 			doc.EndEditCollection();
 		}
-		SetStatus($"Inserted the {template.Name} template" + (filled > 0 ? $" ({filled} field{(filled == 1 ? "" : "s")} filled in)." : "."));
+		if (asSection) BandsChangedNow();
+		SetStatus($"Inserted the {template.Name} template" + (asSection ? " as a new section" : "") + (filled > 0 ? $" ({filled} field{(filled == 1 ? "" : "s")} filled in)." : "."));
 		return filled;
 	}
 
