@@ -29,7 +29,11 @@
 #load "rte_palette.cs"
 #load "rte_extensions.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 61 adds to iteration 60:
+// Run it with AhkWord.ahk. Iteration 62 adds to iteration 61:
+//   - RenderTemplate, a hook for an extension's own template language: given a template's RTF (New from Template,
+//     Insert from Template) or the document's (Fill In Fields), it returns it filled in, or null when the template
+//     isn't in its language; AhkWord's own {{fields}} left in it are filled in afterwards, as before.
+// Iteration 61 added to iteration 60:
 //   - Hooks for what the extension point loads: AddExtensionCommand (Tools > Extensions, shown once there is one, and
 //     the command palette), FieldSource (values for template fields before the dialog asks), SetExtensionStatus (a
 //     place in the status bar).
@@ -671,7 +675,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 61;    // (the About box; make_version.ps1)
+	public const int Iteration = 62;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1472,6 +1476,26 @@ class WriterForm : Form
 	/// Fields dialog: a field given a value here isn't asked for.
 	public Func<string, string?>? FieldSource { get; set; }
 
+	/// An extension's own template language (iteration 62): given RTF (a template's, or the document's for Fill In
+	/// Fields) and whether it may ask for values, returns it filled in, or null when it isn't in that language (AhkWord's
+	/// own {{fields}} left in it are filled in afterwards). An error it throws shows in the status bar.
+	public Func<string, bool, string?>? RenderTemplate { get; set; }
+
+	// the document filled in by the extension's template language, as one undo step; false if it isn't in it
+	bool RenderDocument(bool ask) {
+		if (RenderTemplate?.Invoke(Editor.Rtf, ask) is not string rendered) return false;
+		var doc = Editor.TextDocument;
+		doc.BeginEditCollection();
+		try {
+			Editor.SelectAll();
+			Editor.SelectedRtf = rendered;
+			Editor.Select(0, 0);
+		} finally {
+			doc.EndEditCollection();
+		}
+		return true;
+	}
+
 	/// Adds a command to Tools > Extensions (shown once there is one) and to the command palette; it runs as a ribbon
 	/// command does (an error shows in the status bar).
 	public void AddExtensionCommand(string name, string description, Action run) {
@@ -1698,6 +1722,7 @@ class WriterForm : Form
 	internal bool NewFromTemplate(TemplateInfo template, IDictionary<string, string>? values, bool ask) {
 		if (ask && !ConfirmDiscard()) return false;
 		api.OpenTemplate(template.Path);
+		if (RenderTemplate?.Invoke(Editor.Rtf, ask) is string rendered) Editor.Rtf = rendered;    // (iteration 62: an extension's template language)
 		var doc = Editor.TextDocument;
 		var given = FieldValues("New from " + template.Name, doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "", values, ask);
 		int filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null);
@@ -1857,6 +1882,7 @@ class WriterForm : Form
 		if (!template.Path.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase))
 			throw new InvalidOperationException($"Only RTF templates can be inserted; open {Path.GetFileName(template.Path)} and save it as Rich Text Format.");
 		string rtf = HeaderFooter.StripFromRtf(File.ReadAllText(template.Path, Encoding.Latin1));    // (the header and footer stay the document's)
+		if (RenderTemplate?.Invoke(rtf, ask) is string rendered) rtf = rendered;    // (iteration 62)
 		if (inline) rtf = Snippets.WithoutFinalParagraph(rtf);
 		var doc = Editor.TextDocument;
 		doc.BeginEditCollection();
@@ -1880,16 +1906,19 @@ class WriterForm : Form
 	// Insert > Fill In Fields
 	void FillFieldsCommand() {
 		var doc = Editor.TextDocument;
+		bool rendered = RenderDocument(ask: true);    // (iteration 62: an extension's template language first)
 		if (Templates.Fields(doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "").Count == 0) {
-			SetStatus("There are no {{fields}} to fill in in this document (fields are written {{Name}} or {{Name|default}}).");
+			SetStatus(rendered ? "The template was filled in." : "There are no {{fields}} to fill in in this document (fields are written {{Name}} or {{Name|default}}).");
 			return;
 		}
-		int filled = FillFields(null, ask: true);
-		SetStatus(filled > 0 ? $"{filled} field{(filled == 1 ? "" : "s")} filled in." : "No fields were filled in.");
+		int filled = FillFields(null, ask: true, rendered: true);
+		SetStatus((rendered ? "The template was filled in; " : "") + (filled > 0 ? $"{filled} field{(filled == 1 ? "" : "s")} filled in." : "no fields were filled in."));
 	}
 
-	/// Fills in the document's fields (one undo step): values given, then (ask) the dialog, or the values typed last time.
-	internal int FillFields(IDictionary<string, string>? values, bool ask) {
+	/// Fills in the document's fields (one undo step): values given, then (ask) the dialog, or the values typed last time;
+	/// an extension's template language first (rendered: done already).
+	internal int FillFields(IDictionary<string, string>? values, bool ask, bool rendered = false) {
+		if (!rendered) RenderDocument(ask);
 		var doc = Editor.TextDocument;
 		var given = FieldValues("Fill In Fields", doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "", values, ask);
 		doc.BeginEditCollection();

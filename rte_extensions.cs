@@ -7,6 +7,7 @@
 // What Started can use (iteration 61): form.AddExtensionCommand (Tools > Extensions and the command palette),
 // form.FieldSource (values for template fields before the Fill In Fields dialog asks), form.SetExtensionStatus (a
 // place in the status bar).
+// Iteration 62: form.RenderTemplate (an extension's own template language: a template's RTF filled in).
 static class AhkWordExtensions
 {
 	/// The window is open, with its first document: an extension sets itself up here.
