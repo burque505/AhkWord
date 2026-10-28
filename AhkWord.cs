@@ -2924,6 +2924,9 @@ class WriterForm : Form
 	// its number as shown and its section's pages; worked out again when the text or the pages change
 	(PageBands Bands, int InSection, int Shown, int SectionPages) PageOf(int page) {
 		var starts = bandStarts;
+		// (the window closing, a timer's last call after the editor is gone, or before it has its handle: the document's
+		// own header and footer, without asking the editor)
+		if (Editor.IsDisposed || !Editor.IsHandleCreated) return (Bands, page, page, starts?.Count ?? page);
 		int length = Editor.TextLength;
 		if (pageOfCache == null || !ReferenceEquals(pageOfStarts, starts) || pageOfLength != length || !ReferenceEquals(pageOfBands, Bands)) {
 			(pageOfStarts, pageOfLength, pageOfBands) = (starts, length, Bands);
