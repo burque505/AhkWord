@@ -30,7 +30,12 @@
 #load "rte_sections.cs"
 #load "rte_extensions.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 62 adds to iteration 61:
+// Run it with AhkWord.ahk. Iteration 63 adds to iteration 62:
+//   - Sections (rte_sections.cs): Insert > Section Break starts a new section on a new page, with its own header and
+//     footer (at first the section before's, "same as previous") and its page numbers starting again (at 1, or a number
+//     of its own); File > Header and Footer edits the caret's section. Printing, Print Preview, PDF and the page view
+//     give each page its section's header, footer and number; {sectionpages} is the pages in the section.
+// Iteration 62 added to iteration 61:
 //   - RenderTemplate, a hook for an extension's own template language: given a template's RTF (New from Template,
 //     Insert from Template) or the document's (Fill In Fields), it returns it filled in, or null when the template
 //     isn't in its language; AhkWord's own {{fields}} left in it are filled in afterwards, as before.
@@ -678,7 +683,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 62;    // (the About box; make_version.ps1)
+	public const int Iteration = 63;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
