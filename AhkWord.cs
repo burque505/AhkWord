@@ -33,6 +33,8 @@
 //   - RenderTemplate, a hook for an extension's own template language: given a template's RTF (New from Template,
 //     Insert from Template) or the document's (Fill In Fields), it returns it filled in, or null when the template
 //     isn't in its language; AhkWord's own {{fields}} left in it are filled in afterwards, as before.
+//   - The header's and footer's parts filled in too (New from Template, Fill In Fields): AhkWord's own {{fields}} in
+//     them, asked for with the text's; an extension's language through RenderTemplateText.
 // Iteration 61 added to iteration 60:
 //   - Hooks for what the extension point loads: AddExtensionCommand (Tools > Extensions, shown once there is one, and
 //     the command palette), FieldSource (values for template fields before the dialog asks), SetExtensionStatus (a
@@ -1481,6 +1483,37 @@ class WriterForm : Form
 	/// own {{fields}} left in it are filled in afterwards). An error it throws shows in the status bar.
 	public Func<string, bool, string?>? RenderTemplate { get; set; }
 
+	/// The same for a header's or footer's part (plain text): filled in with the values the template's text had, or null
+	/// when it isn't in that language (iteration 62).
+	public Func<string, string?>? RenderTemplateText { get; set; }
+
+	// the header's and footer's parts (each page's, the first page's)
+	IEnumerable<string[]> BandParts() {
+		yield return Bands.Header;
+		yield return Bands.Footer;
+		if (Bands.FirstHeader != null) yield return Bands.FirstHeader;
+		if (Bands.FirstFooter != null) yield return Bands.FirstFooter;
+	}
+
+	/// The header's and footer's parts as one text (their fields asked for with the document's).
+	string BandsText() => string.Join("\n", BandParts().SelectMany(parts => parts));
+
+	/// Fills in the header's and footer's parts (iteration 62): an extension's template language, then AhkWord's own
+	/// fields (value: a field's value, or null). Returns how many parts changed.
+	int FillBands(Func<string, string?> value) {
+		int changed = 0;
+		foreach (var parts in BandParts())
+			for (int i = 0; i < parts.Length; i++) {
+				string part = parts[i] ?? "";
+				string filled = Templates.FillText(RenderTemplateText?.Invoke(part) ?? part, value);
+				if (filled == part) continue;
+				parts[i] = filled;
+				changed++;
+			}
+		if (changed > 0) { Editor.Modified = true; BandsChangedNow(); }
+		return changed;
+	}
+
 	// the document filled in by the extension's template language, as one undo step; false if it isn't in it
 	bool RenderDocument(bool ask) {
 		if (RenderTemplate?.Invoke(Editor.Rtf, ask) is not string rendered) return false;
@@ -1724,8 +1757,9 @@ class WriterForm : Form
 		api.OpenTemplate(template.Path);
 		if (RenderTemplate?.Invoke(Editor.Rtf, ask) is string rendered) Editor.Rtf = rendered;    // (iteration 62: an extension's template language)
 		var doc = Editor.TextDocument;
-		var given = FieldValues("New from " + template.Name, doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "", values, ask);
+		var given = FieldValues("New from " + template.Name, (doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "") + "\n" + BandsText(), values, ask);
 		int filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null);
+		filled += FillBands(name => given.TryGetValue(name, out var value) ? value : null);    // (iteration 62)
 		Editor.ClearUndo();
 		Editor.Select(0, 0);
 		Editor.Modified = filled > 0;
@@ -1907,8 +1941,9 @@ class WriterForm : Form
 	void FillFieldsCommand() {
 		var doc = Editor.TextDocument;
 		bool rendered = RenderDocument(ask: true);    // (iteration 62: an extension's template language first)
-		if (Templates.Fields(doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "").Count == 0) {
-			SetStatus(rendered ? "The template was filled in." : "There are no {{fields}} to fill in in this document (fields are written {{Name}} or {{Name|default}}).");
+		if (Templates.Fields((doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "") + "\n" + BandsText()).Count == 0) {
+			bool bands = FillBands(_ => null) > 0;    // (an extension's language in the header or footer)
+			SetStatus(rendered || bands ? "The template was filled in." : "There are no {{fields}} to fill in in this document (fields are written {{Name}} or {{Name|default}}).");
 			return;
 		}
 		int filled = FillFields(null, ask: true, rendered: true);
@@ -1920,10 +1955,12 @@ class WriterForm : Form
 	internal int FillFields(IDictionary<string, string>? values, bool ask, bool rendered = false) {
 		if (!rendered) RenderDocument(ask);
 		var doc = Editor.TextDocument;
-		var given = FieldValues("Fill In Fields", doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "", values, ask);
+		var given = FieldValues("Fill In Fields", (doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "") + "\n" + BandsText(), values, ask);
+		int filled;
 		doc.BeginEditCollection();
-		try { return Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null); }
+		try { filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null); }
 		finally { doc.EndEditCollection(); }
+		return filled + FillBands(name => given.TryGetValue(name, out var value) ? value : null);    // (iteration 62: the header and footer too)
 	}
 
 	// The recent list without a template (a document made from it is a new one)
