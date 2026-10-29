@@ -873,8 +873,9 @@ public static class HeaderFooter
 			PageBands? exact = null;
 			foreach (var custom in main.CustomXmlParts)
 				if (ReadCustomXml(custom) is { } json) exact = PageBands.FromJson(json);
-			var section = main.Document.Body?.Elements<W.SectionProperties>().LastOrDefault()
-				?? main.Document.Body?.Descendants<W.SectionProperties>().FirstOrDefault();
+			// (iteration 63) the first section's: the first w:sectPr (the body's own is the last section's, a paragraph's
+			// those before it)
+			var section = main.Document.Body?.Descendants<W.SectionProperties>().FirstOrDefault();
 			string[]? Read<TRef>(Func<string, OpenXmlPart?> part, bool firstPage = false) where TRef : W.HeaderFooterReferenceType {
 				var references = section?.Elements<TRef>().ToList() ?? new List<TRef>();
 				var reference = firstPage ? references.FirstOrDefault(r => r.Type?.Value == W.HeaderFooterValues.First)
