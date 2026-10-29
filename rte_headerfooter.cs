@@ -302,7 +302,7 @@ public static class HeaderFooter
 	const string MetaName = "rte-writer-header-footer";
 	const string XmlNamespace = "urn:rte-writer:header-footer";
 	const string OdtProperty = "AhkWord header and footer";
-	static readonly Regex Field = new(@"\{(title|file|page|pages|date|time)\}", RegexOptions.IgnoreCase);
+	static readonly Regex Field = new(@"\{(title|file|page|pages|sectionpages|date|time)\}", RegexOptions.IgnoreCase);
 
 	// {title} and {file} become text; the others stay fields (filled in by Word and LibreOffice).
 	static string[] Filled(string[] parts, string title, string file) =>
@@ -384,7 +384,8 @@ public static class HeaderFooter
 		string name = m.Success ? m.Groups[1].Value.ToUpperInvariant() : "";
 		return name switch {
 			"PAGE" => "{page}",
-			"NUMPAGES" or "SECTIONPAGES" => "{pages}",
+			"NUMPAGES" => "{pages}",
+			"SECTIONPAGES" => "{sectionpages}",    // (iteration 63)
 			"DATE" or "CREATEDATE" or "SAVEDATE" or "PRINTDATE" => Regex.IsMatch(m.Groups[2].Value, @"[Hhm]{1,2}:") && !Regex.IsMatch(m.Groups[2].Value, "[dMy]") ? "{time}" : "{date}",
 			"TIME" => "{time}",
 			"FILENAME" => m.Groups[2].Value.Contains("\\p", StringComparison.OrdinalIgnoreCase) ? "{file}" : "{title}",
@@ -398,6 +399,23 @@ public static class HeaderFooter
 	/// of the first paragraph, after any other changes to the RTF.
 	public static string AddToRtf(string rtf, PageBands bands, PageLayout layout, string title, string file, float fontSize) {
 		if (BodyStart(rtf) < 0) return rtf;
+		string groups = BandGroups(ref rtf, bands, layout, title, file, fontSize);
+		int body = BodyStart(rtf);
+		var sb = new StringBuilder();
+		sb.Append($@"\paperw{layout.Width}\paperh{layout.Height}\margl{layout.Left}\margr{layout.Right}\margt{layout.Top}\margb{layout.Bottom}\headery{layout.HeaderY}\footery{layout.FooterY}");
+		if (layout.Landscape) sb.Append(@"\landscape");
+		sb.Append(@"\sectd");
+		if (layout.Landscape) sb.Append(@"\lndscpsxn");
+		if (bands.DifferentFirst) sb.Append(@"\titlepg");
+		sb.Append($@"\pgwsxn{layout.Width}\pghsxn{layout.Height}\marglsxn{layout.Left}\margrsxn{layout.Right}\margtsxn{layout.Top}\margbsxn{layout.Bottom}\headery{layout.HeaderY}\footery{layout.FooterY} ");
+		sb.Append(groups);
+		sb.Append(@"{\*\").Append(RtfDestination).Append(' ').Append(RtfEscape(Stamped(bands, title, file).ToJson())).Append('}');
+		return rtf.Insert(body, sb.ToString());
+	}
+
+	/// A header's and footer's RTF groups (\header, \footer, and the first page's \headerf and \footerf when it has its
+	/// own), their fonts added to rtf's font table (iteration 63: each section's own too).
+	internal static string BandGroups(ref string rtf, PageBands bands, PageLayout layout, string title, string file, float fontSize) {
 		int size = (int)Math.Round(fontSize * 2);
 		// (iteration 55) a header's or footer's own font: in the font table, with its size, bold, italic and underline
 		string headerFont = bands.HeaderFont is { } hf ? Formatting(ref rtf, hf) : $@"\f0\fs{size}";
@@ -409,14 +427,7 @@ public static class HeaderFooter
 		foreach (var parts in new[] { bands.Header, bands.Footer, bands.FirstHeader, bands.FirstFooter })
 			foreach (var (_, f) in PageBands.Parts(parts).SelectMany(BandText.Runs))
 				if (f != null && !numbers.ContainsKey(f.Name)) numbers[f.Name] = FontNumber(ref rtf, f.Name);
-		int body = BodyStart(rtf);
 		var sb = new StringBuilder();
-		sb.Append($@"\paperw{layout.Width}\paperh{layout.Height}\margl{layout.Left}\margr{layout.Right}\margt{layout.Top}\margb{layout.Bottom}\headery{layout.HeaderY}\footery{layout.FooterY}");
-		if (layout.Landscape) sb.Append(@"\landscape");
-		sb.Append(@"\sectd");
-		if (layout.Landscape) sb.Append(@"\lndscpsxn");
-		if (bands.DifferentFirst) sb.Append(@"\titlepg");
-		sb.Append($@"\pgwsxn{layout.Width}\pghsxn{layout.Height}\marglsxn{layout.Left}\margrsxn{layout.Right}\margtsxn{layout.Top}\margbsxn{layout.Bottom}\headery{layout.HeaderY}\footery{layout.FooterY} ");
 		void Band(string destination, string[]? parts, bool empty = false) {
 			if (parts == null) {
 				if (empty) sb.Append("{\\").Append(destination).Append(@"\pard\plain\par}");    // (the first page's: none there)
@@ -441,8 +452,7 @@ public static class HeaderFooter
 			Band("headerf", bands.FirstHeaderToWrite, true);
 			Band("footerf", bands.FirstFooterToWrite, true);
 		}
-		sb.Append(@"{\*\").Append(RtfDestination).Append(' ').Append(RtfEscape(Stamped(bands, title, file).ToJson())).Append('}');
-		return rtf.Insert(body, sb.ToString());
+		return sb.ToString();
 	}
 
 	// A band font's RTF: \fN (the font table's entry for its name, added if it has none) \fsN \b \i \ul.
@@ -483,8 +493,8 @@ public static class HeaderFooter
 		int at = 0;
 		foreach (Match m in Field.Matches(part)) {
 			sb.Append(RtfEscape(part[at..m.Index]));
-			string instruction = m.Groups[1].Value.ToLowerInvariant() switch { "page" => "PAGE", "pages" => "NUMPAGES", "date" => "DATE", _ => "TIME" };
-			string shown = instruction switch { "PAGE" or "NUMPAGES" => "1", "DATE" => DateTime.Now.ToShortDateString(), _ => DateTime.Now.ToShortTimeString() };
+			string instruction = m.Groups[1].Value.ToLowerInvariant() switch { "page" => "PAGE", "pages" => "NUMPAGES", "sectionpages" => "SECTIONPAGES", "date" => "DATE", _ => "TIME" };
+			string shown = instruction switch { "PAGE" or "NUMPAGES" or "SECTIONPAGES" => "1", "DATE" => DateTime.Now.ToShortDateString(), _ => DateTime.Now.ToShortTimeString() };
 			sb.Append(@"{\field{\*\fldinst ").Append(instruction).Append(@"}{\fldrslt ").Append(RtfEscape(shown)).Append("}}");
 			at = m.Index + m.Length;
 		}
@@ -503,7 +513,7 @@ public static class HeaderFooter
 	}
 
 	// Where the document's text starts: its first \pard (or \sectd) outside groups other than the outermost.
-	static int BodyStart(string rtf) {
+	internal static int BodyStart(string rtf) {
 		int depth = 0;
 		for (int i = 0; i < rtf.Length; i++) {
 			char c = rtf[i];
@@ -845,7 +855,7 @@ public static class HeaderFooter
 			int at = 0;
 			foreach (Match m in Field.Matches(part)) {
 				if (m.Index > at) paragraph.Append(Run(new W.Text(part[at..m.Index]) { Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve }));
-				string instruction = m.Groups[1].Value.ToLowerInvariant() switch { "page" => "PAGE", "pages" => "NUMPAGES", "date" => "DATE", _ => "TIME" };
+				string instruction = m.Groups[1].Value.ToLowerInvariant() switch { "page" => "PAGE", "pages" => "NUMPAGES", "sectionpages" => "SECTIONPAGES", "date" => "DATE", _ => "TIME" };
 				paragraph.Append(new W.SimpleField(Run(new W.Text("1"))) { Instruction = " " + instruction + " " });
 				at = m.Index + m.Length;
 			}

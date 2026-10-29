@@ -2542,7 +2542,7 @@ class WriterForm : Form
 		var held = gaps && !dialog ? HoldGaps() : null;
 		if (gaps) { QuietGaps(pageGaps.Remove); gapsOut = true; }
 		try {
-			var printer = new DocumentPrinter(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName) {
+			var printer = new DocumentPrinter(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName, PageMargins, PageLandscape) {
 				NoteStyle = NoteStyle, PageSections = Sections.Resolve(Editor.TextDocument, Bands)    // (iteration 63)
 			};
 			if (gaps) printer.Disposed += () => { try { gapsOut = false; QuietGaps(pageGaps.Reapply); } finally { held?.Dispose(); } };
@@ -3010,6 +3010,22 @@ class WriterForm : Form
 		Settings.Save();
 	}
 
+	/// (iteration 63) The document's own page setup: the margins (1/100 inch: left, right, top, bottom) and orientation its
+	/// file gave it, or Page Setup did (null: none; Page Setup's last, the settings', then).
+	internal int[]? DocumentMargins;
+	internal bool? DocumentLandscape;
+	internal int[] PageMargins => DocumentMargins ?? Settings.Margins;
+	internal bool PageLandscape => DocumentLandscape ?? Settings.Landscape;
+
+	/// The document's own page setup changed (opened, new): its pages laid out again if they are different now.
+	internal void SetDocumentPageSetup(int[]? margins, bool? landscape) {
+		var (oldMargins, oldLandscape) = (PageMargins, PageLandscape);
+		(DocumentMargins, DocumentLandscape) = (margins, landscape);
+		if (PageMargins.SequenceEqual(oldMargins) && PageLandscape == oldLandscape) return;
+		pageStartsStale = bandPagesStale = true;
+		ApplyPrintLayout();
+	}
+
 	/// The page that other programs lay the document out on (twips): the default printer's paper (Letter or A4 if there
 	/// is no printer) and Page Setup's margins and orientation.
 	internal PageLayout PageLayout() {
@@ -3021,10 +3037,10 @@ class WriterForm : Form
 		} catch (Exception) {
 			if (RegionInfo.CurrentRegion.IsMetric) (width, height) = (827, 1169);
 		}
-		if (Settings.Landscape) (width, height) = (height, width);
-		int[] m = Settings.Margins is { Length: 4 } margins ? margins : new[] { 100, 100, 100, 100 };
+		if (PageLandscape) (width, height) = (height, width);
+		int[] m = PageMargins is { Length: 4 } margins ? margins : new[] { 100, 100, 100, 100 };
 		static int Twips(int hundredths) => (int)Math.Round(hundredths * 14.4);
-		return new PageLayout(Twips(width), Twips(height), Twips(m[0]), Twips(m[1]), Twips(m[2]), Twips(m[3]), Settings.Landscape, Twips(Bands.HeaderFromEdge), Twips(Bands.FooterFromEdge));
+		return new PageLayout(Twips(width), Twips(height), Twips(m[0]), Twips(m[1]), Twips(m[2]), Twips(m[3]), PageLandscape, Twips(Bands.HeaderFromEdge), Twips(Bands.FooterFromEdge));
 	}
 
 	// ---- Cross-references (iteration 50, rte_crossrefs.cs)
@@ -3558,6 +3574,7 @@ class WriterForm : Form
 		Settings.Margins = new[] { page.Margins.Left, page.Margins.Right, page.Margins.Top, page.Margins.Bottom };
 		pageStartsStale = bandPagesStale = true;
 		Settings.Landscape = page.Landscape;
+		(DocumentMargins, DocumentLandscape) = (Settings.Margins.ToArray(), page.Landscape);    // (iteration 63: the document's, saved with it)
 		Settings.Save();
 		ApplyPrintLayout();    // (the page's new width)
 	}
@@ -5297,6 +5314,7 @@ public class EditorApi
 		form.StyleSetMayHaveChanged();
 		form.Bands = form.DefaultBands();
 		form.SetLineNumbering(new LineNumbering(), changesDocument: false);
+		form.SetDocumentPageSetup(null, null);    // (iteration 63: Page Setup's)
 		ed.Modified = false;
 		FileConverter = "";
 		form.SetFileName(null);
@@ -5335,6 +5353,9 @@ public class EditorApi
 		var numbering = LineNumberFormats.FromRtf(rtf);
 		form.Styles = form.DefaultStyles();
 		form.Levels = form.DefaultLevels();
+		var (margins, landscape) = PageSetupOf(rtf);
+		form.SetDocumentPageSetup(margins, landscape);
+		rtf = Sections.ImportRtf(rtf);    // (iteration 63)
 		Rtf = rtf;
 		form.StylesAfterLoad(StylesFromRtf(rtf), takeLook: false);
 		form.Bands = bands ?? form.DefaultBands();
@@ -5681,6 +5702,10 @@ public class EditorApi
 	/// window stays open).
 	public void Close() => New();
 
+	// (iteration 63) A document's own page setup, as its RTF (or .docx) gives it (null: none, Page Setup's).
+	static (int[]?, bool?) PageSetupOf(string rtf) => Sections.PageSetupFromRtf(rtf) is { } setup ? (setup.Margins, setup.Landscape) : (null, null);
+	static (int[]?, bool?) PageSetupOfDocx(string path) => Sections.PageSetupFromDocx(path) is { } setup ? (setup.Margins, setup.Landscape) : (null, null);
+
 	/// Opens an .html/.htm, .md/.markdown, .rtf, .docx/.doc, .odt or .txt file (unsaved changes are discarded).
 	/// Word and OpenDocument files are converted by Word, openxml, LibreOffice or pandoc (see Converters and
 	/// LastConverter); via names the converter(s) to use, e.g. "openxml" (Save then uses them too).
@@ -5696,6 +5721,7 @@ public class EditorApi
 		form.Styles = form.DefaultStyles();
 		form.Levels = form.DefaultLevels();    // (AhkWord's RTF: its own, as the Rtf setter finds them)
 		form.UseNormalFont();    // (text without a font of its own, as HTML's and Markdown's: Normal's)
+		(int[]? Margins, bool? Landscape) pageSetup = (null, null);    // (iteration 63: the file's, where it gives one)
 		StyleSheet? fileStyles = null;
 		bool takeLook = false, styledLook = false;
 		using (Quietly()) {
@@ -5713,6 +5739,8 @@ public class EditorApi
 				string rtf = File.ReadAllText(full, Encoding.Latin1);
 				bands = HeaderFooter.FromRtf(rtf);
 				numbering = LineNumberFormats.FromRtf(rtf);
+				pageSetup = PageSetupOf(rtf);
+				rtf = Sections.ImportRtf(rtf);    // (iteration 63: Word's sections as AhkWord's section breaks)
 				Rtf = rtf;
 				fileStyles = StylesFromRtf(rtf);
 				LegalLists.AdoptTypedNumbers(ed);
@@ -5723,7 +5751,10 @@ public class EditorApi
 				var (kind, content, converter) = OfficeConverters.Import(full, via);
 				bands = extension == ".docx" ? HeaderFooter.FromDocx(full) : extension == ".odt" ? HeaderFooter.FromOdt(full) : kind == "rtf" ? HeaderFooter.FromRtf(content) : null;
 				numbering = extension == ".docx" ? LineNumberFormats.FromDocx(full) : extension == ".odt" ? LineNumberFormats.FromOdt(full) : kind == "rtf" ? LineNumberFormats.FromRtf(content) : null;
+				// (iteration 63) the file's page setup, and its sections
+				pageSetup = kind == "rtf" ? PageSetupOf(content) : extension == ".docx" ? PageSetupOfDocx(full) : (null, null);
 				if (kind == "rtf") {
+					content = Sections.ImportRtf(content);
 					Rtf = content;
 					fileStyles = StylesFromRtf(content);
 					// (a .docx's styles as the file defines them, where AhkWord's own aren't there: else a style's look
@@ -5778,6 +5809,7 @@ public class EditorApi
 		}
 		form.Bands = bands ?? (canHaveBands ? new PageBands() : form.DefaultBands());
 		form.SetLineNumbering(numbering ?? new LineNumbering(), changesDocument: false);
+		form.SetDocumentPageSetup(pageSetup.Margins, pageSetup.Landscape);
 		form.StylesAfterLoad(fileStyles, takeLook, styledLook);
 		PageBreaks.Normalize(ed);    // (form feeds in plain text, for one)
 		MarksFollowText();
@@ -5961,8 +5993,13 @@ public class EditorApi
 	bool OwnBands => !form.Bands.SameAs(form.DefaultBands());
 
 	// RTF with the document's header, footer, page layout and line numbering, for path.
-	string WithBands(string rtf, string path) =>
-		LineNumberFormats.AddToRtf(HeaderFooter.AddToRtf(Footnotes.ToWordRtf(CrossRefs.ToWordRtf(rtf), ed.Font.Name, ed.Font.SizeInPoints, form.NoteStyle?.Size ?? 0), form.Bands, form.PageLayout(), Path.GetFileName(path), path, ed.Font.SizeInPoints), form.Numbering);
+	// (iteration 63: its section breaks as Word's sections)
+	string WithBands(string rtf, string path) {
+		var layout = form.PageLayout();
+		rtf = HeaderFooter.AddToRtf(Footnotes.ToWordRtf(CrossRefs.ToWordRtf(rtf), ed.Font.Name, ed.Font.SizeInPoints, form.NoteStyle?.Size ?? 0), form.Bands, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints);
+		rtf = Sections.ExportRtf(rtf, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints);
+		return LineNumberFormats.AddToRtf(rtf, form.Numbering);
+	}
 
 	// ---- Rich Text Format, Word and OpenDocument
 
@@ -8917,7 +8954,8 @@ sealed class DocumentPrinter : IDisposable
 	List<Sections.PageNumber>? pageNumbers;    // (each page's section and number: worked out with the page count)
 	int[]? baseMargins;                        // (the page setup's margins: left, right, top, bottom)
 
-	public DocumentPrinter(RichEditBox editor, string title, string path, Settings settings, PageBands bands, LineNumbering numbering, string? printerName) {
+	// (iteration 63: margins and landscape, the document's own page setup where it has one, else the settings')
+	public DocumentPrinter(RichEditBox editor, string title, string path, Settings settings, PageBands bands, LineNumbering numbering, string? printerName, int[]? margins = null, bool? landscape = null) {
 		this.numbering = numbering.Copy();
 		this.editor = editor;
 		this.bands = bands;
@@ -8926,9 +8964,9 @@ sealed class DocumentPrinter : IDisposable
 		this.settings = settings;
 		Document.DocumentName = title;
 		if (!string.IsNullOrEmpty(printerName)) Document.PrinterSettings.PrinterName = printerName;    // before the page settings
-		Document.DefaultPageSettings.Landscape = settings.Landscape;
+		Document.DefaultPageSettings.Landscape = landscape ?? settings.Landscape;
 		// (iteration 55) a header or footer reaching past its margin pushes the text in, as in Word
-		if (settings.Margins is { Length: 4 } m) {
+		if ((margins ?? settings.Margins) is { Length: 4 } m) {
 			int top = Math.Max(m[2], bands.HeaderReach()), bottom = Math.Max(m[3], bands.FooterReach());
 			Document.DefaultPageSettings.Margins = new Margins(m[0], m[1], top, bottom);
 			baseMargins = m.ToArray();
