@@ -786,7 +786,7 @@
         <Image Source="icons/font_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
-    <Command Name="cmdChangeCase" Id="232" LabelTitle="Change Case" Keytip="7" TooltipTitle="Change Case" TooltipDescription="UPPER CASE, lower case or Title Case.">
+    <Command Name="cmdChangeCase" Id="232" LabelTitle="Change Case" Keytip="7" TooltipTitle="Change Case" TooltipDescription="UPPER CASE, lower case, Title Case or Headline Case.">
       <Command.LargeImages>
         <Image Source="icons/changecase_32.bmp" MinDPI="96" />
         <Image Source="icons/changecase_40.bmp" MinDPI="120" />
@@ -803,6 +803,7 @@
     <Command Name="cmdCaseUpper" Id="233" LabelTitle="UPPER CASE" Keytip="U" />
     <Command Name="cmdCaseLower" Id="234" LabelTitle="lower case" Keytip="L" />
     <Command Name="cmdCaseTitle" Id="235" LabelTitle="Title Case" Keytip="T" />
+    <Command Name="cmdCaseHeadline" Id="397" LabelTitle="Headline Case" Keytip="H" TooltipTitle="Headline Case" TooltipDescription="Capitalize the words of a heading or title, but not the small words (a, the, of, and) inside it, and keep abbreviations (LLC, N.A.) and legal forms (v., a/k/a) as they are. The word lists: headline-case.txt beside the settings." />
     <Command Name="cmdUnderlineStyle" Id="236" LabelTitle="Underline Style" Keytip="UL" TooltipTitle="Underline Style" TooltipDescription="Single, double, dotted, dashed or wavy underline.">
       <Command.LargeImages>
         <Image Source="icons/underline_32.bmp" MinDPI="96" />
@@ -2045,6 +2046,7 @@
                 <Button CommandName="cmdCaseUpper" />
                 <Button CommandName="cmdCaseLower" />
                 <Button CommandName="cmdCaseTitle" />
+                <Button CommandName="cmdCaseHeadline" />
               </MenuGroup>
             </DropDownButton>
             <DropDownButton CommandName="cmdUnderlineStyle">

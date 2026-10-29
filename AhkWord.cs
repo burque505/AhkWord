@@ -29,6 +29,7 @@
 #load "rte_palette.cs"
 #load "rte_sections.cs"
 #load "rte_extensions.cs"
+#load "rte_headline.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
 // Run it with AhkWord.ahk. Iteration 63 adds to iteration 62:
 //   - Sections (rte_sections.cs): Insert > Section Break starts a new section on a new page, with its own header and
@@ -606,7 +607,7 @@ enum RibbonCommand : uint
 	NewWindow = 216, OpenInNewWindow = 217, StartPage = 215, InsertFromTemplate = 214, FillInFields = 213, GroupTemplates = 133,
 	GroupHomeMacros = 134, Close = 211, Undo = 220, Redo = 221, Paste = 222, Cut = 223,
 	Copy = 224, SelectAll = 225, Find = 226, Replace = 227, Font = 230, FontDialog = 231,
-	ChangeCase = 232, CaseUpper = 233, CaseLower = 234, CaseTitle = 235, UnderlineStyle = 236, UnderlineSingle = 237,
+	ChangeCase = 232, CaseUpper = 233, CaseLower = 234, CaseTitle = 235, CaseHeadline = 397, UnderlineStyle = 236, UnderlineSingle = 237,
 	UnderlineDouble = 238, UnderlineDotted = 239, UnderlineDashed = 240, UnderlineWavy = 241, Bullets = 250, Numbering = 251,
 	Legal = 252, Outdent = 253, Indent = 254, AlignLeft = 255, AlignCenter = 256, AlignRight = 257,
 	Justify = 258, LineSpacing = 360, LineSpacing10 = 361, LineSpacing115 = 362, LineSpacing150 = 363, LineSpacing200 = 364,
@@ -1068,7 +1069,7 @@ class WriterForm : Form
 		Shortcut(Keys.Control | Keys.OemCloseBrackets, "Increase font size", () => api.IncreaseFontSize(), M("IncreaseFontSize"));
 		Shortcut(Keys.Control | Keys.OemOpenBrackets, "Decrease font size", () => api.DecreaseFontSize(), M("DecreaseFontSize"));
 		Button(RibbonCommand.FontDialog, FontDialogCommand);
-		foreach (var (id, mode) in new[] { (RibbonCommand.CaseUpper, "upper"), (RibbonCommand.CaseLower, "lower"), (RibbonCommand.CaseTitle, "title") })
+		foreach (var (id, mode) in new[] { (RibbonCommand.CaseUpper, "upper"), (RibbonCommand.CaseLower, "lower"), (RibbonCommand.CaseTitle, "title"), (RibbonCommand.CaseHeadline, "headline") })
 			Button(id, () => api.ChangeCase(mode), Keys.None, M("ChangeCase", mode));
 		foreach (var (id, style) in new[] { (RibbonCommand.UnderlineSingle, UnderlineStyle.Single), (RibbonCommand.UnderlineDouble, UnderlineStyle.Double),
 			(RibbonCommand.UnderlineDotted, UnderlineStyle.Dotted), (RibbonCommand.UnderlineDashed, UnderlineStyle.Dashed), (RibbonCommand.UnderlineWavy, UnderlineStyle.Wavy) })
@@ -4891,7 +4892,7 @@ class WriterForm : Form
 		sourceCommands[RibbonCommand.AlignRight] = () => Align("right");
 		sourceCommands[RibbonCommand.Justify] = () => Align("justify");
 		sourceCommands[RibbonCommand.UnderlineSingle] = () => Wrap("<u>", "</u>");
-		foreach (var (id, mode) in new[] { (RibbonCommand.CaseUpper, "upper"), (RibbonCommand.CaseLower, "lower"), (RibbonCommand.CaseTitle, "title") })
+		foreach (var (id, mode) in new[] { (RibbonCommand.CaseUpper, "upper"), (RibbonCommand.CaseLower, "lower"), (RibbonCommand.CaseTitle, "title"), (RibbonCommand.CaseHeadline, "headline") })
 			sourceCommands[id] = () => ChangeSourceCase(mode);
 		sourceCommands[RibbonCommand.PageBreak] = () => InsertBlock("<div style=\"page-break-after: always; break-after: page\"></div>");
 		sourceCommands[RibbonCommand.DateTime] = () => sourceBox.SelectedText = DateTime.Now.ToString("f");
@@ -5105,6 +5106,7 @@ class WriterForm : Form
 		string changed = mode switch {
 			"upper" => text.ToUpper(CultureInfo.CurrentCulture),
 			"lower" => text.ToLower(CultureInfo.CurrentCulture),
+			"headline" => HeadlineCase.Apply(text),
 			_ => CultureInfo.CurrentCulture.TextInfo.ToTitleCase(text.ToLower(CultureInfo.CurrentCulture))
 		};
 		ReplaceSource(sourceBox.SelectionStart, text.Length, changed, 0, changed.Length);
@@ -7015,15 +7017,18 @@ public class EditorApi
 	public int WordCount() => Regex.Matches(CrossRefs.PlainText(ed.Text), @"[\p{L}\p{N}][\p{L}\p{N}'’\-]*").Count;    // (not the cross-references' hidden markers)
 	public int CharacterCount() => ed.TextLength;
 
-	/// Changes the case of the selection, keeping its formatting: "upper", "lower", "title", "sentence" or "toggle".
+	/// Changes the case of the selection, keeping its formatting: "upper", "lower", "title", "headline", "sentence" or
+	/// "toggle". Headline Case: small words lower case, abbreviations as written (rte_headline.cs).
 	public void ChangeCase(string mode) {
-		int type = mode.ToLowerInvariant() switch {
+		mode = mode.ToLowerInvariant();
+		int type = mode switch {
 			"upper" => tomConstants.tomUpperCase,
 			"lower" => tomConstants.tomLowerCase,
 			"title" => tomConstants.tomTitleCase,
+			"headline" => 0,
 			"sentence" => tomConstants.tomSentenceCase,
 			"toggle" => tomConstants.tomToggleCase,
-			_ => throw new ArgumentException("Case must be upper, lower, title, sentence or toggle.")
+			_ => throw new ArgumentException("Case must be upper, lower, title, headline, sentence or toggle.")
 		};
 		// (iteration 57: TOM's ChangeCase is no undo step, so Ctrl+Z undid what came before it. The new text is worked out
 		// with it while undo is held, the text put back, and then the characters that change put in as one undo step,
@@ -7033,14 +7038,17 @@ public class EditorApi
 		int start = range.Start;
 		string before = range.Text ?? "", after;
 		if (before.Length == 0) return;
-		doc.Undo(-9999995);    // tomSuspend
-		try {
-			range.ChangeCase(type);
-			after = range.Text ?? "";
-			if (after.Length != before.Length) return;    // (a letter that became two: as TOM made it, without an undo step)
-			PutText(doc, start, after, before);    // (back as it was)
-		} finally {
-			doc.Undo(-9999994);    // tomResume
+		if (mode == "headline") after = HeadlineCase.Apply(before, HiddenMask(start, start + before.Length));
+		else {
+			doc.Undo(-9999995);    // tomSuspend
+			try {
+				range.ChangeCase(type);
+				after = range.Text ?? "";
+				if (after.Length != before.Length) return;    // (a letter that became two: as TOM made it, without an undo step)
+				PutText(doc, start, after, before);    // (back as it was)
+			} finally {
+				doc.Undo(-9999994);    // tomResume
+			}
 		}
 		doc.BeginEditCollection();
 		try { PutText(doc, start, before, after, skipHidden: true); }
@@ -7058,6 +7066,19 @@ public class EditorApi
 			if (skipHidden && range.Font.Hidden == tomConstants.tomTrue) continue;
 			range.Text = want[i].ToString();
 		}
+	}
+
+	// Which characters from start to end are hidden text (by runs of the same formatting, TOM tomCharFormat).
+	bool[] HiddenMask(int start, int end) {
+		var mask = new bool[end - start];
+		var run = ed.TextDocument.Range2(start, start);
+		while (run.Start < end) {
+			if (run.MoveEnd(tomConstants.tomCharFormat, 1) == 0 || run.End <= run.Start) break;
+			if (run.Font.Hidden == tomConstants.tomTrue)
+				for (int i = Math.Max(run.Start, start); i < Math.Min(run.End, end); i++) mask[i - start] = true;
+			run.SetRange(run.End, run.End);
+		}
+		return mask;
 	}
 
 	// ---- Formatting (these wrap RichEditBox methods of the same name)

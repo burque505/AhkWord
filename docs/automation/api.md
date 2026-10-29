@@ -1149,7 +1149,9 @@ Rte.ChangeCase(mode)
 
 *mode*: text
 
-Changes the case of the selection, keeping its formatting: "upper", "lower", "title", "sentence" or "toggle".
+Changes the case of the selection, keeping its formatting: "upper", "lower", "title", "headline", "sentence" or "toggle".
+
+"headline" (Headline Case) capitalizes the words but not the small words inside a line (a, the, of, and), and keeps abbreviations (LLC, N.A.) and legal forms (v., a/k/a) as they are. Its word lists are in headline-case.txt beside the settings, to be edited.
 
 ### CharacterCount
 
