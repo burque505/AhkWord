@@ -124,6 +124,9 @@ sealed class PageOverview : ScrollableControl
 		}
 		int rows = (pages.Count + Columns - 1) / Columns;
 		AutoScrollMinSize = new Size(Math.Max(width, left + rowWidth + gap), gap + rows * (pageHeight + label + gap));
+		// (iteration 63: the scroll range now: set during a layout, as when the view is first shown or resized, it stayed
+		// the old one, and the last rows couldn't be scrolled to)
+		AdjustFormScrollbars(true);
 	}
 
 	void ScrollTo(int page) {
