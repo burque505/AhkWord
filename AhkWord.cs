@@ -3530,10 +3530,6 @@ class WriterForm : Form
 				pageView.Closing += () => ShowPages(false);
 				sourceSplit.Parent!.Controls.Add(pageView);
 			}
-			// (iteration 63: Page Width and One Page unchecked now, not after the pages are drawn, which takes a while: both
-			// looked checked meanwhile)
-			foreach (var id in new[] { RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage })
-				if (toggleButtons.TryGetValue(id, out var button) && button.BooleanValue) button.BooleanValue = false;
 			Cursor = Cursors.WaitCursor;
 			try { RefreshPages(); } finally { Cursor = Cursors.Default; }
 			pageView.Visible = true;
