@@ -1191,6 +1191,15 @@ Rte.InsertText(text)
 
 Inserts text at the caret, replacing the selection; the caret ends up after the new text.
 
+### PastePlainText
+
+```autohotkey
+Rte.PastePlainText()
+```
+
+Pastes the clipboard's text only, taking the formatting where it lands, as Ctrl+Shift+V does (iteration 65): a web
+page's or a chat's fonts, sizes, spacing and rules stay behind. One undo step.
+
 ### Replace
 
 ```autohotkey

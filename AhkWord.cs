@@ -31,7 +31,11 @@
 #load "rte_extensions.cs"
 #load "rte_headline.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 63 adds to iteration 62:
+// Run it with AhkWord.ahk. Iteration 65 adds to iteration 64:
+//   - Paste as Plain Text (Ctrl+Shift+V, the right-click menu, the command palette, PastePlainText for macros): the
+//     clipboard's text only, taking the formatting where it lands, so a web page's or a chat's fonts, spacing and
+//     rules stay behind.
+// Iteration 64 added Change Case > Headline Case (rte_headline.cs). Iteration 63 added to iteration 62:
 //   - Sections (rte_sections.cs): Insert > Section Break starts a new section on a new page, with its own header and
 //     footer (at first the section before's, "same as previous") and its page numbers starting again (at 1, or a number
 //     of its own); File > Header and Footer edits the caret's section. Printing, Print Preview, PDF and the page view
@@ -684,7 +688,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 63;    // (the About box; make_version.ps1)
+	public const int Iteration = 65;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1050,6 +1054,8 @@ class WriterForm : Form
 		Shortcut(Keys.Shift | Keys.Delete, "Cut", cut, M("Cut"));
 		Shortcut(Keys.Control | Keys.Insert, "Copy", copy, M("Copy"));
 		Shortcut(Keys.Shift | Keys.Insert, "Paste", paste, M("Paste"));
+		pastePlainAction = OnText(PastePlainText, () => sourceBox.Paste(DataFormats.GetFormat(DataFormats.UnicodeText)));
+		Shortcut(Keys.Control | Keys.Shift | Keys.V, "Paste as Plain Text", pastePlainAction, M("PastePlainText"));
 		Button(RibbonCommand.SelectAll, OnText(Editor.SelectAll, sourceBox.SelectAll), Keys.Control | Keys.A, M("SelectAll"));
 		Button(RibbonCommand.Find, () => ShowFind(false), Keys.Control | Keys.F);
 		Button(RibbonCommand.Replace, () => ShowFind(true), Keys.Control | Keys.H);
@@ -1293,6 +1299,8 @@ class WriterForm : Form
 			}
 			items.Add(new PaletteItem(name, label?.Where ?? "", label?.Tooltip ?? "", keysOf.TryGetValue(id, out var k) ? k : "", command.Enabled, command.Run, "cmd:" + id));
 		}
+		items.Add(new PaletteItem("Paste as Plain Text", "Home > Clipboard", "The clipboard's text only, taking the formatting where it lands (a web page's or a chat's fonts and spacing left behind).",
+			ShortcutText(Keys.Control | Keys.Shift | Keys.V), () => true, () => Run(pastePlainAction, M("PastePlainText")), "paste:plain"));
 		// (the Font block is one ribbon control, not buttons: its commands, as their keys run them, in the source views too)
 		foreach (var (fontName, keys, run, call) in new (string, Keys, Action, string)[] {
 			("Bold", Keys.Control | Keys.B, api.ToggleBold, M("ToggleBold")), ("Italic", Keys.Control | Keys.I, api.ToggleItalic, M("ToggleItalic")),
@@ -3651,6 +3659,28 @@ class WriterForm : Form
 	// leave the user's clipboard alone).
 	void PasteText() => PasteText(Editor.Paste);
 
+	// Paste as Plain Text (iteration 65; Ctrl+Shift+V, as Word and browsers have it): the clipboard's text only, taking
+	// the formatting where it lands (a web page's or a chat's fonts, sizes, spacing and rules left behind); numbered
+	// paragraphs join the numbering where they land; one undo step. RichEdit's own paste of the clipboard's text (as
+	// Ctrl+V's is RichEdit's own); paste: tests give one of their own, so as to leave the user's clipboard alone.
+	internal void PastePlainText() => PastePlainText(PlainPasteForTests ?? (() => Editor.Paste(DataFormats.GetFormat(DataFormats.UnicodeText))));
+	internal Action? PlainPasteForTests;
+
+	internal void PastePlainText(Action paste) {
+		var doc = Editor.TextDocument;
+		doc.BeginEditCollection();
+		try {
+			BeforeNumber();
+			int start = doc.Selection2.Start;
+			paste();
+			StyleEngine.JoinPasted(doc, Styles, start, doc.Selection2.Start);
+		} finally {
+			doc.EndEditCollection();
+		}
+		Editor.ScrollToCaret();
+		RefreshOutline();
+	}
+
 	internal void PasteText(Action paste) {
 		var doc = Editor.TextDocument;
 		bool added;
@@ -3760,7 +3790,7 @@ class WriterForm : Form
 	// ---------------------------------------------------------------- Iteration 5: spelling
 
 	// The Home tab's Cut, Copy and Paste (styles kept, the page view's gaps left out), for the right-click menu too.
-	Action cutAction = () => { }, copyAction = () => { }, pasteAction = () => { };
+	Action cutAction = () => { }, copyAction = () => { }, pasteAction = () => { }, pastePlainAction = () => { };
 
 	// The right-click menu, as Word's: spelling suggestions on a misspelled word; Cut, Copy and Paste; the footnote's
 	// note on a footnote; Font and Paragraph; in a table, the table commands (which then act on the cell clicked).
@@ -3808,6 +3838,7 @@ class WriterForm : Form
 		menu.Items.Add(new ToolStripMenuItem("Cu&t", null, (s, e) => Run(cutAction, M("Cut"))) { Enabled = selection, ShortcutKeyDisplayString = "Ctrl+X" });
 		menu.Items.Add(new ToolStripMenuItem("&Copy", null, (s, e) => Run(copyAction, M("Copy"))) { Enabled = selection, ShortcutKeyDisplayString = "Ctrl+C" });
 		menu.Items.Add(new ToolStripMenuItem("&Paste", null, (s, e) => Run(pasteAction, M("Paste"))) { ShortcutKeyDisplayString = "Ctrl+V" });
+		menu.Items.Add(new ToolStripMenuItem("Paste as Plain Te&xt", null, (s, e) => Run(pastePlainAction, M("PastePlainText"))) { ShortcutKeyDisplayString = "Ctrl+Shift+V" });
 		menu.Items.Add(new ToolStripSeparator());
 		void Add(string text, Action action, string macro, string keys = "") =>
 			menu.Items.Add(new ToolStripMenuItem(text, null, (s, e) => Run(action, macro)) { ShortcutKeyDisplayString = keys });
@@ -6952,6 +6983,9 @@ public class EditorApi
 	}
 
 	// ---- Text and selection
+
+	/// Pastes the clipboard's text only (iteration 65), taking the formatting where it lands, as Ctrl+Shift+V does.
+	public void PastePlainText() => form.PastePlainText();
 
 	/// Inserts text at the caret, replacing the selection; the caret ends up after the new text.
 	public void InsertText(string text) {

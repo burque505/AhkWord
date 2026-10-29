@@ -125,15 +125,26 @@ public sealed class PageGaps
 		return range.Start;
 	}
 
-	List<int> Neighbours(int start) {
+	// A paragraph gap's paragraph and those next to it; and (iteration 65) on from them while they are spaced as the gap
+	// (applied): several paragraphs pasted or put in at once at the gap's paragraph each got its space, not only one.
+	List<int> Neighbours(int start, float applied) {
 		var doc = editor.TextDocument;
 		int storyEnd = doc.Range2(0, 0).StoryLength;
 		var starts = new List<int>();
 		if (start > 0) starts.Add(ParagraphStart(start - 1));
 		starts.Add(start);
-		var own = doc.Range2(start, start);
-		own.Expand(4);
-		if (own.End < storyEnd - 1) starts.Add(own.End);
+		int? Next(int at) {
+			var para = doc.Range2(at, at);
+			para.Expand(4);
+			return para.End < storyEnd - 1 && para.End > at ? para.End : null;
+		}
+		if (Next(start) is int next) starts.Add(next);
+		while (starts[0] > 0 && Spaced(doc.Range2(starts[0], starts[0]).Para, applied)) {
+			int before = ParagraphStart(starts[0] - 1);
+			if (before >= starts[0]) break;
+			starts.Insert(0, before);
+		}
+		while (Spaced(doc.Range2(starts[^1], starts[^1]).Para, applied) && Next(starts[^1]) is int after) starts.Add(after);
 		return starts;
 	}
 
@@ -181,7 +192,7 @@ public sealed class PageGaps
 			int at = gap.Track is { } track ? Math.Min(track.Start, Math.Max(0, storyEnd - 1)) : gap.Next;
 			int own = ParagraphStart(at);
 			bool here = false;
-			foreach (int start in Neighbours(own)) {
+			foreach (int start in Neighbours(own, gap.Applied)) {
 				var para = doc.Range2(start, start).Para;
 				if (!Spaced(para, gap.Applied)) continue;
 				para.SpaceBefore = gap.Original;
@@ -367,7 +378,7 @@ public sealed class PageGaps
 			var gap = gaps[i];
 			if (!gap.Paragraph || gap.Track is not { } track) continue;
 			int own = ParagraphStart(Math.Min(track.Start, Math.Max(0, storyEnd - 1)));
-			var spaced = Neighbours(own).Where(s => Spaced(doc.Range2(s, s).Para, gap.Applied)).ToList();
+			var spaced = Neighbours(own, gap.Applied).Where(s => Spaced(doc.Range2(s, s).Para, gap.Applied)).ToList();
 			if (spaced.Count == 0) continue;
 			if (check) { if (spaced.Count > 1) return true; continue; }
 			foreach (int other in spaced.Skip(1)) { doc.Range2(other, other).Para.SpaceBefore = gap.Original; changed = true; }
