@@ -78,13 +78,14 @@ public static class LineNumberFormats
 
 	// ================================================================ RTF
 
-	/// RTF with the line numbering in its section (after HeaderFooter.AddToRtf, which starts one with \sectd).
+	/// RTF with the line numbering in its sections, all of them: it is the whole document's (after HeaderFooter.AddToRtf,
+	/// which starts one with \sectd, and Sections.ExportRtf).
 	public static string AddToRtf(string rtf, LineNumbering numbering) {
 		if (!numbering.On) return rtf;
 		string words = $@"\linemod{numbering.CountBy}" + (numbering.Start != 1 ? $@"\linestarts{numbering.Start}" : "")
 			+ (numbering.Distance > 0 ? $@"\linex{numbering.Distance}" : "") + (numbering.Mode == LineNumbering.Modes.EachPage ? @"\lineppage" : @"\linecont");
-		var section = Regex.Match(rtf, @"\\sectd(?![a-z])");
-		if (section.Success) return rtf.Insert(section.Index + section.Length, words);
+		var sections = Regex.Matches(rtf, @"\\sectd(?![a-z])");
+		if (sections.Count > 0) return Regex.Replace(rtf, @"\\sectd(?![a-z])", m => m.Value + words);
 		var paragraph = Regex.Match(rtf, @"\\pard(?![a-z])");
 		return paragraph.Success ? rtf.Insert(paragraph.Index, @"\sectd" + words + " ") : rtf;
 	}
@@ -110,18 +111,19 @@ public static class LineNumberFormats
 		typeof(W.PrinterSettingsReference), typeof(W.SectionPropertiesChange)
 	};
 
-	/// Sets a .docx's line numbering (in its last section, the whole document's for AhkWord). Word's w:start is the
+	/// Sets a .docx's line numbering, in all its sections: it is the whole document's for AhkWord. Word's w:start is the
 	/// first number less one.
 	public static void AddToDocx(string path, LineNumbering numbering) {
 		using var package = WordprocessingDocument.Open(path, true);
 		var body = package.MainDocumentPart!.Document.Body!;
-		var section = body.Elements<W.SectionProperties>().LastOrDefault();
-		if (section == null) {
+		var sections = body.Descendants<W.SectionProperties>().ToList();
+		if (sections.Count == 0) {
 			if (!numbering.On) return;
-			section = body.AppendChild(new W.SectionProperties());
+			sections.Add(body.AppendChild(new W.SectionProperties()));
 		}
-		section.RemoveAllChildren<W.LineNumberType>();
-		if (numbering.On) {
+		foreach (var section in sections) {
+			section.RemoveAllChildren<W.LineNumberType>();
+			if (!numbering.On) continue;
 			var element = new W.LineNumberType {
 				CountBy = (short)numbering.CountBy,
 				Restart = numbering.Mode == LineNumbering.Modes.EachPage ? W.LineNumberRestartValues.NewPage : W.LineNumberRestartValues.Continuous
@@ -134,14 +136,13 @@ public static class LineNumberFormats
 		package.MainDocumentPart.Document.Save();
 	}
 
-	/// The line numbering of a .docx (null: none). Without w:restart it restarts on each page (the schema's default, and
-	/// what Word writes for that).
+	/// The line numbering of a .docx (null: none): the first section that has any, for the whole document. Without
+	/// w:restart it restarts on each page (the schema's default, and what Word writes for that).
 	public static LineNumbering? FromDocx(string path) {
 		try {
 			using var package = WordprocessingDocument.Open(path, false);
 			var body = package.MainDocumentPart?.Document.Body;
-			var section = body?.Elements<W.SectionProperties>().LastOrDefault() ?? body?.Descendants<W.SectionProperties>().LastOrDefault();
-			var element = section?.GetFirstChild<W.LineNumberType>();
+			var element = body?.Descendants<W.SectionProperties>().Select(s => s.GetFirstChild<W.LineNumberType>()).FirstOrDefault(n => n != null);
 			if (element?.CountBy?.Value is not short countBy || countBy < 1) return null;
 			return new LineNumbering {
 				Mode = element.Restart == null || element.Restart.Value == W.LineNumberRestartValues.NewPage ? LineNumbering.Modes.EachPage : LineNumbering.Modes.Continuous,

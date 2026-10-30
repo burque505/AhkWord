@@ -155,6 +155,30 @@ public static class Sections
 		range.Font.Hidden = tomConstants.tomTrue;
 	}
 
+	static readonly Regex DocxMark = new(@"\[\[docsect=(\d+)\]\]");
+
+	/// The built-in reader's marks of where a .docx's sections end (CrossRefs.MarkedDocx) made section breaks, with the
+	/// settings of the sections after them (HeaderFooter.SectionsFromDocx; null: only the mark goes).
+	public static void FromDocxMarkers(RichEditBox editor, List<SectionSettings?> settings) {
+		var doc = editor.TextDocument;
+		foreach (var m in DocxMark.Matches(Story(doc)).Cast<Match>().Reverse()) {
+			doc.Range2(m.Index, m.Index + m.Length).Text = "";
+			int k = int.Parse(m.Groups[1].Value);
+			if (k >= settings.Count || settings[k] is not { } section) continue;
+			var paragraph = doc.Range2(m.Index, m.Index);
+			paragraph.Expand(tomConstants.tomParagraph);
+			int at = paragraph.End;
+			if ((paragraph.Text ?? "").Trim('\r', '\n') == "") {    // (Word's break in a paragraph of its own: this break takes its place)
+				at = paragraph.Start;
+				doc.Range2(at, at + 1).Text = "";
+			}
+			doc.Selection2.SetRange(at, at);
+			try { Insert(editor, section); }
+			catch (InvalidOperationException) { }    // (in a table: left out)
+		}
+		doc.Selection2.SetRange(0, 0);
+	}
+
 	/// The section break that starts the section a position is in (null: the first section, the document's own).
 	public static Break? BreakFor(ITextDocument2 doc, int position) => Breaks(doc).LastOrDefault(b => b.SectionStart <= position);
 
@@ -233,7 +257,9 @@ public static class Sections
 	/// RTF with Word's sections as AhkWord's: each \sect of its text a section break (a page break, its marker holding the
 	/// section after it: the header and footer the file gives that section, or the section before's when it gives none, as
 	/// Word links them; its page numbers starting again, \pgnrestart, at \pgnstarts). A marker AhkWord wrote in front of a
-	/// \sect is its exact settings. (The first section's header and footer are the document's: HeaderFooter.FromRtf.)
+	/// \sect is its exact settings. A continuous section (\sbknone) starts no page, so no break: its \sect only ends its
+	/// paragraph, and a header or footer of its own goes to the next break. (The first section's header and footer are the
+	/// document's: HeaderFooter.FromRtf.)
 	public static string ImportRtf(string rtf) {
 		var sects = SectsIn(rtf);
 		int body = HeaderFooter.BodyStart(rtf);
@@ -249,18 +275,27 @@ public static class Sections
 			if (!Regex.IsMatch(segment, @"\{\s*\\(header|footer)[lrf]?(?![a-zA-Z])")) return null;
 			return HeaderFooter.FromRtf(head + segment + "}");
 		}
+		// a section's own properties, before its header and footer and its text
+		string PropertiesOf(int k) {
+			string segment = rtf[starts[k]..Math.Max(starts[k], ends[k])];
+			var cut = Regex.Match(segment, @"\{\s*\\(header|footer)|\\pard(?![a-zA-Z])");
+			return cut.Success ? segment[..cut.Index] : segment[..Math.Min(segment.Length, 2000)];
+		}
+		bool Continuous(int k) => Regex.IsMatch(PropertiesOf(k), @"\\sbknone(?![a-zA-Z])");
 		var result = new System.Text.StringBuilder(rtf);
 		for (int k = sects.Count - 1; k >= 0; k--) {
 			var (start, length) = sects[k];
 			string segment = rtf[starts[k + 1]..Math.Max(starts[k + 1], ends[k + 1])];
-			var cut = Regex.Match(segment, @"\{\s*\\(header|footer)|\\pard(?![a-zA-Z])");
-			string properties = cut.Success ? segment[..cut.Index] : segment[..Math.Min(segment.Length, 2000)];
+			string properties = PropertiesOf(k + 1);
 			var restart = Regex.IsMatch(properties, @"\\pgnrestart(?![a-zA-Z])");
 			var at = Regex.Match(properties, @"\\pgnstarts(\d+)");
 			var bands = BandsOf(k + 1);
+			bool continuous = Continuous(k + 1);
+			// (a break after continuous sections takes the last of their own headers and footers, if it has none itself)
+			if (!continuous) for (int j = k; bands == null && j > 0 && Continuous(j); j--) bands = BandsOf(j);
 			var settings = new SectionSettings { Bands = bands, Same = bands == null, Restart = restart, Start = at.Success ? int.Parse(at.Groups[1].Value) : 1 };
 			// (the section's own header and footer groups out of its text: they are its marker's now)
-			if (bands != null)
+			if (BandsOf(k + 1) != null)
 				foreach (var (groupStart, groupLength) in BandGroupsIn(rtf, starts[k + 1], starts[k + 1] + (Regex.Match(segment, @"\\pard(?![a-zA-Z])") is { Success: true } pard ? pard.Index : segment.Length)).AsEnumerable().Reverse())
 					result.Remove(groupStart, groupLength);
 			// AhkWord's own marker in front of the \sect: its exact settings (and taken out, to go in again as the break's)
@@ -274,7 +309,7 @@ public static class Sections
 			}
 			// (Word's \sect ends its paragraph too: the break a paragraph of its own, as AhkWord's are)
 			bool ended = EndsParagraph.IsMatch(rtf[Math.Max(0, start - 400)..start]);
-			result.Remove(start, length).Insert(start, (ended ? "" : @"\par ") + @"{\v " + RtfEscape(MarkerFor(settings)) + @"}\page\par ");
+			result.Remove(start, length).Insert(start, (ended ? "" : @"\par ") + (continuous ? "" : @"{\v " + RtfEscape(MarkerFor(settings)) + @"}\page\par "));
 		}
 		return result.ToString();
 	}

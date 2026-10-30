@@ -875,7 +875,45 @@ public static class HeaderFooter
 				if (ReadCustomXml(custom) is { } json) exact = PageBands.FromJson(json);
 			// (iteration 63) the first section's: the first w:sectPr (the body's own is the last section's, a paragraph's
 			// those before it)
-			var section = main.Document.Body?.Descendants<W.SectionProperties>().FirstOrDefault();
+			return OfSection(main, exact, main.Document.Body?.Descendants<W.SectionProperties>().FirstOrDefault());
+		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) {
+			return null;
+		}
+	}
+
+	/// The sections after a .docx's first, in order, as section breaks: a section with no header or footer of its own keeps
+	/// the one before's, as Word links them; w:pgNumType's start restarts its page numbers. Null for a section that
+	/// doesn't start a new page (continuous). Empty if the file can't be read.
+	public static List<SectionSettings?> SectionsFromDocx(string path) {
+		var result = new List<SectionSettings?>();
+		try {
+			using var package = WordprocessingDocument.Open(path, false);
+			var main = package.MainDocumentPart!;
+			var sections = main.Document.Body?.Descendants<W.SectionProperties>().ToList() ?? new();
+			if (sections.Count < 2) return result;
+			var current = OfSection(main, null, sections[0]) ?? new PageBands();
+			bool own = false;
+			static bool Has<TRef>(W.SectionProperties s) where TRef : W.HeaderFooterReferenceType => s.Elements<TRef>().Any(r => r.Type == null || r.Type.Value == W.HeaderFooterValues.Default);
+			foreach (var section in sections.Skip(1)) {
+				bool header = Has<W.HeaderReference>(section), footer = Has<W.FooterReference>(section);
+				if (header || footer) {
+					var bands = OfSection(main, null, section) ?? new PageBands();
+					if (!header) (bands.ShowHeader, bands.Header, bands.HeaderLine) = (current.ShowHeader, current.Header, current.HeaderLine);
+					if (!footer) (bands.ShowFooter, bands.Footer, bands.FooterLine) = (current.ShowFooter, current.Footer, current.FooterLine);
+					current = bands;
+					own = true;
+				}
+				if (section.GetFirstChild<W.SectionType>()?.Val?.Value == W.SectionMarkValues.Continuous) { result.Add(null); continue; }
+				uint? start = section.GetFirstChild<W.PageNumberType>()?.Start?.Value is int number ? (uint)number : null;
+				result.Add(new SectionSettings { Same = !own, Bands = own ? Sections.CopyBands(current) : null, Restart = start != null, Start = (int)(start ?? 1) });
+				own = false;
+			}
+		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) { result.Clear(); }
+		return result;
+	}
+
+	// a section's header and footer in a .docx (exact: AhkWord's own copy of them, if any)
+	static PageBands? OfSection(MainDocumentPart main, PageBands? exact, W.SectionProperties? section) {
 			string[]? Read<TRef>(Func<string, OpenXmlPart?> part, bool firstPage = false) where TRef : W.HeaderFooterReferenceType {
 				var references = section?.Elements<TRef>().ToList() ?? new List<TRef>();
 				var reference = firstPage ? references.FirstOrDefault(r => r.Type?.Value == W.HeaderFooterValues.First)
@@ -909,9 +947,6 @@ public static class HeaderFooter
 				if (margin.Footer?.Value is uint f) bands.FooterDistance = Distance((int)f);
 			}
 			return bands;
-		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) {
-			return null;
-		}
 	}
 
 	// A paragraph's text, with tabs and fields ({page} ...), and its alignment.

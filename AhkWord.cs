@@ -5813,6 +5813,7 @@ public class EditorApi
 				}
 				else {
 					SetHtml(content);
+					if (extension == ".docx" && converter == OfficeConverters.OpenXml) Sections.FromDocxMarkers(ed, HeaderFooter.SectionsFromDocx(full));
 					// (the built-in reader's: the .docx's styles, DocxStyles; its text has its own look already, every run's
 					// font as the file has it, which a style's look mustn't take over)
 					fileStyles = StyleHtml.FromMeta(content);

@@ -383,7 +383,11 @@ public static class CrossRefs
 			foreach (var bookmark in body.Descendants<W.BookmarkStart>().ToList())
 				if (bookmark.Name?.Value is { } name && names.Contains(name)) bookmark.InsertAfterSelf(Marker($"[[xref:{name}]]"));
 			bool notes = Footnotes.MarkDocx(package);    // (iteration 51: its footnotes too)
-			any = names.Count > 0 || notes || toc;
+			// (where a section ends, for the built-in reader: Sections.FromDocxMarkers makes them section breaks)
+			int section = 0;
+			foreach (var ends in body.Descendants<W.Paragraph>().Where(p => p.ParagraphProperties?.GetFirstChild<W.SectionProperties>() != null).ToList())
+				ends.Append(Marker($"[[docsect={section++}]]"));
+			any = names.Count > 0 || notes || toc || section > 0;
 			if (any) package.MainDocumentPart!.Document.Save();
 		}
 		return any ? copy : path;
