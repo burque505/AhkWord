@@ -1554,16 +1554,20 @@ class WriterForm : Form
 
 	// the document filled in by the extension's template language, as one undo step; false if it isn't in it
 	bool RenderDocument(bool ask) {
-		if (RenderTemplate?.Invoke(Editor.Rtf, ask) is not string rendered) return false;
+		// (the page view's gaps left out: they would become the document's own space and raised lines, in the wrong places
+		// once the text had moved)
+		if (RenderTemplate?.Invoke(WithoutGaps(() => Editor.Rtf), ask) is not string rendered) return false;
 		var doc = Editor.TextDocument;
-		doc.BeginEditCollection();
-		try {
-			Editor.SelectAll();
-			Editor.SelectedRtf = rendered;
-			Editor.Select(0, 0);
-		} finally {
-			doc.EndEditCollection();
-		}
+		WithoutGapsChanging(() => {
+			doc.BeginEditCollection();
+			try {
+				Editor.SelectAll();
+				Editor.SelectedRtf = rendered;
+				Editor.Select(0, 0);
+			} finally {
+				doc.EndEditCollection();
+			}
+		});
 		return true;
 	}
 
