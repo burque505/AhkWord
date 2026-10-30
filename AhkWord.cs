@@ -31,7 +31,10 @@
 #load "rte_extensions.cs"
 #load "rte_headline.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
-// Run it with AhkWord.ahk. Iteration 65 adds to iteration 64:
+// Run it with AhkWord.ahk. Iteration 66 adds to iteration 65:
+//   - Print Layout: a document whose first paragraphs are hidden (Word puts floating shapes' anchors there) no longer has
+//     its first lines painted over by the top margin: page 1's gap goes on the first paragraph that shows.
+// Iteration 65 added to iteration 64:
 //   - Paste as Plain Text (Ctrl+Shift+V, the right-click menu, the command palette, PastePlainText for macros): the
 //     clipboard's text only, taking the formatting where it lands, so a web page's or a chat's fonts, spacing and
 //     rules stay behind.
@@ -688,7 +691,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 65;    // (the About box; make_version.ps1)
+	public const int Iteration = 66;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;

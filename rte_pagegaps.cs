@@ -214,6 +214,18 @@ public sealed class PageGaps
 	/// Puts back the gaps Remove took out, as they were (the text in between unchanged).
 	public void Reapply() => Put(removed);
 
+	// The first paragraph from one on that shows: one all hidden (Word's anchors for floating shapes can be) takes no room,
+	// so space before it moves nothing, and the sheet drawn for the gap would cover the lines after it.
+	int FirstShown(int at, int storyEnd) {
+		var doc = editor.TextDocument;
+		while (true) {
+			var para = doc.Range2(at, at);
+			para.Expand(4);    // tomParagraph
+			if (para.Font.Hidden != -1 || para.End <= at || para.End >= storyEnd - 1) return at;    // (-1: tomTrue, all of it)
+			at = para.End;
+		}
+	}
+
 	// Raises the line gaps' lines and spaces the paragraph gaps' paragraphs.
 	void Put(List<Gap> gaps) {
 		var doc = editor.TextDocument;
@@ -223,10 +235,11 @@ public sealed class PageGaps
 		foreach (var gap in gaps) {
 			if (gap.Paragraph) {
 				if (gap.Next >= storyEnd || (gap.Next > 0 && story[gap.Next - 1] != '\r')) continue;    // (no longer a paragraph's start)
-				var para = doc.Range2(gap.Next, gap.Next).Para;
+				int at = FirstShown(gap.Next, storyEnd);
+				var para = doc.Range2(at, at).Para;
 				float original = Math.Max(0, para.SpaceBefore);
 				para.SpaceBefore = original + gap.Height;
-				put.Add(gap with { Original = original, Applied = para.SpaceBefore, Track = doc.Range2(gap.Next, gap.Next) });
+				put.Add(gap with { Next = at, Original = original, Applied = para.SpaceBefore, Track = doc.Range2(at, at) });
 			}
 			else if (gap.LineEnd <= storyEnd && gap.LineEnd > gap.LineStart && !TouchesTable(story, gap.LineStart, gap.LineEnd)) {
 				doc.Range2(gap.LineStart, gap.LineEnd).Font.Position = gap.Raise;
