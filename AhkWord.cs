@@ -628,7 +628,7 @@ enum RibbonCommand : uint
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
 	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
@@ -691,7 +691,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 66;    // (the About box; make_version.ps1)
+	public const int Iteration = 67;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1158,6 +1158,7 @@ class WriterForm : Form
 		// Insert
 		Button(RibbonCommand.PageBreak, () => api.InsertPageBreak(), Keys.None, M("InsertPageBreak"));    // Ctrl+Enter: ProcessCmdKey
 		Button(RibbonCommand.SectionBreak, () => api.InsertSectionBreak(), Keys.None, M("InsertSectionBreak"));    // (iteration 63)
+		Button(RibbonCommand.ContinuousBreak, () => api.InsertContinuousBreak(), Keys.None, M("InsertContinuousBreak"));    // (iteration 67)
 		Button(RibbonCommand.Table, InsertTableDialog);
 		Button(RibbonCommand.Picture, InsertImageDialog);
 		Button(RibbonCommand.Thumbnail, InsertThumbnailDialog);
@@ -1172,6 +1173,7 @@ class WriterForm : Form
 
 		// Layout, Review
 		Button(RibbonCommand.HeaderFooter, HeaderFooterCommand);
+		Button(RibbonCommand.Columns, ColumnsCommand);    // (iteration 67)
 		foreach (var (id, mode) in new[] { (RibbonCommand.LineNumbersNone, LineNumbering.Modes.None), (RibbonCommand.LineNumbersContinuous, LineNumbering.Modes.Continuous),
 			(RibbonCommand.LineNumbersEachPage, LineNumbering.Modes.EachPage) })
 			Toggle(id, () => api.LineNumbers = LineNumbering.ModeName(mode), Keys.None, M("LineNumbers", LineNumbering.ModeName(mode)));
@@ -2559,7 +2561,7 @@ class WriterForm : Form
 		if (gaps) { QuietGaps(pageGaps.Remove); gapsOut = true; }
 		try {
 			var printer = new DocumentPrinter(Editor, DocumentName, FileName ?? "", Settings, Bands, Numbering, printerName, PageMargins, PageLandscape) {
-				NoteStyle = NoteStyle, PageSections = Sections.Resolve(Editor.TextDocument, Bands)    // (iteration 63)
+				NoteStyle = NoteStyle, PageSections = Sections.Resolve(Editor.TextDocument, Bands, DocumentColumns)    // (iteration 63)
 			};
 			if (gaps) printer.Disposed += () => { try { gapsOut = false; QuietGaps(pageGaps.Reapply); } finally { held?.Dispose(); } };
 			return printer;
@@ -3029,14 +3031,15 @@ class WriterForm : Form
 	/// file gave it, or Page Setup did (null: none; Page Setup's last, the settings', then).
 	internal int[]? DocumentMargins;
 	internal bool? DocumentLandscape;
+	internal SectionColumns? DocumentColumns;    // (iteration 67: the first section's columns; null: one)
 	internal int[] PageMargins => DocumentMargins ?? Settings.Margins;
 	internal bool PageLandscape => DocumentLandscape ?? Settings.Landscape;
 
 	/// The document's own page setup changed (opened, new): its pages laid out again if they are different now.
-	internal void SetDocumentPageSetup(int[]? margins, bool? landscape) {
-		var (oldMargins, oldLandscape) = (PageMargins, PageLandscape);
-		(DocumentMargins, DocumentLandscape) = (margins, landscape);
-		if (PageMargins.SequenceEqual(oldMargins) && PageLandscape == oldLandscape) return;
+	internal void SetDocumentPageSetup(int[]? margins, bool? landscape, SectionColumns? columns = null) {
+		var (oldMargins, oldLandscape, oldColumns) = (PageMargins, PageLandscape, DocumentColumns);
+		(DocumentMargins, DocumentLandscape, DocumentColumns) = (margins, landscape, columns);
+		if (PageMargins.SequenceEqual(oldMargins) && PageLandscape == oldLandscape && columns == oldColumns) return;
 		pageStartsStale = bandPagesStale = true;
 		ApplyPrintLayout();
 	}
@@ -3055,7 +3058,7 @@ class WriterForm : Form
 		if (PageLandscape) (width, height) = (height, width);
 		int[] m = PageMargins is { Length: 4 } margins ? margins : new[] { 100, 100, 100, 100 };
 		static int Twips(int hundredths) => (int)Math.Round(hundredths * 14.4);
-		return new PageLayout(Twips(width), Twips(height), Twips(m[0]), Twips(m[1]), Twips(m[2]), Twips(m[3]), PageLandscape, Twips(Bands.HeaderFromEdge), Twips(Bands.FooterFromEdge));
+		return new PageLayout(Twips(width), Twips(height), Twips(m[0]), Twips(m[1]), Twips(m[2]), Twips(m[3]), PageLandscape, Twips(Bands.HeaderFromEdge), Twips(Bands.FooterFromEdge), DocumentColumns);
 	}
 
 	// ---- Cross-references (iteration 50, rte_crossrefs.cs)
@@ -3268,10 +3271,26 @@ class WriterForm : Form
 
 	/// The header or footer changed: shown at once (iteration 49), not at the strips' next look, half a second on.
 	internal void BandsChangedNow() {
+		Editor.SectionsChanged();
 		bandsShown = "";
 		pageStartsStale = true;    // (iteration 55: a taller header or footer moves the page breaks)
 		if (!PageViewActive) bandPagesStale = true;
 		UpdateBands();
+	}
+
+	// (iteration 67) Layout > Columns: the selected paragraphs' (with continuous breaks around them), or the caret's section's
+	void ColumnsCommand() {
+		var doc = Editor.TextDocument;
+		var (at, to) = (doc.Selection2.Start, doc.Selection2.End);
+		var sections = Sections.Resolve(doc, Bands, DocumentColumns);
+		int index = Sections.IndexAt(sections, at);
+		using var dialog = new ColumnsDialog(sections[index].Columns, index + 1, sections.Count > 1, to > at);
+		if (dialog.ShowDialog(this) != DialogResult.OK) return;
+		var columns = dialog.Result;
+		int gap = (int)Math.Round((columns?.Gap ?? 720) / 14.4);
+		if (to > at) api.SetColumnsOn(at, to, columns?.Count ?? 1, gap, columns?.Line ?? false);
+		else api.SetColumns(at, columns?.Count ?? 1, gap, columns?.Line ?? false);
+		SetStatus(columns == null ? "One column." : $"{columns.Count} columns, on the printed pages: you go on editing in one column, and Print Preview shows them.");
 	}
 
 	void HeaderFooterCommand() {
@@ -3526,7 +3545,7 @@ class WriterForm : Form
 	static readonly HashSet<RibbonCommand> PageViewCommands = new() {
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100, RibbonCommand.Print,
 		RibbonCommand.PrintPreview, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Save,
-		RibbonCommand.SaveAs, RibbonCommand.PageSetup, RibbonCommand.HeaderFooter, RibbonCommand.ShowBands, RibbonCommand.Outline,
+		RibbonCommand.SaveAs, RibbonCommand.PageSetup, RibbonCommand.HeaderFooter, RibbonCommand.Columns, RibbonCommand.ShowBands, RibbonCommand.Outline,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.Exit, RibbonCommand.NewWindow, RibbonCommand.OpenInNewWindow,
 	};
 
@@ -4098,16 +4117,31 @@ class WriterForm : Form
 
 	void FontDialogCommand() {
 		var font = api.SelectionFont();
-		using var dlg = new FontDialog { ShowEffects = false, ShowColor = false };
-		try { dlg.Font = new Font(string.IsNullOrEmpty(font.Name) ? Editor.Font.Name : font.Name, font.Size > 0 ? font.Size : Editor.Font.Size); } catch (ArgumentException) { }
+		var tom = Editor.TextDocument.Selection2.Font;
+		// (what the selection has; mixed counts as off, so that only what is changed in the dialog changes)
+		var style = (tom.Bold == -1 ? FontStyle.Bold : 0) | (tom.Italic == -1 ? FontStyle.Italic : 0) | (tom.Underline == 1 ? FontStyle.Underline : 0) | (tom.StrikeThrough == -1 ? FontStyle.Strikeout : 0);
+		var color = tom.ForeColor is >= 0 and <= 0xFFFFFF ? ColorTranslator.FromWin32(tom.ForeColor) : Color.Black;
+		using var dlg = new FontDialog { ShowEffects = true, ShowColor = true, Color = color };
+		try { dlg.Font = new Font(string.IsNullOrEmpty(font.Name) ? Editor.Font.Name : font.Name, font.Size > 0 ? font.Size : Editor.Font.Size, style); } catch (ArgumentException) { }
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
-		api.SetFontName(dlg.Font.Name);
-		Record(M("SetFontName", dlg.Font.Name));
-		if (Editor.EnableFontSize) {
-			api.SetFontSize(dlg.Font.SizeInPoints);
-			Record(M("SetFontSize", dlg.Font.SizeInPoints));
-		}
-		else SetStatus("Font name applied. Font sizes need free-form mode (View > Free-form).");
+		ApplyFontChoice(dlg.Font, dlg.Color, style, color);
+	}
+
+	// The Font dialog's choice, one undo step: its font and size, and what it changes of the styles and the colour.
+	// (RichEdit's undo keeps each format change apart, edit collection or not: so all of it goes on at once)
+	internal void ApplyFontChoice(Font chosen, Color chosenColor, FontStyle oldStyle, Color oldColor) {
+		int Change(FontStyle flag) => (chosen.Style & flag) == (oldStyle & flag) ? -1 : chosen.Style.HasFlag(flag) ? 1 : 0;
+		var (bold, italic, underline, strike) = (Change(FontStyle.Bold), Change(FontStyle.Italic), Change(FontStyle.Underline), Change(FontStyle.Strikeout));
+		bool newColor = chosenColor.ToArgb() != oldColor.ToArgb();
+		// (typed legal numbers take a new size through SetFontSize, which sizes them with their text)
+		bool legal = LegalLists.Paragraphs(Editor.TextDocument).Any(p => p.PrefixLength > 0);
+		api.SetFontLook(bold, italic, underline, strike, newColor ? chosenColor : null, chosen.Name, Editor.EnableFontSize && !legal ? chosen.SizeInPoints : null);
+		if (Editor.EnableFontSize && legal) api.SetFontSize(chosen.SizeInPoints);
+		Record(M("SetFontName", chosen.Name));
+		if (Editor.EnableFontSize) Record(M("SetFontSize", chosen.SizeInPoints));
+		else SetStatus("Font applied. Font sizes need free-form mode (View > Free-form).");
+		if (bold >= 0 || italic >= 0 || underline >= 0 || strike >= 0) Record(M("SetFontStyle", bold, italic, underline, strike));
+		if (newColor) Record(M("SetFontColor", chosenColor));
 	}
 
 	void InsertHyperlinkDialog() {
@@ -4711,7 +4745,7 @@ class WriterForm : Form
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.Snippets, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
 		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.WordWrap, RibbonCommand.PrintLayout, RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage,
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
-		RibbonCommand.HeaderFooter, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
+		RibbonCommand.HeaderFooter, RibbonCommand.Columns, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
 		RibbonCommand.LineNumberOptions, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
 		RibbonCommand.SelectAll, RibbonCommand.Find, RibbonCommand.Replace,
 	};
@@ -5393,7 +5427,7 @@ public class EditorApi
 		form.Styles = form.DefaultStyles();
 		form.Levels = form.DefaultLevels();
 		var (margins, landscape) = PageSetupOf(rtf);
-		form.SetDocumentPageSetup(margins, landscape);
+		form.SetDocumentPageSetup(margins, landscape, Sections.FirstColumnsFromRtf(rtf));
 		rtf = Sections.ImportRtf(rtf);    // (iteration 63)
 		Rtf = rtf;
 		form.StylesAfterLoad(StylesFromRtf(rtf), takeLook: false);
@@ -5761,6 +5795,7 @@ public class EditorApi
 		form.Levels = form.DefaultLevels();    // (AhkWord's RTF: its own, as the Rtf setter finds them)
 		form.UseNormalFont();    // (text without a font of its own, as HTML's and Markdown's: Normal's)
 		(int[]? Margins, bool? Landscape) pageSetup = (null, null);    // (iteration 63: the file's, where it gives one)
+		SectionColumns? fileColumns = null;                            // (iteration 67: its first section's)
 		StyleSheet? fileStyles = null;
 		bool takeLook = false, styledLook = false;
 		using (Quietly()) {
@@ -5779,6 +5814,7 @@ public class EditorApi
 				bands = HeaderFooter.FromRtf(rtf);
 				numbering = LineNumberFormats.FromRtf(rtf);
 				pageSetup = PageSetupOf(rtf);
+				fileColumns = Sections.FirstColumnsFromRtf(rtf);
 				rtf = Sections.ImportRtf(rtf);    // (iteration 63: Word's sections as AhkWord's section breaks)
 				Rtf = rtf;
 				fileStyles = StylesFromRtf(rtf);
@@ -5792,6 +5828,7 @@ public class EditorApi
 				numbering = extension == ".docx" ? LineNumberFormats.FromDocx(full) : extension == ".odt" ? LineNumberFormats.FromOdt(full) : kind == "rtf" ? LineNumberFormats.FromRtf(content) : null;
 				// (iteration 63) the file's page setup, and its sections
 				pageSetup = kind == "rtf" ? PageSetupOf(content) : extension == ".docx" ? PageSetupOfDocx(full) : (null, null);
+				fileColumns = kind == "rtf" ? Sections.FirstColumnsFromRtf(content) : extension == ".docx" ? HeaderFooter.FirstColumnsFromDocx(full) : null;
 				if (kind == "rtf") {
 					content = Sections.ImportRtf(content);
 					Rtf = content;
@@ -5849,7 +5886,7 @@ public class EditorApi
 		}
 		form.Bands = bands ?? (canHaveBands ? new PageBands() : form.DefaultBands());
 		form.SetLineNumbering(numbering ?? new LineNumbering(), changesDocument: false);
-		form.SetDocumentPageSetup(pageSetup.Margins, pageSetup.Landscape);
+		form.SetDocumentPageSetup(pageSetup.Margins, pageSetup.Landscape, fileColumns);
 		form.StylesAfterLoad(fileStyles, takeLook, styledLook);
 		PageBreaks.Normalize(ed);    // (form feeds in plain text, for one)
 		MarksFollowText();
@@ -6540,10 +6577,83 @@ public class EditorApi
 		form.BandsChangedNow();
 	}
 
-	/// What the status line adds on opening a document whose sections have a page setup that is kept but not shown ("": none).
-	internal string OpenNotice() => Sections.KeptOnly(Sections.Breaks(ed.TextDocument)) is { Count: > 0 } kept
-		? $". Section{(kept.Count == 1 ? "" : "s")} {string.Join(", ", kept)}: paper, orientation or left and right margins of {(kept.Count == 1 ? "its" : "their")} own are kept in the file, but not shown or printed"
-		: "";
+	/// Inserts a continuous section break at the caret: the section after it starts on the same page, with the settings of
+	/// the section it splits, so that the two can have different columns.
+	public void InsertContinuousBreak() {
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try { Sections.InsertContinuous(ed, doc.Selection2.End, firstColumns: form.DocumentColumns); }
+		finally { doc.EndEditCollection(); }
+		ed.Modified = true;
+		form.BandsChangedNow();
+		form.SetStatus("Continuous section break inserted: the next section starts on this page. Layout > Columns, with the caret in it, gives it columns.");
+	}
+
+	/// Puts the paragraphs from start to end in columns, as Word does: continuous breaks around them where there are none,
+	/// the text around them keeping its columns. The arguments as SetColumns'. Returns where their section starts.
+	public int SetColumnsOn(int start, int end, int count, int gap = 50, bool line = false) {
+		var doc = ed.TextDocument;
+		var first = doc.Range2(start, start);
+		first.Expand(tomConstants.tomParagraph);
+		var last = doc.Range2(Math.Max(start, end - 1), Math.Max(start, end - 1));
+		last.Expand(tomConstants.tomParagraph);
+		int from = first.Start, to = last.End;
+		bool Starts(int at) => at == 0 || Sections.Breaks(doc).Any(b => b.SectionStart == at);
+		doc.BeginEditCollection();
+		try {
+			if (to < doc.Range2(0, 0).StoryLength && !Starts(to)) Sections.InsertContinuous(ed, to, firstColumns: form.DocumentColumns);
+			if (!Starts(from)) from = Sections.InsertContinuous(ed, from, firstColumns: form.DocumentColumns);
+			int index = Sections.Breaks(doc).FindIndex(b => b.SectionStart == from);
+			WriteColumns(from, count, gap, line);
+			if (index >= 0) from = Sections.Breaks(doc)[index].SectionStart;    // (its marker grew)
+		}
+		finally { doc.EndEditCollection(); }
+		doc.Selection2.SetRange(from, from);
+		ed.Modified = true;
+		form.BandsChangedNow();
+		return from;
+	}
+
+	/// Sets the columns of the section a position is in, on the printed pages (the text is edited in one column): 1 to 6
+	/// of equal width (1: none), the gap between them (1/100 inch), a line in the gap.
+	public void SetColumns(int position, int count, int gap = 50, bool line = false) {
+		var doc = ed.TextDocument;
+		doc.BeginEditCollection();
+		try { WriteColumns(position, count, gap, line); }
+		finally { doc.EndEditCollection(); }
+		ed.Modified = true;
+		form.BandsChangedNow();
+	}
+
+	void WriteColumns(int position, int count, int gap, bool line) {
+		if (count < 1 || count > 6) throw new ArgumentException("A section has 1 to 6 columns.");
+		if (gap < 0) throw new ArgumentException("The gap can't be negative.");
+		var doc = ed.TextDocument;
+		var columns = SectionColumns.Of(count, (int)Math.Round(gap * 14.4), line);
+		if (Sections.BreakFor(doc, position) is { } section) {
+			var settings = section.Settings.Copy();
+			settings.Columns = columns;
+			Sections.Write(doc, section, settings);
+		}
+		else form.DocumentColumns = columns;
+	}
+
+	/// The columns of the section a position is in: how many, the gap (1/100 inch), 1 if a line is drawn in it ("1 0 0": one).
+	public string ColumnsAt(int position) {
+		var sections = Sections.Resolve(ed.TextDocument, form.Bands, form.DocumentColumns);
+		return sections[Sections.IndexAt(sections, position)].Columns is { } c ? $"{c.Count} {(int)Math.Round(c.Gap / 14.4)} {(c.Line ? 1 : 0)}" : "1 0 0";
+	}
+
+	/// What the status line adds on opening a document whose sections have a page setup that is kept but not shown, or
+	/// columns, which show only on the printed pages ("": none).
+	internal string OpenNotice() {
+		var breaks = Sections.Breaks(ed.TextDocument);
+		string notice = Sections.KeptOnly(breaks) is { Count: > 0 } kept
+			? $". Section{(kept.Count == 1 ? "" : "s")} {string.Join(", ", kept)}: paper, orientation or left and right margins of {(kept.Count == 1 ? "its" : "their")} own are kept in the file, but not shown or printed"
+			: "";
+		if (form.DocumentColumns != null || breaks.Any(b => b.Settings.Columns != null)) notice += ". It has columns: they are printed, and Print Preview shows them; here it is edited in one column";
+		return notice;
+	}
 
 	/// Inserts a page break at the caret (replacing the selection): the text after it starts a new page when printed,
 	/// and in Word and LibreOffice. A numbered list it splits goes on with its numbers after it. Ctrl+Enter.
@@ -7257,6 +7367,28 @@ public class EditorApi
 		int tom = style switch { UnderlineStyle.Double => 3, UnderlineStyle.Dotted => 4, UnderlineStyle.Dashed => 5, UnderlineStyle.Wavy => 8, _ => 1 };    // tomSingle, tomDouble ...
 		int now = ed.TextDocument.Selection2.Font.Underline;
 		Format(() => ed.ToggleUnderline(style), font => font.Underline = now == tom ? 0 : tom);    // (0: tomNone)
+	}
+
+	/// Sets bold, italic, single underline and strikethrough, as SetFontColor: 1 on, 0 off, -1 as each part is.
+	public void SetFontStyle(int bold = -1, int italic = -1, int underline = -1, int strikeThrough = -1) => SetFontLook(bold, italic, underline, strikeThrough, null);
+
+	// (a selection's changed at once, through a duplicate of its font: one undo step)
+	internal void SetFontLook(int bold, int italic, int underline, int strikeThrough, Color? color, string? name = null, float? size = null) {
+		void Apply(ITextFont font) {
+			if (name != null) font.Name = name;
+			if (size is { } points) font.Size = points;
+			if (color is { } c) font.ForeColor = ColorTranslator.ToWin32(c);
+			if (bold >= 0) font.Bold = bold > 0 ? -1 : 0;
+			if (italic >= 0) font.Italic = italic > 0 ? -1 : 0;
+			if (underline >= 0) font.Underline = underline > 0 ? 1 : 0;
+			if (strikeThrough >= 0) font.StrikeThrough = strikeThrough > 0 ? -1 : 0;
+		}
+		Format(() => {
+			var selection = ed.TextDocument.Selection2;
+			var look = selection.Font.Duplicate;
+			Apply(look);
+			selection.Font = look;
+		}, Apply);
 	}
 
 	/// Sets the font colour: of the selected text; with nothing selected, of what is typed next (and of an empty line).
@@ -9020,6 +9152,15 @@ sealed class DocumentPrinter : IDisposable
 	public List<List<Footnotes.NoteLine>> LastNotes { get; private set; } = new();
 	int nextChar, page, pageCount;
 
+	// (iteration 67) a column of a page: its text and how tall it is (twips); a band across the page: its columns (null:
+	// one), how far down the text area it starts (twips) and its columns' text
+	sealed record ColumnPart(int Start, int End, int Height);
+	sealed record PageBand(SectionColumns? Columns, int Top, List<ColumnPart> Parts)
+	{
+		public int Height => Parts.Max(p => p.Height);
+	}
+	List<List<PageBand>?>? pageLayout;    // each page's bands (null: a page of one column; with the page count)
+
 	const int EM_FORMATRANGE = 0x0400 + 57;
 
 	[StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
@@ -9079,6 +9220,38 @@ sealed class DocumentPrinter : IDisposable
 		return new() { Left = r.Left, Right = r.Right, Top = r.Top + (int)Math.Round(top * 14.4), Bottom = r.Bottom - (int)Math.Round(bottom * 14.4) };
 	}
 
+	// The columns a page starting at position has in a text area this wide (null: one).
+	SectionColumns? ColumnsAt(int position, int width) {
+		var all = AllSections;
+		return all[Sections.IndexAt(all, position)].Columns is { } columns && columns.FitIn(width) ? columns : null;
+	}
+
+	// Where the text that has the columns position has stops (int.MaxValue: at the document's end), where the next goes on,
+	// and whether that is on the same page. (A hidden paragraph joins the line after it, so a continuous break's isn't
+	// laid out: the text stops before it and goes on after it.)
+	(int Stop, int Next, bool Continuous) RegionEnd(int position, int width) {
+		var all = AllSections;
+		SectionColumns? Of(PageSection s) => s.Columns is { } columns && columns.FitIn(width) ? columns : null;
+		int index = Sections.IndexAt(all, position);
+		for (int i = index + 1; i < all.Count; i++)
+			if (Of(all[i]) != Of(all[index])) return (all[i].Continuous ? all[i].Stop : all[i].Start, all[i].Start, all[i].Continuous);
+		return (int.MaxValue, int.MaxValue, false);
+	}
+
+	// range's text drawn: in its one area, or in each band's columns. Where the text goes on.
+	int DrawText(FORMATRANGE range, List<PageBand>? layout) {
+		if (layout == null) return (int)SendMessage(editor.Handle, EM_FORMATRANGE, (IntPtr)1, ref range);
+		foreach (var band in layout)
+			for (int i = 0; i < band.Parts.Count; i++) {
+				var column = range;
+				column.rc.Top = range.rc.Top + band.Top;
+				if (band.Columns != null) (column.rc.Left, column.rc.Right) = band.Columns.Slot(range.rc.Left, range.rc.Right, i);
+				column.chrg = new CHARRANGE { cpMin = band.Parts[i].Start, cpMax = band.Parts[i].End };
+				SendMessage(editor.Handle, EM_FORMATRANGE, (IntPtr)1, ref column);
+			}
+		return layout[^1].Parts[^1].End;
+	}
+
 	void PrintPage(object? sender, PrintPageEventArgs e) {
 		page++;
 		var g = e.Graphics!;
@@ -9088,6 +9261,7 @@ sealed class DocumentPrinter : IDisposable
 		float hardX = e.PageSettings.HardMarginX, hardY = e.PageSettings.HardMarginY;
 		int start = nextChar;
 		int end = editor.TextDocument.Range2(0, 0).StoryLength - 1;    // without the final paragraph mark
+		List<PageBand>? layout = null;
 		IntPtr hdc = g.GetHdc();
 		try {
 			var range = new FORMATRANGE {
@@ -9105,13 +9279,20 @@ sealed class DocumentPrinter : IDisposable
 						numberMarks[i] = numberMarks[i].Select(mark => mark with { Baseline = mark.Baseline + (int)Math.Round(down * 14.4) }).ToList();
 				pageNumbers = Sections.Number(pageStarts, AllSections);    // (iteration 63)
 				pageLeaders = LeadersOnPages(range, pageStarts);    // (iteration 52)
+				// (iteration 67: both are measured across the whole text area, so not on pages in columns)
+				for (int i = 0; i < pageStarts.Count; i++)
+					if (pageLayout?[i] != null) {
+						if (numberMarks != null && i < numberMarks.Count) numberMarks[i] = new();
+						if (pageLeaders != null && i < pageLeaders.Count) pageLeaders[i] = new();
+					}
 			}
 			range.rc = Twips(margins, hardX, hardY);    // (page 1's own)
 			range.chrg.cpMin = nextChar;
 			// (the page ends where the paragraphs' rules have it: page break before, keep together, widow control, keep with next)
 			range.chrg.cpMax = pageStarts != null && page < pageStarts.Count ? pageStarts[page] : -1;
-			if (Document.PrintController?.IsPreview == true) nextChar = PreviewPage(range, e.PageBounds, out preview);
-			else nextChar = (int)SendMessage(editor.Handle, EM_FORMATRANGE, (IntPtr)1, ref range);
+			layout = pageLayout != null && page <= pageLayout.Count ? pageLayout[page - 1] : null;
+			if (Document.PrintController?.IsPreview == true) nextChar = PreviewPage(range, e.PageBounds, out preview, layout);
+			else nextChar = DrawText(range, layout);
 			nextChar = PageBreaks.AfterBreak(editor.TextDocument, nextChar);    // (a page break's paragraph mark stays with it)
 		} finally {
 			g.ReleaseHdc(hdc);
@@ -9123,6 +9304,16 @@ sealed class DocumentPrinter : IDisposable
 			}
 			preview = null;
 		}
+		// (iteration 67) the lines between the columns, as tall as the tallest
+		foreach (var band in layout ?? new())
+			if (band.Columns is { Line: true } lined) {
+				using var pen = new Pen(Color.Black, PageBands.RuleWidth);
+				float top = margins.Top - hardY + band.Top / 14.4f;
+				for (int i = 0; i + 1 < band.Parts.Count; i++) {
+					float x = margins.Left - hardX + (lined.Slot(0, (int)Math.Round(margins.Width * 14.4), i).Right + lined.Gap / 2f) / 14.4f;
+					g.DrawLine(pen, x, top, x, top + band.Height / 14.4f);
+				}
+			}
 		// (iteration 51) the page's footnotes at the foot of its text area, under a short line
 		if (pageNotes != null && page <= pageNotes.Count && pageNotes[page - 1].Count > 0) {
 			using var noteFont = Footnotes.NoteFont(NoteFontUsed.Name, NoteFontUsed.Size);
@@ -9186,7 +9377,7 @@ sealed class DocumentPrinter : IDisposable
 	// screen's resolution. The text is first recorded in a metafile made for the printer, so that each letter is where it
 	// will print (drawn straight at the screen's resolution, letters are a little wider, and the end of a line could be
 	// cut off), laid out for the printer as before (so the pages break in the same places).
-	int PreviewPage(FORMATRANGE range, Rectangle page, out Bitmap? picture) {
+	int PreviewPage(FORMATRANGE range, Rectangle page, out Bitmap? picture, List<PageBand>? layout) {
 		int width = (int)Math.Ceiling(page.Width * 0.96 * PreviewScale), height = (int)Math.Ceiling(page.Height * 0.96 * PreviewScale);
 		int next;
 		using var measuring = Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings);
@@ -9203,7 +9394,7 @@ sealed class DocumentPrinter : IDisposable
 				range.hdcTarget = reference;
 				range.rc = new RECT { Left = range.rc.Left - dx, Top = range.rc.Top - dy, Right = range.rc.Right - dx, Bottom = range.rc.Bottom - dy };
 				range.rcPage = new RECT { Left = 0, Top = 0, Right = range.rcPage.Right - dx, Bottom = range.rcPage.Bottom - dy };
-				next = (int)SendMessage(editor.Handle, EM_FORMATRANGE, (IntPtr)1, ref range);
+				next = DrawText(range, layout);
 			} finally {
 				record.ReleaseHdc(hdc);
 			}
@@ -9340,9 +9531,18 @@ sealed class DocumentPrinter : IDisposable
 			(int Page, float Top) Place(int position) {
 				int page = Math.Max(0, starts.FindLastIndex(s => s <= position));
 				float pageTop = marginTop + Shift(starts[page]).Top * 0.72f;    // (iteration 55: page 1's own; 63: its section's)
-				if (position <= starts[page]) return (page, pageTop);
+				// (iteration 67: from the top of its column, in its band)
+				int from = starts[page];
 				var measure = range;
-				measure.chrg = new CHARRANGE { cpMin = starts[page], cpMax = position };
+				foreach (var band in (pageLayout != null && page < pageLayout.Count ? pageLayout[page] : null) ?? new())
+					for (int i = 0; i < band.Parts.Count; i++)
+						if (band.Parts[i].Start <= position) {
+							from = band.Parts[i].Start;
+							(measure.rc.Left, measure.rc.Right) = band.Columns?.Slot(range.rc.Left, range.rc.Right, i) ?? (range.rc.Left, range.rc.Right);
+							pageTop = marginTop + Shift(starts[page]).Top * 0.72f + band.Top / 20f;
+						}
+				if (position <= from) return (page, pageTop);
+				measure.chrg = new CHARRANGE { cpMin = from, cpMax = position };
 				SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref measure);
 				return (page, pageTop + (measure.rc.Bottom - range.rc.Top) / 20f);
 			}
@@ -9392,6 +9592,94 @@ sealed class DocumentPrinter : IDisposable
 			lines ??= new PrintedLines(editor, Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings), range.rc.Right - range.rc.Left);
 			return lines.Starts(from, to);
 		}
+		// (iteration 67) the printed lines of a column of that width, and the columns of a page (text laid out for each in
+		// turn, the page ending early at a page break)
+		var columnLines = new Dictionary<int, PrintedLines>();
+		IReadOnlyList<int>? LinesIn(int width, int from, int to) {
+			if (!columnLines.TryGetValue(width, out var own)) columnLines[width] = own = new PrintedLines(editor, Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings), width);
+			return own.Starts(from, to);
+		}
+		bool EndsPage(int at) => (at >= 2 && story[at - 2] == PageBreaks.Break) || (at >= 1 && story[at - 1] == PageBreaks.Break);
+		(List<ColumnPart> Parts, int Next) LayColumns(SectionColumns columns, RECT area, int from, int limit) {
+			var parts = new List<ColumnPart>();
+			int next = from;
+			for (int i = 0; i < columns.Count; i++) {
+				int begin = next;
+				var column = area;
+				(column.Left, column.Right) = columns.Slot(area.Left, area.Right, i);
+				range.rc = column;
+				range.chrg.cpMin = begin;
+				range.chrg.cpMax = limit == int.MaxValue ? -1 : limit;
+				int laidOut = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
+				int height = range.rc.Bottom - area.Top;
+				int width = column.Right - column.Left;
+				next = PageBreaks.AfterBreak(doc, laidOut >= limit ? laidOut : PageKeeping.Adjust(doc, story, begin, laidOut, (a, b) => LinesIn(width, a, b)));
+				if (next <= begin) { next = begin; break; }
+				if (next < laidOut) {    // (a rule ended it earlier)
+					range.rc = column;
+					range.chrg.cpMax = next;
+					SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
+					height = range.rc.Bottom - area.Top;
+				}
+				parts.Add(new ColumnPart(begin, next, height));
+				if (next >= end || next >= limit || EndsPage(next)) break;
+			}
+			return (parts, next);
+		}
+		// a page's bands, from the top of area: full-width text, columns, and so on, as far as the page goes; columns that
+		// end on the page with text after them there are balanced, the shortest height that holds them
+		(List<PageBand> Bands, int Next) LayBands(RECT area, int from) {
+			var layout = new List<PageBand>();
+			int at = from, top = area.Top, width = area.Right - area.Left;
+			while (top < area.Bottom) {
+				var (limit, onwardAt, onward) = RegionEnd(at, width);
+				if (onward && at >= limit) { at = onwardAt; continue; }
+				var room = area;
+				room.Top = top;
+				var columns = ColumnsAt(at, width);
+				List<ColumnPart> parts;
+				int next;
+				if (columns == null) {
+					range.rc = room;
+					range.chrg.cpMin = at;
+					range.chrg.cpMax = limit == int.MaxValue ? -1 : limit;
+					int laidOut = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
+					int height = range.rc.Bottom - top;
+					next = PageBreaks.AfterBreak(doc, laidOut >= limit ? laidOut : PageKeeping.Adjust(doc, story, at, laidOut, Lines));
+					if (next <= at) break;
+					if (next < laidOut) {
+						range.rc = room;
+						range.chrg.cpMax = next;
+						SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
+						height = range.rc.Bottom - top;
+					}
+					parts = new() { new ColumnPart(at, next, height) };
+				}
+				else {
+					(parts, next) = LayColumns(columns, room, at, limit);
+					if (parts.Count == 0) break;
+					if (onward && next >= limit) {
+						int low = 0, high = room.Bottom - room.Top;
+						while (high - low > 40) {
+							int middle = (low + high) / 2;
+							var shorter = room;
+							shorter.Bottom = room.Top + middle;
+							var (tried, reached) = LayColumns(columns, shorter, at, limit);
+							if (reached >= limit) { (parts, next) = (tried, reached); high = middle; } else low = middle;
+						}
+					}
+				}
+				var band = new PageBand(columns, top - area.Top, parts);
+				layout.Add(band);
+				top += band.Height;
+				at = next;
+				if (at >= end || at < limit || !onward || EndsPage(at)) break;
+				at = onwardAt;
+			}
+			return (layout, at);
+		}
+		var laidBands = new List<List<PageBand>?>();
+		pageLayout = laidBands;
 		var otherArea = range.rc;    // (EM_FORMATRANGE gives back the height it used in rc: each page gets the whole area again)
 		// (iteration 51) the footnotes: room for each page's notes at its foot, as lines (Footnotes.Lines), at most a
 		// little over half the page; the lines that don't fit go on at the foot of the next page, before its own, as in
@@ -9426,6 +9714,37 @@ sealed class DocumentPrinter : IDisposable
 				count++;
 				var area = AreaAt(otherArea, position);    // (iteration 55: page 1's own; 63: the page's section's)
 				starts?.Add(position);
+				// (iteration 67) a page in columns, or with text that goes on in columns: the notes across its foot, the bands above them
+				int across = area.Right - area.Left;
+				bool banded = ColumnsAt(position, across) != null;
+				if (!banded && RegionEnd(position, across) is { Continuous: true } region) {
+					range.rc = area;
+					range.chrg.cpMin = position;
+					range.chrg.cpMax = -1;
+					banded = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range) > region.Stop;
+				}
+				if (banded) {
+					int reserved = 0, most = (area.Bottom - area.Top) / 2;
+					List<PageBand> layout = new();
+					int after = position;
+					for (int pass = 0; pass < 4; pass++) {
+						var above = area;
+						above.Bottom -= reserved;
+						(layout, after) = LayBands(above, position);
+						int needed = Math.Min(most, Twips(carried.Concat(LinesOf(On(position, after))).ToList()));
+						if (needed <= reserved) break;
+						reserved = needed;
+					}
+					var (onPage, later) = Split(carried.Concat(LinesOf(On(position, after))).ToList(), reserved);
+					notes?.Add(onPage);
+					carried = later;
+					laidBands.Add(layout.Count > 0 ? layout : null);
+					heights?.Add(layout.Count > 0 ? (layout[^1].Top + layout[^1].Height) / 20f : 0);
+					if (after <= position || after >= end) break;
+					position = after;
+					continue;
+				}
+				laidBands.Add(null);
 				range.rc = area;
 				range.chrg.cpMin = position;
 				range.chrg.cpMax = -1;
@@ -9497,6 +9816,7 @@ sealed class DocumentPrinter : IDisposable
 			}
 		} finally {
 			lines?.Dispose();
+			foreach (var own in columnLines.Values) own.Dispose();
 			measure?.Dispose();
 			noteFont?.Dispose();
 		}
@@ -9534,6 +9854,56 @@ sealed class DocumentPrinter : IDisposable
 		var done = Disposed;
 		Disposed = null;
 		done?.Invoke();
+	}
+}
+
+// (iteration 67) Layout > Columns: the columns of the caret's section.
+sealed class ColumnsDialog : Form
+{
+	readonly NumericUpDown count = new() { Minimum = 1, Width = 60, AccessibleName = "Number of columns" };
+	readonly NumericUpDown gap = new() { DecimalPlaces = 2, Increment = 0.05m, Width = 70, AccessibleName = "Gap between columns" };
+	readonly CheckBox line = new() { Text = "Line between columns", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+	readonly bool metric = System.Globalization.RegionInfo.CurrentRegion.IsMetric;
+
+	/// The columns chosen (null: one).
+	public SectionColumns? Result => SectionColumns.Of((int)count.Value, (int)Math.Round(Math.Round(metric ? gap.Value / 0.0254m : gap.Value * 100) * 14.4m), line.Checked);
+
+	public ColumnsDialog(SectionColumns? columns, int sectionNumber, bool sections, bool selection) {
+		Text = selection ? "Columns: the selected paragraphs" : sections ? $"Columns: Section {sectionNumber}" : "Columns";
+		FormBorderStyle = FormBorderStyle.FixedDialog;
+		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
+		StartPosition = FormStartPosition.CenterParent;
+		AutoSize = true;
+		AutoSizeMode = AutoSizeMode.GrowAndShrink;
+		Padding = new Padding(10);
+		count.Maximum = Math.Max(3, columns?.Count ?? 1);
+		count.Value = columns?.Count ?? 1;
+		gap.Maximum = metric ? 5 : 2;
+		decimal hundredths = (columns?.Gap ?? 720) / 14.4m;
+		gap.Value = Math.Min(gap.Maximum, Math.Round(metric ? hundredths * 0.0254m : hundredths / 100m, 2));
+		line.Checked = columns?.Line ?? false;
+		var table = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
+		table.Controls.Add(new Label { Text = "Columns:", AutoSize = true, Margin = new Padding(3, 7, 3, 0) }, 0, 0);
+		table.Controls.Add(count, 1, 0);
+		table.Controls.Add(new Label { Text = metric ? "Gap (cm):" : "Gap (in):", AutoSize = true, Margin = new Padding(3, 7, 3, 0) }, 0, 1);
+		table.Controls.Add(gap, 1, 1);
+		table.Controls.Add(line, 0, 2);
+		table.SetColumnSpan(line, 2);
+		var note = new Label { Text = "Columns are printed, and Print Preview shows them. You go on editing in one column.", AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(280), 0), Margin = new Padding(3, 6, 3, 8) };
+		table.Controls.Add(note, 0, 3);
+		table.SetColumnSpan(note, 2);
+		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
+		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
+		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		table.Controls.Add(buttons, 0, 4);
+		table.SetColumnSpan(buttons, 2);
+		Controls.Add(table);
+		AcceptButton = ok;
+		CancelButton = cancel;
+		void Enable() => gap.Enabled = line.Enabled = count.Value > 1;
+		count.ValueChanged += (s, e) => Enable();
+		Enable();
 	}
 }
 
@@ -9972,6 +10342,7 @@ sealed class WriterEditBox : RichEditBox
 	protected override void OnTextChanged(EventArgs e) {
 		base.OnTextChanged(e);
 		pageBreaks = null;
+		sectionMarks = null;
 		RepaintDrawings();
 	}
 
@@ -10007,6 +10378,10 @@ sealed class WriterEditBox : RichEditBox
 					if (y > client.Bottom + 12) break;
 					if (y >= client.Top - 12) Invalidate(new Rectangle(0, y - 12, client.Width, 24), false);
 				}
+			foreach (var (at, _) in sectionMarks ?? new()) {
+				int y = GetPositionFromCharIndex(at).Y;
+				if (y >= client.Top - 12 && y <= client.Bottom + 12) Invalidate(new Rectangle(0, y - 12, client.Width, 24), false);
+			}
 		});
 	}
 
@@ -10035,6 +10410,43 @@ sealed class WriterEditBox : RichEditBox
 			var size = g.MeasureString(text, label);
 			float x = client.Left + (client.Width - size.Width) / 2;
 			g.FillRectangle(back, x - 4, y - size.Height / 2, size.Width + 8, size.Height);
+			g.DrawString(text, label, brush, x, y - size.Height / 2);
+		}
+	}
+
+	// (iteration 67) continuous section breaks take no room: a thin dashed line above the section's first line, with its
+	// columns at the right
+	List<(int At, string Text)>? sectionMarks;
+	int sectionMarksLength = -1;    // (the document's length they were found for: not all edits raise TextChanged)
+	bool SectionMarksStale => sectionMarks == null || sectionMarksLength != TextDocument.Range2(0, 0).StoryLength;
+
+	/// A section's settings changed (the document's length may not have): its lines found and drawn again.
+	public void SectionsChanged() {
+		sectionMarks = null;
+		if (IsHandleCreated) Invalidate();
+	}
+
+	/// The lines drawn at the last paint (for tests).
+	internal string SectionMarksDrawn => string.Join("; ", (sectionMarks ?? new()).Select(m => m.Text));
+	void DrawSectionMarks(Graphics g) {
+		if (SectionMarksStale) {
+			sectionMarksLength = TextDocument.Range2(0, 0).StoryLength;
+			sectionMarks = Sections.Breaks(TextDocument).Where(b => b.Settings.Continuous)
+				.Select(b => (b.SectionStart, b.Settings.Columns is { } c ? $"Section: {c.Count} columns" : "Section: one column")).ToList();
+		}
+		if (sectionMarks!.Count == 0) return;
+		var client = TextArea;
+		using var pen = new Pen(Color.FromArgb(150, 150, 150)) { DashStyle = DashStyle.Dot };
+		using var label = new Font("Segoe UI", 7.5f);
+		using var brush = new SolidBrush(Color.FromArgb(120, 120, 120));
+		using var back = new SolidBrush(BackColor);
+		foreach (var (at, text) in sectionMarks) {
+			int y = GetPositionFromCharIndex(at).Y;
+			if (y < client.Top || y > client.Bottom) continue;
+			g.DrawLine(pen, client.Left + 4, y, client.Right - 4, y);
+			var size = g.MeasureString(text, label);
+			float x = client.Right - size.Width - 8;
+			g.FillRectangle(back, x, y - size.Height / 2, size.Width, size.Height);
 			g.DrawString(text, label, brush, x, y - size.Height / 2);
 		}
 	}
@@ -10299,6 +10711,7 @@ sealed class WriterEditBox : RichEditBox
 		DrawLeaders(g);
 		if (Gaps is { Applied: true }) DrawGaps(g);
 		else DrawPageBreaks(g);
+		DrawSectionMarks(g);
 		DrawPageBoundaries(g);
 	}
 
@@ -10415,7 +10828,7 @@ sealed class WriterEditBox : RichEditBox
 		if (m.Msg == WM_PAINT) {
 			// (held: not painted now, and the window's need of a paint kept, for the paint after: QuietGaps)
 			if (HoldPaint && IsHandleCreated) return;
-			if (((pageBreaks == null || pageBreaks.Count > 0) || PageStarts is { Count: > 1 } || Gaps is { Applied: true } || Leaders?.Invoke() is { Count: > 0 }) && IsHandleCreated && Buffered)
+			if (((pageBreaks == null || pageBreaks.Count > 0) || SectionMarksStale || sectionMarks!.Count > 0 || PageStarts is { Count: > 1 } || Gaps is { Applied: true } || Leaders?.Invoke() is { Count: > 0 }) && IsHandleCreated && Buffered)
 				PaintBuffered();
 			else base.WndProc(ref m);
 			Painted?.Invoke();
@@ -11111,7 +11524,7 @@ sealed class HeaderFooterDialog : Form
 		var page = SectionPage.WithMargins(section.Page, ownMargins.Checked ? Twips(sectionTop) : null, ownMargins.Checked ? Twips(sectionBottom) : null);
 		// (a header and footer of its own have the distances the dialog gives them)
 		if (page != null && !sameAsPrevious.Checked) page = page with { HeaderY = null, FooterY = null };
-		return new SectionSettings { Same = sameAsPrevious.Checked, Bands = sameAsPrevious.Checked ? null : Result(), Restart = restart.Checked, Start = (int)startAt.Value, Page = page == new SectionPage() ? null : page };
+		return new SectionSettings { Same = sameAsPrevious.Checked, Bands = sameAsPrevious.Checked ? null : Result(), Restart = restart.Checked, Start = (int)startAt.Value, Page = page == new SectionPage() ? null : page, Columns = section.Columns, Continuous = section.Continuous };
 	}
 
 	/// The document's header and footer (section: a section after a break, its number from 1 and its settings; bands are

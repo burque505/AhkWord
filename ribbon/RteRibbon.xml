@@ -1158,7 +1158,21 @@
         <Image Source="icons/applystyles_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
-    <Command Name="cmdSectionBreak" Id="396" LabelTitle="Section Break" Keytip="SB" TooltipTitle="Section break" TooltipDescription="Start a new section on a new page: its own header and footer (File &gt; Header and Footer), its page numbers from 1. For a package of papers in one document.">
+    <Command Name="cmdSectionBreak" Id="396" LabelTitle="Section Break" Keytip="SB" TooltipTitle="Section break" TooltipDescription="Start a new section on a new page: its own header and footer (Layout &gt; Header &amp; Footer), its page numbers from 1. For a package of papers in one document.">
+      <Command.LargeImages>
+        <Image Source="icons/sectionbreak_32.bmp" MinDPI="96" />
+        <Image Source="icons/sectionbreak_40.bmp" MinDPI="120" />
+        <Image Source="icons/sectionbreak_48.bmp" MinDPI="144" />
+        <Image Source="icons/sectionbreak_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/sectionbreak_16.bmp" MinDPI="96" />
+        <Image Source="icons/sectionbreak_20.bmp" MinDPI="120" />
+        <Image Source="icons/sectionbreak_24.bmp" MinDPI="144" />
+        <Image Source="icons/sectionbreak_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdContinuousBreak" Id="399" LabelTitle="Continuous Break" Keytip="CB" TooltipTitle="Continuous section break" TooltipDescription="Start a new section on this page, so that it can have columns of its own. Layout &gt; Columns with paragraphs selected puts these in for you.">
       <Command.LargeImages>
         <Image Source="icons/sectionbreak_32.bmp" MinDPI="96" />
         <Image Source="icons/sectionbreak_40.bmp" MinDPI="120" />
@@ -1366,6 +1380,20 @@
         <Image Source="icons/headerfooter_20.bmp" MinDPI="120" />
         <Image Source="icons/headerfooter_24.bmp" MinDPI="144" />
         <Image Source="icons/headerfooter_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdColumns" Id="398" LabelTitle="Columns" Keytip="C" TooltipTitle="Columns" TooltipDescription="This section's columns on the printed pages. You go on editing in one column; Print Preview shows them.">
+      <Command.LargeImages>
+        <Image Source="icons/columns_32.bmp" MinDPI="96" />
+        <Image Source="icons/columns_40.bmp" MinDPI="120" />
+        <Image Source="icons/columns_48.bmp" MinDPI="144" />
+        <Image Source="icons/columns_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/columns_16.bmp" MinDPI="96" />
+        <Image Source="icons/columns_20.bmp" MinDPI="120" />
+        <Image Source="icons/columns_24.bmp" MinDPI="144" />
+        <Image Source="icons/columns_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
     <Command Name="cmdNextSpelling" Id="295" LabelTitle="Next Spelling Error" Keytip="S" TooltipTitle="Next spelling error (F7)" TooltipDescription="Go to the next misspelled word. Right-click it for suggestions.">
@@ -2297,9 +2325,10 @@
           </Group>
         </Tab>
         <Tab CommandName="cmdTabInsert">
-          <Group CommandName="cmdGroupPages" SizeDefinition="TwoButtons">
+          <Group CommandName="cmdGroupPages" SizeDefinition="ThreeButtons">
             <Button CommandName="cmdPageBreak" />
             <Button CommandName="cmdSectionBreak" />
+            <Button CommandName="cmdContinuousBreak" />
           </Group>
           <Group CommandName="cmdGroupContents" SizeDefinition="OneButton">
             <Button CommandName="cmdTableOfContents" />
@@ -2328,9 +2357,10 @@
           </Group>
         </Tab>
         <Tab CommandName="cmdTabLayout">
-          <Group CommandName="cmdGroupPage" SizeDefinition="FiveButtons">
+          <Group CommandName="cmdGroupPage" SizeDefinition="SixButtons">
             <Button CommandName="cmdPageSetup" />
             <Button CommandName="cmdHeaderFooter" />
+            <Button CommandName="cmdColumns" />
             <DropDownButton CommandName="cmdLineNumbers">
               <MenuGroup>
                 <ToggleButton CommandName="cmdLineNumbersNone" />

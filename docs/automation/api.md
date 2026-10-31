@@ -828,6 +828,42 @@ Rte.SetSectionMargins(position, top, bottom)
 
 Gives the section `position` is in top and bottom margins of its own (1/100 inch; -1: the document's). Not for the first section, which has the document's (Page Setup). Word's section with a paper size, orientation or left and right margins of its own keeps them in the file, but is shown and printed with the document's.
 
+### InsertContinuousBreak
+
+```autohotkey
+Rte.InsertContinuousBreak()
+```
+
+Inserts a continuous section break at the caret: the section after it starts on the same page, with the columns, margins, header and footer of the section it splits, and its page numbers going on. It shows as a thin dotted line, on screen only.
+
+### SetColumnsOn
+
+```autohotkey
+Rte.SetColumnsOn(start, end, count, gap := 50, line := false)
+```
+
+returns: integer
+
+Puts the paragraphs from `start` to `end` in columns: continuous breaks go around them where there are none, and the text around them keeps its columns. On a page where text follows them, the columns are balanced. Returns where their section starts. Selecting paragraphs and choosing Layout > Columns does the same.
+
+### SetColumns
+
+```autohotkey
+Rte.SetColumns(position, count, gap := 50, line := false)
+```
+
+Gives the section `position` is in `count` columns of equal width (1 to 6; 1: none), `gap` (1/100 inch) between them, and a line in the gap if `line` is true. Columns are on the printed pages, PDFs and Print Preview; the text is edited in one column. Columns too narrow to use (under 3/4 inch) print as one. Layout > Columns does the same.
+
+### ColumnsAt
+
+```autohotkey
+Rte.ColumnsAt(position)
+```
+
+returns: string
+
+The columns of the section `position` is in: how many, the gap (1/100 inch), and 1 if a line is drawn in it (`1 0 0`: one column).
+
 ### InsertPageBreak
 
 ```autohotkey
@@ -1333,6 +1369,14 @@ Rte.SetBackgroundColor(color)
 *color*: color
 
 Sets the highlight (background) colour, as SetFontColor.
+
+### SetFontStyle
+
+```autohotkey
+Rte.SetFontStyle(bold := -1, italic := -1, underline := -1, strikeThrough := -1)
+```
+
+Sets bold, italic, single underline and strikethrough of the selected text; with nothing selected, of what is typed next. For each: 1 on, 0 off, -1 leaves it as it is.
 
 ### SetFontColor
 

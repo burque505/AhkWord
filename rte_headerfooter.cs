@@ -291,7 +291,7 @@ public sealed class PageBands
 }
 
 /// The page a document is laid out on in other programs (twips): Page Setup's paper and margins.
-public sealed record PageLayout(int Width, int Height, int Left, int Right, int Top, int Bottom, bool Landscape, int HeaderY = 720, int FooterY = 720)
+public sealed record PageLayout(int Width, int Height, int Left, int Right, int Top, int Bottom, bool Landscape, int HeaderY = 720, int FooterY = 720, SectionColumns? Columns = null)
 {
 	public int TextWidth => Math.Max(1440, Width - Left - Right);
 }
@@ -407,6 +407,7 @@ public static class HeaderFooter
 		sb.Append(@"\sectd");
 		if (layout.Landscape) sb.Append(@"\lndscpsxn");
 		if (bands.DifferentFirst) sb.Append(@"\titlepg");
+		if (layout.Columns != null) sb.Append(layout.Columns.ToRtf());
 		sb.Append($@"\pgwsxn{layout.Width}\pghsxn{layout.Height}\marglsxn{layout.Left}\margrsxn{layout.Right}\margtsxn{layout.Top}\margbsxn{layout.Bottom}\headery{layout.HeaderY}\footery{layout.FooterY} ");
 		sb.Append(groups);
 		sb.Append(@"{\*\").Append(RtfDestination).Append(' ').Append(RtfEscape(Stamped(bands, title, file).ToJson())).Append('}');
@@ -797,6 +798,8 @@ public static class HeaderFooter
 			var margin = new W.PageMargin { Left = (uint)layout.Left, Right = (uint)layout.Right, Top = layout.Top, Bottom = layout.Bottom, Header = (uint)layout.HeaderY, Footer = (uint)layout.FooterY, Gutter = 0 };
 			if (last == null) { section.PrependChild(margin); section.PrependChild(size); }
 			else { section.InsertAfter(margin, last); section.InsertAfter(size, last); }
+			section.RemoveAllChildren<W.Columns>();
+			if (layout.Columns is { } columns) section.InsertAfter(new W.Columns { ColumnCount = (short)columns.Count, Space = columns.Gap.ToString(System.Globalization.CultureInfo.InvariantCulture), EqualWidth = true, Separator = columns.Line ? true : null }, margin);
 			main.Document.Save();
 		}
 		// the exact copy, in a custom XML part of its own (Word keeps those)
@@ -882,10 +885,27 @@ public static class HeaderFooter
 		}
 	}
 
+	// a section's columns in a .docx (null: one)
+	static SectionColumns? ColumnsOf(W.SectionProperties? section) {
+		if (section?.GetFirstChild<W.Columns>() is not { } columns) return null;
+		int count = columns.ColumnCount?.Value ?? 1;
+		int gap = int.TryParse(columns.Space?.Value, out int space) ? space : 720;
+		return SectionColumns.Of(count, gap, columns.Separator?.Value == true);
+	}
+
+	/// The first section's columns in a .docx (null: one, or it can't be read).
+	public static SectionColumns? FirstColumnsFromDocx(string path) {
+		try {
+			using var package = WordprocessingDocument.Open(path, false);
+			return ColumnsOf(package.MainDocumentPart!.Document.Body?.Descendants<W.SectionProperties>().FirstOrDefault());
+		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) {
+			return null;
+		}
+	}
+
 	/// The sections after a .docx's first, in order, as section breaks: a section with no header or footer of its own keeps
 	/// the one before's, as Word links them; w:pgNumType's start restarts its page numbers; what w:pgSz and w:pgMar give it
-	/// that differs from the first section's is its own (SectionPage). Null for a section that doesn't start a new page
-	/// (continuous). Empty if the file can't be read.
+	/// that differs from the first section's is its own (SectionPage). Empty if the file can't be read.
 	public static List<SectionSettings?> SectionsFromDocx(string path) {
 		var result = new List<SectionSettings?>();
 		try {
@@ -911,9 +931,9 @@ public static class HeaderFooter
 					current = bands;
 					own = true;
 				}
-				if (section.GetFirstChild<W.SectionType>()?.Val?.Value == W.SectionMarkValues.Continuous) { result.Add(null); continue; }
+				bool continuous = section.GetFirstChild<W.SectionType>()?.Val?.Value == W.SectionMarkValues.Continuous;
 				uint? start = section.GetFirstChild<W.PageNumberType>()?.Start?.Value is int number ? (uint)number : null;
-				result.Add(new SectionSettings { Same = !own, Bands = own ? Sections.CopyBands(current) : null, Restart = start != null, Start = (int)(start ?? 1), Page = PageOf(section).Against(firstPage) });
+				result.Add(new SectionSettings { Same = !own, Bands = own ? Sections.CopyBands(current) : null, Restart = start != null, Start = (int)(start ?? 1), Page = PageOf(section).Against(firstPage), Columns = ColumnsOf(section), Continuous = continuous });
 				own = false;
 			}
 		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) { result.Clear(); }

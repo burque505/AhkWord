@@ -5,6 +5,8 @@
 // its RTF, as the cross-references' and footnotes' markers are kept; rte_crossrefs.cs). So a section's header, footer
 // and page numbering travel with its break. The text before the first break is the first section, with the document's
 // own header and footer (WriterForm.Bands), as before.
+// A continuous section break (Word's, iteration 67) starts no page: it is a paragraph of its own, all hidden (the marker
+// and the paragraph mark, so it takes no room and the caret doesn't stop in it), and its section starts after it.
 //   - SectionSettings: a section's own: its header and footer (PageBands; Same: as the section before's, Word's "Link to
 //     Previous", until one is given), whether its page numbers start again (Restart, on unless turned off) and at what
 //     number (Start), and (Page) the page setup it has of its own.
@@ -38,6 +40,36 @@ public sealed record SectionPage(int? Width = null, int? Height = null, int? Lef
 	[System.Text.Json.Serialization.JsonIgnore] public bool KeptOnly => Width != null || Height != null || Left != null || Right != null || Landscape != null;
 }
 
+/// A section's columns, of equal width: how many, the gap between them (twips), and whether a line is drawn in the gap.
+/// They are the printed page's: RichEdit shows a document at one width, so the text is edited in one column.
+public sealed record SectionColumns(int Count = 2, int Gap = 720, bool Line = false)
+{
+	/// Columns narrower than this (twips) aren't used: the section prints in one.
+	const int Narrowest = 1080;
+
+	/// Null (one column) or the columns asked for.
+	public static SectionColumns? Of(int count, int gap, bool line) => count < 2 ? null : new SectionColumns(count, Math.Max(0, gap), line);
+
+	public bool FitIn(int width) => Width(width) >= Narrowest;
+	int Width(int width) => (width - (Count - 1) * Gap) / Count;
+
+	/// Column index's left and right in a text area from left to right.
+	public (int Left, int Right) Slot(int left, int right, int index) {
+		int width = Width(right - left), at = left + index * (width + Gap);
+		return (at, at + width);
+	}
+
+	/// A section's RTF properties' columns (null: one).
+	public static SectionColumns? FromRtf(string properties) {
+		var count = Regex.Match(properties, @"\\cols(\d+)");
+		if (!count.Success) return null;
+		var gap = Regex.Match(properties, @"\\colsx(\d+)");
+		return Of(int.Parse(count.Groups[1].Value), gap.Success ? int.Parse(gap.Groups[1].Value) : 720, Regex.IsMatch(properties, @"\\linebetcol(?![a-zA-Z])"));
+	}
+
+	public string ToRtf() => $@"\cols{Count}\colsx{Gap}" + (Line ? @"\linebetcol" : "");
+}
+
 /// A section's own settings, as its break's marker holds them.
 public sealed class SectionSettings
 {
@@ -50,13 +82,18 @@ public sealed class SectionSettings
 	public int Start { get; set; } = 1;
 	/// The section's own page setup (null: the document's).
 	public SectionPage? Page { get; set; }
+	/// The section's columns (null: one).
+	public SectionColumns? Columns { get; set; }
+	/// Whether the section starts on the same page as the text before it.
+	public bool Continuous { get; set; }
 
-	public SectionSettings Copy() => new() { Bands = Bands == null ? null : Sections.CopyBands(Bands), Same = Same, Restart = Restart, Start = Start, Page = Page };
+	public SectionSettings Copy() => new() { Bands = Bands == null ? null : Sections.CopyBands(Bands), Same = Same, Restart = Restart, Start = Start, Page = Page, Columns = Columns, Continuous = Continuous };
 }
 
-/// A section as laid out: where its text starts (the first section at 0), its header and footer, its numbering, and its
-/// own top and bottom margins (1/100 inch; null: the document's).
-public sealed record PageSection(int Start, PageBands Bands, bool Restart, int StartAt, int? Top = null, int? Bottom = null);
+/// A section as laid out: where its text starts (the first section at 0), its header and footer, its numbering, its
+/// own top and bottom margins (1/100 inch; null: the document's), its columns (null: one), whether it starts on the same
+/// page as the text before it, and where the text before it stops (a continuous break's hidden paragraph).
+public sealed record PageSection(int Start, PageBands Bands, bool Restart, int StartAt, int? Top = null, int? Bottom = null, SectionColumns? Columns = null, bool Continuous = false, int Stop = 0);
 
 public static class Sections
 {
@@ -91,15 +128,20 @@ public static class Sections
 	/// paragraph), its settings.
 	public sealed record Break(int MarkStart, int MarkLength, int SectionStart, SectionSettings Settings);
 
-	/// The document's section breaks, in order: markers right in front of a page break's form feed (others are ignored).
+	/// The document's section breaks, in order: markers right in front of a page break's form feed, or a continuous one's
+	/// paragraph mark (others are ignored).
 	public static List<Break> Breaks(ITextDocument2 doc) => Breaks(Story(doc));
 
 	public static List<Break> Breaks(string story) {
 		var breaks = new List<Break>();
 		foreach (Match m in Mark.Matches(story)) {
 			int after = m.Index + m.Length;
-			if (after >= story.Length || story[after] != PageBreaks.Break) continue;
-			if (Parse(m.Groups[1].Value) is not { } settings) continue;
+			if (after >= story.Length || Parse(m.Groups[1].Value) is not { } settings) continue;
+			if (settings.Continuous) {
+				if (story[after] == '\r') breaks.Add(new Break(m.Index, m.Length, after + 1, settings));
+				continue;
+			}
+			if (story[after] != PageBreaks.Break) continue;
 			int start = after + 1 < story.Length && story[after + 1] == '\r' ? after + 2 : after + 1;
 			breaks.Add(new Break(m.Index, m.Length, start, settings));
 		}
@@ -116,15 +158,15 @@ public static class Sections
 	}
 
 	/// The sections as laid out: the first with the document's header and footer (numbered from 1), then one after each
-	/// break (its own header and footer, or the section before's).
-	public static List<PageSection> Resolve(ITextDocument2 doc, PageBands first) => Resolve(Breaks(doc), first);
+	/// break (its own header and footer, or the section before's). firstColumns: the first section's, the document's.
+	public static List<PageSection> Resolve(ITextDocument2 doc, PageBands first, SectionColumns? firstColumns = null) => Resolve(Breaks(doc), first, firstColumns);
 
-	public static List<PageSection> Resolve(List<Break> breaks, PageBands first) {
-		var sections = new List<PageSection> { new(0, first, true, 1) };
+	public static List<PageSection> Resolve(List<Break> breaks, PageBands first, SectionColumns? firstColumns = null) {
+		var sections = new List<PageSection> { new(0, first, true, 1, Columns: firstColumns) };
 		foreach (var b in breaks) {
 			var bands = b.Settings.Same || b.Settings.Bands == null ? sections[^1].Bands : b.Settings.Bands;
 			static int? Hundredths(int? twips) => twips is int t ? (int)Math.Round(Math.Abs(t) / 14.4) : null;
-			sections.Add(new PageSection(b.SectionStart, bands, b.Settings.Restart, Math.Max(0, b.Settings.Start), Hundredths(b.Settings.Page?.Top), Hundredths(b.Settings.Page?.Bottom)));
+			sections.Add(new PageSection(b.SectionStart, bands, b.Settings.Restart, Math.Max(0, b.Settings.Start), Hundredths(b.Settings.Page?.Top), Hundredths(b.Settings.Page?.Bottom), b.Settings.Columns, b.Settings.Continuous, b.MarkStart));
 		}
 		return sections;
 	}
@@ -185,6 +227,31 @@ public static class Sections
 		return at;
 	}
 
+	/// Puts a continuous section break at a position (between paragraphs: in a paragraph, it splits it), with settings, or
+	/// those of the section it splits, the header and footer the same, page numbers going on; the caret after it. Returns
+	/// where the new section starts. The caller groups this into one undo step.
+	public static int InsertContinuous(RichEditBox editor, int at, SectionSettings? settings = null, SectionColumns? firstColumns = null) {
+		var doc = editor.TextDocument;
+		if (RtfTables.At(editor, at) != null) throw new InvalidOperationException("A section break cannot go in a table.");
+		var paragraph = doc.Range2(at, at);
+		paragraph.Expand(tomConstants.tomParagraph);
+		if (at > paragraph.Start) {
+			if (at >= paragraph.End - 1 && paragraph.End < doc.Range2(0, 0).StoryLength) at = paragraph.End;
+			else { doc.Range2(at, at).Text = "\r"; at++; }
+		}
+		if (at <= 0) throw new InvalidOperationException("A section break can't go before the document's first paragraph.");
+		var before = BreakFor(doc, at);
+		var own = settings?.Copy() ?? new SectionSettings { Restart = false, Page = before?.Settings.Page, Columns = before == null ? firstColumns : before.Settings.Columns };
+		own.Continuous = true;
+		string marker = MarkerFor(own);
+		doc.Range2(at, at).Text = marker + "\r";
+		var range = doc.Range2(at, at + marker.Length + 1);
+		if ((range.Para.ListType & 0xFFFF) != tomConstants.tomListNone) range.Para.ListType = tomConstants.tomListNone;
+		range.Font.Hidden = tomConstants.tomTrue;
+		doc.Selection2.SetRange(range.End, range.End);
+		return range.End;
+	}
+
 	/// A section break's settings changed (its marker written again, hidden).
 	public static void Write(ITextDocument2 doc, Break b, SectionSettings settings) {
 		string marker = MarkerFor(settings);
@@ -207,6 +274,12 @@ public static class Sections
 			var paragraph = doc.Range2(m.Index, m.Index);
 			paragraph.Expand(tomConstants.tomParagraph);
 			int at = paragraph.End;
+			if (section.Continuous) {
+				if (at < doc.Range2(0, 0).StoryLength)
+					try { InsertContinuous(editor, at, section); }
+					catch (InvalidOperationException) { }    // (in a table: left out)
+				continue;
+			}
 			if ((paragraph.Text ?? "").Trim('\r', '\n') == "") {    // (Word's break in a paragraph of its own: this break takes its place)
 				at = paragraph.Start;
 				doc.Range2(at, at + 1).Text = "";
@@ -226,8 +299,9 @@ public static class Sections
 	// groups whose \sect isn't the document's: headers, footers and the other destinations
 	static readonly Regex Destination = new(@"\G\{\s*\\(\*|header[lrf]?|footer[lrf]?|fonttbl|colortbl|stylesheet|info|pict|listtable|listoverridetable|object|shp[a-z]*|nonshppict|themedata|datastore|latentstyles|xmlnstbl|rsidtbl|generator)(?![a-zA-Z])");
 
-	// a section break's marker as RTF writes it (braces escaped; letters outside ASCII as \uN? or \'hh)
-	static readonly Regex RtfMark = new(@"\[\[sect:((?:[^\]\\]|\\[\\{}]|\\'[0-9a-fA-F]{2}|\\u-?\d+\??|\](?!\]))*)\]\]");
+	// a section break's marker as RTF writes it (braces escaped; letters outside ASCII as \uN? or \'hh; Word puts font
+	// words such as \hich\af44 in the middle of it)
+	static readonly Regex RtfMark = new(@"\[\[sect:((?:[^\]\\]|\\[\\{}]|\\'[0-9a-fA-F]{2}|\\u-?\d+\??|\\[a-zA-Z]+-?\d* ?|\](?!\]))*)\]\]");
 
 	// only RTF's own between two places: control words, braces, spaces
 	static readonly Regex OnlyControls = new(@"^(?:\s|\\[a-zA-Z]+-?\d* ?|[{}])*$");
@@ -278,6 +352,7 @@ public static class Sections
 	}
 
 	static string RtfUnescape(string s) {
+		s = Regex.Replace(s, @"\\\\|\\(?!u-?\d)[a-zA-Z]+-?\d* ?", m => m.Value == @"\\" ? m.Value : "");
 		s = Regex.Replace(s, @"\\u(-?\d+)\??", m => ((char)(short)int.Parse(m.Groups[1].Value)).ToString());
 		s = Regex.Replace(s, @"\\'([0-9a-fA-F]{2})", m => ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString());
 		return Regex.Replace(s, @"\\([\\{}])", "$1");
@@ -298,8 +373,8 @@ public static class Sections
 	/// Word links them; its page numbers starting again, \pgnrestart, at \pgnstarts). A marker AhkWord wrote in front of a
 	/// \sect is its exact settings, but for its page setup, which the section after the \sect gives: another program may
 	/// have changed it. What differs from the first section's is the section's own (SectionPage). A continuous section
-	/// (\sbknone) starts no page, so no break: its \sect only ends its paragraph, and a header or footer of its own goes to
-	/// the next break. (The first section's header and footer are the document's: HeaderFooter.FromRtf.)
+	/// (\sbknone) starts no page: a continuous break, its hidden paragraph after the paragraph its \sect ends. (The first
+	/// section's header and footer are the document's: HeaderFooter.FromRtf.)
 	public static string ImportRtf(string rtf) {
 		var sects = SectsIn(rtf);
 		int body = HeaderFooter.BodyStart(rtf);
@@ -344,10 +419,9 @@ public static class Sections
 			var at = Regex.Match(properties, @"\\pgnstarts(\d+)");
 			var bands = BandsOf(k + 1);
 			bool continuous = Continuous(k + 1);
-			// (a break after continuous sections takes the last of their own headers and footers, if it has none itself)
-			if (!continuous) for (int j = k; bands == null && j > 0 && Continuous(j); j--) bands = BandsOf(j);
 			var page = PageOf(k + 1).Against(firstPage);
-			var settings = new SectionSettings { Bands = bands, Same = bands == null, Restart = restart, Start = at.Success ? int.Parse(at.Groups[1].Value) : 1, Page = page };
+			var columns = SectionColumns.FromRtf(properties);
+			var settings = new SectionSettings { Bands = bands, Same = bands == null, Restart = restart, Start = at.Success ? int.Parse(at.Groups[1].Value) : 1, Page = page, Columns = columns, Continuous = continuous };
 			// (the section's own header and footer groups out of its text: they are its marker's now)
 			if (BandsOf(k + 1) != null)
 				foreach (var (groupStart, groupLength) in BandGroupsIn(rtf, starts[k + 1], starts[k + 1] + (Regex.Match(segment, @"\\pard(?![a-zA-Z])") is { Success: true } pard ? pard.Index : segment.Length)).AsEnumerable().Reverse())
@@ -358,21 +432,32 @@ public static class Sections
 			if (mark != null && OnlyControls.IsMatch(rtf[(from + mark.Index + mark.Length)..start]) && Parse(RtfUnescape(mark.Groups[1].Value)) is { } exact) {
 				settings = exact;
 				settings.Page = page;
+				settings.Columns = columns;
+				settings.Continuous = continuous;
+				if (continuous) {
+					result.Remove(start, length).Insert(start, @"\par " + HiddenParagraph(settings));
+					result.Remove(from + mark.Index, mark.Length);
+					continue;
+				}
 				result.Remove(start, length).Insert(start, @"\page\par ");
 				result.Remove(from + mark.Index, mark.Length).Insert(from + mark.Index, RtfEscape(MarkerFor(settings)));
 				continue;
 			}
 			// (Word's \sect ends its paragraph too: the break a paragraph of its own, as AhkWord's are)
 			bool ended = EndsParagraph.IsMatch(rtf[Math.Max(0, start - 400)..start]);
-			result.Remove(start, length).Insert(start, (ended ? "" : @"\par ") + (continuous ? "" : @"{\v " + RtfEscape(MarkerFor(settings)) + @"}\page\par "));
+			result.Remove(start, length).Insert(start, (ended ? "" : @"\par ") + (continuous ? HiddenParagraph(settings) : @"{\v " + RtfEscape(MarkerFor(settings)) + @"}\page\par "));
 		}
 		return result.ToString();
 	}
 
+	// a continuous break's paragraph
+	static string HiddenParagraph(SectionSettings settings) => @"{\pard\v " + RtfEscape(MarkerFor(settings)) + @"\par }";
+
 	/// RTF (AhkWord's own, with its header and footer written: HeaderFooter.AddToRtf) with its section breaks as Word's:
 	/// each break's \page a \sect, the section after it given its settings (its own header and footer as \header and
 	/// \footer groups, none when it is the same as the section before's; \pgnrestart \pgnstarts; the page layout, with what
-	/// it has of its own). The markers stay (hidden text) for AhkWord to read its own settings back.
+	/// it has of its own). A continuous break's hidden paragraph goes: the \sect (\sbknone) ends the paragraph before it,
+	/// with the marker at its end. The markers stay (hidden text) for AhkWord to read its own settings back.
 	public static string ExportRtf(string rtf, PageLayout layout, string title, string file, float fontSize) {
 		if (!rtf.Contains("[[sect:")) return rtf;
 		// the sections' groups first (their fonts go into the font table, which moves what follows)
@@ -386,21 +471,42 @@ public static class Sections
 			var m = marks[k];
 			if (Parse(RtfUnescape(m.Groups[1].Value)) is not { } settings) continue;
 			int after = m.Index + m.Length;
-			var page = Regex.Match(rtf[after..Math.Min(rtf.Length, after + 400)], @"\\page(?![a-zA-Z]) ?");
+			var page = Regex.Match(rtf[after..Math.Min(rtf.Length, after + 400)], settings.Continuous ? @"\\par(?![a-zA-Z]) ?" : @"\\page(?![a-zA-Z]) ?");
 			if (!page.Success || !OnlyControls.IsMatch(rtf[after..(after + page.Index)])) continue;
 			var sb = new System.Text.StringBuilder(@"\sect\sectd");
+			if (settings.Continuous) sb.Append(@"\sbknone");
 			var own = settings.Page ?? new SectionPage();
 			if (own.Landscape ?? layout.Landscape) sb.Append(@"\lndscpsxn");
 			if (settings.Restart) sb.Append(@"\pgnrestart\pgnstarts").Append(Math.Max(0, settings.Start));
 			if (settings is { Same: false, Bands.DifferentFirst: true }) sb.Append(@"\titlepg");
+			if (settings.Columns != null) sb.Append(settings.Columns.ToRtf());
 			sb.Append($@"\pgwsxn{own.Width ?? layout.Width}\pghsxn{own.Height ?? layout.Height}\marglsxn{own.Left ?? layout.Left}\margrsxn{own.Right ?? layout.Right}\margtsxn{own.Top ?? layout.Top}\margbsxn{own.Bottom ?? layout.Bottom}\headery{own.HeaderY ?? layout.HeaderY}\footery{own.FooterY ?? layout.FooterY} ");
 			sb.Append(k < groups.Count ? groups[k] : "");
 			// (\sect ends the paragraph: the break paragraph's own mark would be an empty line in Word)
 			int pageAt = after + page.Index;
+			if (settings.Continuous) {
+				int before = Math.Max(0, m.Index - 400);
+				var ending = Regex.Matches(rtf[before..m.Index], @"\\par(?![a-zA-Z]) ?").Cast<Match>().LastOrDefault();
+				if (ending == null || !OnlyControls.IsMatch(rtf[(before + ending.Index + ending.Length)..m.Index])) {    // (after a table: the \sect ends its own paragraph)
+					rtf = rtf.Remove(pageAt, page.Length).Insert(pageAt, sb.ToString());
+					continue;
+				}
+				rtf = rtf.Remove(pageAt, page.Length).Remove(m.Index, m.Length).Remove(before + ending.Index, ending.Length).Insert(before + ending.Index, @"{\v " + m.Value + "}" + sb);
+				continue;
+			}
 			if (BreakMark.Match(rtf, pageAt + page.Length) is { Success: true } mark) rtf = rtf.Remove(mark.Groups[1].Index, mark.Groups[1].Length);
 			rtf = rtf.Remove(pageAt, page.Length).Insert(pageAt, sb.ToString());
 		}
 		return rtf;
+	}
+
+	/// The first section's columns as RTF gives them (null: one).
+	public static SectionColumns? FirstColumnsFromRtf(string rtf) {
+		int body = HeaderFooter.BodyStart(rtf);
+		if (body < 0) return null;
+		string rest = rtf[body..];
+		var cut = Regex.Match(rest, @"\{\s*\\(header|footer)|\\pard(?![a-zA-Z])");
+		return SectionColumns.FromRtf(cut.Success ? rest[..cut.Index] : rest[..Math.Min(rest.Length, 2000)]);
 	}
 
 	/// A document's page setup as its RTF gives it (the first section's, else the document's): margins (1/100 inch: left,
