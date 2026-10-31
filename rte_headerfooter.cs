@@ -755,7 +755,8 @@ public static class HeaderFooter
 		using var package = WordprocessingDocument.Open(path, true);
 		var main = package.MainDocumentPart!;
 		var body = main.Document.Body!;
-		if (parts && !main.HeaderParts.Any() && !main.FooterParts.Any()) {
+		// (one section: the built-in converter's; a file of several has them from Word or LibreOffice, each with its own page)
+		if (parts && !main.HeaderParts.Any() && !main.FooterParts.Any() && body.Descendants<W.SectionProperties>().Count() <= 1) {
 			var section = body.Elements<W.SectionProperties>().LastOrDefault();
 			if (section == null) { section = new W.SectionProperties(); body.Append(section); }
 			foreach (var old in section.Elements<W.HeaderReference>().Cast<DocumentFormat.OpenXml.OpenXmlElement>().Concat(section.Elements<W.FooterReference>()).ToList()) old.Remove();
@@ -882,8 +883,9 @@ public static class HeaderFooter
 	}
 
 	/// The sections after a .docx's first, in order, as section breaks: a section with no header or footer of its own keeps
-	/// the one before's, as Word links them; w:pgNumType's start restarts its page numbers. Null for a section that
-	/// doesn't start a new page (continuous). Empty if the file can't be read.
+	/// the one before's, as Word links them; w:pgNumType's start restarts its page numbers; what w:pgSz and w:pgMar give it
+	/// that differs from the first section's is its own (SectionPage). Null for a section that doesn't start a new page
+	/// (continuous). Empty if the file can't be read.
 	public static List<SectionSettings?> SectionsFromDocx(string path) {
 		var result = new List<SectionSettings?>();
 		try {
@@ -894,6 +896,12 @@ public static class HeaderFooter
 			var current = OfSection(main, null, sections[0]) ?? new PageBands();
 			bool own = false;
 			static bool Has<TRef>(W.SectionProperties s) where TRef : W.HeaderFooterReferenceType => s.Elements<TRef>().Any(r => r.Type == null || r.Type.Value == W.HeaderFooterValues.Default);
+			static SectionPage PageOf(W.SectionProperties s) {
+				var (size, margin) = (s.GetFirstChild<W.PageSize>(), s.GetFirstChild<W.PageMargin>());
+				return new SectionPage((int?)size?.Width?.Value, (int?)size?.Height?.Value, (int?)margin?.Left?.Value, (int?)margin?.Right?.Value, margin?.Top?.Value, margin?.Bottom?.Value,
+					size?.Orient?.Value == W.PageOrientationValues.Landscape, (int?)margin?.Header?.Value, (int?)margin?.Footer?.Value);
+			}
+			var firstPage = PageOf(sections[0]);
 			foreach (var section in sections.Skip(1)) {
 				bool header = Has<W.HeaderReference>(section), footer = Has<W.FooterReference>(section);
 				if (header || footer) {
@@ -905,7 +913,7 @@ public static class HeaderFooter
 				}
 				if (section.GetFirstChild<W.SectionType>()?.Val?.Value == W.SectionMarkValues.Continuous) { result.Add(null); continue; }
 				uint? start = section.GetFirstChild<W.PageNumberType>()?.Start?.Value is int number ? (uint)number : null;
-				result.Add(new SectionSettings { Same = !own, Bands = own ? Sections.CopyBands(current) : null, Restart = start != null, Start = (int)(start ?? 1) });
+				result.Add(new SectionSettings { Same = !own, Bands = own ? Sections.CopyBands(current) : null, Restart = start != null, Start = (int)(start ?? 1), Page = PageOf(section).Against(firstPage) });
 				own = false;
 			}
 		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) { result.Clear(); }

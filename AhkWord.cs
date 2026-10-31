@@ -2417,7 +2417,7 @@ class WriterForm : Form
 			Cursor = Cursors.WaitCursor;
 			try { api.Open(dlg.FileName, ViaOf(OpenTypes, dlg.FilterIndex)); }
 			finally { Cursor = Cursors.Default; }
-			SetStatus("Opened " + dlg.FileName + (api.LastConverter != "" ? " (converted by " + api.LastConverter + ")" : ""));
+			SetStatus("Opened " + dlg.FileName + (api.LastConverter != "" ? " (converted by " + api.LastConverter + ")" : "") + api.OpenNotice());
 		}
 	}
 
@@ -2507,7 +2507,7 @@ class WriterForm : Form
 		}
 		if (!ConfirmDiscard()) return;
 		api.Open(path);
-		SetStatus("Opened " + path);
+		SetStatus("Opened " + path + api.OpenNotice());
 	}
 
 	// ---------------------------------------------------------------- Iteration 3: drag and drop
@@ -2533,7 +2533,7 @@ class WriterForm : Form
 			if (files.FirstOrDefault(IsDocument) is { } document) {
 				if (!ConfirmDiscard()) return;
 				api.Open(document);
-				SetStatus("Opened " + document);
+				SetStatus("Opened " + document + api.OpenNotice());
 				return;
 			}
 			if (screenPoint is { } point) Editor.Select(Editor.GetCharIndexFromPosition(Editor.PointToClient(point)), 0);
@@ -2846,17 +2846,16 @@ class WriterForm : Form
 			if (pages != null && PageViewActive)
 			{
 				var (top, bottom, firstTop, firstBottom) = gapsMargins = GapMargins(layout);
-				// (iteration 63) each page's own margins: its section's header and footer, the section's first page its own
+				// (iteration 63) each page's own margins: its section's, with its header and footer, the section's first page its own
 				Func<int, (float, float, float)>? marginsOf = null;
 				var sections = Sections.Resolve(Editor.TextDocument, Bands);
 				if (sections.Count > 1) {
 					var numbers = Sections.Number(pages.Select(p => p.Start).ToList(), sections);
 					marginsOf = k => {
 						var n = numbers[Math.Min(k, numbers.Count - 1)];
-						var b = sections[n.Section].Bands;
-						int on = n.InSection == 1 ? 1 : 2;
-						float t = Math.Max(layout.Top / 20f, b.HeaderReach(on) * 0.72f), bo = Math.Max(layout.Bottom / 20f, b.FooterReach(on) * 0.72f);
-						return (layout.Height / 20f - t - bo, bo, t);
+						static int Hundredths(int twips) => (int)Math.Round(twips / 14.4);
+						var (t, bo) = Sections.MarginsOn(sections[n.Section], n.InSection == 1 ? 1 : 2, Hundredths(layout.Top), Hundredths(layout.Bottom), Hundredths(layout.Height));
+						return (layout.Height / 20f - t * 0.72f - bo * 0.72f, bo * 0.72f, t * 0.72f);
 					};
 				}
 				pageGaps.Apply(pages, layout.Height / 20f - top - bottom, bottom, top, layout.Height / 20f - firstTop - firstBottom, firstBottom, firstTop, marginsOf);
@@ -3282,7 +3281,7 @@ class WriterForm : Form
 			var breaks = Sections.Breaks(doc);
 			int index = breaks.FindIndex(b => b.MarkStart == sectionBreak.MarkStart) + 1;
 			var resolved = Sections.Resolve(breaks, Bands);
-			using var sectionDialog = new HeaderFooterDialog(Sections.CopyBands(resolved[index].Bands), DefaultBands(), sectionBreak.Settings, index + 1);
+			using var sectionDialog = new HeaderFooterDialog(Sections.CopyBands(resolved[index].Bands), DefaultBands(), sectionBreak.Settings, index + 1, new[] { PageMargins[2], PageMargins[3] });
 			if (sectionDialog.ShowDialog(this) != DialogResult.OK) return;
 			doc.BeginEditCollection();
 			try { Sections.Write(doc, sectionBreak, sectionDialog.SectionResult()!); }
@@ -6504,24 +6503,47 @@ public class EditorApi
 
 	/// Iteration 63: inserts a section break at the caret (replacing the selection): a page break after which a new
 	/// section starts, with its own header and footer (at first the section before's: "same as previous") and its page
-	/// numbers starting again at 1 (File > Header and Footer changes them, where the caret is).
+	/// numbers starting again at 1 (Layout > Header & Footer changes them, where the caret is).
 	public void InsertSectionBreak() {
 		var doc = ed.TextDocument;
 		doc.BeginEditCollection();
 		try { Sections.Insert(ed); }
 		finally { doc.EndEditCollection(); }
 		form.BandsChangedNow();
-		form.SetStatus("Section break inserted: the next page starts a new section, its page numbers from 1. File > Header and Footer (with the caret in it) gives it its own footer.");
+		form.SetStatus("Section break inserted: the next page starts a new section, its page numbers from 1. Layout > Header & Footer (with the caret in it) gives it its own footer.");
 	}
 
-	/// The sections: where each starts (characters), whether its page numbers start again and at what, and whether its
-	/// header and footer are the section before's ("same as previous"). The first section is the document's own.
+	/// The sections: where each starts (characters), whether its page numbers start again and at what, whether its
+	/// header and footer are the section before's ("same as previous"), and any top and bottom margins of its own (1/100
+	/// inch; "-" for one that is the document's). The first section is the document's own.
 	public string SectionList() {
 		var lines = new List<string> { "0 restart 1 own" };
-		foreach (var b in Sections.Breaks(ed.TextDocument))
-			lines.Add($"{b.SectionStart} {(b.Settings.Restart ? "restart " + b.Settings.Start : "continue")} {(b.Settings.Same ? "same" : "own")}");
+		var breaks = Sections.Breaks(ed.TextDocument);
+		var sections = Sections.Resolve(breaks, form.Bands);
+		foreach (var (b, section) in breaks.Zip(sections.Skip(1)))
+			lines.Add($"{b.SectionStart} {(b.Settings.Restart ? "restart " + b.Settings.Start : "continue")} {(b.Settings.Same ? "same" : "own")}{(section.Top == null && section.Bottom == null ? "" : $" {section.Top?.ToString() ?? "-"} {section.Bottom?.ToString() ?? "-"}")}");
 		return string.Join("\n", lines);
 	}
+
+	/// Gives the section a position is in (not the first: the document's own, Page Setup's) top and bottom margins of its
+	/// own (1/100 inch; -1: the document's).
+	public void SetSectionMargins(int position, int top, int bottom) {
+		var doc = ed.TextDocument;
+		if (Sections.BreakFor(doc, position) is not { } section) throw new ArgumentException("The first section has the document's margins (Page Setup).");
+		static int? Twips(int hundredths) => hundredths < 0 ? null : (int)Math.Round(hundredths * 14.4);
+		var settings = section.Settings.Copy();
+		settings.Page = SectionPage.WithMargins(settings.Page, Twips(top), Twips(bottom));
+		doc.BeginEditCollection();
+		try { Sections.Write(doc, section, settings); }
+		finally { doc.EndEditCollection(); }
+		ed.Modified = true;
+		form.BandsChangedNow();
+	}
+
+	/// What the status line adds on opening a document whose sections have a page setup that is kept but not shown ("": none).
+	internal string OpenNotice() => Sections.KeptOnly(Sections.Breaks(ed.TextDocument)) is { Count: > 0 } kept
+		? $". Section{(kept.Count == 1 ? "" : "s")} {string.Join(", ", kept)}: paper, orientation or left and right margins of {(kept.Count == 1 ? "its" : "their")} own are kept in the file, but not shown or printed"
+		: "";
 
 	/// Inserts a page break at the caret (replacing the selection): the text after it starts a new page when printed,
 	/// and in Word and LibreOffice. A numbered list it splits goes on with its numbers after it. Ctrl+Enter.
@@ -9040,16 +9062,18 @@ sealed class DocumentPrinter : IDisposable
 	}
 
 	// (iteration 55) a page's text area against the page setup's (1/100 inch): its header or footer reaches further or
-	// less far; (iteration 63) its section's, the section's first page its own first-page ones
+	// less far; (iteration 63) its section's, the section's first page its own first-page ones; its section's own top and
+	// bottom margins
 	(int Top, int Bottom) Shift(int position) {
 		if (baseMargins is not { } m) return (0, 0);
 		var all = AllSections;
 		var section = all[Sections.IndexAt(all, position)];
 		int on = position <= section.Start ? 1 : 2;    // (a page starting where its section does: the section's first)
-		int top = Math.Max(m[2], section.Bands.HeaderReach(on)) - Document.DefaultPageSettings.Margins.Top;
-		int bottom = Math.Max(m[3], section.Bands.FooterReach(on)) - Document.DefaultPageSettings.Margins.Bottom;
-		return (top, bottom);
+		pageHeight ??= Document.DefaultPageSettings.Bounds.Height;
+		var (top, bottom) = Sections.MarginsOn(section, on, m[2], m[3], pageHeight.Value);
+		return (top - Document.DefaultPageSettings.Margins.Top, bottom - Document.DefaultPageSettings.Margins.Bottom);
 	}
+	int? pageHeight;
 	RECT AreaAt(RECT r, int position) {
 		var (top, bottom) = Shift(position);
 		return new() { Left = r.Left, Right = r.Right, Top = r.Top + (int)Math.Round(top * 14.4), Bottom = r.Bottom - (int)Math.Round(bottom * 14.4) };
@@ -11074,16 +11098,26 @@ sealed class HeaderFooterDialog : Form
 	readonly CheckBox restart = new() { Text = "Page numbers start again at", AutoSize = true, Margin = new Padding(16, 6, 0, 0) };
 	readonly NumericUpDown startAt = new() { Minimum = 0, Maximum = 99999, Width = 70, AccessibleName = "First page number", Margin = new Padding(3, 3, 3, 0) };
 	readonly SectionSettings? section;
+	// a section's own top and bottom margins (the document's until ticked)
+	readonly CheckBox ownMargins = new() { Text = "Margins of its own: top", AutoSize = true, Margin = new Padding(16, 6, 0, 0) };
+	readonly NumericUpDown sectionTop = new() { DecimalPlaces = 2, Width = 70, AccessibleName = "Section's top margin", Margin = new Padding(3, 3, 3, 0) };
+	readonly NumericUpDown sectionBottom = new() { DecimalPlaces = 2, Width = 70, AccessibleName = "Section's bottom margin", Margin = new Padding(3, 3, 3, 0) };
 
 	/// Iteration 63: a section's settings as the dialog has them (null: the document's own header and footer, the first
 	/// section's): Same, or its own header and footer (Result), and its numbering.
-	public SectionSettings? SectionResult() => section == null ? null : new SectionSettings {
-		Same = sameAsPrevious.Checked, Bands = sameAsPrevious.Checked ? null : Result(), Restart = restart.Checked, Start = (int)startAt.Value
-	};
+	public SectionSettings? SectionResult() {
+		if (section == null) return null;
+		int Twips(NumericUpDown box) => (int)Math.Round(FromUnits(box.Value) * 14.4);
+		var page = SectionPage.WithMargins(section.Page, ownMargins.Checked ? Twips(sectionTop) : null, ownMargins.Checked ? Twips(sectionBottom) : null);
+		// (a header and footer of its own have the distances the dialog gives them)
+		if (page != null && !sameAsPrevious.Checked) page = page with { HeaderY = null, FooterY = null };
+		return new SectionSettings { Same = sameAsPrevious.Checked, Bands = sameAsPrevious.Checked ? null : Result(), Restart = restart.Checked, Start = (int)startAt.Value, Page = page == new SectionPage() ? null : page };
+	}
 
 	/// The document's header and footer (section: a section after a break, its number from 1 and its settings; bands are
-	/// then its header and footer as they are now, the section before's when it is the same).
-	public HeaderFooterDialog(PageBands bands, PageBands defaultBands, SectionSettings? section = null, int sectionNumber = 0) {
+	/// then its header and footer as they are now, the section before's when it is the same; margins: the document's top
+	/// and bottom, 1/100 inch, which a section's own start from).
+	public HeaderFooterDialog(PageBands bands, PageBands defaultBands, SectionSettings? section = null, int sectionNumber = 0, int[]? margins = null) {
 		defaults_ = defaultBands;
 		this.section = section;
 		Text = "Header and Footer";
@@ -11109,6 +11143,19 @@ sealed class HeaderFooterDialog : Form
 			startAt.Enabled = restart.Checked;
 			restart.CheckedChanged += (s, e) => startAt.Enabled = restart.Checked;
 			new ToolTip().SetToolTip(sameAsPrevious, "Ticked, this section prints the header and footer of the section before (Word's Link to Previous); untick it to give it its own.");
+			row.Controls.Add(ownMargins);
+			row.Controls.Add(sectionTop);
+			row.Controls.Add(new Label { Text = "bottom", AutoSize = true, Margin = new Padding(3, 7, 0, 0) });
+			row.Controls.Add(sectionBottom);
+			row.Controls.Add(new Label { Text = metric ? "cm" : "in", AutoSize = true, Margin = new Padding(3, 7, 3, 0) });
+			foreach (var box in new[] { sectionTop, sectionBottom }) box.Maximum = ToUnits(1000);
+			ownMargins.Checked = section.Page?.Top != null || section.Page?.Bottom != null;
+			decimal Start(int? twips, int side) => Math.Min(sectionTop.Maximum, ToUnits(twips is int t ? (int)Math.Round(Math.Abs(t) / 14.4) : margins is { Length: 2 } ? margins[side] : 100));
+			sectionTop.Value = Start(section.Page?.Top, 0);
+			sectionBottom.Value = Start(section.Page?.Bottom, 1);
+			sectionTop.Enabled = sectionBottom.Enabled = ownMargins.Checked;
+			ownMargins.CheckedChanged += (s, e) => sectionTop.Enabled = sectionBottom.Enabled = ownMargins.Checked;
+			new ToolTip().SetToolTip(ownMargins, "Ticked, this section's pages have these top and bottom margins; the other sections keep theirs. Page Setup sets the document's.");
 		}
 		layout.Controls.Add(SelectionRow());
 		layout.Controls.Add(differentFirst);

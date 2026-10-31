@@ -802,6 +802,32 @@ The number of table rows the selection covers completely (0 if it is not whole r
 
 ## Pictures' alt text
 
+### InsertSectionBreak
+
+```autohotkey
+Rte.InsertSectionBreak()
+```
+
+Inserts a section break at the caret (replacing the selection): a page break after which a new section starts, with the header and footer of the section before and its page numbers starting again at 1. Layout > Header & Footer, with the caret in the section, changes them.
+
+### SectionList
+
+```autohotkey
+Rte.SectionList()
+```
+
+returns: string
+
+The sections, a line each: where it starts (characters), `restart N` or `continue` for its page numbers, `same` or `own` for its header and footer, and then any top and bottom margins of its own (1/100 inch; `-` for one that is the document's). The first section is the document's own.
+
+### SetSectionMargins
+
+```autohotkey
+Rte.SetSectionMargins(position, top, bottom)
+```
+
+Gives the section `position` is in top and bottom margins of its own (1/100 inch; -1: the document's). Not for the first section, which has the document's (Page Setup). Word's section with a paper size, orientation or left and right margins of its own keeps them in the file, but is shown and printed with the document's.
+
 ### InsertPageBreak
 
 ```autohotkey

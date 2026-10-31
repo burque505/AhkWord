@@ -7,7 +7,7 @@
 // own header and footer (WriterForm.Bands), as before.
 //   - SectionSettings: a section's own: its header and footer (PageBands; Same: as the section before's, Word's "Link to
 //     Previous", until one is given), whether its page numbers start again (Restart, on unless turned off) and at what
-//     number (Start).
+//     number (Start), and (Page) the page setup it has of its own.
 //   - PageSection: a section as laid out: where its text starts, its header and footer, its numbering.
 //   - Sections: the markers read and written; a section break put in; each page's section, number shown ({page}), the
 //     section's page count ({sectionpages}) and whether it is the section's first page (its own first-page header).
@@ -15,6 +15,28 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using EllipticBit.RichEditorNET;
 using EllipticBit.RichEditorNET.TextObjectModel2;
+
+/// A section's own page setup: what its file gives it that differs from the first section's (twips; null: the document's).
+/// Top and Bottom are shown and printed; the rest is only kept, and written back when the file is saved.
+public sealed record SectionPage(int? Width = null, int? Height = null, int? Left = null, int? Right = null, int? Top = null, int? Bottom = null, bool? Landscape = null, int? HeaderY = null, int? FooterY = null)
+{
+	/// What this section has that first hasn't (null: nothing).
+	public SectionPage? Against(SectionPage first) {
+		static int? Own(int? a, int? b) => a == b ? null : a;
+		var own = new SectionPage(Own(Width, first.Width), Own(Height, first.Height), Own(Left, first.Left), Own(Right, first.Right), Own(Top, first.Top), Own(Bottom, first.Bottom),
+			(Landscape ?? false) == (first.Landscape ?? false) ? null : Landscape ?? false, Own(HeaderY, first.HeaderY), Own(FooterY, first.FooterY));
+		return own == new SectionPage() ? null : own;
+	}
+
+	/// With other top and bottom margins (twips; null: the document's); null if that leaves it nothing of its own.
+	public static SectionPage? WithMargins(SectionPage? page, int? top, int? bottom) {
+		var own = (page ?? new SectionPage()) with { Top = top, Bottom = bottom };
+		return own == new SectionPage() ? null : own;
+	}
+
+	/// Whether it has more than margins top and bottom and the header's and footer's distances: things kept but not shown.
+	[System.Text.Json.Serialization.JsonIgnore] public bool KeptOnly => Width != null || Height != null || Left != null || Right != null || Landscape != null;
+}
 
 /// A section's own settings, as its break's marker holds them.
 public sealed class SectionSettings
@@ -26,12 +48,15 @@ public sealed class SectionSettings
 	/// Whether page numbers start again in this section, and at what number.
 	public bool Restart { get; set; } = true;
 	public int Start { get; set; } = 1;
+	/// The section's own page setup (null: the document's).
+	public SectionPage? Page { get; set; }
 
-	public SectionSettings Copy() => new() { Bands = Bands == null ? null : Sections.CopyBands(Bands), Same = Same, Restart = Restart, Start = Start };
+	public SectionSettings Copy() => new() { Bands = Bands == null ? null : Sections.CopyBands(Bands), Same = Same, Restart = Restart, Start = Start, Page = Page };
 }
 
-/// A section as laid out: where its text starts (the first section at 0), its header and footer, its numbering.
-public sealed record PageSection(int Start, PageBands Bands, bool Restart, int StartAt);
+/// A section as laid out: where its text starts (the first section at 0), its header and footer, its numbering, and its
+/// own top and bottom margins (1/100 inch; null: the document's).
+public sealed record PageSection(int Start, PageBands Bands, bool Restart, int StartAt, int? Top = null, int? Bottom = null);
 
 public static class Sections
 {
@@ -98,10 +123,24 @@ public static class Sections
 		var sections = new List<PageSection> { new(0, first, true, 1) };
 		foreach (var b in breaks) {
 			var bands = b.Settings.Same || b.Settings.Bands == null ? sections[^1].Bands : b.Settings.Bands;
-			sections.Add(new PageSection(b.SectionStart, bands, b.Settings.Restart, Math.Max(0, b.Settings.Start)));
+			static int? Hundredths(int? twips) => twips is int t ? (int)Math.Round(Math.Abs(t) / 14.4) : null;
+			sections.Add(new PageSection(b.SectionStart, bands, b.Settings.Restart, Math.Max(0, b.Settings.Start), Hundredths(b.Settings.Page?.Top), Hundredths(b.Settings.Page?.Bottom)));
 		}
 		return sections;
 	}
+
+	/// A page's top and bottom margins (1/100 inch): its section's own, else the document's (top, bottom), with its header
+	/// and footer pushing the text in; on: 1 for the section's first page, else 2. A section's own that would leave less
+	/// than an inch of text on a page pageHeight tall aren't used.
+	public static (int Top, int Bottom) MarginsOn(PageSection section, int on, int top, int bottom, int pageHeight) {
+		int ownTop = section.Top ?? top, ownBottom = section.Bottom ?? bottom;
+		if (pageHeight - ownTop - ownBottom < 100) (ownTop, ownBottom) = (top, bottom);
+		return (Math.Max(ownTop, section.Bands.HeaderReach(on)), Math.Max(ownBottom, section.Bands.FooterReach(on)));
+	}
+
+	/// The sections (numbered from 1) with a page setup that is kept but not shown: paper, orientation, left and right
+	/// margins of their own.
+	public static List<int> KeptOnly(List<Break> breaks) => breaks.Select((b, i) => (b, i)).Where(x => x.b.Settings.Page?.KeptOnly == true).Select(x => x.i + 2).ToList();
 
 	/// The section a position is in.
 	public static int IndexAt(IReadOnlyList<PageSection> sections, int position) {
@@ -257,9 +296,10 @@ public static class Sections
 	/// RTF with Word's sections as AhkWord's: each \sect of its text a section break (a page break, its marker holding the
 	/// section after it: the header and footer the file gives that section, or the section before's when it gives none, as
 	/// Word links them; its page numbers starting again, \pgnrestart, at \pgnstarts). A marker AhkWord wrote in front of a
-	/// \sect is its exact settings. A continuous section (\sbknone) starts no page, so no break: its \sect only ends its
-	/// paragraph, and a header or footer of its own goes to the next break. (The first section's header and footer are the
-	/// document's: HeaderFooter.FromRtf.)
+	/// \sect is its exact settings, but for its page setup, which the section after the \sect gives: another program may
+	/// have changed it. What differs from the first section's is the section's own (SectionPage). A continuous section
+	/// (\sbknone) starts no page, so no break: its \sect only ends its paragraph, and a header or footer of its own goes to
+	/// the next break. (The first section's header and footer are the document's: HeaderFooter.FromRtf.)
 	public static string ImportRtf(string rtf) {
 		var sects = SectsIn(rtf);
 		int body = HeaderFooter.BodyStart(rtf);
@@ -282,6 +322,19 @@ public static class Sections
 			return cut.Success ? segment[..cut.Index] : segment[..Math.Min(segment.Length, 2000)];
 		}
 		bool Continuous(int k) => Regex.IsMatch(PropertiesOf(k), @"\\sbknone(?![a-zA-Z])");
+		// a section's page setup: its own words, else the document's, else RTF's defaults
+		SectionPage PageOf(int k) {
+			string properties = PropertiesOf(k);
+			int Twips(string own, string document, int fallback) {
+				var m = Regex.Match(properties, @"\\" + own + @"(-?\d+)");
+				if (!m.Success) m = Regex.Match(head, @"\\" + document + @"(-?\d+)");
+				return m.Success ? int.Parse(m.Groups[1].Value) : fallback;
+			}
+			bool landscape = Regex.IsMatch(properties, @"\\lndscpsxn(?![a-zA-Z])") || (!properties.Contains(@"\pgwsxn") && Regex.IsMatch(head, @"\\landscape(?![a-zA-Z])"));
+			return new SectionPage(Twips("pgwsxn", "paperw", 12240), Twips("pghsxn", "paperh", 15840), Twips("marglsxn", "margl", 1800), Twips("margrsxn", "margr", 1800),
+				Twips("margtsxn", "margt", 1440), Twips("margbsxn", "margb", 1440), landscape, Twips("headery", "headery", 720), Twips("footery", "footery", 720));
+		}
+		var firstPage = PageOf(0);
 		var result = new System.Text.StringBuilder(rtf);
 		for (int k = sects.Count - 1; k >= 0; k--) {
 			var (start, length) = sects[k];
@@ -293,7 +346,8 @@ public static class Sections
 			bool continuous = Continuous(k + 1);
 			// (a break after continuous sections takes the last of their own headers and footers, if it has none itself)
 			if (!continuous) for (int j = k; bands == null && j > 0 && Continuous(j); j--) bands = BandsOf(j);
-			var settings = new SectionSettings { Bands = bands, Same = bands == null, Restart = restart, Start = at.Success ? int.Parse(at.Groups[1].Value) : 1 };
+			var page = PageOf(k + 1).Against(firstPage);
+			var settings = new SectionSettings { Bands = bands, Same = bands == null, Restart = restart, Start = at.Success ? int.Parse(at.Groups[1].Value) : 1, Page = page };
 			// (the section's own header and footer groups out of its text: they are its marker's now)
 			if (BandsOf(k + 1) != null)
 				foreach (var (groupStart, groupLength) in BandGroupsIn(rtf, starts[k + 1], starts[k + 1] + (Regex.Match(segment, @"\\pard(?![a-zA-Z])") is { Success: true } pard ? pard.Index : segment.Length)).AsEnumerable().Reverse())
@@ -303,6 +357,7 @@ public static class Sections
 			var mark = RtfMark.Matches(rtf[from..start]).Cast<Match>().LastOrDefault();
 			if (mark != null && OnlyControls.IsMatch(rtf[(from + mark.Index + mark.Length)..start]) && Parse(RtfUnescape(mark.Groups[1].Value)) is { } exact) {
 				settings = exact;
+				settings.Page = page;
 				result.Remove(start, length).Insert(start, @"\page\par ");
 				result.Remove(from + mark.Index, mark.Length).Insert(from + mark.Index, RtfEscape(MarkerFor(settings)));
 				continue;
@@ -316,8 +371,8 @@ public static class Sections
 
 	/// RTF (AhkWord's own, with its header and footer written: HeaderFooter.AddToRtf) with its section breaks as Word's:
 	/// each break's \page a \sect, the section after it given its settings (its own header and footer as \header and
-	/// \footer groups, none when it is the same as the section before's; \pgnrestart \pgnstarts; the page layout). The
-	/// markers stay (hidden text) for AhkWord to read its own settings back.
+	/// \footer groups, none when it is the same as the section before's; \pgnrestart \pgnstarts; the page layout, with what
+	/// it has of its own). The markers stay (hidden text) for AhkWord to read its own settings back.
 	public static string ExportRtf(string rtf, PageLayout layout, string title, string file, float fontSize) {
 		if (!rtf.Contains("[[sect:")) return rtf;
 		// the sections' groups first (their fonts go into the font table, which moves what follows)
@@ -334,10 +389,11 @@ public static class Sections
 			var page = Regex.Match(rtf[after..Math.Min(rtf.Length, after + 400)], @"\\page(?![a-zA-Z]) ?");
 			if (!page.Success || !OnlyControls.IsMatch(rtf[after..(after + page.Index)])) continue;
 			var sb = new System.Text.StringBuilder(@"\sect\sectd");
-			if (layout.Landscape) sb.Append(@"\lndscpsxn");
+			var own = settings.Page ?? new SectionPage();
+			if (own.Landscape ?? layout.Landscape) sb.Append(@"\lndscpsxn");
 			if (settings.Restart) sb.Append(@"\pgnrestart\pgnstarts").Append(Math.Max(0, settings.Start));
 			if (settings is { Same: false, Bands.DifferentFirst: true }) sb.Append(@"\titlepg");
-			sb.Append($@"\pgwsxn{layout.Width}\pghsxn{layout.Height}\marglsxn{layout.Left}\margrsxn{layout.Right}\margtsxn{layout.Top}\margbsxn{layout.Bottom}\headery{layout.HeaderY}\footery{layout.FooterY} ");
+			sb.Append($@"\pgwsxn{own.Width ?? layout.Width}\pghsxn{own.Height ?? layout.Height}\marglsxn{own.Left ?? layout.Left}\margrsxn{own.Right ?? layout.Right}\margtsxn{own.Top ?? layout.Top}\margbsxn{own.Bottom ?? layout.Bottom}\headery{own.HeaderY ?? layout.HeaderY}\footery{own.FooterY ?? layout.FooterY} ");
 			sb.Append(k < groups.Count ? groups[k] : "");
 			// (\sect ends the paragraph: the break paragraph's own mark would be an empty line in Word)
 			int pageAt = after + page.Index;

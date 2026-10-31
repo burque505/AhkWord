@@ -58,5 +58,6 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 - [ ] Tab leaders set in the Paragraph dialog drawn (RichEdit keeps them, and Word shows them, but AhkWord draws only a table of contents' leaders)
 - [ ] Merged table cells
 - [ ] A section break on the same page (Word's continuous break), worth it once there are columns or a page setup per section
+- [ ] A section's own paper, orientation and left and right margins shown and printed (they are kept in the file now; top and bottom margins are shown): RichEdit wraps the whole document to one width
 - [ ] A winget package
 - [ ] Windows on ARM
