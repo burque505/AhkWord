@@ -691,7 +691,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 67;    // (the About box; make_version.ps1)
+	public const int Iteration = 68;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -2700,7 +2700,7 @@ class WriterForm : Form
 			// as was taken before: zoomed, the text was left a line or so off, which showed as a jump); what a step moved the
 			// text by is measured, and any rest scrolled with that
 			double perStep = 1;
-			for (int tries = 0; tries < 4; tries++) {
+			for (int tries = 0; tries < 4 && !openingSheets; tries++) {
 				int moved = Editor.GetPositionFromCharIndex(top).Y - topY;
 				int step = (int)Math.Round(moved / perStep);
 				if (step == 0) break;
@@ -2739,6 +2739,39 @@ class WriterForm : Form
 		});
 	}
 	bool heldGaps;
+
+	/// Iteration 68: while a document opens: the busy cursor and a word in the status bar, the editor's painting held
+	/// (HoldGaps), painted once after; the keyboard's focus off the editor (with it there, Windows' text services follow each
+	/// of the many changes a file's formats are put in with). OpenTime: how long it took.
+	internal IDisposable HoldOpening(string name) {
+		var clock = System.Diagnostics.Stopwatch.StartNew();
+		bool focused = Editor.Focused;
+		if (focused) ActiveControl = null;
+		UseWaitCursor = true;
+		Cursor.Current = Cursors.WaitCursor;
+		ShowProgress($"Opening {name}...");
+		var held = HoldGaps();
+		return new OnDispose(() => {
+			held.Dispose();
+			UseWaitCursor = false;
+			Cursor.Current = Cursors.Default;
+			if (focused && Editor.CanFocus) Editor.Focus();
+			OpenTime = clock.Elapsed;
+		});
+	}
+	internal TimeSpan OpenTime;
+
+	/// The new document's sheets worked out now, not a moment after it shows (when they would move the text), and its
+	/// start in view with page 1's top margin.
+	internal void SheetsNow() {
+		if (!PageViewActive || gapsOut) return;
+		ReferencesNow();    // (they can change the pages: after it shows, the sheets would be worked out again, and move it)
+		openingSheets = true;
+		try { RecomputeGaps(); }
+		finally { openingSheets = false; }
+		bandPagesStale = false;
+	}
+	bool openingSheets;    // (nothing to scroll back to: the document starts at its top, and scrolling draws at once, held or not)
 
 	// The window painted after the gaps went in or out.
 	void RepaintAfterGaps() {
@@ -3953,6 +3986,12 @@ class WriterForm : Form
 	}
 
 	// Rebuilds the tree when the headings have changed.
+	/// The outline of a document just opened, with it, not a moment after.
+	internal void OutlineNow() {
+		outlineTimer.Stop();
+		RefreshOutline();
+	}
+
 	void RefreshOutline() {
 		if (!Editor.IsHandleCreated) return;
 		List<(int Level, int Start, string Text)> headings;
@@ -4863,7 +4902,17 @@ class WriterForm : Form
 		if (text != null && kind != SourceKind.None) sources[kind] = (Embedded(text).Replace("\r\n", "\n"), api.SourceOf(kind), true);
 		sourceNewline = text != null && text.Contains("\r\n") ? "\r\n" : kind == SourceKind.Html ? "\r\n" : "\n";
 		if (view != SourceKind.None) FillSource();
-		if (IsHandleCreated && CrossRefs.Any(Editor.Text)) BeginInvoke(QuietReferenceUpdate);
+		if (IsHandleCreated && CrossRefs.Any(Editor.Text)) {
+			referencesPending = true;
+			BeginInvoke(ReferencesNow);    // (opened in the page view: already done, SheetsNow)
+		}
+	}
+
+	bool referencesPending;
+	void ReferencesNow() {
+		if (!referencesPending) return;
+		referencesPending = false;
+		QuietReferenceUpdate();
 	}
 
 	// (iteration 50) Once a document is loaded: its cross-references' numbers as the editor numbers the paragraphs (a
@@ -5362,7 +5411,8 @@ class WriterForm : Form
 public class EditorApi
 {
 	readonly WriterForm form;
-	RichEditBox ed => form.Editor;
+	RichEditBox ed => building ?? form.Editor;
+	RichEditBox? building;    // (iteration 68: the hidden editor a document is being built in: SetHtml)
 
 	internal EditorApi(WriterForm form) {
 		this.form = form;
@@ -5784,6 +5834,17 @@ public class EditorApi
 	/// LastConverter); via names the converter(s) to use, e.g. "openxml" (Save then uses them too).
 	public void Open(string path, string via = "") {
 		string full = Path.GetFullPath(path);
+		// (iteration 68: not painted until its sheets are in, so it shows once, where it stays)
+		using (form.HoldOpening(Path.GetFileName(full))) {
+			Load(full, via);
+			form.SheetsNow();
+			form.OutlineNow();
+		}
+		form.Events.Raise(EditorEvent.Opened);
+		form.RunHook(HookEvent.Opened, full);    // (iteration 56)
+	}
+
+	void Load(string full, string via) {
 		string extension = Path.GetExtension(full).ToLowerInvariant();
 		LastConverter = "";
 		// the header and footer: the document's own; documents that can have them but don't have none, others get the default
@@ -5866,7 +5927,7 @@ public class EditorApi
 				if (kind == "rtf") LinkFonts(ed);
 				// (a .docx's list levels: where its lists put their numbers and text, from its most used list definition;
 				// the document's lists and legal numbering take them)
-				if (extension == ".docx" && OfficeConverters.ListLevelIndents(full) is { } indents) {
+				if ((extension == ".docx" ? OfficeConverters.ListLevelIndents(full) : extension == ".odt" && kind == "html" ? OfficeConverters.ConvertedListIndents : null) is { } indents) {
 					for (int i = 0; i < 9; i++) (form.Levels[i].NumberAt, form.Levels[i].TextAt) = indents[i];
 					OfficeConverters.FitListIndents(ed.TextDocument);
 					if (LegalLists.Paragraphs(ed.TextDocument).Any(p => p.Legal && !p.Styled)) LegalLists.Renumber(ed);
@@ -5879,6 +5940,10 @@ public class EditorApi
 				bands = HeaderFooter.FromHtml(html);
 				numbering = LineNumberFormats.FromHtml(html);
 				SetHtml(html);
+				if (StyleHtml.LevelsIn(html) is { Count: 9 } levels) {    // (AhkWord's HTML: where its lists put their numbers and text)
+					form.Levels = levels;
+					OfficeConverters.FitListIndents(ed.TextDocument);
+				}
 				fileStyles = StyleHtml.FromMeta(html);    // (AhkWord's HTML: its styles, which its styled paragraphs are given again)
 				styledLook = fileStyles != null;
 				break;
@@ -5907,8 +5972,6 @@ public class EditorApi
 		form.SetFileName(full);
 		form.AddRecent(full);
 		form.DocumentLoaded(sourceText == null ? WriterForm.SourceKind.None : extension is ".md" or ".markdown" ? WriterForm.SourceKind.Markdown : WriterForm.SourceKind.Html, sourceText);
-		form.Events.Raise(EditorEvent.Opened);
-		form.RunHook(HookEvent.Opened, full);    // (iteration 56)
 	}
 
 	// While a document is loaded: no undo steps (they are cleared once it is), and no change notifications, which would
@@ -5993,13 +6056,76 @@ public class EditorApi
 
 	/// Replaces the document with HTML (a whole page or a part of one), including the list numbering and tables GetHtml writes.
 	public void SetHtml(string html) {
+		// (iteration 68: built in a hidden editor, which lays nothing out for the page and has no spell checker or text services
+		// following it, and handed over at once: the many changes a file's formats take were up to minutes in the window's own)
+		using var hidden = new WriterEditBox { WordWrap = false, Width = 600, Height = 400, Font = ed.Font };
+		_ = hidden.Handle;
+		hidden.EnableFontSize = ed.EnableFontSize;
+		hidden.SetDefaultSize();
+		building = hidden;
+		try { BuildHtml(html); }
+		finally { building = null; }
+		building = hidden;
+		MarksFollowText();    // (here: thousands of looks at single characters, seconds in the window)
+		OfficeConverters.FitListIndents(hidden.TextDocument);    // (HTML's lists come without them: number and text apart, as RTF's and Word's)
+		building = null;
+		marksFollowed = true;
+		// (the paragraphs' styles and list levels aren't all in RichEdit's RTF; by paragraph: the markers are still in this text)
+		var styled = new Dictionary<int, int>();
+		var listed = new Dictionary<int, (int Type, int Start, int Level, float Tab)>();
+		var breaks = new Dictionary<int, string>();
+		EachParagraph(hidden, (index, paragraph) => {
+			var para = paragraph.Para;
+			if (para.Style is int style and not -1) styled[index] = style;
+			if (global::LineSpacing.BreaksIn(paragraph.Text ?? "") is { } kept) breaks[index] = kept;
+			if ((para.ListType & 0xFFFF) != tomConstants.tomListNone) listed[index] = (para.ListType, para.ListStart, para.ListLevelIndex, para.ListTab);
+		});
+		string rtf = ((RichTextBox)hidden).Rtf;
+		((RichTextBox)ed).Rtf = global::LineSpacing.MarkersToRtf(rtf);
+		global::LineSpacing.FromMarkers(ed);    // (any that didn't come through in one piece, split by a format)
+		if (listed.Count + breaks.Count > 0) EachParagraph(ed, (index, paragraph) => {
+			var para = paragraph.Para;
+			if (breaks.TryGetValue(index, out var kept)) global::LineSpacing.SetBreaks(para, kept);
+			if (!listed.TryGetValue(index, out var list)) return;
+			if (para.ListType != list.Type) para.ListType = list.Type;
+			if (para.ListStart != list.Start) para.ListStart = list.Start;
+			if (para.ListLevelIndex != list.Level) para.ListLevelIndex = list.Level;
+			if (Math.Abs(para.ListTab - list.Tab) > 0.01f) para.ListTab = list.Tab;
+		});
+		if (styled.Count > 0) EachParagraph(ed, (index, paragraph) => { if (styled.TryGetValue(index, out int style)) {
+			// (a built-in style puts its own spacing on the paragraph: the paragraph's stay)
+			var para = paragraph.Para;
+			var (before, after, rule, line, next, together, widow) = (para.SpaceBefore, para.SpaceAfter, para.LineSpacingRule, para.LineSpacing, para.KeepWithNext, para.KeepTogether, para.WidowControl);
+			var (alignment, first, left, right) = (para.Alignment, para.FirstLineIndent, para.LeftIndent, para.RightIndent);
+			para.Style = style;
+			para.Alignment = alignment;
+			para.SetIndents(first, left, right);
+			(para.SpaceBefore, para.SpaceAfter, para.KeepWithNext, para.KeepTogether, para.WidowControl) = (before, after, next, together, widow);
+			para.SetLineSpacing(rule, line);
+		} });
+	}
+
+	static void EachParagraph(RichEditBox editor, Action<int, ITextRange2> each) {
+		var doc = editor.TextDocument;
+		int end = doc.Range2(0, 0).StoryLength, index = 0;
+		var paragraph = doc.Range2(0, 0);
+		paragraph.Expand(tomConstants.tomParagraph);
+		while (true) {
+			each(index++, paragraph);
+			if (paragraph.End >= end) break;
+			paragraph.SetRange(paragraph.End, paragraph.End);
+			paragraph.Expand(tomConstants.tomParagraph);
+		}
+	}
+
+	void BuildHtml(string html) {
 		// (frozen: the markers put into the text, and taken out one by one, aren't shown)
 		ed.TextDocument.Freeze();
 		try {
 			RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(StyleHtml.MarkHtml(CrossRefs.FromHtml(Footnotes.FromHtml(html))))))), HtmlLists.Load, HtmlLists.Load, TableWidth());
 			CrossRefs.AfterLoad(ed.TextDocument);
 			StyleHtml.FromMarkers(ed);    // (headings and styles from their tags, not their fonts)
-			if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) + global::LineSpacing.FromMarkers(ed) > 0) ed.ClearUndo();
+			if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) + (building == null ? global::LineSpacing.FromMarkers(ed) : 0) > 0) ed.ClearUndo();
 		} finally {
 			ed.TextDocument.Unfreeze();
 		}
@@ -6048,7 +6174,7 @@ public class EditorApi
 	// conversions use it as it comes).
 	string HtmlFile(string title, bool pretty = false) {
 		string body = HtmlBody(out string css);
-		return HtmlDocument(pretty ? PrettyHtml.Format(body) : body, title, css, (OwnBands ? HeaderFooter.HtmlMeta(form.Bands) : "") + LineNumberFormats.HtmlMeta(form.Numbering), StyleHtml.EndComment(form.Styles));
+		return HtmlDocument(pretty ? PrettyHtml.Format(body) : body, title, css, (OwnBands ? HeaderFooter.HtmlMeta(form.Bands) : "") + LineNumberFormats.HtmlMeta(form.Numbering), StyleHtml.EndComment(form.Styles) + StyleHtml.LevelsComment(form.Levels));
 	}
 
 	/// The "via" for an HTML file that keeps its pictures inside it.
@@ -6652,6 +6778,7 @@ public class EditorApi
 			? $". Section{(kept.Count == 1 ? "" : "s")} {string.Join(", ", kept)}: paper, orientation or left and right margins of {(kept.Count == 1 ? "its" : "their")} own are kept in the file, but not shown or printed"
 			: "";
 		if (form.DocumentColumns != null || breaks.Any(b => b.Settings.Columns != null)) notice += ". It has columns: they are printed, and Print Preview shows them; here it is edited in one column";
+		if (form.OpenTime.TotalSeconds >= 2) notice += $" ({form.OpenTime.TotalSeconds:0.0} seconds)";
 		return notice;
 	}
 
@@ -6829,7 +6956,9 @@ public class EditorApi
 	// marks (they came back at the default size, and list numbers, drawn in the mark's format, with them), and
 	// LibreOffice's RTF gives table marks its own default (12 pt, making rows taller). Table row markers take the size of
 	// their row's first and last cell.
+	bool marksFollowed;    // (done as the document was built: SetHtml)
 	void MarksFollowText() {
+		if (building == null && marksFollowed) { marksFollowed = false; return; }
 		var doc = ed.TextDocument;
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 		static bool Mark(char c) => c is '\r' or '\u0007' or '\uFFF9' or '\uFFFB' or '\v';

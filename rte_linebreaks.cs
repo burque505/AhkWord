@@ -20,7 +20,7 @@ public static class LineBreaks
 
 	// A block's start, and where its own text ends: at the next block tag (a list item's text ends where a list nested in
 	// it starts, before its </li>).
-	static readonly Regex BlockStart = new(@"<(p|h[1-6]|li|pre)\b[^>]*>", RegexOptions.IgnoreCase);
+	static readonly Regex BlockStart = new(@"<(p|h[1-6]|li|pre)\b[^>]*>(?!\s*<[ou]l\b)", RegexOptions.IgnoreCase);
 	static readonly Regex BlockTag = new(@"</?(p|h[1-6]|li|pre|ol|ul|table|tr|td|th|div|blockquote)\b[^>]*>", RegexOptions.IgnoreCase);
 	static readonly Regex AnyTag = new(@"<[^>]+>");
 

@@ -82,7 +82,7 @@ public static class LineSpacing
 
 	// ================================================================ HTML
 
-	static readonly Regex BlockStart = new(@"<(p|h[1-6]|li|pre)\b[^>]*>", RegexOptions.IgnoreCase);
+	static readonly Regex BlockStart = new(@"<(p|h[1-6]|li|pre)\b[^>]*>(?!\s*<[ou]l\b)", RegexOptions.IgnoreCase);
 	const char CellEnd = '\u0007';
 
 	static string Story(ITextDocument2 doc) => doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
@@ -291,10 +291,112 @@ public static class LineSpacing
 		return markers.Count;
 	}
 
+	static readonly Regex RtfUnits = new(@"\\\\|\\pard(?![a-zA-Z])(?<words>(?:\\[a-zA-Z]+-?\d* ?)*)|\\(?:par|cell)(?![a-zA-Z]) ?|" + Marker + "|" + ParaMarker);
+	/// The line and page breaks a paragraph's marker gives (as Breaks has them; null: none).
+	public static string? BreaksIn(string paragraph) {
+		foreach (Match m in ParaMarker.Matches(paragraph))
+			foreach (string field in m.Groups[1].Value.Split(';'))
+				if (field.StartsWith('k')) return field[1..];
+		return null;
+	}
+
+	/// Sets a paragraph's breaks as BreaksIn gives them.
+	public static void SetBreaks(ITextPara para, string breaks) {
+		if (breaks.Contains('n')) para.KeepWithNext = tomConstants.tomTrue;
+		if (breaks.Contains('t')) para.KeepTogether = tomConstants.tomTrue;
+		if (breaks.Contains('p')) para.PageBreakBefore = tomConstants.tomTrue;
+		if (breaks.Contains('x')) para.NoLineNumber = tomConstants.tomTrue;
+	}
+
+	static readonly Regex NextIsPard = new(@"\G(?:\s|\\[a-zA-Z]+-?\d* ?)*?\\pard(?![a-zA-Z])");
+
+	/// RTF (RichEdit's, with the markers MarkHtml left) with each marker made RTF's words for the same formats, which hold for
+	/// the paragraph they are in: one pass over the text, not thousands of changes to a document (seconds to minutes for a
+	/// long one: FromMarkers). RichEdit writes \pard only where the format changes, so the words would go on into the
+	/// paragraphs after: there, what they changed is put back as it was (a list item's numbering and indents are left).
+	public static string MarkersToRtf(string rtf) {
+		if (!rtf.Contains(MarkerStart) && !rtf.Contains(ParaStart)) return rtf;
+		static int Twips(float points) => (int)Math.Round(points * 20);
+		var result = new StringBuilder(rtf.Length);
+		int position = 0;
+		string paragraph = "";                // the words after the last \pard
+		var changed = new HashSet<string>();  // what the marker in this paragraph changed
+		string Own(string word) => Regex.Match(paragraph, @"\\" + word + @"(-?\d+)") is { Success: true } m ? m.Groups[1].Value : "0";
+		string LineWords(int rule, float spacing) => rule switch {
+			OneAndHalf => @"\sl360\slmult1", Double => @"\sl480\slmult1",
+			AtLeast => $@"\sl{Twips(spacing)}\slmult0", Exactly => $@"\sl-{Twips(spacing)}\slmult0",
+			Multiple => $@"\sl{(int)Math.Round(spacing * 240)}\slmult1", _ => "",
+		};
+		string ParaWords(string fields) {
+			var words = new StringBuilder();
+			foreach (string field in fields.Split(';', StringSplitOptions.RemoveEmptyEntries)) {
+				char kind = field[0];
+				string value = field[1..];
+				if (kind == 'k') {
+					// (the others have no word that turns them off again: BreaksIn and SetBreaks)
+					if (value.Contains('o')) { words.Append(@"\nowidctlpar"); changed.Add("nowidctlpar"); }
+				}
+				else if (kind == 't') {
+					foreach (var tab in value.Split(',')) {
+						var p = tab.Split('/');
+						float at = float.Parse(p[0], Invariant);
+						if (at <= 0 || at > 1584) continue;
+						words.Append(p[1] switch { "1" => @"\tqc", "2" => @"\tqr", "3" => @"\tqdec", _ => "" });
+						words.Append(p[2] switch { "1" => @"\tldot", "2" => @"\tlhyph", "3" => @"\tlul", _ => "" });
+						words.Append(p[1] == "4" ? @"\tb" : @"\tx").Append(Twips(at));
+						changed.Add("tabs");
+					}
+				}
+				else if (float.TryParse(value, NumberStyles.Float, Invariant, out float points) && (kind switch { 'b' => "sb", 'a' => "sa", 'l' => "li", 'r' => "ri", 'f' => "fi", _ => null }) is { } word) {
+					words.Append('\\').Append(word).Append(Twips(points));
+					changed.Add(word);
+				}
+			}
+			return words.ToString();
+		}
+		// after a paragraph with a marker: what it changed as it was
+		string Back() {
+			if (changed.Contains("tabs")) return @"\pard" + paragraph.TrimEnd() + " ";    // (only \pard takes tab stops off; not in lists, which have no markers for them)
+			var words = new StringBuilder();
+			foreach (var word in changed)
+				if (word == "nowidctlpar") words.Append(@"\widctlpar");
+				else if (word == "sl") words.Append(Regex.Match(paragraph, @"\\sl-?\d+\\slmult\d") is { Success: true } line ? line.Value : @"\sl240\slmult1");
+				else words.Append('\\').Append(word).Append(Own(word));
+			return words.Length > 0 ? words.Append(' ').ToString() : "";
+		}
+		foreach (Match unit in RtfUnits.Matches(rtf)) {
+			if (unit.Value == @"\\") continue;
+			result.Append(rtf, position, unit.Index - position);
+			position = unit.Index + unit.Length;
+			if (unit.Groups["words"].Success) {
+				paragraph = unit.Groups["words"].Value;
+				changed.Clear();
+				result.Append(unit.Value);
+			}
+			else if (unit.Value.StartsWith(MarkerStart)) {
+				string words = LineWords(unit.Groups[1].Value[0] - '0', float.Parse(unit.Groups[2].Value, Invariant));
+				if (words != "") { result.Append(words).Append(' '); changed.Add("sl"); }
+			}
+			else if (unit.Value.StartsWith(ParaStart)) {
+				string words = ParaWords(unit.Groups[3].Value);
+				if (words != "") result.Append(words).Append(' ');
+			}
+			else {
+				result.Append(unit.Value);
+				if (changed.Count > 0) {
+					if (!NextIsPard.IsMatch(rtf, position)) result.Append(Back());
+					changed.Clear();
+				}
+			}
+		}
+		result.Append(rtf, position, rtf.Length - position);
+		return result.ToString();
+	}
+
 	// "b12;a0;l36;r0;f-18;t45/0/0,468/2/0;knt": before, after, left, right, first-line indent (points), tab stops
 	// (position / alignment / leader, TOM's values), the line and page breaks (as Breaks gives them)
 	static void ApplyFormat(ITextRange2 at, string fields) {
-		var para = at.Para;
+		var para = at.Para.Duplicate;    // (set on a copy and put on at once: each change to the paragraph itself formats it again)
 		float? left = null, right = null, first = null;
 		foreach (string field in fields.Split(';', StringSplitOptions.RemoveEmptyEntries)) {
 			char kind = field[0];
@@ -331,6 +433,7 @@ public static class LineSpacing
 			float f = first ?? para.FirstLineIndent, l = left ?? para.LeftIndent, r = right ?? para.RightIndent;
 			if (Math.Abs(f - para.FirstLineIndent) > 0.01f || Math.Abs(l - para.LeftIndent) > 0.01f || Math.Abs(r - para.RightIndent) > 0.01f) para.SetIndents(f, l, r);
 		}
+		at.Para = para;
 	}
 }
 
@@ -518,13 +621,15 @@ public static class DocxLineSpacing
 		try {
 			for (int i = 0; i < starts.Count; i++) {
 				var f = formats[i];
-				var para = doc.Range2(starts[i], starts[i]).Para;
+				var at = doc.Range2(starts[i], starts[i]);
+				var para = at.Para.Duplicate;    // (set on a copy and put on at once: each change to the paragraph itself formats it again)
 				para.SpaceBefore = f.Before / 20f;
 				para.SpaceAfter = f.After / 20f;
 				if (f.Line is int line) {
 					if (f.Rule == "auto") para.SetLineSpacing(Math.Abs(line - 240) <= 1 ? LineSpacing.Single : LineSpacing.Multiple, Math.Abs(line - 240) <= 1 ? 1 : line / 240f);
 					else para.SetLineSpacing(f.Rule == "atLeast" ? LineSpacing.AtLeast : LineSpacing.Exactly, line / 20f);
 				}
+				at.Para = para;
 			}
 		} finally {
 			doc.EndEditCollection();

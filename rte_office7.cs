@@ -171,6 +171,7 @@ public static class OfficeConverters {
 		if (format != "docx" && OpenXmlAvailable) {
 			try {
 				string docx = LibreOfficeConvert(copy, temp, "docx:MS Word 2007 XML", "docx");
+				ConvertedListIndents = ListLevelIndents(docx);
 				return ("html", OpenXmlRead(docx), LibreOffice);
 			} catch { }
 		}
@@ -1379,6 +1380,9 @@ public static class OfficeConverters {
 	/// (Word's number position, left minus hanging, and text indent, left). LibreOffice gives its list definitions no
 	/// indents and each paragraph its own; Word and the built-in writer, the definitions. null: no lists; a level
 	/// without paragraphs: (null, null), automatic.
+	/// The list levels of the .docx LibreOffice made of the last file it read (ListLevelIndents; that file is gone by then).
+	public static (float? NumberAt, float? TextAt)[]? ConvertedListIndents;
+
 	public static (float? NumberAt, float? TextAt)[]? ListLevelIndents(string docx) {
 		try {
 			using var zip = System.IO.Compression.ZipFile.OpenRead(docx);

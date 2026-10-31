@@ -1220,7 +1220,8 @@ public static class StyleClipboard
 // (StyleHtml.FromMarkers).
 public static class StyleHtml
 {
-	static readonly Regex BlockStart = new(@"<(p|h[1-6]|li|pre)\b([^>]*)>", RegexOptions.IgnoreCase);
+	// (not the <li> the library wraps a sub-list in when its item has no parent: <li><ul><li>: no paragraph of its own)
+	static readonly Regex BlockStart = new(@"<(p|h[1-6]|li|pre)\b([^>]*)>(?!\s*<[ou]l\b)", RegexOptions.IgnoreCase);
 	const string MarkerStart = "@@RTE-STYLE:", MarkerEnd = "@@";
 	static readonly Regex Marker = new(Regex.Escape(MarkerStart) + @"([^@]+)" + Regex.Escape(MarkerEnd));
 
@@ -1334,6 +1335,20 @@ public static class StyleHtml
 	/// leave it out): in the head, the long line of them came first in the HTML source view, before the document.
 	public static string EndComment(StyleSheet sheet) =>
 		$"<!-- {MetaName} {Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(sheet)))} -->\r\n";
+
+	const string LevelsName = "rte-writer-levels";
+
+	/// The document's list levels for AhkWord, as EndComment (HTML has no place for where they put numbers and text).
+	public static string LevelsComment(List<ListLevel> levels) => levels.All(l => l.NumberAt == null && l.TextAt == null) ? ""
+		: $"<!-- {LevelsName} {Convert.ToBase64String(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(levels)))} -->\r\n";
+
+	/// The list levels an HTML file has for AhkWord (null: none).
+	public static List<ListLevel>? LevelsIn(string html) {
+		var m = Regex.Match(html, "<!--\\s*" + LevelsName + "\\s+([A-Za-z0-9+/=]+)\\s*-->", RegexOptions.IgnoreCase);
+		if (!m.Success) return null;
+		try { return JsonSerializer.Deserialize<List<ListLevel>>(Encoding.UTF8.GetString(Convert.FromBase64String(m.Groups[1].Value))); }
+		catch (Exception ex) when (ex is FormatException or JsonException) { return null; }
+	}
 
 	/// The styles an HTML file has for AhkWord (null: none): at its end, or (files saved before iteration 46) in its head.
 	public static StyleSheet? FromMeta(string html) {

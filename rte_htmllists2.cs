@@ -182,6 +182,7 @@ public static class HtmlLists
 				bool legal = Regex.IsMatch(tag.Groups[3].Value, @"\bclass\s*=\s*""[^""]*\b" + LegalClass + @"\b");
 				open.Add((cls.Success ? PunctuationOf(cls.Groups[2].Value) : null, start.Success ? int.Parse(start.Groups[1].Value) : 1, legal));
 			} else if (name == "li" && !closing) {
+				if (Regex.IsMatch(html.AsSpan(tag.Index + tag.Length, Math.Min(40, html.Length - tag.Index - tag.Length)), @"^\s*<[ou]l\b", RegexOptions.IgnoreCase)) continue;    // (the library's wrapper of a sub-list: no paragraph)
 				wanted.Add(open.Count > 0 ? open[^1] : null);
 				firstOfList.Add(itemsSeen.Count > 0 && itemsSeen[^1]++ == 0);
 				var styleName = Regex.Match(tag.Groups[3].Value, @"\bdata-rte-style\s*=\s*""([^""]+)""", RegexOptions.IgnoreCase);
