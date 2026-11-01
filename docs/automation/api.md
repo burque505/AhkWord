@@ -482,9 +482,10 @@ The converter used by the last Open, Save, SaveAs or Export of a Word or OpenDoc
 
 ```autohotkey
 value := Rte.Rtf
+Rte.Rtf := value
 ```
 
-text · read-only
+text
 
 The document as RTF (get), or replaced by RTF (set). RTF keeps everything the editor has.
 
@@ -773,12 +774,12 @@ Inserts an empty row below (below = 1) or above (0) the caret's row.
 ### InsertTable
 
 ```autohotkey
-Rte.InsertTable(rows = 3, columns = 3, headerRow = 1)
+Rte.InsertTable(rows = 3, columns = 3, headerRow = 1, roomAbove = 0)
 ```
 
-*rows*: number · *columns*: number · *headerRow*: 1/0
+*rows*: number · *columns*: number · *headerRow*: 1/0 · *roomAbove*: 1/0
 
-Inserts a table at the caret (headerRow = 1 makes the first row bold) and puts the caret in its first cell.
+Inserts a table at the caret (headerRow = 1 makes the first row bold) and puts the caret in its first cell. roomAbove = 1, in an empty document: an empty paragraph stays above the table, as the Insert Table dialog leaves it: RichEdit can't space a table's first row, so a table first in a document has no top margin in Show Pages, and nothing above it for Page Up to go to.
 
 ### InTable
 
@@ -802,31 +803,15 @@ The number of table rows the selection covers completely (0 if it is not whole r
 
 ## Pictures' alt text
 
-### InsertSectionBreak
+### ColumnsAt
 
 ```autohotkey
-Rte.InsertSectionBreak()
+Rte.ColumnsAt(position)
 ```
 
-Inserts a section break at the caret (replacing the selection): a page break after which a new section starts, with the header and footer of the section before and its page numbers starting again at 1. Layout > Header & Footer, with the caret in the section, changes them.
+*position*: number · returns: text
 
-### SectionList
-
-```autohotkey
-Rte.SectionList()
-```
-
-returns: string
-
-The sections, a line each: where it starts (characters), `restart N` or `continue` for its page numbers, `same` or `own` for its header and footer, and then any top and bottom margins of its own (1/100 inch; `-` for one that is the document's). The first section is the document's own.
-
-### SetSectionMargins
-
-```autohotkey
-Rte.SetSectionMargins(position, top, bottom)
-```
-
-Gives the section `position` is in top and bottom margins of its own (1/100 inch; -1: the document's). Not for the first section, which has the document's (Page Setup). Word's section with a paper size, orientation or left and right margins of its own keeps them in the file, but is shown and printed with the document's.
+The columns of the section a position is in: how many, the gap (1/100 inch), 1 if a line is drawn in it ("1 0 0": one), then, if they aren't of equal width, each one's (1/100 inch, with commas between them).
 
 ### InsertContinuousBreak
 
@@ -834,35 +819,7 @@ Gives the section `position` is in top and bottom margins of its own (1/100 inch
 Rte.InsertContinuousBreak()
 ```
 
-Inserts a continuous section break at the caret: the section after it starts on the same page, with the columns, margins, header and footer of the section it splits, and its page numbers going on. It shows as a thin dotted line, on screen only.
-
-### SetColumnsOn
-
-```autohotkey
-Rte.SetColumnsOn(start, end, count, gap := 50, line := false)
-```
-
-returns: integer
-
-Puts the paragraphs from `start` to `end` in columns: continuous breaks go around them where there are none, and the text around them keeps its columns. On a page where text follows them, the columns are balanced. Returns where their section starts. Selecting paragraphs and choosing Layout > Columns does the same.
-
-### SetColumns
-
-```autohotkey
-Rte.SetColumns(position, count, gap := 50, line := false)
-```
-
-Gives the section `position` is in `count` columns of equal width (1 to 6; 1: none), `gap` (1/100 inch) between them, and a line in the gap if `line` is true. Columns are on the printed pages, PDFs and Print Preview; the text is edited in one column. Columns too narrow to use (under 3/4 inch) print as one. Layout > Columns does the same.
-
-### ColumnsAt
-
-```autohotkey
-Rte.ColumnsAt(position)
-```
-
-returns: string
-
-The columns of the section `position` is in: how many, the gap (1/100 inch), and 1 if a line is drawn in it (`1 0 0`: one column).
+Inserts a continuous section break at the caret: the section after it starts on the same page, with the settings of the section it splits, so that the two can have different columns.
 
 ### InsertPageBreak
 
@@ -871,6 +828,14 @@ Rte.InsertPageBreak()
 ```
 
 Inserts a page break at the caret (replacing the selection): the text after it starts a new page when printed, and in Word and LibreOffice. A numbered list it splits goes on with its numbers after it. Ctrl+Enter.
+
+### InsertSectionBreak
+
+```autohotkey
+Rte.InsertSectionBreak()
+```
+
+Iteration 63: inserts a section break at the caret (replacing the selection): a page break after which a new section starts, with its own header and footer (at first the section before's: "same as previous") and its page numbers starting again at 1 (Layout &gt; Header &amp; Footer changes them, where the caret is).
 
 ### PageBreakCount
 
@@ -892,6 +857,36 @@ Rte.PictureAltText(position)
 
 The alt text of the picture at a position ("" if it has none).
 
+### SectionList
+
+```autohotkey
+Rte.SectionList()
+```
+
+returns: text
+
+The sections: where each starts (characters), whether its page numbers start again and at what, whether its header and footer are the section before's ("same as previous"), and any top and bottom margins of its own (1/100 inch; "-" for one that is the document's). The first section is the document's own.
+
+### SetColumns
+
+```autohotkey
+Rte.SetColumns(position, count, gap = 50, line = 0, widths = "")
+```
+
+*position*: number · *count*: number · *gap*: number · *line*: 1/0 · *widths*: text
+
+Sets the columns of the section a position is in, on the printed pages (the text is edited in one column): 1 to 6 of equal width (1: none), the gap between them (1/100 inch), a line in the gap; widths: each column's own (1/100 inch, with commas between them; on the page in proportion to the text's width), "": equal.
+
+### SetColumnsOn
+
+```autohotkey
+Rte.SetColumnsOn(start, end, count, gap = 50, line = 0, widths = "")
+```
+
+*start*: number · *end*: number · *count*: number · *gap*: number · *line*: 1/0 · *widths*: text · returns: number
+
+Puts the paragraphs from start to end in columns, as Word does: continuous breaks around them where there are none, the text around them keeping its columns. The arguments as SetColumns'. Returns where their section starts.
+
 ### SetPictureAltText
 
 ```autohotkey
@@ -901,6 +896,16 @@ Rte.SetPictureAltText(position, alt)
 *position*: number · *alt*: text
 
 Gives the picture at a position a new alt text ("" for none). RichEditorNET can't change a picture's alt text, so the picture is replaced by the same picture (image, size and link) with the new one, in one undo step.
+
+### SetSectionMargins
+
+```autohotkey
+Rte.SetSectionMargins(position, top, bottom)
+```
+
+*position*: number · *top*: number · *bottom*: number
+
+Gives the section a position is in (not the first: the document's own, Page Setup's) top and bottom margins of its own (1/100 inch; -1: the document's).
 
 ### TableCell
 
@@ -1211,9 +1216,7 @@ Rte.ChangeCase(mode)
 
 *mode*: text
 
-Changes the case of the selection, keeping its formatting: "upper", "lower", "title", "headline", "sentence" or "toggle".
-
-"headline" (Headline Case) capitalizes the words but not the small words inside a line (a, the, of, and), and keeps abbreviations (LLC, N.A.) and legal forms (v., a/k/a) as they are. Its word lists are in headline-case.txt beside the settings, to be edited.
+Changes the case of the selection, keeping its formatting: "upper", "lower", "title", "headline", "sentence" or "toggle". Headline Case: small words lower case, abbreviations as written (rte_headline.cs).
 
 ### CharacterCount
 
@@ -1259,8 +1262,7 @@ Inserts text at the caret, replacing the selection; the caret ends up after the 
 Rte.PastePlainText()
 ```
 
-Pastes the clipboard's text only, taking the formatting where it lands, as Ctrl+Shift+V does (iteration 65): a web
-page's or a chat's fonts, sizes, spacing and rules stay behind. One undo step.
+Pastes the clipboard's text only (iteration 65), taking the formatting where it lands, as Ctrl+Shift+V does.
 
 ### Replace
 
@@ -1370,14 +1372,6 @@ Rte.SetBackgroundColor(color)
 
 Sets the highlight (background) colour, as SetFontColor.
 
-### SetFontStyle
-
-```autohotkey
-Rte.SetFontStyle(bold := -1, italic := -1, underline := -1, strikeThrough := -1)
-```
-
-Sets bold, italic, single underline and strikethrough of the selected text; with nothing selected, of what is typed next. For each: 1 on, 0 off, -1 leaves it as it is.
-
 ### SetFontColor
 
 ```autohotkey
@@ -1387,6 +1381,16 @@ Rte.SetFontColor(color)
 *color*: color
 
 Sets the font colour: of the selected text; with nothing selected, of what is typed next (and of an empty line).
+
+### SetFontStyle
+
+```autohotkey
+Rte.SetFontStyle(bold = -1, italic = -1, underline = -1, strikeThrough = -1)
+```
+
+*bold*: number · *italic*: number · *underline*: number · *strikeThrough*: number
+
+Sets bold, italic, single underline and strikethrough, as SetFontColor: 1 on, 0 off, -1 as each part is.
 
 ### TabMakesSubLevel
 

@@ -40,23 +40,41 @@ public sealed record SectionPage(int? Width = null, int? Height = null, int? Lef
 	[System.Text.Json.Serialization.JsonIgnore] public bool KeptOnly => Width != null || Height != null || Left != null || Right != null || Landscape != null;
 }
 
-/// A section's columns, of equal width: how many, the gap between them (twips), and whether a line is drawn in the gap.
-/// They are the printed page's: RichEdit shows a document at one width, so the text is edited in one column.
-public sealed record SectionColumns(int Count = 2, int Gap = 720, bool Line = false)
+/// A section's columns: how many, the gap between them (twips), whether a line is drawn in the gap; of equal width, or
+/// each of its own (Widths, Gaps: twips; Gaps as Word's files may have them, one after each column but the last; on the
+/// page, in proportion to the text area's width). They are the printed page's: RichEdit shows a document at one width, so
+/// the text is edited in one column.
+public sealed record SectionColumns(int Count = 2, int Gap = 720, bool Line = false, int[]? Widths = null, int[]? Gaps = null)
 {
 	/// Columns narrower than this (twips) aren't used: the section prints in one.
 	const int Narrowest = 1080;
 
 	/// Null (one column) or the columns asked for.
-	public static SectionColumns? Of(int count, int gap, bool line) => count < 2 ? null : new SectionColumns(count, Math.Max(0, gap), line);
+	public static SectionColumns? Of(int count, int gap, bool line, int[]? widths = null, int[]? gaps = null) {
+		if (count < 2) return null;
+		gap = Math.Max(0, gap);
+		if (widths?.Length != count || widths.Any(w => w <= 0) || (widths.Distinct().Count() == 1 && (gaps == null || gaps.Distinct().Count() == 1))) return new SectionColumns(count, gaps?.Length == count - 1 ? Math.Max(0, gaps[0]) : gap, line);
+		return new SectionColumns(count, gap, line, widths, gaps?.Length == count - 1 ? gaps : null);
+	}
 
-	public bool FitIn(int width) => Width(width) >= Narrowest;
-	int Width(int width) => (width - (Count - 1) * Gap) / Count;
+	int GapAfter(int index) => Math.Max(0, Gaps?[index] ?? Gap);
+
+	/// The narrowest column's width in a text area this wide.
+	public int NarrowestWidth(int width) => Enumerable.Range(0, Count).Min(i => { var (left, right) = Slot(0, width, i); return right - left; });
+
+	public bool FitIn(int width) => Enumerable.Range(0, Count).All(i => { var (left, right) = Slot(0, width, i); return right - left >= Narrowest; });
 
 	/// Column index's left and right in a text area from left to right.
 	public (int Left, int Right) Slot(int left, int right, int index) {
-		int width = Width(right - left), at = left + index * (width + Gap);
-		return (at, at + width);
+		int area = right - left;
+		if (Widths == null) {
+			int width = (area - (Count - 1) * Gap) / Count, start = left + index * (width + Gap);
+			return (start, start + width);
+		}
+		double scale = (double)area / (Widths.Sum() + Enumerable.Range(0, Count - 1).Sum(GapAfter));
+		double at = left;
+		for (int i = 0; i < index; i++) at += (Widths[i] + GapAfter(i)) * scale;
+		return ((int)at, (int)(at + Widths[index] * scale));
 	}
 
 	/// A section's RTF properties' columns (null: one).
@@ -64,10 +82,14 @@ public sealed record SectionColumns(int Count = 2, int Gap = 720, bool Line = fa
 		var count = Regex.Match(properties, @"\\cols(\d+)");
 		if (!count.Success) return null;
 		var gap = Regex.Match(properties, @"\\colsx(\d+)");
-		return Of(int.Parse(count.Groups[1].Value), gap.Success ? int.Parse(gap.Groups[1].Value) : 720, Regex.IsMatch(properties, @"\\linebetcol(?![a-zA-Z])"));
+		var own = Regex.Matches(properties, @"\\colno\d+\s*\\colw(\d+)(?:\s*\\colsr(\d+))?");
+		return Of(int.Parse(count.Groups[1].Value), gap.Success ? int.Parse(gap.Groups[1].Value) : 720, Regex.IsMatch(properties, @"\\linebetcol(?![a-zA-Z])"),
+			own.Count == 0 ? null : own.Select(m => int.Parse(m.Groups[1].Value)).ToArray(),
+			own.Count == 0 ? null : own.Take(own.Count - 1).Select(m => m.Groups[2].Success ? int.Parse(m.Groups[2].Value) : gap.Success ? int.Parse(gap.Groups[1].Value) : 720).ToArray());
 	}
 
-	public string ToRtf() => $@"\cols{Count}\colsx{Gap}" + (Line ? @"\linebetcol" : "");
+	public string ToRtf() => $@"\cols{Count}\colsx{Gap}" + (Line ? @"\linebetcol" : "")
+		+ (Widths == null ? "" : string.Concat(Widths.Select((w, i) => $@"\colno{i + 1}\colw{w}" + (i + 1 < Count ? $@"\colsr{GapAfter(i)}" : ""))));
 }
 
 /// A section's own settings, as its break's marker holds them.

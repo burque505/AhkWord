@@ -799,7 +799,12 @@ public static class HeaderFooter
 			if (last == null) { section.PrependChild(margin); section.PrependChild(size); }
 			else { section.InsertAfter(margin, last); section.InsertAfter(size, last); }
 			section.RemoveAllChildren<W.Columns>();
-			if (layout.Columns is { } columns) section.InsertAfter(new W.Columns { ColumnCount = (short)columns.Count, Space = columns.Gap.ToString(System.Globalization.CultureInfo.InvariantCulture), EqualWidth = true, Separator = columns.Line ? true : null }, margin);
+			if (layout.Columns is { } columns) {
+				var written = new W.Columns { ColumnCount = (short)columns.Count, Space = columns.Gap.ToString(System.Globalization.CultureInfo.InvariantCulture), EqualWidth = columns.Widths == null, Separator = columns.Line ? true : null };
+				for (int i = 0; i < (columns.Widths?.Length ?? 0); i++)
+					written.Append(new W.Column { Width = columns.Widths![i].ToString(System.Globalization.CultureInfo.InvariantCulture), Space = i + 1 < columns.Count ? (columns.Gaps?[i] ?? columns.Gap).ToString(System.Globalization.CultureInfo.InvariantCulture) : null });
+				section.InsertAfter(written, margin);
+			}
 			main.Document.Save();
 		}
 		// the exact copy, in a custom XML part of its own (Word keeps those)
@@ -890,7 +895,10 @@ public static class HeaderFooter
 		if (section?.GetFirstChild<W.Columns>() is not { } columns) return null;
 		int count = columns.ColumnCount?.Value ?? 1;
 		int gap = int.TryParse(columns.Space?.Value, out int space) ? space : 720;
-		return SectionColumns.Of(count, gap, columns.Separator?.Value == true);
+		var own = columns.Elements<W.Column>().ToList();
+		int[]? widths = own.Count == 0 || columns.EqualWidth?.Value == true ? null : own.Select(c => int.TryParse(c.Width?.Value, out int width) ? width : 0).ToArray();
+		int[]? gaps = widths == null ? null : own.Take(own.Count - 1).Select(c => int.TryParse(c.Space?.Value, out int after) ? after : gap).ToArray();
+		return SectionColumns.Of(widths?.Length ?? count, gap, columns.Separator?.Value == true, widths, gaps);
 	}
 
 	/// The first section's columns in a .docx (null: one, or it can't be read).

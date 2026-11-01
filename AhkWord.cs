@@ -691,7 +691,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 68;    // (the About box; make_version.ps1)
+	public const int Iteration = 69;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -851,7 +851,12 @@ class WriterForm : Form
 		Editor.HandleCreated += (s, e) => BeginInvoke(() => ApplyPrintLayout());    // (wider numbers: the text stays where it was, as far as it can)
 		headerStrip.Click += (s, e) => Run(HeaderFooterCommand);
 		footerStrip.Click += (s, e) => Run(HeaderFooterCommand);
-		Editor.TextChanged += (s, e) => { bandPagesStale = pageStartsStale = true; lastEdit = DateTime.Now; };
+		Editor.TextChanged += (s, e) => {
+			bool typed = Editor.Typing && (typedOnly || !bandPagesStale);
+			bandPagesStale = pageStartsStale = true;
+			typedOnly = typed;
+			lastEdit = DateTime.Now;
+		};
 		bandTimer.Tick += (s, e) => UpdateBands();
 		bandTimer.Start();
 		var outlineTitle = new Label { Text = "Outline", Dock = DockStyle.Top, Height = LogicalToDeviceUnits(26), Padding = new Padding(6, 6, 0, 0),
@@ -2580,7 +2585,9 @@ class WriterForm : Form
 	readonly BandStrip headerStrip = new(true), footerStrip = new(false);
 	readonly System.Windows.Forms.Timer bandTimer = new() { Interval = 500 };
 	List<int>? bandStarts;          // where the printed pages start, for {page} (the page in view) and {pages}; null: not known
-	bool bandPagesStale = true;     // the text changed since it was counted
+	// The text changed since it was counted. (typedOnly: only by typing, so that the pages may well be as they were: UpdateBands)
+	bool bandPagesStale { get => pagesStale; set { pagesStale = value; typedOnly = false; } }
+	bool pagesStale = true, typedOnly;
 	DateTime lastEdit = DateTime.MinValue;
 	string bandsShown = "";
 
@@ -2597,15 +2604,19 @@ class WriterForm : Form
 		bool pageView = PageViewActive;
 		if (!pageView && pageGaps.Applied && !gapsOut) { QuietGaps(pageGaps.Remove); pageGaps.Forget(); }
 		// (the page view showing without its gaps, as back from a source view, which took them out: worked out again)
-		if (pageView && !pageGaps.Applied && !gapsOut && !quietGaps) bandPagesStale = true;
+		// (not when they were worked out and there are none, as with one page that starts with a table: that would be again
+		// at every tick, the window repainted each time)
+		if (pageView && !pageGaps.Applied && !gapsOut && !quietGaps && !noGapsNeeded) bandPagesStale = true;
 		if (pageGaps.Lost) { pageGaps.Lost = false; bandPagesStale = true; }    // (gaps editing took apart: worked out again)
 		// (iteration 55) a header or footer that now reaches further or less far: the sheets laid out again at once, not
 		// after the next edit (meanwhile the text was under the header)
 		bool marginsMoved = pageView && pageGaps.Applied && !gapsOut && !quietGaps && pageLayout is { } laidOut && GapMargins(laidOut) != gapsMargins;
 		if (marginsMoved) bandPagesStale = true;
 		if ((needPages || marginsMoved) && bandPagesStale && !gapsOut && (marginsMoved || (DateTime.Now - lastEdit).TotalMilliseconds > 1000)) {
+			bool samePages = typedOnly && pageView && !marginsMoved && pagesStamp != null && pagesStamp == PagesStamp();
 			bandPagesStale = false;
-			if (pageView) RecomputeGaps();
+			if (samePages) bandStarts = pageRanges.Select(p => p.Start).ToList();    // (where typing has moved them)
+			else if (pageView) RecomputeGaps();
 			else {
 				try { using var printer = CreatePrinter(); bandStarts = printer.PageStarts(); }
 				catch (Exception) { bandStarts = null; }
@@ -2771,6 +2782,12 @@ class WriterForm : Form
 		finally { openingSheets = false; }
 		bandPagesStale = false;
 	}
+	/// Runs change with no scrolling back after the gaps: the document is seen from its top, its top margin in view.
+	internal void FromTheTop(Action change) {
+		openingSheets = true;
+		try { change(); }
+		finally { openingSheets = false; }
+	}
 	bool openingSheets;    // (nothing to scroll back to: the document starts at its top, and scrolling draws at once, held or not)
 
 	// The window painted after the gaps went in or out.
@@ -2894,14 +2911,40 @@ class WriterForm : Form
 					};
 				}
 				pageGaps.Apply(pages, layout.Height / 20f - top - bottom, bottom, top, layout.Height / 20f - firstTop - firstBottom, firstBottom, firstTop, marginsOf);
+				noGapsNeeded = !pageGaps.Applied;
 			}
 		});
+		pagesStamp = bandStarts == null ? null : PagesStamp();
+		pageRanges = (bandStarts ?? new()).Select(s => Editor.TextDocument.Range2(s, s)).ToList();
 	}
+
+	// What says that the pages are as they were worked out, without taking the gaps out to see: as many lines, as tall, and
+	// each gap on its line. Worked out only when they aren't: taking the gaps out and putting them back moves the text, and with
+	// a table at or below the caret the window showed that, a second after typing stopped. Null: a gap that can't be said of.
+	string? PagesStamp() {
+		var doc = Editor.TextDocument;
+		int end = Math.Max(0, doc.Range2(0, 0).StoryLength - 1);
+		var stamp = new StringBuilder($"{SendMask(Editor.Handle, EM_GETLINECOUNT, IntPtr.Zero, IntPtr.Zero)} {pageGaps.PositionOf(end).Y - pageGaps.PositionOf(0).Y}");
+		foreach (var gap in pageGaps.Gaps) {
+			if (gap.Track is not { } track) return null;
+			stamp.Append($" {SendMask(Editor.Handle, EM_EXLINEFROMCHAR, IntPtr.Zero, track.Start)}");
+			if (gap.Paragraph) continue;
+			var line = doc.Range2(track.Start, track.Start);
+			line.Expand(5);    // tomLine
+			if (line.Start != track.Start || line.End - track.End is not (0 or 1)) return null;
+		}
+		return stamp.ToString();
+	}
+	const int EM_GETLINECOUNT = 0x00BA, EM_EXLINEFROMCHAR = 0x0436;
+	string? pagesStamp;
+	List<ITextRange2> pageRanges = new();    // (where the pages start: they move with the text)
+
+	bool noGapsNeeded;    // (the page view worked out for this text, with no gaps to put: see UpdateBands)
 
 	/// Runs read with the document as it is, without the page view's gaps, which are then put back as they were (read
 	/// mustn't change the text: see WithoutGapsChanging).
 	internal T WithoutGaps<T>(Func<T> read) {
-		if (gapsOut || quietGaps || !pageGaps.Applied) return read();
+		if (gapsOut || quietGaps || gapsLeft || !pageGaps.Applied) return read();
 		T result = default!;
 		HeldGaps(() => {
 			QuietGaps(pageGaps.Remove);
@@ -2913,6 +2956,22 @@ class WriterForm : Form
 	}
 
 	internal void WithoutGaps(Action read) => WithoutGaps(() => { read(); return 0; });
+
+	/// The RTF of the document as it is without the gaps, read leaving the window alone: they are taken out of a hidden copy
+	/// (the recovery copy, once a minute while typing: taken out of the editor, that moved the text). Else as WithoutGaps.
+	internal string RtfLeavingGaps() {
+		if (gapsOut || quietGaps || !pageGaps.Applied) return WithoutGaps(() => Editor.Rtf ?? "");
+		return pageGaps.OutOf(Editor.Rtf ?? "") ?? WithoutGaps(() => Editor.Rtf ?? "");
+	}
+
+	/// Runs read, which doesn't depend on the gaps, without WithoutGaps taking them out for it.
+	internal T LeavingGaps<T>(Func<T> read) {
+		bool was = gapsLeft;
+		gapsLeft = true;
+		try { return read(); }
+		finally { gapsLeft = was; }
+	}
+	bool gapsLeft;
 
 	/// Runs change with the document as it is, without the page view's gaps, which are worked out again after it.
 	internal void WithoutGapsChanging(Action change) {
@@ -3317,12 +3376,13 @@ class WriterForm : Form
 		var (at, to) = (doc.Selection2.Start, doc.Selection2.End);
 		var sections = Sections.Resolve(doc, Bands, DocumentColumns);
 		int index = Sections.IndexAt(sections, at);
-		using var dialog = new ColumnsDialog(sections[index].Columns, index + 1, sections.Count > 1, to > at);
+		using var dialog = new ColumnsDialog(sections[index].Columns, index + 1, sections.Count > 1, to > at, (int)(TextWidthPoints() * 20));
 		if (dialog.ShowDialog(this) != DialogResult.OK) return;
 		var columns = dialog.Result;
 		int gap = (int)Math.Round((columns?.Gap ?? 720) / 14.4);
-		if (to > at) api.SetColumnsOn(at, to, columns?.Count ?? 1, gap, columns?.Line ?? false);
-		else api.SetColumns(at, columns?.Count ?? 1, gap, columns?.Line ?? false);
+		string widths = columns?.Widths is { } own ? string.Join(",", own.Select(w => (int)Math.Round(w / 14.4))) : "";
+		if (to > at) api.SetColumnsOn(at, to, columns?.Count ?? 1, gap, columns?.Line ?? false, widths);
+		else api.SetColumns(at, columns?.Count ?? 1, gap, columns?.Line ?? false, widths);
 		SetStatus(columns == null ? "One column." : $"{columns.Count} columns, on the printed pages: you go on editing in one column, and Print Preview shows them.");
 	}
 
@@ -3832,7 +3892,7 @@ class WriterForm : Form
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		(Settings.TableRows, Settings.TableColumns, Settings.TableHeader) = (dlg.Rows, dlg.Columns, dlg.Header);
 		Settings.Save();
-		Run(() => api.InsertTable(dlg.Rows, dlg.Columns, dlg.Header), M("InsertTable", dlg.Rows, dlg.Columns, dlg.Header));
+		Run(() => api.InsertTable(dlg.Rows, dlg.Columns, dlg.Header, true), M("InsertTable", dlg.Rows, dlg.Columns, dlg.Header, true));
 	}
 
 	// Table Tools > Properties: the dialog, its changes made in one step (one undo step), and recorded as the calls they are.
@@ -5431,6 +5491,7 @@ public class EditorApi
 		form.Levels = form.DefaultLevels();
 		form.UseNormalFont();
 		ed.Html = "";
+		(ed as WriterEditBox)?.AdvancedLayout(false);
 		StyleEngine.Apply(ed.TextDocument, form.Styles, form.Styles.Normal, 0, 0);
 		StyleEngine.SetTyping(ed.TextDocument.Selection2.Font, form.Styles.Normal);
 		form.FillStyleBox(force: true);
@@ -5468,7 +5529,10 @@ public class EditorApi
 	// The recovery copy's content: the document as RTF, with its header, footer and line numbering.
 	// (iteration 47: the list indents fitted before the styles go in: fitting them goes through RichEdit, which writes
 	// only its own styles, Normal and the headings, and so lost the others' paragraphs, a Numbered Paragraph's)
-	internal string RecoveryRtf() => WithBands(StyledRtf(OfficeConverters.ListIndentsRtf(RawRtf)), form.FileName ?? "");
+	internal string RecoveryRtf() {
+		string rtf = OfficeConverters.ListIndentsRtf(form.RtfLeavingGaps());
+		return form.LeavingGaps(() => WithBands(StyledRtf(rtf), form.FileName ?? ""));
+	}
 
 	// A recovery copy back in the editor: as unsaved changes to the document it was (fileName; null: a new one).
 	internal void Recover(string rtf, string? fileName) {
@@ -5847,6 +5911,7 @@ public class EditorApi
 	void Load(string full, string via) {
 		string extension = Path.GetExtension(full).ToLowerInvariant();
 		LastConverter = "";
+		(ed as WriterEditBox)?.AdvancedLayout(false);    // (the document's RTF turns it on if it needs it)
 		// the header and footer: the document's own; documents that can have them but don't have none, others get the default
 		PageBands? bands = null;
 		LineNumbering? numbering = null;
@@ -6269,8 +6334,6 @@ public class EditorApi
 			if (ListLevelsFrom(value) is { } levels) form.Levels = levels;    // (the document's list levels, as AhkWord's RTF kept them)
 			value = OfficeConverters.SimplePictures(value);    // (Word's picture wrappers, which RichEdit can drop)
 			value = OfficeConverters.WithoutUnlistedNumbering(value, out var wordStarts);    // (Word's paragraphs in no list, which RichEdit would number)
-			// (LibreOffice's and Word's "page break before" paragraphs, which are their page breaks; AhkWord's own keep it)
-			if (!value.Contains(@"{\*\rtewriterstyles")) value = PageBreaks.FromPageBreakBefore(value);
 			value = HeaderFooter.StripFromRtf(value);             // (the header and footer are the document's Bands)
 			value = CrossRefs.FromWordRtf(value);                 // (iteration 50: Word's REF fields and bookmarks, which RichEdit drops)
 			value = Footnotes.FromWordRtf(value);                 // (iteration 51: Word's footnotes, which RichEdit shows in the text)
@@ -6496,6 +6559,8 @@ public class EditorApi
 		if (format.Contextual != null) throw new ArgumentException("Contextual is a style's: Rte.ModifyStyle(name, \"Contextual=1\").");
 		var doc = ed.TextDocument;
 		var selection = doc.Selection2;
+		// (before the tabs: lines laid out without it stay wrapped as they were)
+		if (format.Tabs?.Any(t => t.Alignment != "left" || t.Leader != "none") == true) (ed as WriterEditBox)?.AdvancedLayout(true);
 		doc.BeginEditCollection();
 		try { format.Apply(doc, selection.Start, selection.End); } finally { doc.EndEditCollection(); }
 		form.LineGutter.DocumentChanged();
@@ -6574,9 +6639,27 @@ public class EditorApi
 	// ---- Tables
 
 	/// Inserts a table at the caret (headerRow = 1 makes the first row bold) and puts the caret in its first cell.
-	public void InsertTable(int rows = 3, int columns = 3, bool headerRow = true) {
+	/// roomAbove = 1, in an empty document: an empty paragraph stays above the table, as the Insert Table dialog leaves it:
+	/// RichEdit can't space a table's first row, so a table first in a document has no top margin in Show Pages, and nothing
+	/// above it for Page Up to go to.
+	public void InsertTable(int rows = 3, int columns = 3, bool headerRow = true, bool roomAbove = false) {
 		if (rows < 1 || columns < 1 || rows > 500 || columns > 63) throw new ArgumentException("A table has 1 to 500 rows and 1 to 63 columns.");
-		RtfTables.Insert(ed, rows, columns, headerRow, TableWidth());
+		// (gaps out first: the paragraph a gap is on would end up after the table, its space with it)
+		var doc = ed.TextDocument;
+		bool room = roomAbove && doc.Range2(0, 0).StoryLength <= 1;
+		void Insert() => form.WithoutGapsChanging(() => {
+			doc.BeginEditCollection();    // (one step to undo)
+			try {
+				if (room) {
+					doc.Range2(0, 0).Text = "\r";
+					doc.Selection2.SetRange(1, 1);
+				}
+				RtfTables.Insert(ed, rows, columns, headerRow, WidthAt(doc.Selection2.Start));
+			}
+			finally { doc.EndEditCollection(); }
+		});
+		if (room) form.FromTheTop(Insert);
+		else Insert();
 	}
 
 	/// Whether the caret is in a table.
@@ -6717,7 +6800,7 @@ public class EditorApi
 
 	/// Puts the paragraphs from start to end in columns, as Word does: continuous breaks around them where there are none,
 	/// the text around them keeping its columns. The arguments as SetColumns'. Returns where their section starts.
-	public int SetColumnsOn(int start, int end, int count, int gap = 50, bool line = false) {
+	public int SetColumnsOn(int start, int end, int count, int gap = 50, bool line = false, string widths = "") {
 		var doc = ed.TextDocument;
 		var first = doc.Range2(start, start);
 		first.Expand(tomConstants.tomParagraph);
@@ -6730,7 +6813,7 @@ public class EditorApi
 			if (to < doc.Range2(0, 0).StoryLength && !Starts(to)) Sections.InsertContinuous(ed, to, firstColumns: form.DocumentColumns);
 			if (!Starts(from)) from = Sections.InsertContinuous(ed, from, firstColumns: form.DocumentColumns);
 			int index = Sections.Breaks(doc).FindIndex(b => b.SectionStart == from);
-			WriteColumns(from, count, gap, line);
+			WriteColumns(from, count, gap, line, widths);
 			if (index >= 0) from = Sections.Breaks(doc)[index].SectionStart;    // (its marker grew)
 		}
 		finally { doc.EndEditCollection(); }
@@ -6741,33 +6824,66 @@ public class EditorApi
 	}
 
 	/// Sets the columns of the section a position is in, on the printed pages (the text is edited in one column): 1 to 6
-	/// of equal width (1: none), the gap between them (1/100 inch), a line in the gap.
-	public void SetColumns(int position, int count, int gap = 50, bool line = false) {
+	/// of equal width (1: none), the gap between them (1/100 inch), a line in the gap; widths: each column's own (1/100
+	/// inch, with commas between them; on the page in proportion to the text's width), "": equal.
+	public void SetColumns(int position, int count, int gap = 50, bool line = false, string widths = "") {
 		var doc = ed.TextDocument;
 		doc.BeginEditCollection();
-		try { WriteColumns(position, count, gap, line); }
+		try { WriteColumns(position, count, gap, line, widths); }
 		finally { doc.EndEditCollection(); }
 		ed.Modified = true;
 		form.BandsChangedNow();
 	}
 
-	void WriteColumns(int position, int count, int gap, bool line) {
+	void WriteColumns(int position, int count, int gap, bool line, string widths) {
 		if (count < 1 || count > 6) throw new ArgumentException("A section has 1 to 6 columns.");
 		if (gap < 0) throw new ArgumentException("The gap can't be negative.");
 		var doc = ed.TextDocument;
-		var columns = SectionColumns.Of(count, (int)Math.Round(gap * 14.4), line);
+		int[]? own = null;
+		if (!string.IsNullOrWhiteSpace(widths)) {
+			var parts = widths.Split(',', StringSplitOptions.TrimEntries);
+			if (parts.Length != count || parts.Any(p => !int.TryParse(p, out int w) || w <= 0)) throw new ArgumentException("Give each column's width, 1/100 inch, with commas between them.");
+			own = parts.Select(p => (int)Math.Round(int.Parse(p) * 14.4)).ToArray();
+		}
+		var columns = SectionColumns.Of(count, (int)Math.Round(gap * 14.4), line, own);
+		int index = Sections.IndexAt(Sections.Resolve(doc, form.Bands, form.DocumentColumns), position);
 		if (Sections.BreakFor(doc, position) is { } section) {
 			var settings = section.Settings.Copy();
 			settings.Columns = columns;
 			Sections.Write(doc, section, settings);
 		}
 		else form.DocumentColumns = columns;
+		if (columns != null) FitTables(index, columns.NarrowestWidth(TableWidth()));
 	}
 
-	/// The columns of the section a position is in: how many, the gap (1/100 inch), 1 if a line is drawn in it ("1 0 0": one).
+	// The tables of section index, those wider than width made as wide, their columns in proportion: a table doesn't wrap as
+	// text does, and would print across the next column. (As wide as the narrowest column: it can land in any of them.)
+	void FitTables(int index, int width) {
+		var doc = ed.TextDocument;
+		var sections = Sections.Resolve(doc, form.Bands, form.DocumentColumns);
+		int start = sections[index].Start, end = index + 1 < sections.Count ? sections[index + 1].Start : int.MaxValue;
+		foreach (var table in RtfTables.Find(doc).Where(t => t.Start >= start && t.Start < end).Reverse().ToList())
+			RtfTables.Format(ed, table.Start, rows => {
+				foreach (var row in rows) {
+					int total = row.Cells.Sum(c => c.Width);
+					if (total > width)
+						foreach (var cell in row.Cells) cell.Width = Math.Max(144, cell.Width * width / total);
+				}
+			});
+	}
+
+	// How wide a new table at a position is: the page's text, or the narrowest of its section's columns.
+	int WidthAt(int position) {
+		var sections = Sections.Resolve(ed.TextDocument, form.Bands, form.DocumentColumns);
+		int width = TableWidth();
+		return sections[Sections.IndexAt(sections, position)].Columns is { } columns && columns.FitIn(width) ? Math.Min(width, columns.NarrowestWidth(width)) : width;
+	}
+
+	/// The columns of the section a position is in: how many, the gap (1/100 inch), 1 if a line is drawn in it ("1 0 0": one),
+	/// then, if they aren't of equal width, each one's (1/100 inch, with commas between them).
 	public string ColumnsAt(int position) {
 		var sections = Sections.Resolve(ed.TextDocument, form.Bands, form.DocumentColumns);
-		return sections[Sections.IndexAt(sections, position)].Columns is { } c ? $"{c.Count} {(int)Math.Round(c.Gap / 14.4)} {(c.Line ? 1 : 0)}" : "1 0 0";
+		return sections[Sections.IndexAt(sections, position)].Columns is { } c ? $"{c.Count} {(int)Math.Round(c.Gap / 14.4)} {(c.Line ? 1 : 0)}" + (c.Widths is { } own ? " " + string.Join(",", own.Select(w => (int)Math.Round(w / 14.4))) : "") : "1 0 0";
 	}
 
 	/// What the status line adds on opening a document whose sections have a page setup that is kept but not shown, or
@@ -9439,7 +9555,8 @@ sealed class DocumentPrinter : IDisposable
 				using var pen = new Pen(Color.Black, PageBands.RuleWidth);
 				float top = margins.Top - hardY + band.Top / 14.4f;
 				for (int i = 0; i + 1 < band.Parts.Count; i++) {
-					float x = margins.Left - hardX + (lined.Slot(0, (int)Math.Round(margins.Width * 14.4), i).Right + lined.Gap / 2f) / 14.4f;
+					int across = (int)Math.Round(margins.Width * 14.4);
+					float x = margins.Left - hardX + (lined.Slot(0, across, i).Right + lined.Slot(0, across, i + 1).Left) / 2f / 14.4f;
 					g.DrawLine(pen, x, top, x, top + band.Height / 14.4f);
 				}
 			}
@@ -9992,12 +10109,17 @@ sealed class ColumnsDialog : Form
 	readonly NumericUpDown count = new() { Minimum = 1, Width = 60, AccessibleName = "Number of columns" };
 	readonly NumericUpDown gap = new() { DecimalPlaces = 2, Increment = 0.05m, Width = 70, AccessibleName = "Gap between columns" };
 	readonly CheckBox line = new() { Text = "Line between columns", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+	readonly CheckBox equal = new() { Text = "Equal widths", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+	readonly NumericUpDown[] widths = Enumerable.Range(1, 6).Select(i => new NumericUpDown { DecimalPlaces = 2, Increment = 0.05m, Minimum = 0.05m, Maximum = 99, Width = 62, Margin = new Padding(0, 3, 6, 3), AccessibleName = $"Width of column {i}" }).ToArray();
 	readonly bool metric = System.Globalization.RegionInfo.CurrentRegion.IsMetric;
 
-	/// The columns chosen (null: one).
-	public SectionColumns? Result => SectionColumns.Of((int)count.Value, (int)Math.Round(Math.Round(metric ? gap.Value / 0.0254m : gap.Value * 100) * 14.4m), line.Checked);
+	int Twips(decimal shown) => (int)Math.Round(Math.Round(metric ? shown / 0.0254m : shown * 100) * 14.4m);
+	decimal Shown(int twips) => Math.Round(metric ? twips / 14.4m * 0.0254m : twips / 1440m, 2);
 
-	public ColumnsDialog(SectionColumns? columns, int sectionNumber, bool sections, bool selection) {
+	/// The columns chosen (null: one).
+	public SectionColumns? Result => SectionColumns.Of((int)count.Value, Twips(gap.Value), line.Checked, equal.Checked ? null : widths.Take((int)count.Value).Select(w => Twips(w.Value)).ToArray());
+
+	public ColumnsDialog(SectionColumns? columns, int sectionNumber, bool sections, bool selection, int textWidth = 9360) {
 		Text = selection ? "Columns: the selected paragraphs" : sections ? $"Columns: Section {sectionNumber}" : "Columns";
 		FormBorderStyle = FormBorderStyle.FixedDialog;
 		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
@@ -10018,20 +10140,43 @@ sealed class ColumnsDialog : Form
 		table.Controls.Add(gap, 1, 1);
 		table.Controls.Add(line, 0, 2);
 		table.SetColumnSpan(line, 2);
-		var note = new Label { Text = "Columns are printed, and Print Preview shows them. You go on editing in one column.", AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(280), 0), Margin = new Padding(3, 6, 3, 8) };
-		table.Controls.Add(note, 0, 3);
+		equal.Checked = columns?.Widths == null;
+		table.Controls.Add(equal, 0, 3);
+		table.SetColumnSpan(equal, 2);
+		var widthRow = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(LogicalToDeviceUnits(240), 0), Margin = new Padding(3, 0, 3, 0) };
+		widthRow.Controls.AddRange(widths);
+		table.Controls.Add(new Label { Text = metric ? "Widths (cm):" : "Widths (in):", AutoSize = true, Margin = new Padding(3, 7, 3, 0) }, 0, 4);
+		table.Controls.Add(widthRow, 1, 4);
+		var note = new Label { Text = "Columns are printed, and Print Preview shows them. You go on editing in one column. Widths are kept in proportion, to fill the page's text width.", AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(280), 0), Margin = new Padding(3, 6, 3, 8) };
+		table.Controls.Add(note, 0, 5);
 		table.SetColumnSpan(note, 2);
 		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
 		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
 		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
 		buttons.Controls.AddRange(new Control[] { cancel, ok });
-		table.Controls.Add(buttons, 0, 4);
+		table.Controls.Add(buttons, 0, 6);
 		table.SetColumnSpan(buttons, 2);
 		Controls.Add(table);
 		AcceptButton = ok;
 		CancelButton = cancel;
-		void Enable() => gap.Enabled = line.Enabled = count.Value > 1;
-		count.ValueChanged += (s, e) => Enable();
+		// (the boxes: the widths the columns have, or, of equal width, what they would be)
+		void Fill() {
+			int shown = (int)count.Value;
+			if (shown < 2) return;
+			var taken = equal.Checked || columns?.Widths?.Length != shown ? SectionColumns.Of(shown, Twips(gap.Value), false) : columns;
+			for (int i = 0; i < shown; i++) { var (left, right) = taken!.Slot(0, textWidth, i); widths[i].Value = Math.Clamp(Shown(right - left), widths[i].Minimum, widths[i].Maximum); }
+		}
+		void Enable() {
+			gap.Enabled = line.Enabled = equal.Enabled = count.Value > 1;
+			for (int i = 0; i < widths.Length; i++) {
+				widths[i].Visible = i < count.Value && count.Value > 1;
+				widths[i].Enabled = !equal.Checked;
+			}
+		}
+		count.ValueChanged += (s, e) => { Fill(); Enable(); };
+		gap.ValueChanged += (s, e) => { if (equal.Checked) Fill(); };
+		equal.CheckedChanged += (s, e) => Enable();
+		Fill();
 		Enable();
 	}
 }
@@ -10413,6 +10558,13 @@ sealed class WriterEditBox : RichEditBox
 		ApplyTextMargins();
 	}
 
+	/// RichEdit's advanced layout, on or off. RichEdit takes it itself on reading RTF that has right or centre tabs or
+	/// leaders; without it such tabs act as left ones and leaders aren't drawn. Only for documents that have them: typing
+	/// flickers in it, with tables and Show Pages (AhkWord 68 had it off: tested by the user).
+	public void AdvancedLayout(bool on) {
+		if (IsHandleCreated) SendTypography(Handle, EM_SETTYPOGRAPHYOPTIONS, (IntPtr)(on ? TO_ADVANCEDTYPOGRAPHY : 0), (IntPtr)TO_ADVANCEDTYPOGRAPHY);
+	}
+
 	protected override void OnFontChanged(EventArgs e) {
 		base.OnFontChanged(e);
 		if (IsHandleCreated) { SetDefaultSize(); ApplyTextMargins(); }
@@ -10533,7 +10685,8 @@ sealed class WriterEditBox : RichEditBox
 			int bottom = after > at ? GetPositionFromCharIndex(after).Y : top + lineHeight;
 			if (after >= storyEnd - 1 || bottom <= top) bottom = top + 2 * lineHeight;
 			if (bottom < client.Top) continue;
-			int y = (top + bottom) / 2;
+			// (at the end of a line of text, where joining paragraphs leaves one: under that line, not through it)
+			int y = at > 0 && TextDocument.Range2(at - 1, at).Text != "\r" ? bottom : (top + bottom) / 2;
 			g.DrawLine(pen, client.Left + 4, y, client.Right - 4, y);
 			const string text = "Page break";
 			var size = g.MeasureString(text, label);
@@ -10740,6 +10893,7 @@ sealed class WriterEditBox : RichEditBox
 
 	/// While true, the editor doesn't paint: a paint asked for is left for later (the page view's gaps going in).
 	public bool HoldPaint;
+	public bool Typing;    // (RichEdit is handling a key without Ctrl or Alt: what it changes is typing)
 
 	// Iteration 43: RichEdit paints the part of the window to paint into a bitmap (WM_PRINTCLIENT), the gaps, page breaks
 	// and page lines are drawn over it there, and the bitmap goes onto the screen at once: drawn over on the screen, the
@@ -10874,8 +11028,10 @@ sealed class WriterEditBox : RichEditBox
 		}
 	}
 
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendTypography(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+	const int EM_SETTYPOGRAPHYOPTIONS = 0x04CA, TO_ADVANCEDTYPOGRAPHY = 1;
 	const int WM_PRINTCLIENT = 0x0318, PRF_CLIENT = 0x04, PRF_ERASEBKGND = 0x08, SRCCOPY = 0x00CC0020;
-	const int WM_MOUSEWHEEL = 0x020A, WM_VSCROLL = 0x0115, WM_KEYDOWN = 0x0100, WM_TIMER = 0x0113, EM_GETSCROLLPOS = 0x04DD, EM_SETSCROLLPOS = 0x04DE;
+	const int WM_MOUSEWHEEL = 0x020A, WM_VSCROLL = 0x0115, WM_KEYDOWN = 0x0100, WM_CHAR = 0x0102, WM_TIMER = 0x0113, EM_GETSCROLLPOS = 0x04DD, EM_SETSCROLLPOS = 0x04DE;
 
 	// Iteration 46: RichEdit scrolls only until the text's last line is at the window's bottom, but Show Pages draws the
 	// last sheet's end (its footer) below it: the wheel and the scroll bar's down arrow and page go on down there (and
@@ -10970,13 +11126,21 @@ sealed class WriterEditBox : RichEditBox
 		if (m.Msg is WM_MOUSEWHEEL or WM_VSCROLL or WM_KEYDOWN or WM_TIMER && IsHandleCreated) {
 			if (ScrollPastEnd(m)) return;
 			var before = ScrollPosition();
+			Typing = m.Msg == WM_KEYDOWN && (ModifierKeys & (Keys.Control | Keys.Alt)) == 0;
 			base.WndProc(ref m);
+			Typing = false;
 			if (IsHandleCreated && ScrollPosition() != before) Update();
 			// (iteration 46) Page Down or Ctrl+End at the end: on to the last sheet's footer, the caret still in view
 			if (m.Msg == WM_KEYDOWN && ((int)m.WParam == 0x22 || ((int)m.WParam == 0x23 && (ModifierKeys & Keys.Control) != 0)) && AtScrollEnd()) {
 				int caretTop = GetPositionFromCharIndex(TextDocument.Selection2.Start).Y;
 				ScrollDown(Math.Min(RoomBelow(), Math.Max(0, caretTop)));
 			}
+			return;
+		}
+		if (m.Msg == WM_CHAR && (ModifierKeys & (Keys.Control | Keys.Alt)) == 0) {
+			Typing = true;
+			base.WndProc(ref m);
+			Typing = false;
 			return;
 		}
 		if (m.Msg == WM_CONTEXTMENU && ContextMenuHook != null) {

@@ -9,7 +9,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 ### Writing and formatting
 
 - [x] Paragraph styles, with the Classic, Plain and Modern style sets, your own styles for new documents, and Copy Styles from Document
-- [x] The Paragraph dialog: indents, spacing, line spacing, tab stops, keep with next, widow control, page break before
+- [x] The Paragraph dialog: indents, spacing, line spacing, tab stops with leaders, keep with next (tables too), keep lines together, widow control, page break before
 - [x] Lists, legal numbering (1., 1.1, 1.1.1) and numbered styles whose numbers survive cutting and pasting, with sub-levels
 - [x] Tables, with column widths, borders, shading and alignment
 - [x] Pictures, with alt text
@@ -55,9 +55,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 
 ## Later, perhaps
 
-- [ ] Tab leaders set in the Paragraph dialog drawn (RichEdit keeps them, and Word shows them, but AhkWord draws only a table of contents' leaders)
 - [ ] Merged table cells
-- [ ] Columns of different widths (equal ones are printed; the text is edited in one column)
 - [ ] A section's own paper, orientation and left and right margins shown and printed (they are kept in the file now; top and bottom margins are shown): RichEdit wraps the whole document to one width
 - [ ] A winget package
 - [ ] Windows on ARM

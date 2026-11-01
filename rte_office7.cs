@@ -17,8 +17,7 @@
 // Version 4: page breaks. Word and LibreOffice get them in the RTF (\page); the openxml converter writes the editor's
 // HTML page breaks (rte_pagebreaks.cs) as Word page breaks (HtmlToOpenXml does that itself), and reads Word's
 // (<w:br w:type="page"/>) as <br style="page-break-before: always">, which the PowerTools would write as a plain <br>.
-// (LibreOffice's and Word's RTF give a page break as \pagebb on the paragraph after it, which RichEdit ignores:
-// PageBreaks.FromPageBreakBefore makes that a \page when the editor loads RTF.) Word repaginates before saving: it
+// (LibreOffice's and Word's RTF give a page break as \pagebb on the paragraph after it: page break before, as PageKeeping keeps it.) Word repaginates before saving: it
 // had left list items after the first page unnumbered.
 // Version 3: Word and LibreOffice get legal lists as real list numbering too (LegalRtf): the RTF they are given has
 // the legal items' number text replaced by an RTF list (\ls, \ilvl) with legal level texts (%1.%2.%3), so the documents

@@ -1,6 +1,6 @@
 # Tables
 
-**Insert > Table** inserts a table: choose the rows and columns, and whether the first row is a bold header.
+**Insert > Table** inserts a table: choose the rows and columns, and whether the first row is a bold header. In an empty document an empty paragraph stays above the table, ready for a title or other text; delete it if the table is to come first.
 
 While the caret is in a table, the **Table Tools** tab appears:
 

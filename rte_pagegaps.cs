@@ -136,9 +136,21 @@ public sealed class PageGaps
 		int? Next(int at) {
 			var para = doc.Range2(at, at);
 			para.Expand(4);
-			return para.End < storyEnd - 1 && para.End > at ? para.End : null;
+			return para.End < storyEnd && para.End > at ? para.End : null;    // (the last paragraph too: a new document's, text put in before it)
 		}
-		if (Next(start) is int next) starts.Add(next);
+		// (a table put in at the gap's paragraph: that paragraph, with its space, is now after the table)
+		string text = doc.Range2(start, Math.Min(storyEnd, start + 1)).Text ?? "";
+		if (text == "\uFFF9") {
+			string story = doc.Range2(0, storyEnd).Text ?? "";
+			int after = start;
+			while (after < story.Length && story[after] == '\uFFF9') {
+				int end = story.IndexOf('\uFFFB', after);
+				if (end < 0) break;
+				after = end + 2;
+			}
+			if (after > start && after < storyEnd) starts.Add(after);
+		}
+		else if (Next(start) is int next) starts.Add(next);
 		while (starts[0] > 0 && Spaced(doc.Range2(starts[0], starts[0]).Para, applied)) {
 			int before = ParagraphStart(starts[0] - 1);
 			if (before >= starts[0]) break;
@@ -203,6 +215,39 @@ public sealed class PageGaps
 		removed = lost ? new List<Gap>() : kept;
 		if (lost) Lost = true;
 		Gaps = new();
+	}
+
+	/// The RTF rtf (this editor's, with the gaps in it) as it is without them, the gaps taken out of a hidden copy: the
+	/// editor isn't touched. Null: the copy isn't the same text, or a gap isn't where it should be (the caller takes them out).
+	public string? OutOf(string rtf) {
+		var doc = editor.TextDocument;
+		int storyEnd = doc.Range2(0, 0).StoryLength;
+		var raised = new List<(int Start, int End)>();
+		var run = doc.Range2(0, 0);
+		if (Gaps.Any(g => !g.Paragraph))
+			while (run.Start < storyEnd) {
+				run.MoveEnd(13, 1);    // tomCharFormat
+				if (run.End <= run.Start) break;
+				if (Ours(run.Font.Position)) raised.Add((run.Start, run.End));
+				if (run.End >= storyEnd) break;
+				run.SetRange(run.End, run.End);
+			}
+		var spaced = new List<(int Start, float Original)>();
+		foreach (var gap in Gaps) {
+			if (!gap.Paragraph) continue;
+			int own = ParagraphStart(gap.Track is { } track ? Math.Min(track.Start, Math.Max(0, storyEnd - 1)) : gap.Next);
+			var starts = Neighbours(own, gap.Applied).Where(s => Spaced(doc.Range2(s, s).Para, gap.Applied)).ToList();
+			if (starts.Count == 0) return null;
+			spaced.AddRange(starts.Select(s => (s, gap.Original)));
+		}
+		using var copy = new RichEditBox { WordWrap = false, Width = 600, Height = 400, Font = editor.Font };
+		_ = copy.Handle;
+		copy.Rtf = rtf;
+		var inCopy = copy.TextDocument;
+		if (inCopy.Range2(0, 0).StoryLength != storyEnd || inCopy.Range2(0, storyEnd).Text != doc.Range2(0, storyEnd).Text) return null;
+		foreach (var (start, end) in raised) inCopy.Range2(start, end).Font.Position = 0;
+		foreach (var (start, original) in spaced) inCopy.Range2(start, start).Para.SpaceBefore = original;
+		return copy.Rtf;
 	}
 
 	List<Gap> removed = new();
@@ -274,7 +319,8 @@ public sealed class PageGaps
 		var gaps = new List<Gap>();
 		// (iteration 49: an empty document too, its one paragraph mark: its sheet, header and footer shown before typing)
 		if (starts.Count == 0 || story.Length < 1) { Put(gaps); return; }
-		// page 1's top margin: space before the first paragraph (not before a table's first row)
+		// page 1's top margin: space before the first paragraph (not before a table's first row: RichEdit puts that inside
+		// the row, under its top border)
 		if (!InTable(story, 0)) gaps.Add(new Gap(0, 0, 0, 0, 0, 0, 0, Of(0).Top, 0, Paragraph: true));
 		for (int k = 1; k < starts.Count; k++) {
 			int at = starts[k];

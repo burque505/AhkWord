@@ -108,33 +108,6 @@ public static class PageBreaks
 
 	// ================================================================ RTF
 
-	static readonly Regex RtfToken = new(@"\\[a-zA-Z]+-?\d* ?|\\[^a-zA-Z]|[{}]|[^\\{}]+");
-	static readonly string[] SkippedGroups = { @"\*", @"\stylesheet", @"\fonttbl", @"\colortbl", @"\listtable", @"\listoverridetable", @"\info", @"\pict" };
-
-	/// RTF with LibreOffice's and Word's "page break before" paragraphs (\pagebb, which RichEdit ignores) given a page
-	/// break (\page) at their start instead. (Styles and other tables are left alone.)
-	public static string FromPageBreakBefore(string rtf) {
-		if (!rtf.Contains(@"\pagebb")) return rtf;
-		var sb = new StringBuilder(rtf.Length + 64);
-		var skip = new Stack<bool>();
-		bool skipping = false;
-		foreach (Match token in RtfToken.Matches(rtf)) {
-			string t = token.Value;
-			if (t == "{") {
-				skip.Push(skipping);
-				string next = rtf.Substring(token.Index + 1, Math.Min(20, rtf.Length - token.Index - 1));
-				skipping = skipping || SkippedGroups.Any(g => next.StartsWith(g) && (g == @"\*" || next.Length == g.Length || !char.IsLetter(next[g.Length])));
-			} else if (t == "}") {
-				skipping = skip.Count > 0 && skip.Pop();
-			} else if (!skipping && Regex.IsMatch(t, @"^\\pagebb ?$")) {
-				sb.Append(@"\page ");
-				continue;
-			}
-			sb.Append(t);
-		}
-		return sb.ToString();
-	}
-
 	// ================================================================ HTML
 
 	// Empty blocks of RichEditorNET's HTML (a paragraph with nothing but spaces and inline formatting in it), lists,

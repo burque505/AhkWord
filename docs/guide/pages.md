@@ -49,6 +49,6 @@ Other PDF printers, such as CutePDF, PDF24 or PDFCreator, appear in **File > Pri
 
 (Some PDF printers' installers offer other software along the way: read each step before clicking Next.)
 
-Printing follows the paragraphs' line and page break rules (keep with next, keep lines together, widow and orphan control, page break before), as Word does.
+Printing follows the paragraphs' line and page break rules (keep with next, keep lines together, widow and orphan control, page break before), as Word does. Keep with next works with tables too: a heading stays with the table after it, and rows set to keep with next stay on one page, so selecting a table's rows but the last keeps it whole, and the same on a signature block keeps it from being left alone on a page.
 
 See also [Line numbers](line-numbers.md), which are printed too.

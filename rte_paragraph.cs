@@ -248,8 +248,9 @@ public sealed class ParagraphFormat
 // Where printed pages end, with the paragraphs' rules. RichEdit's page layout (EM_FORMATRANGE) fits as many lines as
 // it can; a rule moves the page's end back to the start of a paragraph or a line, never so far that the page would be
 // empty (then the page ends where RichEdit had it, as Word ignores a rule it can't keep). Tables are left as RichEdit
-// lays them out. Keep with next moves the whole paragraph with the next (a heading's one line; Word keeps only its last
-// line with the next, which differs only for a paragraph of several lines with keep with next).
+// lays them out, but a page may end before a row that is to stay with the one before it (its first paragraph's keep with
+// next), and a paragraph kept with a table goes with its first row. Keep with next moves a paragraph's last line with the
+// next (its last two with widow control; the whole paragraph if that leaves too little behind, or it is kept together).
 public static class PageKeeping
 {
 	const char RowStart = '￹', RowEnd = '￻', CellEnd = '\u0007';
@@ -271,15 +272,16 @@ public static class PageKeeping
 	/// A page laid out from start ends before next (where RichEdit ended it): where it ends with the rules. lines: the
 	/// printed lines' starts from a paragraph's start up to its end (null: not known, widow control set aside).
 	public static int Adjust(ITextDocument2 doc, string story, int start, int next, Func<int, int, IReadOnlyList<int>?> lines) {
-		if (next <= start || next >= story.Length - 1) return next;
-		if (story[next - 1] == PageBreaks.Break || InTable(story, next) || InTable(story, next - 1)) return next;
+		if (next <= start) return next;
 		ITextPara Para(int at) => doc.Range2(at, at).Para;
 		// page break before: the first paragraph on the page (after its first) that has it ends the page
 		for (var (s, e) = ParagraphAt(story, start); e <= next && e < story.Length; (s, e) = ParagraphAt(story, e))
 			if (e > start && e < next && !InTable(story, e) && Para(e).PageBreakBefore == tomConstants.tomTrue) return e;
+		if (next >= story.Length - 1 || story[next - 1] == PageBreaks.Break) return next;
+		if (InTable(story, next) && story[next] != RowStart) return next;    // (a row longer than the page)
 		int end = next;
 		var (pStart, pEnd) = ParagraphAt(story, end);
-		if (pStart < end) {
+		if (pStart < end && !InTable(story, end)) {
 			// the page ends inside a paragraph: kept together, it goes to the next page; with widow control, not a single
 			// line at the foot of this page or at the top of the next
 			var para = Para(pStart);
@@ -299,8 +301,22 @@ public static class PageKeeping
 		if (ParagraphAt(story, end).Start == end) {
 			int at = end;
 			while (at > start) {
+				if (at >= 2 && story[at - 2] == RowEnd) {
+					int row = story.LastIndexOf(RowStart, at - 2);
+					if (row < 0 || Para(row + 2).KeepWithNext != tomConstants.tomTrue) break;    // (its first cell, after the row's start and its mark)
+					if (row <= start) { at = end; break; }    // (the whole page: set aside)
+					at = row;
+					continue;
+				}
 				var (qStart, _) = ParagraphAt(story, at - 1);
-				if (InTable(story, qStart) || Para(qStart).KeepWithNext != tomConstants.tomTrue) break;
+				if (InTable(story, qStart)) break;
+				var para = Para(qStart);
+				if (para.KeepWithNext != tomConstants.tomTrue) break;
+				if (para.KeepTogether != tomConstants.tomTrue && lines(qStart, at) is { Count: > 1 } starts) {
+					int stay = StyleEngine.WidowControlOf(para) ? 2 : 1;
+					int last = starts[^Math.Min(stay, starts.Count)];
+					if (last > start && starts.Count(l => l >= start && l < last) >= stay) { at = last; break; }
+				}
 				if (qStart <= start) { at = end; break; }    // (the whole page: set aside)
 				at = qStart;
 			}
