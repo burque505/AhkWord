@@ -27,6 +27,7 @@
 #load "rte_snippets.cs"
 #load "rte_hooks.cs"
 #load "rte_palette.cs"
+#load "rte_theme.cs"
 #load "rte_sections.cs"
 #load "rte_extensions.cs"
 #load "rte_headline.cs"
@@ -628,7 +629,7 @@ enum RibbonCommand : uint
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399, Theme = 401, FontName = 410, FontSize = 411, FontBold = 412, FontItalic = 413, FontUnderline = 414, FontStrike = 415, FontSub = 416, FontSuper = 417, FontGrow = 418, FontShrink = 419, FontColor = 420, FontHighlight = 421,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
 	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
@@ -691,7 +692,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 69;    // (the About box; make_version.ps1)
+	public const int Iteration = 70;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1010,14 +1011,22 @@ class WriterForm : Form
 
 	// ---------------------------------------------------------------- Iteration 16: the ribbon
 
-	string RibbonFile => Path.Combine(appDir, "ribbon", "RteRibbon.ribbon");
+	string RibbonFile => RibbonFor(AppTheme.Named(Settings.Theme));
+
+	// (iteration 70) The Dark and Color themes have a ribbon of their own, with light icons.
+	string RibbonFor(AppTheme theme) {
+		string dark = Path.Combine(appDir, "ribbon", "RteRibbonDark.ribbon");
+		return theme.Dark && File.Exists(dark) ? dark : Path.Combine(appDir, "ribbon", "RteRibbon.ribbon");
+	}
 
 	// Connects the commands of ribbon\RteRibbon.xml to what they do. Each runs through Run (so it is recorded in a macro
 	// as the menus' and toolbar's were); keys are the shortcuts the menus had, handled in ProcessCmdKey.
 	void BuildRibbon() {
 		if (!File.Exists(RibbonFile))
 			throw new FileNotFoundException($"The ribbon is missing: {RibbonFile}. Build it with ribbon\\build_ribbon.ahk (it needs the Windows SDK and the Visual Studio C++ tools).");
-		ribbon.ResourceName = "file://" + RibbonFile;
+		ribbon.ViewCreated += (s, e) => PaintTheme();
+		ribbonLoaded = RibbonFile;
+		ribbon.ResourceName = "file://" + ribbonLoaded;
 
 		// File menu
 		Button(RibbonCommand.New, () => { if (ConfirmDiscard()) api.New(); }, Keys.Control | Keys.N);
@@ -1070,6 +1079,7 @@ class WriterForm : Form
 		Shortcut(Keys.F3, "Find Next", () => FindNext());
 
 		// Home: font. The font control's B, I, U ... buttons toggle, as the toolbar's did.
+		BuildDarkFont();
 		fontControl = new RibbonFontControl(ribbon, (uint)RibbonCommand.Font);
 		fontControl.ExecuteEvent += (s, e) => {
 			var changes = FontControlEventArgs.Create(fontControl, e).ChangedFontValues;
@@ -1204,6 +1214,14 @@ class WriterForm : Form
 		Button(RibbonCommand.Zoom100, () => { if (PagesShown) pageView!.Zoom(0); else ManualZoom(1f); });
 		Toggle(RibbonCommand.ZoomPageWidth, () => api.ZoomMode = "PageWidth", Keys.None, M("ZoomMode", "PageWidth"));
 		Toggle(RibbonCommand.ZoomOnePage, () => api.ZoomMode = "OnePage", Keys.None, M("ZoomMode", "OnePage"));
+		themeGallery = new RibbonDropDownGallery(ribbon, (uint)RibbonCommand.Theme);
+		themeGallery.ItemsSourceReady += (s, e) => FillThemeGallery();
+		themeGallery.ExecuteEvent += (s, e) => {
+			if (GalleryItemEventArgs.Create(themeGallery, e).SelectedItem is { } item && item.SelectedItemIndex >= 0 && item.SelectedItemIndex < AppTheme.All.Length) {
+				string name = AppTheme.All[item.SelectedItemIndex].Name;
+				BeginInvoke(() => Command(RibbonCommand.Theme, () => api.Theme = name, M("Theme", name)));
+			}
+		};
 		Toggle(RibbonCommand.ZoomMultiplePages, () => { bool show = !PagesShown; api.MultiplePages = show; Record(M("MultiplePages", show)); });
 		Toggle(RibbonCommand.ViewRich, () => SetView(SourceKind.None, false));
 		Toggle(RibbonCommand.ViewMarkdown, () => SetView(SourceKind.Markdown, sideBySide));
@@ -1284,6 +1302,117 @@ class WriterForm : Form
 		if (keys != Keys.None) { Shortcut(keys, CommandName(id), action); keyCommands[keys] = id; }
 		checkBoxes[id] = box;
 		paletteCommands[id] = (() => Command(id, action, null), () => box.Enabled, () => box.BooleanValue);
+	}
+
+	// ---- Themes (iteration 70, rte_theme.cs)
+
+	string ribbonLoaded = "";    // (the file the ribbon came from)
+	RibbonDropDownGallery themeGallery = null!;
+
+	// The dark ribbon's Font group (ribbon\RteRibbonDarkFont.xml). Windows' font control doesn't follow a dark ribbon: its
+	// B, I, U ... stay dark navy, and its font list near-black, whatever the colors. These do what it does, by the same way
+	// (ApplyFontChanges), so the views and the macros behave alike.
+	bool DarkRibbon => ribbonLoaded.EndsWith("RteRibbonDark.ribbon", StringComparison.OrdinalIgnoreCase);
+	RibbonComboBox darkFontName = null!, darkFontSize = null!;
+	readonly Dictionary<RibbonCommand, RibbonToggleButton> darkFontToggles = new();
+	static readonly string[] FontSizes = { "8", "9", "10", "10.5", "11", "12", "14", "16", "18", "20", "22", "24", "26", "28", "36", "48", "72" };
+	List<string> darkFontNames = new();
+
+	internal void ChangeFont(Dictionary<FontPropertiesEnum, object> changes) => BeginInvoke(() => { ribbonSent.Clear(); LeaveOverlays(); ApplyFontChanges(changes); Editor.Focus(); });
+
+	void BuildDarkFont() {
+		if (!DarkRibbon) return;
+		RibbonComboBox Box(RibbonCommand id, string widest, Action<string> chosen, Func<IEnumerable<string>> list) {
+			var box = new RibbonComboBox(ribbon, (uint)id);
+			box.RepresentativeString = widest;
+			box.ItemsSourceReady += (s, e) => {
+				if (box.ItemsSource is not { } items) return;
+				items.Clear();
+				foreach (var item in list()) items.Add(new GalleryItemPropertySet { Label = item, CategoryID = Constants.UI_Collection_InvalidIndex });
+			};
+			box.ExecuteEvent += (s, e) => {
+				if (updatingUi) return;
+				string text = GalleryItemEventArgs.Create(box, e).SelectedItem is { SelectedItemIndex: >= 0 } item && item.SelectedItemIndex < list().Count() ? list().ElementAt(item.SelectedItemIndex) : box.StringValue;
+				if (!string.IsNullOrWhiteSpace(text)) chosen(text.Trim());
+			};
+			return box;
+		}
+		darkFontName = Box(RibbonCommand.FontName, "Times New Roman W", name => ChangeFont(new() { [FontPropertiesEnum.Family] = name }), () => {
+			if (darkFontNames.Count == 0) {
+				using var fonts = new System.Drawing.Text.InstalledFontCollection();
+				darkFontNames = fonts.Families.Select(f => f.Name).ToList();
+			}
+			return darkFontNames;
+		});
+		darkFontSize = Box(RibbonCommand.FontSize, "10.5", text => {
+			if (decimal.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var size) && size > 0) ChangeFont(new() { [FontPropertiesEnum.Size] = size });
+			else ribbonSent.Clear();    // (the box shows the size again)
+		}, () => FontSizes);
+		void Toggles(RibbonCommand id, Func<Dictionary<FontPropertiesEnum, object>> changes) {
+			var button = new RibbonToggleButton(ribbon, (uint)id);
+			button.ExecuteEvent += (s, e) => ChangeFont(changes());
+			darkFontToggles[id] = button;
+		}
+		Toggles(RibbonCommand.FontBold, () => new() { [FontPropertiesEnum.Bold] = true });
+		Toggles(RibbonCommand.FontItalic, () => new() { [FontPropertiesEnum.Italic] = true });
+		Toggles(RibbonCommand.FontUnderline, () => new() { [FontPropertiesEnum.Underline] = true });
+		Toggles(RibbonCommand.FontStrike, () => new() { [FontPropertiesEnum.Strikethrough] = true });
+		Toggles(RibbonCommand.FontSub, () => new() { [FontPropertiesEnum.VerticalPositioning] = api.SelectionFont().Subscript == tomConstants.tomTrue ? FontVerticalPosition.NotSet : FontVerticalPosition.SubScript });
+		Toggles(RibbonCommand.FontSuper, () => new() { [FontPropertiesEnum.VerticalPositioning] = api.SelectionFont().Superscript == tomConstants.tomTrue ? FontVerticalPosition.NotSet : FontVerticalPosition.SuperScript });
+		new RibbonButton(ribbon, (uint)RibbonCommand.FontGrow).ExecuteEvent += (s, e) => ChangeFont(new() { [FontPropertiesEnum.DeltaSize] = FontDeltaSize.Grow });
+		new RibbonButton(ribbon, (uint)RibbonCommand.FontShrink).ExecuteEvent += (s, e) => ChangeFont(new() { [FontPropertiesEnum.DeltaSize] = FontDeltaSize.Shrink });
+		void Picker(RibbonCommand id, FontPropertiesEnum kind, FontPropertiesEnum color) {
+			var picker = new RibbonDropDownColorPicker(ribbon, (uint)id);
+			picker.ExecuteEvent += (s, e) => {
+				var picked = ColorPickerEventArgs.Create(picker, e);
+				var changes = new Dictionary<FontPropertiesEnum, object> { [kind] = picked.ColorType };
+				if (picked.RGBColor is Color c) changes[color] = c;
+				ChangeFont(changes);
+			};
+		}
+		Picker(RibbonCommand.FontColor, FontPropertiesEnum.ForegroundColorType, FontPropertiesEnum.ForegroundColor);
+		Picker(RibbonCommand.FontHighlight, FontPropertiesEnum.BackgroundColorType, FontPropertiesEnum.BackgroundColor);
+	}
+
+	void ShowDarkFont(ITextFont font) {
+		Push(darkFontName, "StringValue", font.Name ?? "", v => darkFontName.StringValue = v);
+		Push(darkFontSize, "StringValue", font.Size > 0 ? Math.Round(font.Size, 1).ToString(System.Globalization.CultureInfo.InvariantCulture) : "", v => darkFontSize.StringValue = v);
+		void On(RibbonCommand id, bool on) => Push(darkFontToggles[id], "BooleanValue", on, v => darkFontToggles[id].BooleanValue = v);
+		On(RibbonCommand.FontBold, font.Bold == tomConstants.tomTrue);
+		On(RibbonCommand.FontItalic, font.Italic == tomConstants.tomTrue);
+		On(RibbonCommand.FontUnderline, font.Underline > 0);
+		On(RibbonCommand.FontStrike, font.StrikeThrough == tomConstants.tomTrue);
+		On(RibbonCommand.FontSub, font.Subscript == tomConstants.tomTrue);
+		On(RibbonCommand.FontSuper, font.Superscript == tomConstants.tomTrue);
+	}
+
+	void FillThemeGallery() {
+		if (!ribbon.Initialized || themeGallery.ItemsSource is not { } items) return;
+		items.Clear();
+		foreach (var theme in AppTheme.All)
+			using (var swatch = theme.Swatch(LogicalToDeviceUnits(16)))
+				items.Add(new GalleryItemPropertySet { Label = theme.Name, CategoryID = Constants.UI_Collection_InvalidIndex, ItemImage = ribbon.ConvertToUIImage(swatch) });
+		ShowThemeChosen();
+	}
+
+	void ShowThemeChosen() => themeGallery.SelectedItem = (uint)Array.IndexOf(AppTheme.All, AppTheme.Named(Settings.Theme));
+
+	// The theme's colors, on the ribbon as soon as it is there.
+	void PaintTheme() {
+		var theme = AppTheme.Named(Settings.Theme);
+		theme.Paint(ribbon);
+		theme.PaintTitleBar(Handle);
+	}
+
+	// A change of theme while running. The darker themes share a ribbon and change at once. Light's is another file, which loads
+	// only at the start: reloading the ribbon in a running window lost the font box, the Style box and its label (seen in
+	// iteration 70), so that change waits; the setting is saved for the next window.
+	internal void ChangeTheme() {
+		Settings.Save();
+		if (!ribbon.Initialized) return;
+		ShowThemeChosen();
+		if (RibbonFile == ribbonLoaded) PaintTheme();
+		else SetStatus($"The {Settings.Theme} theme starts with the next AhkWord window: File > New Window, or the next time AhkWord starts.");
 	}
 
 	// ---- The command palette (iteration 57, rte_palette.cs)
@@ -2175,6 +2304,9 @@ class WriterForm : Form
 		styleBoxNames = names;
 		items.Clear();
 		foreach (var name in names) items.Add(new GalleryItemPropertySet { Label = name, CategoryID = Constants.UI_Collection_InvalidIndex });
+		// (a style sent before the list was there is lost: the box stayed empty on the dark ribbon, which fills it later)
+		ribbonSent.Remove((blockCombo, "SelectedItem"));
+		BeginInvoke(UpdateUi);
 	}
 
 	/// The style of the paragraph at the caret ("" if the selection has several).
@@ -3640,6 +3772,7 @@ class WriterForm : Form
 		RibbonCommand.PrintPreview, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Save,
 		RibbonCommand.SaveAs, RibbonCommand.PageSetup, RibbonCommand.HeaderFooter, RibbonCommand.Columns, RibbonCommand.ShowBands, RibbonCommand.Outline,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.Exit, RibbonCommand.NewWindow, RibbonCommand.OpenInNewWindow,
+		RibbonCommand.Theme,
 	};
 
 	/// Shows the printed pages in the editor's place (show) or goes back to editing where the caret was.
@@ -4754,6 +4887,8 @@ class WriterForm : Form
 	void UpdateRibbon(ITextRange2 range) {
 		var font = api.SelectionFont();    // (with nothing selected: what is typed next, as Word shows it)
 		FontProperties State(int value) => value == tomConstants.tomTrue ? FontProperties.Set : value == tomConstants.tomFalse ? FontProperties.NotSet : FontProperties.NotAvailable;
+		if (DarkRibbon) ShowDarkFont(font);
+		else {
 		Push(fontControl, "Family", font.Name ?? "", v => fontControl.Family = v);
 		Push(fontControl, "Size", font.Size > 0 ? (decimal)Math.Round(font.Size, 1) : 0, v => fontControl.Size = v);
 		Push(fontControl, "Bold", State(font.Bold), v => fontControl.Bold = v);
@@ -4764,6 +4899,7 @@ class WriterForm : Form
 			: font.Subscript == tomConstants.tomTrue ? FontVerticalPosition.SubScript
 			: font.Superscript == tomConstants.tomUndefined || font.Subscript == tomConstants.tomUndefined ? FontVerticalPosition.NotAvailable : FontVerticalPosition.NotSet, v => fontControl.VerticalPositioning = v);
 		if (font.ForeColor >= 0) Push(fontControl, "ForegroundColor", ColorTranslator.FromWin32(font.ForeColor), v => fontControl.ForegroundColor = v);
+		}
 
 		var para = range.Para;
 		int listType = para.ListType;
@@ -4846,7 +4982,7 @@ class WriterForm : Form
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
 		RibbonCommand.HeaderFooter, RibbonCommand.Columns, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
 		RibbonCommand.LineNumberOptions, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
-		RibbonCommand.SelectAll, RibbonCommand.Find, RibbonCommand.Replace,
+		RibbonCommand.SelectAll, RibbonCommand.Find, RibbonCommand.Replace, RibbonCommand.Theme,
 	};
 
 	// Keys the source editor handles itself (RichEdit's own editing), and the document's commands it lets through.
@@ -6498,6 +6634,15 @@ public class EditorApi
 
 	/// Print Layout's zoom: "PageWidth" (the page's width fills the window), "OnePage" (a page's height fits) or
 	/// "Manual" (ZoomFactor, as Zoom In / Out / 100% and Ctrl+wheel set it). Remembered.
+	/// <summary>The window's theme: "Light", "Dark", "Teal", "Navy", "Forest", "Plum", "Burgundy" or "Bronze". The document page stays white in all of them.</summary>
+	public string Theme {
+		get => form.Settings.Theme;
+		set {
+			form.Settings.Theme = AppTheme.Find(value)?.Name ?? throw new ArgumentException($"No theme \"{value}\": {string.Join(", ", AppTheme.All.Select(t => t.Name))}.");
+			form.ChangeTheme();
+		}
+	}
+
 	public string ZoomMode {
 		get => form.Settings.ZoomMode;
 		set {
@@ -9188,6 +9333,7 @@ public sealed class Settings
 	public bool WordWrap { get; set; } = true;
 	public bool PrintLayout { get; set; } = true;    // View > Print Layout: lines as on the printed page
 	public bool PageView { get; set; } = true;       // View > Show Pages: Print Layout's pages as sheets of their own (on from iteration 48)
+	public string Theme { get; set; } = "Light";    // View > Theme: a name in AppTheme.All (iteration 70)
 	public string ZoomMode { get; set; } = "PageWidth";    // Print Layout's zoom: PageWidth, OnePage or Manual (View > Zoom)
 	public bool SpellCheck { get; set; } = true;
 	public bool AutoLevelStyles { get; set; } = true;

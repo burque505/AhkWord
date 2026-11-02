@@ -1,6 +1,7 @@
 #Requires AutoHotkey v2.0 64-bit
 #Include "..\Csharp-in-AHK.ahk"
-; Builds RteRibbon.ribbon, the compiled ribbon that AhkWord.cs loads, from RteRibbon.xml:
+; Builds RteRibbon.ribbon and RteRibbonDark.ribbon (the same with light icons, for the Dark and Color themes), the
+; compiled ribbons that AhkWord.cs loads, from RteRibbon.xml:
 ;   1. make_icons.cs draws the icons into build\icons (32-bit BMPs, 16 to 64 pixels for the DPI steps) from Microsoft's
 ;      Fluent UI System Icons (MIT license), whose font is downloaded once into build\fluent, at a fixed commit;
 ;   2. uicc.exe (Windows SDK) compiles the markup into a binary ribbon (.bml) and a resource script (.rc);
@@ -23,27 +24,45 @@ try {
             Download("https://raw.githubusercontent.com/microsoft/fluentui-system-icons/" FluentCommit "/" Item, Target)
         }
     }
-    if DirExist(Build "\icons")
-        DirDelete(Build "\icons", true)    ; no icons left over from an earlier build
-    DirCreate(Build "\icons")
-    Report(RunCSharpFile(A_ScriptDir "\make_icons.cs", Build "\icons", FluentDir))
-    if CSExitCode
-        throw Error("make_icons.cs failed:`n" CSOutput)
     SdkBin := SdkBinDir()
-    Step("uicc", SdkBin "\uicc.exe", '"' A_ScriptDir '\RteRibbon.xml" RteRibbon.bml /header:RteRibbon.h /res:RteRibbon.rc /name:APPLICATION')
-    Step("rc", SdkBin "\rc.exe", "/nologo RteRibbon.rc")
-    Step("link", LinkExe(), '/NOLOGO /NOENTRY /DLL /MACHINE:X64 /OUT:"' A_ScriptDir '\RteRibbon.ribbon" RteRibbon.res')
-    Report("Built " A_ScriptDir "\RteRibbon.ribbon (" FileGetSize(A_ScriptDir "\RteRibbon.ribbon") " bytes)", true)
+    MakeRibbon(Build, "RteRibbon.ribbon", "dark")
+    MakeRibbon(Build "\dark", "RteRibbonDark.ribbon", "light")
+    Report("Built RteRibbon.ribbon and RteRibbonDark.ribbon in " A_ScriptDir, true)
 } catch as e {
     Report("Build failed: " e.Message, true, true)
     ExitApp(1)
 }
 ExitApp(0)
 
-; Runs a build tool in the build folder; its output goes to build\<name>.log and, if it fails, into the error.
-Step(Name, Exe, Args) {
-    Log := Build "\" Name ".log"
-    Code := RunWait(A_ComSpec ' /c ""' Exe '" ' Args ' > "' Log '" 2>&1"', Build, "Hide")
+; One ribbon: its icons (the ink for a light or a dark ribbon) and the markup compiled in Folder, into Target.
+MakeRibbon(Folder, Target, Ink) {
+    global SdkBin, FluentDir
+    if DirExist(Folder "\icons")
+        DirDelete(Folder "\icons", true)    ; no icons left over from an earlier build
+    DirCreate(Folder "\icons")
+    Report(RunCSharpFile(A_ScriptDir "\make_icons.cs", Folder "\icons", FluentDir, Ink))
+    if CSExitCode
+        throw Error("make_icons.cs failed:`n" CSOutput)
+    Markup := A_ScriptDir "\RteRibbon.xml"
+    if Ink = "light" {    ; (Windows' font control can't be read on a dark ribbon: this one's Font group is its own)
+        Text := RegExReplace(FileRead(Markup, "UTF-8"), 's)<Group CommandName="cmdGroupFont".*?</Group>\R?', FileRead(A_ScriptDir "\RteRibbonDarkFont.xml", "UTF-8"), &Changes)
+        if Changes != 1
+            throw Error("The Font group was not found in RteRibbon.xml.")
+        Markup := Folder "\RteRibbon.xml"
+        if FileExist(Markup)
+            FileDelete(Markup)
+        FileAppend(Text, Markup, "UTF-8")
+    }
+    Step(Folder, "uicc", SdkBin "\uicc.exe", '"' Markup '" RteRibbon.bml /header:RteRibbon.h /res:RteRibbon.rc /name:APPLICATION')
+    Step(Folder, "rc", SdkBin "\rc.exe", "/nologo RteRibbon.rc")
+    Step(Folder, "link", LinkExe(), '/NOLOGO /NOENTRY /DLL /MACHINE:X64 /OUT:"' A_ScriptDir "\" Target '" RteRibbon.res')
+    Report("Built " Target " (" FileGetSize(A_ScriptDir "\" Target) " bytes)")
+}
+
+; Runs a build tool in Folder; its output goes to <name>.log there and, if it fails, into the error.
+Step(Folder, Name, Exe, Args) {
+    Log := Folder "\" Name ".log"
+    Code := RunWait(A_ComSpec ' /c ""' Exe '" ' Args ' > "' Log '" 2>&1"', Folder, "Hide")
     Output := Trim(FileRead(Log), " `r`n")
     if Code
         throw Error(Name " failed (exit code " Code "):`n" Output)

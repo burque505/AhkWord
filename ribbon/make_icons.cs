@@ -12,6 +12,7 @@ using System.Drawing.Text;
 using System.Text.Json;
 
 string outDir = args[0], fontDir = args[1];
+if (args.Length > 2 && args[2] == "light") Icons.UseLightInk();    // (for the dark ribbon: RteRibbonDark.ribbon)
 Directory.CreateDirectory(outDir);
 Icons.Load(Path.Combine(fontDir, "FluentSystemIcons-Regular.ttf"), Path.Combine(fontDir, "FluentSystemIcons-Regular.json"));
 
@@ -30,6 +31,10 @@ var fluent = new Dictionary<string, string> {
 	["link"] = "link", ["crossreference"] = "number_symbol_square", ["updatereferences"] = "arrow_sync", ["footnote"] = "text_footnote", ["tableofcontents"] = "document_bullet_list", ["snippets"] = "text_expand", ["horizontalline"] = "divider_short", ["datetime"] = "calendar_clock", ["headerfooter"] = "document_header_footer", ["columns"] = "text_column_two",
 	["nextspelling"] = "text_proofing_tools", ["dictionary"] = "book_add",
 	["structured"] = "text_header_1", ["freeform"] = "text_font_size",
+	["themecolor"] = "color",
+	["fontbold"] = "text_bold", ["fontitalic"] = "text_italic", ["fontunderline"] = "text_underline", ["fontstrike"] = "text_strikethrough",
+	["fontsub"] = "text_subscript", ["fontsuper"] = "text_superscript", ["fontgrow"] = "font_increase", ["fontshrink"] = "font_decrease",
+	["fontcolor"] = "text_color", ["fonthighlight"] = "highlight",
 	["zoomin"] = "zoom_in", ["zoomout"] = "zoom_out", ["zoom100"] = "zoom_fit", ["html"] = "code", ["markdown"] = "markdown",
 	["viewrich"] = "document_text", ["sidebyside"] = "layout_column_two",
 	["tablesettings"] = "table_settings", ["linespacing"] = "text_line_spacing", ["pagewidth"] = "document_width", ["printlayout"] = "document_one_page", ["onepage"] = "page_fit", ["multiplepages"] = "document_multiple", ["close"] = "document_dismiss", ["newtemplate"] = "document_add", ["startpage"] = "home", ["newwindow"] = "window_new", ["stylesmenu"] = "text_edit_style", ["modifystyle"] = "edit", ["newstyle"] = "add", ["updatestyle"] = "arrow_sync", ["deletestyle"] = "delete", ["savestyles"] = "save", ["clearformatting"] = "text_clear_formatting", ["paragraphsettings"] = "text_paragraph", ["applystyles"] = "paint_brush_arrow_down", ["openwindow"] = "folder_open", ["inserttemplate"] = "document_text", ["fillfields"] = "textbox", ["borderall"] = "border_all", ["borderoutside"] = "border_outside",
@@ -66,7 +71,9 @@ static class Icons
 	static PrivateFontCollection fonts = null!;
 	static FontFamily family = null!;
 	static Dictionary<string, int> codes = null!;
-	static readonly Color Ink = Color.FromArgb(0x30, 0x30, 0x30), Accent = Color.FromArgb(0x00, 0x67, 0xC0);
+	static Color Ink = Color.FromArgb(0x30, 0x30, 0x30), Accent = Color.FromArgb(0x00, 0x67, 0xC0);
+
+	public static void UseLightInk() => (Ink, Accent) = (Color.FromArgb(0xEC, 0xEC, 0xEC), Color.FromArgb(0x6C, 0xC4, 0xF4));
 
 	public static void Load(string fontFile, string namesFile) {
 		fonts = new PrivateFontCollection();

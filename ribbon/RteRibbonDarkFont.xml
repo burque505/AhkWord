@@ -1,0 +1,58 @@
+          <Group CommandName="cmdGroupFont">
+            <SizeDefinition>
+              <ControlNameMap>
+                <ControlNameDefinition Name="name" />
+                <ControlNameDefinition Name="size" />
+                <ControlNameDefinition Name="grow" />
+                <ControlNameDefinition Name="shrink" />
+                <ControlNameDefinition Name="bold" />
+                <ControlNameDefinition Name="italic" />
+                <ControlNameDefinition Name="underline" />
+                <ControlNameDefinition Name="strike" />
+                <ControlNameDefinition Name="sub" />
+                <ControlNameDefinition Name="super" />
+                <ControlNameDefinition Name="color" />
+                <ControlNameDefinition Name="highlight" />
+              </ControlNameMap>
+              <GroupSizeDefinition Size="Large">
+                <Row>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="name" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="size" IsLabelVisible="false" />
+                  </ControlGroup>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="grow" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="shrink" IsLabelVisible="false" />
+                  </ControlGroup>
+                </Row>
+                <Row>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="bold" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="italic" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="underline" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="strike" IsLabelVisible="false" />
+                  </ControlGroup>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="sub" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="super" IsLabelVisible="false" />
+                  </ControlGroup>
+                  <ControlGroup>
+                    <ControlSizeDefinition ControlName="color" IsLabelVisible="false" />
+                    <ControlSizeDefinition ControlName="highlight" IsLabelVisible="false" />
+                  </ControlGroup>
+                </Row>
+              </GroupSizeDefinition>
+            </SizeDefinition>
+            <ComboBox CommandName="cmdFontName" IsEditable="true" IsAutoCompleteEnabled="true" ResizeType="NoResize" />
+            <ComboBox CommandName="cmdFontSize" IsEditable="true" IsAutoCompleteEnabled="false" ResizeType="NoResize" />
+            <Button CommandName="cmdFontGrow" />
+            <Button CommandName="cmdFontShrink" />
+            <ToggleButton CommandName="cmdFontBold" />
+            <ToggleButton CommandName="cmdFontItalic" />
+            <ToggleButton CommandName="cmdFontUnderline" />
+            <ToggleButton CommandName="cmdFontStrike" />
+            <ToggleButton CommandName="cmdFontSub" />
+            <ToggleButton CommandName="cmdFontSuper" />
+            <DropDownColorPicker CommandName="cmdFontColor" ColorTemplate="StandardColors" IsAutomaticColorButtonVisible="true" IsNoColorButtonVisible="false" />
+            <DropDownColorPicker CommandName="cmdFontHighlight" ColorTemplate="StandardColors" IsAutomaticColorButtonVisible="false" IsNoColorButtonVisible="true" />
+          </Group>

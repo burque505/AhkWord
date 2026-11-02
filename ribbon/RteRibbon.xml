@@ -1499,6 +1499,176 @@
     </Command>
     <Command Name="cmdShowBands" Id="303" LabelTitle="Header and footer" Keytip="H" />
     <Command Name="cmdOutline" Id="304" LabelTitle="Outline" Keytip="O" TooltipTitle="Outline (Ctrl+Shift+O)" />
+    <Command Name="cmdGroupTheme" Id="400" LabelTitle="Theme">
+      <Command.LargeImages>
+        <Image Source="icons/themecolor_32.bmp" MinDPI="96" />
+        <Image Source="icons/themecolor_40.bmp" MinDPI="120" />
+        <Image Source="icons/themecolor_48.bmp" MinDPI="144" />
+        <Image Source="icons/themecolor_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/themecolor_16.bmp" MinDPI="96" />
+        <Image Source="icons/themecolor_20.bmp" MinDPI="120" />
+        <Image Source="icons/themecolor_24.bmp" MinDPI="144" />
+        <Image Source="icons/themecolor_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFontName" Id="410" LabelTitle="Font" Keytip="FF" TooltipTitle="Font" />
+    <Command Name="cmdFontSize" Id="411" LabelTitle="Font Size" Keytip="FS" TooltipTitle="Font size" />
+    <Command Name="cmdFontBold" Id="412" LabelTitle="Bold" Keytip="FB" TooltipTitle="Bold (Ctrl+B)">
+      <Command.LargeImages>
+        <Image Source="icons/fontbold_32.bmp" MinDPI="96" />
+        <Image Source="icons/fontbold_40.bmp" MinDPI="120" />
+        <Image Source="icons/fontbold_48.bmp" MinDPI="144" />
+        <Image Source="icons/fontbold_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/fontbold_16.bmp" MinDPI="96" />
+        <Image Source="icons/fontbold_20.bmp" MinDPI="120" />
+        <Image Source="icons/fontbold_24.bmp" MinDPI="144" />
+        <Image Source="icons/fontbold_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFontItalic" Id="413" LabelTitle="Italic" Keytip="FI" TooltipTitle="Italic (Ctrl+I)">
+      <Command.LargeImages>
+        <Image Source="icons/fontitalic_32.bmp" MinDPI="96" />
+        <Image Source="icons/fontitalic_40.bmp" MinDPI="120" />
+        <Image Source="icons/fontitalic_48.bmp" MinDPI="144" />
+        <Image Source="icons/fontitalic_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/fontitalic_16.bmp" MinDPI="96" />
+        <Image Source="icons/fontitalic_20.bmp" MinDPI="120" />
+        <Image Source="icons/fontitalic_24.bmp" MinDPI="144" />
+        <Image Source="icons/fontitalic_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFontUnderline" Id="414" LabelTitle="Underline" Keytip="FU" TooltipTitle="Underline (Ctrl+U)">
+      <Command.LargeImages>
+        <Image Source="icons/fontunderline_32.bmp" MinDPI="96" />
+        <Image Source="icons/fontunderline_40.bmp" MinDPI="120" />
+        <Image Source="icons/fontunderline_48.bmp" MinDPI="144" />
+        <Image Source="icons/fontunderline_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/fontunderline_16.bmp" MinDPI="96" />
+        <Image Source="icons/fontunderline_20.bmp" MinDPI="120" />
+        <Image Source="icons/fontunderline_24.bmp" MinDPI="144" />
+        <Image Source="icons/fontunderline_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFontStrike" Id="415" LabelTitle="Strikethrough" Keytip="FT" TooltipTitle="Strikethrough">
+      <Command.LargeImages>
+        <Image Source="icons/fontstrike_32.bmp" MinDPI="96" />
+        <Image Source="icons/fontstrike_40.bmp" MinDPI="120" />
+        <Image Source="icons/fontstrike_48.bmp" MinDPI="144" />
+        <Image Source="icons/fontstrike_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/fontstrike_16.bmp" MinDPI="96" />
+        <Image Source="icons/fontstrike_20.bmp" MinDPI="120" />
+        <Image Source="icons/fontstrike_24.bmp" MinDPI="144" />
+        <Image Source="icons/fontstrike_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFontSub" Id="416" LabelTitle="Subscript" Keytip="FD" TooltipTitle="Subscript">
+      <Command.LargeImages>
+        <Image Source="icons/fontsub_32.bmp" MinDPI="96" />
+        <Image Source="icons/fontsub_40.bmp" MinDPI="120" />
+        <Image Source="icons/fontsub_48.bmp" MinDPI="144" />
+        <Image Source="icons/fontsub_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/fontsub_16.bmp" MinDPI="96" />
+        <Image Source="icons/fontsub_20.bmp" MinDPI="120" />
+        <Image Source="icons/fontsub_24.bmp" MinDPI="144" />
+        <Image Source="icons/fontsub_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFontSuper" Id="417" LabelTitle="Superscript" Keytip="FP" TooltipTitle="Superscript">
+      <Command.LargeImages>
+        <Image Source="icons/fontsuper_32.bmp" MinDPI="96" />
+        <Image Source="icons/fontsuper_40.bmp" MinDPI="120" />
+        <Image Source="icons/fontsuper_48.bmp" MinDPI="144" />
+        <Image Source="icons/fontsuper_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/fontsuper_16.bmp" MinDPI="96" />
+        <Image Source="icons/fontsuper_20.bmp" MinDPI="120" />
+        <Image Source="icons/fontsuper_24.bmp" MinDPI="144" />
+        <Image Source="icons/fontsuper_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFontGrow" Id="418" LabelTitle="Grow Font" Keytip="FG" TooltipTitle="Grow font">
+      <Command.LargeImages>
+        <Image Source="icons/fontgrow_32.bmp" MinDPI="96" />
+        <Image Source="icons/fontgrow_40.bmp" MinDPI="120" />
+        <Image Source="icons/fontgrow_48.bmp" MinDPI="144" />
+        <Image Source="icons/fontgrow_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/fontgrow_16.bmp" MinDPI="96" />
+        <Image Source="icons/fontgrow_20.bmp" MinDPI="120" />
+        <Image Source="icons/fontgrow_24.bmp" MinDPI="144" />
+        <Image Source="icons/fontgrow_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFontShrink" Id="419" LabelTitle="Shrink Font" Keytip="FK" TooltipTitle="Shrink font">
+      <Command.LargeImages>
+        <Image Source="icons/fontshrink_32.bmp" MinDPI="96" />
+        <Image Source="icons/fontshrink_40.bmp" MinDPI="120" />
+        <Image Source="icons/fontshrink_48.bmp" MinDPI="144" />
+        <Image Source="icons/fontshrink_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/fontshrink_16.bmp" MinDPI="96" />
+        <Image Source="icons/fontshrink_20.bmp" MinDPI="120" />
+        <Image Source="icons/fontshrink_24.bmp" MinDPI="144" />
+        <Image Source="icons/fontshrink_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFontColor" Id="420" LabelTitle="Font Color" Keytip="FC" TooltipTitle="Font color">
+      <Command.LargeImages>
+        <Image Source="icons/fontcolor_32.bmp" MinDPI="96" />
+        <Image Source="icons/fontcolor_40.bmp" MinDPI="120" />
+        <Image Source="icons/fontcolor_48.bmp" MinDPI="144" />
+        <Image Source="icons/fontcolor_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/fontcolor_16.bmp" MinDPI="96" />
+        <Image Source="icons/fontcolor_20.bmp" MinDPI="120" />
+        <Image Source="icons/fontcolor_24.bmp" MinDPI="144" />
+        <Image Source="icons/fontcolor_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdFontHighlight" Id="421" LabelTitle="Highlight" Keytip="FH" TooltipTitle="Text highlight color">
+      <Command.LargeImages>
+        <Image Source="icons/fonthighlight_32.bmp" MinDPI="96" />
+        <Image Source="icons/fonthighlight_40.bmp" MinDPI="120" />
+        <Image Source="icons/fonthighlight_48.bmp" MinDPI="144" />
+        <Image Source="icons/fonthighlight_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/fonthighlight_16.bmp" MinDPI="96" />
+        <Image Source="icons/fonthighlight_20.bmp" MinDPI="120" />
+        <Image Source="icons/fonthighlight_24.bmp" MinDPI="144" />
+        <Image Source="icons/fonthighlight_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdTheme" Id="401" LabelTitle="Theme" Keytip="T" TooltipTitle="Theme" TooltipDescription="The colors of the ribbon and the window. The document page stays white in every theme. Between the darker themes the change is at once; to or from Light it starts with the next window.">
+      <Command.LargeImages>
+        <Image Source="icons/themecolor_32.bmp" MinDPI="96" />
+        <Image Source="icons/themecolor_40.bmp" MinDPI="120" />
+        <Image Source="icons/themecolor_48.bmp" MinDPI="144" />
+        <Image Source="icons/themecolor_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/themecolor_16.bmp" MinDPI="96" />
+        <Image Source="icons/themecolor_20.bmp" MinDPI="120" />
+        <Image Source="icons/themecolor_24.bmp" MinDPI="144" />
+        <Image Source="icons/themecolor_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdZoomIn" Id="305" LabelTitle="Zoom In" Keytip="I" TooltipTitle="Zoom in">
       <Command.LargeImages>
         <Image Source="icons/zoomin_32.bmp" MinDPI="96" />
@@ -2408,6 +2578,13 @@
             <Button CommandName="cmdZoomIn" />
             <Button CommandName="cmdZoomOut" />
             <Button CommandName="cmdZoom100" />
+          </Group>
+          <Group CommandName="cmdGroupTheme" SizeDefinition="OneButton">
+            <DropDownGallery CommandName="cmdTheme" Type="Items" TextPosition="Right" HasLargeItems="false">
+              <DropDownGallery.MenuLayout>
+                <VerticalMenuLayout />
+              </DropDownGallery.MenuLayout>
+            </DropDownGallery>
           </Group>
         </Tab>
         <Tab CommandName="cmdTabTools">
