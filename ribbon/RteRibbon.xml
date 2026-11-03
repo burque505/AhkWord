@@ -2203,6 +2203,18 @@
       </Ribbon.ContextualTabs>
       <Ribbon.Tabs>
         <Tab CommandName="cmdTabHome">
+          <!-- Narrower windows: the Styles gallery loses tiles first, then the Editing labels, then the gallery is a button. -->
+          <Tab.ScalingPolicy>
+            <ScalingPolicy>
+              <ScalingPolicy.IdealSizes>
+                <Scale Group="cmdGroupStyles" Size="Large" />
+                <Scale Group="cmdGroupEditing" Size="Large" />
+              </ScalingPolicy.IdealSizes>
+              <Scale Group="cmdGroupStyles" Size="Medium" />
+              <Scale Group="cmdGroupEditing" Size="Small" />
+              <Scale Group="cmdGroupStyles" Size="Popup" />
+            </ScalingPolicy>
+          </Tab.ScalingPolicy>
           <Group CommandName="cmdGroupClipboard" SizeDefinition="BigButtonsAndSmallButtonsOrInputs">
             <ControlGroup>
               <Button CommandName="cmdPaste" />
@@ -2215,7 +2227,7 @@
           <Group CommandName="cmdGroupFont" SizeDefinition="OneFontControl">
             <FontControl CommandName="cmdFont" FontType="RichFont" />
           </Group>
-          <!-- A column of small buttons: change case, underline style, the font dialog. -->
+          <!-- A column of small buttons without labels, as in Word: change case, underline style, the font dialog. -->
           <Group CommandName="cmdGroupText">
             <SizeDefinition>
               <ControlNameMap>
@@ -2224,14 +2236,14 @@
                 <ControlNameDefinition Name="font" />
               </ControlNameMap>
               <GroupSizeDefinition Size="Large">
-                <ControlSizeDefinition ControlName="case" ImageSize="Small" />
-                <ControlSizeDefinition ControlName="underline" ImageSize="Small" />
-                <ControlSizeDefinition ControlName="font" ImageSize="Small" />
+                <ControlSizeDefinition ControlName="case" ImageSize="Small" IsLabelVisible="false" />
+                <ControlSizeDefinition ControlName="underline" ImageSize="Small" IsLabelVisible="false" />
+                <ControlSizeDefinition ControlName="font" ImageSize="Small" IsLabelVisible="false" />
               </GroupSizeDefinition>
               <GroupSizeDefinition Size="Medium">
-                <ControlSizeDefinition ControlName="case" ImageSize="Small" />
-                <ControlSizeDefinition ControlName="underline" ImageSize="Small" />
-                <ControlSizeDefinition ControlName="font" ImageSize="Small" />
+                <ControlSizeDefinition ControlName="case" ImageSize="Small" IsLabelVisible="false" />
+                <ControlSizeDefinition ControlName="underline" ImageSize="Small" IsLabelVisible="false" />
+                <ControlSizeDefinition ControlName="font" ImageSize="Small" IsLabelVisible="false" />
               </GroupSizeDefinition>
               <GroupSizeDefinition Size="Small">
                 <ControlSizeDefinition ControlName="case" ImageSize="Small" IsLabelVisible="false" />
@@ -2437,7 +2449,12 @@
             </DropDownButton>
           </Group>
           <Group CommandName="cmdGroupStyles">
-            <ComboBox CommandName="cmdBlockStyle" IsEditable="false" IsAutoCompleteEnabled="false" ResizeType="NoResize" />
+            <!-- A gallery of the styles, as in Word: a tile for each, its sample on white as it prints (FillStyleBox draws them). -->
+            <InRibbonGallery CommandName="cmdBlockStyle" Type="Items" TextPosition="Hide" ItemWidth="72" ItemHeight="52" MaxRows="1" MaxColumns="6" MinColumnsLarge="4" MaxColumnsMedium="3" MinColumnsMedium="2">
+              <InRibbonGallery.MenuLayout>
+                <FlowMenuLayout Columns="6" Gripper="None" />
+              </InRibbonGallery.MenuLayout>
+            </InRibbonGallery>
             <DropDownButton CommandName="cmdStylesMenu">
               <MenuGroup>
                 <Button CommandName="cmdModifyStyle" />

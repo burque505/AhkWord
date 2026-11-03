@@ -712,7 +712,7 @@ class WriterForm : Form
 	readonly Dictionary<RibbonCommand, RibbonToggleButton> toggleButtons = new();
 	readonly Dictionary<RibbonCommand, RibbonCheckBox> checkBoxes = new();
 	RibbonFontControl fontControl = null!;
-	RibbonComboBox blockCombo = null!;
+	RibbonInRibbonGallery blockCombo = null!;
 	RibbonDropDownGallery macrosGallery = null!;
 	RibbonDropDownGallery extensionsGallery = null!;
 	RibbonRecentItems recentItems = null!;
@@ -1141,9 +1141,7 @@ class WriterForm : Form
 		Button(RibbonCommand.OutdentParagraph, () => Editor.Outdent(), Keys.Control | Keys.Shift | Keys.M, M("Outdent"));
 
 		// Home: block styles (structured documents)
-		blockCombo = new RibbonComboBox(ribbon, (uint)RibbonCommand.BlockStyle);
-		// The ribbon sizes a combo box by this string, not by its items: the widest style name, and a letter to spare.
-		blockCombo.RepresentativeString = "Heading 6 (your style)W";    // (the ribbon sizes the box by this, not by its items)
+		blockCombo = new RibbonInRibbonGallery(ribbon, (uint)RibbonCommand.BlockStyle);    // (a combo box until iteration 72)
 		blockCombo.ItemsSourceReady += (s, e) => FillStyleBox(force: true);
 		blockCombo.ExecuteEvent += (s, e) => {
 			if (updatingUi || GalleryItemEventArgs.Create(blockCombo, e).SelectedItem is not { SelectedItemIndex: >= 0 } item || item.SelectedItemIndex >= styleBoxNames.Count) return;
@@ -2317,17 +2315,47 @@ class WriterForm : Form
 		ribbon.Framework.InvalidateUICommand((uint)id, Invalidations.Property, (PropertyKeyRef)pinnedLabelKey.Target!);
 	}
 
-	// The Style box's list: the document's styles, in the sheet's order.
+	// The Styles gallery: the document's styles, in the sheet's order, a tile for each.
 	internal void FillStyleBox(bool force = false) {
 		if (blockCombo == null || !ribbon.Initialized || blockCombo.ItemsSource is not { } items) return;
 		var names = Styles.Styles.Select(s => s.Name).ToList();
-		if (!force && names.SequenceEqual(styleBoxNames)) return;
+		if (!force && names.SequenceEqual(styleBoxNames)) return;    // (StylesChanged forces it: a tile shows the style's font)
 		styleBoxNames = names;
 		items.Clear();
-		foreach (var name in names) items.Add(new GalleryItemPropertySet { Label = name, CategoryID = Constants.UI_Collection_InvalidIndex });
+		foreach (var style in Styles.Styles)
+			using (var tile = StyleTile(style, LogicalToDeviceUnits(72), LogicalToDeviceUnits(52)))
+				items.Add(new GalleryItemPropertySet { Label = style.Name, CategoryID = Constants.UI_Collection_InvalidIndex, ItemImage = ribbon.ConvertToUIImage(tile) });
 		// (a style sent before the list was there is lost: the box stayed empty on the dark ribbon, which fills it later)
 		ribbonSent.Remove((blockCombo, "SelectedItem"));
 		BeginInvoke(UpdateUi);
+	}
+
+	// A style's tile, as in Word's gallery: a sample in its font, size (made smaller to fit), weight and color, and its name,
+	// on white in every theme (a preview shows the page as it prints).
+	static Bitmap StyleTile(ParagraphStyle style, int width, int height) {
+		var tile = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+		using var g = Graphics.FromImage(tile);
+		g.Clear(Color.White);
+		g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+		using (var edge = new Pen(Color.FromArgb(0xD0, 0xD0, 0xD0))) g.DrawRectangle(edge, 0, 0, width - 1, height - 1);
+		var look = (style.Bold ? FontStyle.Bold : 0) | (style.Italic ? FontStyle.Italic : 0) | (style.Underline ? FontStyle.Underline : 0);
+		Color ink = Color.Black;
+		if (style.Color != "") try { ink = ColorTranslator.FromHtml(style.Color); } catch (Exception) { }
+		const string Sample = "AaBbCc";
+		float pixels = Math.Clamp(style.Size, 8f, 16f) * height / 52f * 96f / 72f;    // (the tile is 52 logical pixels high)
+		int nameHeight = height * 15 / 52;
+		for (; ; pixels -= 1f) {
+			using var font = new Font(style.Font, pixels, look, GraphicsUnit.Pixel);
+			var size = g.MeasureString(Sample, font);
+			if (pixels > 7f && (size.Width > width - 6 || size.Height > height - nameHeight - 2)) continue;
+			using var brush = new SolidBrush(ink);
+			g.DrawString(Sample, font, brush, (width - size.Width) / 2, Math.Max(1, (height - nameHeight - size.Height) / 2));
+			break;
+		}
+		using (var nameFont = new Font("Segoe UI", height * 10f / 52f, GraphicsUnit.Pixel))
+		using (var format = new StringFormat { Alignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap })
+			g.DrawString(style.Name, nameFont, Brushes.DimGray, new RectangleF(2, height - nameHeight, width - 4, nameHeight - 1), format);
+		return tile;
 	}
 
 	/// The style of the paragraph at the caret ("" if the selection has several).
@@ -2377,7 +2405,7 @@ class WriterForm : Form
 		var selection = doc.Selection2;
 		if (selection.Start == selection.End && StyleEngine.Paragraphs(doc, selection.Start, selection.Start)[0] is var (start, end) && end - start <= 1)
 			StyleEngine.SetTyping(selection.Font, StyleEngine.StyleAt(doc, Styles, start));
-		FillStyleBox();
+		FillStyleBox(force: true);
 		RefreshOutline();
 		lineGutter.DocumentChanged();
 		UpdateUi();
