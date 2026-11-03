@@ -1405,8 +1405,8 @@ sealed class StyleDialog : Form
 	readonly TextBox subLevels = new() { Width = 220 };
 	readonly NumericUpDown subLevelIndent = new() { Minimum = 0, Maximum = 144, DecimalPlaces = 1, Increment = 1, Width = 70 };
 	readonly ComboBox subLevelSpace = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 330 };    // (ParagraphStyle.SubLevelSpaces, in order)
-	readonly Panel preview = new() { Height = 120, Dock = DockStyle.Fill, BackColor = SystemColors.Window, BorderStyle = BorderStyle.FixedSingle };
-	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
+	readonly Panel preview = new() { Height = 120, Dock = DockStyle.Fill, BackColor = AppTheme.Paper, BorderStyle = BorderStyle.FixedSingle };
+	readonly Label error = new() { AutoSize = true, ForeColor = AppTheme.Warning };
 	Color color = Color.Black;
 	readonly ParagraphStyle original;
 	readonly ParagraphStyle breaks;    // (what the Paragraph dialog sets that this one doesn't show: line and page breaks)
@@ -1587,7 +1587,7 @@ sealed class StyleDialog : Form
 	// A sample paragraph in the style, with grey text before and after it (the space and indents to scale).
 	void PaintPreview(object? sender, PaintEventArgs e) {
 		var g = e.Graphics;
-		g.Clear(SystemColors.Window);
+		g.Clear(AppTheme.Paper);
 		float scale = DeviceDpi / 72f * 0.5f;
 		var area = preview.ClientRectangle;
 		area.Inflate(-8, -6);
@@ -1599,7 +1599,7 @@ sealed class StyleDialog : Form
 		Font sample;
 		try { sample = new Font(font.Text.Trim() == "" ? "Segoe UI" : font.Text.Trim(), Math.Max(4f, (float)size.Value * 0.75f), styleFont); } catch (ArgumentException) { sample = new Font("Segoe UI", 9f, styleFont); }
 		using (sample)
-		using (var ink = new SolidBrush(automatic.Checked ? SystemColors.WindowText : color)) {
+		using (var ink = new SolidBrush(automatic.Checked ? AppTheme.Ink : color)) {
 			float x = area.Left + (float)left.Value * scale, width = Math.Max(40, area.Width - (float)(left.Value + right.Value) * scale);
 			var format = new StringFormat { Alignment = align.SelectedIndex switch { 1 => StringAlignment.Center, 2 => StringAlignment.Far, _ => StringAlignment.Near } };
 			string text = "A sample of the style: the quick brown fox jumps over the lazy dog, and goes on to a second line.";
@@ -1664,7 +1664,7 @@ sealed class CopyStylesDialog : Form
 	readonly CheckedListBox list = new() { CheckOnClick = true, Width = 520, Height = 260, IntegralHeight = false };
 	readonly Label about = new() { AutoSize = true, MaximumSize = new Size(520, 0), ForeColor = SystemColors.GrayText, Margin = new Padding(3, 6, 3, 3) };
 	readonly CheckBox forNew = new() { Text = "Also for new documents (your default styles)", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
-	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
+	readonly Label error = new() { AutoSize = true, ForeColor = AppTheme.Warning };
 	readonly List<ParagraphStyle> styles;
 
 	public CopyStylesDialog(string file, StyleSheet source, StyleSheet here) {

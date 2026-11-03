@@ -175,8 +175,9 @@ sealed class PaletteForm : Form
 		bool selected = (e.State & DrawItemState.Selected) != 0, enabled = SafeEnabled(item);
 		using var back = new SolidBrush(selected ? SystemColors.Highlight : SystemColors.Window);
 		e.Graphics.FillRectangle(back, e.Bounds);
-		var main = selected ? SystemColors.HighlightText : enabled ? SystemColors.WindowText : SystemColors.GrayText;
-		var gray = selected ? SystemColors.HighlightText : SystemColors.GrayText;
+		var highlighted = AppTheme.DarkWindows ? Color.White : SystemColors.HighlightText;    // (the dark system color is black: it doesn't read on the blue)
+		var main = selected ? highlighted : enabled ? SystemColors.WindowText : SystemColors.GrayText;
+		var gray = selected ? highlighted : SystemColors.GrayText;
 		int pad = LogicalToDeviceUnits(8), half = e.Bounds.Height / 2;
 		using var bold = new Font(Font, FontStyle.Bold);
 		var top = new Rectangle(e.Bounds.Left + pad, e.Bounds.Top + LogicalToDeviceUnits(2), e.Bounds.Width - 2 * pad, half);

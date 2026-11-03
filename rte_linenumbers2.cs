@@ -260,7 +260,7 @@ sealed class LineNumberGutter : Control
 		Dock = DockStyle.Left;
 		Visible = false;
 		SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw, true);
-		BackColor = SystemColors.Window;
+		BackColor = AppTheme.Paper;
 		TabStop = false;
 		editor.TextChanged += (s, e) => DocumentChanged();
 	}
@@ -427,7 +427,7 @@ sealed class LineNumberGutter : Control
 		foreach (var shown in LastDrawn) {
 			string text = shown.Number.ToString(CultureInfo.CurrentCulture);
 			int width = TextRenderer.MeasureText(g, text, font, Size.Empty, TextFormatFlags.NoPadding).Width;
-			TextRenderer.DrawText(g, text, font, new Point(right - width, shown.Top), SystemColors.GrayText, TextFormatFlags.NoPadding);
+			TextRenderer.DrawText(g, text, font, new Point(right - width, shown.Top), AppTheme.FaintInk, TextFormatFlags.NoPadding);
 		}
 	}
 
@@ -514,7 +514,7 @@ static class PrintedLineNumbers
 	public static List<List<Mark>> Compute(RichEditBox editor, LineNumbering numbering, IntPtr hdc, Rectangle text, Rectangle page, List<int> pageStarts, bool everyLine = false) {
 		var marks = pageStarts.Select(_ => new List<Mark>()).ToList();
 		if (!numbering.On || pageStarts.Count == 0) return marks;
-		using var hidden = new RichEditBox { WordWrap = true, Width = 600, Height = 400 };
+		using var hidden = AppTheme.OnPaper(new RichEditBox { WordWrap = true, Width = 600, Height = 400 });
 		IntPtr h = hidden.Handle;
 		((RichTextBox)hidden).Rtf = ((RichTextBox)editor).Rtf;
 		var doc = hidden.TextDocument;

@@ -46,7 +46,7 @@ sealed class PrintLayoutTarget : IDisposable
 
 static class PrintLayoutPage
 {
-	public static readonly Color Surround = Color.FromArgb(0xE6, 0xE6, 0xE6);    // the grey around the page, as in Word
+	public static Color Surround = Color.FromArgb(0xE6, 0xE6, 0xE6);    // the grey around the page, as in Word (a darker theme's own: AppTheme)
 
 	/// The paper's width and height in pixels at a zoom of 1.
 	public static (double Width, double Height) Paper(PageLayout layout, int dpi) => (layout.Width / 1440.0 * dpi, layout.Height / 1440.0 * dpi);

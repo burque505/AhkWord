@@ -240,7 +240,7 @@ public sealed class PageGaps
 			if (starts.Count == 0) return null;
 			spaced.AddRange(starts.Select(s => (s, gap.Original)));
 		}
-		using var copy = new RichEditBox { WordWrap = false, Width = 600, Height = 400, Font = editor.Font };
+		using var copy = AppTheme.OnPaper(new RichEditBox { WordWrap = false, Width = 600, Height = 400, Font = editor.Font });
 		_ = copy.Handle;
 		copy.Rtf = rtf;
 		var inCopy = copy.TextDocument;

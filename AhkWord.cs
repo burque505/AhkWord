@@ -594,6 +594,7 @@ using RibbonLib.Interop;
 Application.EnableVisualStyles();
 AppFolders.ProgramFolder = args.Length > 1 ? args[1] : Environment.CurrentDirectory;    // (portable mode: before the settings)
 AppFolders.HostScript = args.Length > 3 && args[3] != "" ? args[3] : null;    // (AhkWord.ahk: New Window starts it again)
+AppTheme.Named(Settings.Load().Theme).SetColorMode();    // (before anything of WinForms is made: see SetColorMode)
 using var form = new WriterForm(
 	args.Length > 0 ? args[0] : "",
 	args.Length > 1 ? args[1] : Environment.CurrentDirectory,
@@ -692,7 +693,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 70;    // (the About box; make_version.ps1)
+	public const int Iteration = 71;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -725,6 +726,7 @@ class WriterForm : Form
 	internal enum SourceKind { None, Markdown, Html }
 	readonly SplitContainer sourceSplit = new() { Dock = DockStyle.Fill, Panel1Collapsed = true, SplitterWidth = 6 };
 	readonly SourceBox sourceBox = new() { Dock = DockStyle.Fill };
+	readonly StatusStrip statusBar = new();
 	readonly Label sourceTitle = new() { Dock = DockStyle.Top, AutoEllipsis = true, ForeColor = SystemColors.GrayText, BackColor = SystemColors.Control };
 	readonly System.Windows.Forms.Timer sourceTimer = new() { Interval = 600 }, richToSourceTimer = new() { Interval = 600 };
 	SourceKind view = SourceKind.None, shownKind = SourceKind.None;    // the view; what the source editor holds
@@ -758,7 +760,7 @@ class WriterForm : Form
 
 	// Iteration 6: macro recording and hotkeys
 	readonly MacroRecorder recorder = new();
-	readonly ToolStripStatusLabel recordingLabel = new() { ForeColor = Color.Firebrick, Visible = false, IsLink = false, ToolTipText = "Recording a macro - click to stop" };
+	readonly ToolStripStatusLabel recordingLabel = new() { ForeColor = AppTheme.Warning, Visible = false, IsLink = false, ToolTipText = "Recording a macro - click to stop" };
 	readonly SplitContainer outlineSplit = new() { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1 };
 	readonly TreeView outlineTree = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, HideSelection = false, FullRowSelect = true, ShowLines = false, ShowPlusMinus = true };
 	readonly Label outlineHint = new() { Dock = DockStyle.Fill, ForeColor = SystemColors.GrayText, Padding = new Padding(6), Visible = false,
@@ -798,6 +800,10 @@ class WriterForm : Form
 	}
 
 	public WriterForm(string ahkPath, string appDir, string? startFile) {
+		AppTheme.OnPaper(Editor);
+		AppTheme.OnPaper(headerStrip);
+		AppTheme.OnPaper(footerStrip);
+		recordingLabel.ForeColor = AppTheme.Warning;
 		TaskbarIdentity.SetProcess();    // (before its first window)
 		this.ahkPath = ahkPath;
 		this.appDir = appDir;
@@ -818,7 +824,7 @@ class WriterForm : Form
 
 		api = new EditorApi(this);
 		lineGutter = new LineNumberGutter(Editor);
-		var page = pagePanel = new BufferedPanel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
+		var page = pagePanel = new BufferedPanel { Dock = DockStyle.Fill, BackColor = AppTheme.Paper };
 		pageGaps = new PageGaps(Editor);
 		Editor.Gaps = pageGaps;
 		Editor.BandParts = GapBandParts;
@@ -890,7 +896,7 @@ class WriterForm : Form
 		};
 		sourceSplit.SplitterMoved += (s, e) => { if (sideBySide && sourceSplit.Width > 0) Settings.SourceSplit = (int)Math.Round(sourceSplit.SplitterDistance * 100.0 / sourceSplit.Width); };
 		outlineSplit.Panel1Collapsed = !Settings.ShowOutline;
-		var status = new StatusStrip();
+		var status = statusBar;
 		status.Items.AddRange(new ToolStripItem[] { recordingLabel, statusText, extensionLabel, positionLabel, wordsLabel, modeLabel, automationLabel });
 		recordingLabel.Font = new Font(status.Font, FontStyle.Bold);
 		recordingLabel.Click += (s, e) => Run(ToggleRecording);
@@ -898,6 +904,8 @@ class WriterForm : Form
 		Controls.Add(outlineSplit);    // docking order: the last control added is docked first
 		Controls.Add(ribbon);
 		Controls.Add(status);
+		if (AppTheme.DarkWindows) statusBar.Renderer = new FlatStripRenderer();
+		PaintFrame(AppTheme.Named(Settings.Theme));
 		Activated += (s, e) => FillMacrosGallery();    // macros may have been added or removed meanwhile
 
 		// Automation: in-process (AppContext) and cross-process (hidden window) entry points.
@@ -1402,6 +1410,19 @@ class WriterForm : Form
 		var theme = AppTheme.Named(Settings.Theme);
 		theme.Paint(ribbon);
 		theme.PaintTitleBar(Handle);
+		PaintFrame(theme);
+	}
+
+	// A darker theme's colors on what is around the page. The dialogs stay the neutral dark of the system colors.
+	void PaintFrame(AppTheme theme) {
+		if (!AppTheme.DarkWindows) return;
+		statusBar.BackColor = theme.Background;
+		outlineSplit.BackColor = sourceSplit.BackColor = sourceTitle.BackColor = theme.Panel;
+		outlineSplit.Panel1.BackColor = outlineTree.BackColor = outlineHint.BackColor = theme.Panel;
+		PrintLayoutPage.Surround = lineGutter.BandColor = theme.Surround;
+		if (pageHost.BackColor != AppTheme.Paper) pageHost.BackColor = theme.Surround;
+		pageHost.Invalidate(true);
+		Editor.Invalidate();
 	}
 
 	// A change of theme while running. The darker themes share a ribbon and change at once. Light's is another file, which loads
@@ -2069,7 +2090,7 @@ class WriterForm : Form
 
 	/// A part's plain text (its RTF read by a RichTextBox of its own; markers left out).
 	internal static string SnippetPlainText(TemplateInfo part) {
-		using var box = new RichTextBox();
+		using var box = AppTheme.OnPaper(new RichTextBox());
 		box.Rtf = File.ReadAllText(part.Path, Encoding.Latin1);
 		return CrossRefs.PlainText(box.Text).TrimEnd('\n', '\r');
 	}
@@ -3616,7 +3637,7 @@ class WriterForm : Form
 			var host = pageHost;
 			if (pageLayout == null) {
 				host.AutoScroll = false;
-				host.BackColor = SystemColors.Window;
+				host.BackColor = AppTheme.Paper;
 				pagePanel.Dock = DockStyle.Fill;
 				int left = LogicalToDeviceUnits(28);
 				if (Numbering.On) left = Math.Max(LogicalToDeviceUnits(4), left - Math.Max(lineGutter.Width, LogicalToDeviceUnits(30)));
@@ -6259,7 +6280,7 @@ public class EditorApi
 	public void SetHtml(string html) {
 		// (iteration 68: built in a hidden editor, which lays nothing out for the page and has no spell checker or text services
 		// following it, and handed over at once: the many changes a file's formats take were up to minutes in the window's own)
-		using var hidden = new WriterEditBox { WordWrap = false, Width = 600, Height = 400, Font = ed.Font };
+		using var hidden = AppTheme.OnPaper(new WriterEditBox { WordWrap = false, Width = 600, Height = 400, Font = ed.Font });
 		_ = hidden.Handle;
 		hidden.EnableFontSize = ed.EnableFontSize;
 		hidden.SetDefaultSize();
@@ -10459,7 +10480,7 @@ sealed class SaveMacroDialog : Form
 {
 	readonly TextBox nameBox = new(), scriptBox = new();
 	readonly HotkeyBox hotkeyBox = new();
-	readonly Label warning = new() { AutoSize = true, ForeColor = Color.Firebrick };
+	readonly Label warning = new() { AutoSize = true, ForeColor = AppTheme.Warning };
 
 	public string MacroName => string.Concat(nameBox.Text.Trim().Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
 	public string Script => scriptBox.Text;
@@ -10514,7 +10535,7 @@ sealed class SaveMacroDialog : Form
 sealed class MacroHotkeysDialog : Form
 {
 	readonly Dictionary<string, HotkeyBox> boxes = new();
-	readonly Label warning = new() { AutoSize = true, ForeColor = Color.Firebrick, MaximumSize = new Size(600, 0) };
+	readonly Label warning = new() { AutoSize = true, ForeColor = AppTheme.Warning, MaximumSize = new Size(600, 0) };
 	readonly Dictionary<Keys, string> menuShortcuts;
 
 	public IEnumerable<(string File, Keys Keys)> Hotkeys => boxes.Select(p => (p.Key, p.Value.Hotkey));
@@ -11466,7 +11487,7 @@ sealed class ListLevelsDialog : Form
 	readonly CheckBox forNew = new() { Text = "Also for new documents", AutoSize = true, Checked = true };
 	readonly CheckBox autoLevel = new() { Text = "Tab and Shift+Tab give an item its new level's numbering style (automatic numbering style per level)", AutoSize = true };
 	public bool AutomaticPerLevel => autoLevel.Checked;
-	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
+	readonly Label error = new() { AutoSize = true, ForeColor = AppTheme.Warning };
 	readonly Label preview = new() { AutoSize = true, Font = new Font("Consolas", 9.5f), Padding = new Padding(8, 4, 8, 4), BackColor = SystemColors.Window };
 	readonly CheckBox apply = new() { Text = "Apply to the current list", AutoSize = true };
 
@@ -11889,8 +11910,8 @@ sealed class BandStrip : Control
 		int lineY = header ? area.Bottom - 1 : area.Top;
 		g.DrawLine(pen, area.Left, lineY, area.Right - LogicalToDeviceUnits(16), lineY);
 		var text = new Rectangle(area.Left, header ? area.Top : area.Top + gap, area.Width - LogicalToDeviceUnits(16), area.Height - gap);
-		using var plain = new SolidBrush(band != null ? SystemColors.WindowText : SystemColors.GrayText);
-		using var formatted = new SolidBrush(SystemColors.WindowText);
+		using var plain = new SolidBrush(band != null ? AppTheme.Ink : AppTheme.FaintInk);
+		using var formatted = new SolidBrush(AppTheme.Ink);
 		g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 		BandText.Draw(g, parts, band ?? BandFont.Plain, text.Left, text.Width, text.Top + LogicalToDeviceUnits(3), Scale, plain, formatted);
 	}
@@ -11909,9 +11930,9 @@ sealed class HeaderFooterDialog : Form
 	{
 		public readonly bool IsHeader, First;
 		public readonly CheckBox Show = new() { AutoSize = true };
-		public readonly RichTextBox[] Parts = Enumerable.Range(0, 3).Select(_ => new RichTextBox {
+		public readonly RichTextBox[] Parts = Enumerable.Range(0, 3).Select(_ => AppTheme.OnPaper(new RichTextBox {
 			Multiline = true, WordWrap = false, ScrollBars = RichTextBoxScrollBars.Vertical, DetectUrls = false, HideSelection = false
-		}).ToArray();
+		})).ToArray();
 		public BandFont? Font;
 		public readonly Label FontLabel = new() { AutoSize = true, Anchor = AnchorStyles.Left };
 		public readonly CheckBox Line = new() { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(16, 7, 3, 0) };
@@ -12271,7 +12292,7 @@ sealed class HeaderFooterDialog : Form
 // Insert > Footnote (iteration 51): a footnote's note, its paragraphs, with their bold, italic and underline.
 sealed class FootnoteDialog : Form
 {
-	readonly RichTextBox text = new() { Multiline = true, WordWrap = true, ScrollBars = RichTextBoxScrollBars.Vertical, DetectUrls = false, Dock = DockStyle.Fill };
+	readonly RichTextBox text = AppTheme.OnPaper(new RichTextBox { Multiline = true, WordWrap = true, ScrollBars = RichTextBoxScrollBars.Vertical, DetectUrls = false, Dock = DockStyle.Fill });
 	readonly NumericUpDown size = new() { Minimum = 4, Maximum = 72, DecimalPlaces = 1, Increment = 0.5m, Width = 70 };
 	const FontStyle Formats = FontStyle.Bold | FontStyle.Italic | FontStyle.Underline;
 

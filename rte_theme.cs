@@ -7,6 +7,7 @@
 
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 using RibbonLib;
 
 sealed record AppTheme(string Name, bool Dark, Color Background, Color Highlight, Color FileButton, Color Caption)
@@ -53,6 +54,38 @@ sealed record AppTheme(string Name, bool Dark, Color Background, Color Highlight
 		ribbon.ApplicationButtonColor = FileButton;
 	}
 
+	// The darker themes darken every window of the program, dialogs included, through the system colors WinForms hands out. It
+	// holds for the whole process, so, like the ribbon, it is set once, before the first window. Light leaves it all alone.
+	// It must come before any control is made, not just before the first window: a control's fields start WinForms' window for
+	// system events, and then SetColorMode signals that window and waits for it, which could hang the start for good, with no
+	// window at all (seen in AhkWord.ahk on its main thread, never on the tests' own thread).
+	public void SetColorMode() {
+		if (!Dark) return;
+		DarkWindows = true;
+#pragma warning disable WFO5001
+		Application.SetColorMode(SystemColorMode.Dark);
+#pragma warning restore WFO5001
+		PrintLayoutPage.Surround = Surround;
+	}
+
+	public static bool DarkWindows { get; private set; }
+
+	// What shows a document stays as it prints, in every theme: the page, its strips, the previews of a paragraph or a style.
+	public static Color Paper => DarkWindows ? Color.White : SystemColors.Window;
+	public static Color Ink => DarkWindows ? Color.Black : SystemColors.WindowText;
+	public static Color FaintInk => DarkWindows ? Color.Gray : SystemColors.GrayText;
+	public static T OnPaper<T>(T control) where T : Control { if (DarkWindows) { control.BackColor = Paper; control.ForeColor = Ink; } return control; }
+
+	public static void DarkLink(LinkLabel link) { if (DarkWindows) link.LinkColor = link.ActiveLinkColor = link.VisitedLinkColor = Rgb(0x8AB4F8); }    // (the usual blue can't be read there)
+
+	public static Color Warning => DarkWindows ? Rgb(0xFF9A8A) : Color.Firebrick;    // (Firebrick is too dark to read on the darker themes)
+
+	static Color Shade(Color color, double by) => Color.FromArgb((int)(color.R * by), (int)(color.G * by), (int)(color.B * by));
+
+	// The window around the page, in the darker themes.
+	public Color Panel => Shade(Background, 0.72);      // the outline, the source view's title
+	public Color Surround => Shade(Background, 0.5);    // around the page
+
 	[DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref int value, int size);
 	const int DWMWA_CAPTION_COLOR = 35;    // (Windows 11; ignored before)
 
@@ -61,4 +94,15 @@ sealed record AppTheme(string Name, bool Dark, Color Background, Color Highlight
 		int color = ColorTranslator.ToWin32(Caption);
 		DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, ref color, sizeof(int));
 	}
+}
+
+// A strip in its own BackColor: the usual renderer paints its own gradient over it.
+sealed class FlatStripRenderer : ToolStripProfessionalRenderer
+{
+	protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e) {
+		using var back = new SolidBrush(e.BackColor);
+		e.Graphics.FillRectangle(back, e.AffectedBounds);
+	}
+
+	protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e) { }
 }

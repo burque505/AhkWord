@@ -341,13 +341,13 @@ sealed class SnippetDialog : Form
 {
 	readonly TextBox abbreviation = new() { Width = 160, AccessibleName = "Abbreviation" };
 	readonly ComboBox part = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 300, AccessibleName = "Part" };
-	readonly RichTextBox text = new() { Multiline = true, WordWrap = true, ScrollBars = RichTextBoxScrollBars.Vertical, DetectUrls = false, HideSelection = false, AccessibleName = "Snippet text" };
+	readonly RichTextBox text = AppTheme.OnPaper(new RichTextBox { Multiline = true, WordWrap = true, ScrollBars = RichTextBoxScrollBars.Vertical, DetectUrls = false, HideSelection = false, AccessibleName = "Snippet text" });
 	readonly Label partNote = new() { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(3, 0, 3, 4) };
 	readonly RadioButton onEnding = new() { Text = "On an ending character: Space, Enter, Tab or punctuation (AutoHotkey's usual)", AutoSize = true, Checked = true };
 	readonly RadioButton instant = new() { Text = "At once, as soon as the abbreviation is typed (AutoHotkey's *)", AutoSize = true };
 	readonly CheckBox keep = new() { Text = "Keep the ending character after the snippet (Enter: a new paragraph after it)", AutoSize = true };
 	readonly CheckBox exact = new() { Text = "Case-sensitive: the abbreviation fires only typed as it is here (AutoHotkey's C)", AutoSize = true };
-	readonly Label problem = new() { AutoSize = true, ForeColor = Color.Firebrick, Margin = new Padding(3, 8, 3, 3) };
+	readonly Label problem = new() { AutoSize = true, ForeColor = AppTheme.Warning, Margin = new Padding(3, 8, 3, 3) };
 	readonly List<Snippet> all;
 	readonly Snippet? old;
 	readonly List<string> parts;
@@ -482,7 +482,7 @@ sealed class SnippetDialog : Form
 		if (wrong == "" && ok && PartName == "") wrong = "Give the part a name.";
 		if (wrong == "" && PartName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) wrong = "A part's name can't have \\ / : * ? \" < > | in it.";
 		if (wrong == "" && ok && text.TextLength == 0) wrong = "Type or paste the snippet's text.";
-		problem.ForeColor = wrong != "" ? Color.Firebrick : SystemColors.GrayText;
+		problem.ForeColor = wrong != "" ? AppTheme.Warning : SystemColors.GrayText;
 		problem.Text = wrong != "" ? wrong : typed == "" ? "" : Snippets.Warning(typed, instant.Checked);
 		if (!ok || wrong != "") return false;
 		Result = new Snippet(typed, PartName, instant.Checked, onEnding.Checked && keep.Checked, exact.Checked);

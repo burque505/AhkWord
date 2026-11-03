@@ -463,7 +463,7 @@ public static class RtfTables
 	/// Fills the cells that have content (null: leave as it is) by loading each into a second editor and copying its RTF.
 	public static void FillCells(RichEditBox editor, int tableStart, List<List<string?>> cells, bool header, Action<RichEditBox, string> loadCell) {
 		if (cells.All(row => row.All(c => c == null))) return;
-		using var scratch = new RichEditBox { Font = editor.Font, EnableHtmlFontSizing = editor.EnableHtmlFontSizing };
+		using var scratch = AppTheme.OnPaper(new RichEditBox { Font = editor.Font, EnableHtmlFontSizing = editor.EnableHtmlFontSizing });
 		_ = scratch.Handle;
 		for (int r = 0; r < cells.Count; r++)
 			for (int c = 0; c < cells[r].Count; c++) {

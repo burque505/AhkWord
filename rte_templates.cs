@@ -361,6 +361,7 @@ sealed class StartPage : UserControl
 
 	LinkLabel Link(string text, Action chosen) {
 		var link = new LinkLabel { Text = text, AutoSize = true, Font = tileFont, Margin = new Padding(3, 2, LogicalToDeviceUnits(18), 2), LinkBehavior = LinkBehavior.HoverUnderline };
+		AppTheme.DarkLink(link);
 		link.LinkClicked += (s, e) => chosen();
 		return link;
 	}

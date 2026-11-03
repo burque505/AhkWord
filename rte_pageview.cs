@@ -30,7 +30,7 @@ sealed class PageOverview : ScrollableControl
 
 	public PageOverview() {
 		SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.Selectable | ControlStyles.ResizeRedraw, true);
-		BackColor = Surround;
+		BackColor = AppTheme.DarkWindows ? PrintLayoutPage.Surround : Surround;
 		AutoScroll = true;
 		TabStop = true;
 	}

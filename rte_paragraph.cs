@@ -340,7 +340,7 @@ public sealed class PrintedLines : IDisposable
 	public PrintedLines(RichEditBox editor, Graphics information, int width) {
 		this.information = information;
 		hdc = information.GetHdc();
-		var box = new RichEditBox { WordWrap = true, Width = 600, Height = 400 };
+		var box = AppTheme.OnPaper(new RichEditBox { WordWrap = true, Width = 600, Height = 400 });
 		IntPtr h = box.Handle;
 		((RichTextBox)box).Rtf = ((RichTextBox)editor).Rtf;
 		if (box.TextDocument.Range2(0, 0).StoryLength != editor.TextDocument.Range2(0, 0).StoryLength) { box.Dispose(); return; }
@@ -446,8 +446,8 @@ sealed class ParagraphDialog : Form
 	readonly CheckBox contextual = Check("Don't add spa&ce between paragraphs of the same style");
 	readonly CheckBox widow = Check("&Widow/Orphan control"), keepNext = Check("Keep with ne&xt"), keepLines = Check("&Keep lines together"),
 		pageBreak = Check("Page &break before"), noNumber = Check("&Suppress line numbers");
-	readonly Panel preview = new() { Height = 120, Dock = DockStyle.Fill, BackColor = SystemColors.Window, BorderStyle = BorderStyle.FixedSingle };
-	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
+	readonly Panel preview = new() { Height = 120, Dock = DockStyle.Fill, BackColor = AppTheme.Paper, BorderStyle = BorderStyle.FixedSingle };
+	readonly Label error = new() { AutoSize = true, ForeColor = AppTheme.Warning };
 	readonly ParagraphFormat original;
 	readonly bool forStyle;
 	readonly HashSet<string> changed = new();
@@ -536,7 +536,7 @@ sealed class ParagraphDialog : Form
 		preview.Paint += PaintPreview;
 
 		// Indents and Spacing
-		var spacingPage = new TabPage("Indents and Spacing") { Padding = new Padding(8), UseVisualStyleBackColor = true };
+		var spacingPage = new TabPage("Indents and Spacing") { Padding = new Padding(8), UseVisualStyleBackColor = !AppTheme.DarkWindows };
 		var grid = Grid();
 		Heading(grid, "General");
 		Row(grid, "&Alignment:", align, "&Outline level:", level);
@@ -552,7 +552,7 @@ sealed class ParagraphDialog : Form
 		spacingPage.Controls.Add(grid);
 
 		// Line and Page Breaks
-		var breaksPage = new TabPage("Line and Page Breaks") { Padding = new Padding(8), UseVisualStyleBackColor = true };
+		var breaksPage = new TabPage("Line and Page Breaks") { Padding = new Padding(8), UseVisualStyleBackColor = !AppTheme.DarkWindows };
 		var grid2 = Grid();
 		Heading(grid2, "Pagination");
 		foreach (var box in new[] { widow, keepNext, keepLines, pageBreak }) { int r = grid2.RowCount++; grid2.Controls.Add(box, 0, r); grid2.SetColumnSpan(box, 4); }
@@ -739,7 +739,7 @@ sealed class ParagraphDialog : Form
 	// spacing and line spacing to scale (a 6.5 inch text width across the box).
 	void PaintPreview(object? sender, PaintEventArgs e) {
 		var g = e.Graphics;
-		g.Clear(SystemColors.Window);
+		g.Clear(AppTheme.Paper);
 		var area = preview.ClientRectangle;
 		area.Inflate(-LogicalToDeviceUnits(10), -LogicalToDeviceUnits(6));
 		float scale = area.Width / 468f;    // pixels per point
@@ -769,7 +769,7 @@ sealed class ParagraphDialog : Form
 				else if (rule == global::LineSpacing.AtLeast) exact = Math.Max(value, fontSize * 1.15f);
 			} catch (ArgumentException) { }
 			y += (shown.Before ?? 0) * scale;
-			using var ink = new SolidBrush(SystemColors.WindowText);
+			using var ink = new SolidBrush(AppTheme.Ink);
 			y = Paragraph(g, "Sample Text ", 4, sample, ink, area, y, shown.Left ?? 0, shown.Right ?? 0, shown.FirstLine ?? 0,
 				Array.IndexOf(Aligns, shown.Align ?? "left"), lineFactor, scale, exact);
 			y += (shown.After ?? 0) * scale + 2;
@@ -817,7 +817,7 @@ sealed class TabsDialog : Form
 	readonly ListBox list = new() { Width = 120, Height = 110, IntegralHeight = false };
 	readonly RadioButton[] alignments = ParagraphTab.Alignments.Select(a => new RadioButton { Text = Title(a), AutoSize = true, Margin = new Padding(3, 1, 3, 1) }).ToArray();
 	readonly RadioButton[] leaders = new[] { "none", "dots", "dashes", "underline" }.Select((l, i) => new RadioButton { Text = (i + 1) + " " + l switch { "none" => "None", "dots" => ".......", "dashes" => "-------", _ => "_______" }, Tag = l, AutoSize = true, Margin = new Padding(3, 1, 3, 1) }).ToArray();
-	readonly Label error = new() { AutoSize = true, ForeColor = Color.Firebrick };
+	readonly Label error = new() { AutoSize = true, ForeColor = AppTheme.Warning };
 	List<ParagraphTab> stops;
 
 	public List<ParagraphTab> Tabs => stops.OrderBy(t => t.Position).ToList();
