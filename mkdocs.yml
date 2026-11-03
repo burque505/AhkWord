@@ -60,6 +60,7 @@ nav:
       - Markdown and HTML views: guide/source-views.md
       - Templates: guide/templates.md
       - The ribbon and keyboard: guide/ribbon.md
+      - Themes: guide/themes.md
   - For legal drafting: legal.md
   - Automation:
       - Scripts, events and macros: automation/index.md
