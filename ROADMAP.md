@@ -46,6 +46,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 
 - [x] A download that needs nothing installed: AhkWord carries its libraries and offers to download .NET for itself; a complete download has .NET inside
 - [x] AhkWord's own copy of .NET kept up to date: Microsoft's fixes offered as they come out
+- [x] Fast starts: AhkWord is compiled once and kept compiled (about two seconds a start), and a download carries it compiled, so even its first start compiles nothing
 - [x] Documentation: [burque505.github.io/AhkWord](https://burque505.github.io/AhkWord/)
 
 ## Next

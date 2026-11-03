@@ -175,6 +175,10 @@ When no compiler path is set and no Visual Studio or Build Tools install is foun
 
 To use a different compiler (a folder with `csc.exe`, `Microsoft.CodeAnalysis.dll` and `Microsoft.CodeAnalysis.CSharp.dll`), run **`Csharp-in-AHK-Paths.ahk`** in this folder, or set `RoslynDir` in `Csharp-in-AHK.ini` (copy `Csharp-in-AHK.example.ini`), or set the environment variable `CSHARP_IN_AHK_ROSLYN`. [Csharp-in-AHK's README](https://github.com/burque505/Csharp-in-AHK#readme) describes the paths in full.
 
+### Compiled once
+
+Csharp-in-AHK keeps what it compiles in `%TEMP%\CSharp-in-AHK\scripts` (a release: `lib\cache\scripts`), named after a hash of the sources, references, runtime and compiler, so later starts load AhkWord instead of compiling it (about two seconds instead of five or more); a changed source file is compiled again once. A release also carries AhkWord compiled (`lib\cache\prebuilt`, made by `make_release.ps1` with `CSharpPrebuild`), used while its sources are unchanged. Set `CSHARP_IN_AHK_TRACE` to a file path to log what is compiled or loaded, with the times.
+
 ### Optional converters
 
 Word and OpenDocument files are converted by the first of these that is available:
@@ -199,7 +203,7 @@ It downloads the [Fluent UI System Icons](https://github.com/microsoft/fluentui-
 
 ## Getting started
 
-**Without AutoHotkey, nothing to install:** a release download (on the repository's Releases page) carries everything: `AhkWord.exe` (a copy of AutoHotkey v2 under AhkWord's name), the libraries, the C# compiler's DLLs and the C# host, so nothing is downloaded at the first start and nothing written outside its folder but the settings. Unzip it and double-click `AhkWord.exe` (its `START HERE.txt` says the same). Without the .NET 10 Desktop Runtime on the computer, AhkWord offers to download it from Microsoft for itself only (into its folder, checked against Microsoft's checksums), or to open Microsoft's page to install it for all of Windows; `AhkWord-NN-complete.zip` has it inside. `make_release.ps1` makes both downloads from the last commit (`-Working`: from the working tree, to try one out); they get their libraries from the last NuGet restore, so start AhkWord once after a package changes.
+**Without AutoHotkey, nothing to install:** a release download (on the repository's Releases page) carries everything: `AhkWord.exe` (a copy of AutoHotkey v2 under AhkWord's name), the libraries, the C# compiler's DLLs, the C# host and AhkWord itself compiled beforehand (`lib\cache\prebuilt`, with RteClient2's in-process snippet), so nothing is compiled or downloaded at the first start and nothing written outside its folder but the settings. Unzip it and double-click `AhkWord.exe` (its `START HERE.txt` says the same). Without the .NET 10 Desktop Runtime on the computer, AhkWord offers to download it from Microsoft for itself only (into its folder, checked against Microsoft's checksums), or to open Microsoft's page to install it for all of Windows; `AhkWord-NN-complete.zip` has it inside. `make_release.ps1` makes both downloads from the last commit (`-Working`: from the working tree, to try one out); they get their libraries from the last NuGet restore, so start AhkWord once after a package changes.
 
 **From the repository:**
 

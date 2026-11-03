@@ -24,7 +24,11 @@
 ;   - #load "Other.cs"         compiles another C# file (e.g. class definitions) together with the script
 ;   - Other #: directives and #! lines are ignored. Relative paths are resolved against the script's folder
 ;     (or the working directory for inline scripts).
-;   - Compiled scripts are cached per AHK process, so running the same script again is fast.
+;   - Compiled scripts are cached per AHK process, so running the same script again is fast, and kept on disk
+;     (CacheDir\scripts, by default %TEMP%\CSharp-in-AHK\scripts), so that a later start loads them instead of
+;     compiling them again. CSHARP_IN_AHK_TRACE=<file> logs each compile or load with its time.
+;   - CSharpPrebuild(Script) compiles a script (a file or a string) without running it, into CacheDir\prebuilt, for a
+;     program that carries its scripts compiled: loaded from there wherever the program is, while the sources match.
 ;   - Calling Environment.Exit() inside a script terminates AutoHotkey too.
 ;
 ; Output configuration:
@@ -341,11 +345,12 @@ _CSharpHostSource() {
 
             // A program can carry its scripts compiled (CSharpPrebuild): CSHARP_IN_AHK_CACHE\prebuilt\Name-Hash.dll, the hash
             // of what doesn't depend on where the program is (the sources and their paths from the script's folder, the
-            // references' names and versions, the host's name), so that even its first start compiles nothing.
+            // references' names and versions, the host's name), so that even its first start compiles nothing. A string is
+            // carried the same way (inline-Hash), but no older ones are removed.
             string prebuiltBase = null, prebuiltName = null;
             bool prebuild = Environment.GetEnvironmentVariable("CSHARP_IN_AHK_PREBUILD") == "1";
-            if (file != null && Environment.GetEnvironmentVariable("CSHARP_IN_AHK_CACHE") is string prebuiltCache && prebuiltCache != "") {
-                prebuiltName = Path.GetFileNameWithoutExtension(file) + "-";
+            if (Environment.GetEnvironmentVariable("CSHARP_IN_AHK_CACHE") is string prebuiltCache && prebuiltCache != "") {
+                prebuiltName = file != null ? Path.GetFileNameWithoutExtension(file) + "-" : "inline-";
                 prebuiltBase = Path.Combine(prebuiltCache, "prebuilt", prebuiltName + PortableHash(file, trees, refs, packages));
                 if (!prebuild)
                     try {
@@ -414,7 +419,7 @@ _CSharpHostSource() {
             if (prebuild && prebuiltBase != null) {
                 string dir = Path.GetDirectoryName(prebuiltBase);
                 Directory.CreateDirectory(dir);
-                foreach (var old in Directory.GetFiles(dir, prebuiltName + "*")) File.Delete(old);
+                foreach (var old in file != null ? Directory.GetFiles(dir, prebuiltName + "*") : Array.Empty<string>()) File.Delete(old);
                 File.WriteAllBytes(prebuiltBase + ".pdb", pdb.ToArray());
                 File.WriteAllBytes(prebuiltBase + ".dll", pe.ToArray());
             }
@@ -425,7 +430,7 @@ _CSharpHostSource() {
         }
 
         static string PortableHash(string file, List<(string Text, string Path)> trees, List<string> refs, List<string> packages) {
-            string dir = Path.GetDirectoryName(file);
+            string dir = file != null ? Path.GetDirectoryName(file) : Environment.CurrentDirectory;
             var key = new StringBuilder(GlobalUsings).Append('\0').Append(typeof(AHK).Assembly.GetName().Name);
             foreach (var package in packages) key.Append('\0').Append(package);
             foreach (var reference in refs) {
@@ -778,11 +783,12 @@ CSharpBuildHost(OutDir, Name := "CSHost") {
     return OutDir "\" Name ".dll"
 }
 
-; Compiles a script file without running it, into CacheDir\prebuilt (see Csharp-in-AHK.ini), for a program that carries
-; its scripts compiled: they are loaded from there, wherever the program is, as long as their sources are the same.
-CSharpPrebuild(Path) {
+; Compiles a script (a file, or a string as for RunCSharp) without running it, into CacheDir\prebuilt (see
+; Csharp-in-AHK.ini), for a program that carries its scripts compiled: they are loaded from there, wherever the program
+; is, as long as their sources are the same.
+CSharpPrebuild(Script) {
     EnvSet("CSHARP_IN_AHK_PREBUILD", "1")
-    try RunCSharpFile(Path)
+    try RunCSharp(Script)
     finally EnvSet("CSHARP_IN_AHK_PREBUILD")
 }
 

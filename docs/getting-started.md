@@ -36,7 +36,7 @@
 
 ## 2. The first start
 
-AhkWord compiles itself as it starts, so the first start takes a little longer, and later starts a few seconds.
+A release download carries AhkWord already compiled, so even its first start compiles nothing (the first start can still take a few seconds more while Windows checks the new files). Run from the repository, AhkWord compiles itself on the first start and keeps the result, so later starts take about two seconds; after a source file changes, it compiles again once.
 
 Then try the example documents in the `examples` folder:
 

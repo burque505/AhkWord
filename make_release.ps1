@@ -129,11 +129,14 @@ try {
 		"; nothing written outside this folder (see Csharp-in-AHK.ahk). The .NET it runs on: AhkWordSetup.ahk.",
 		"[Paths]", "RoslynDir=lib\roslyn", "HostDll=lib\host\CSHost-AhkWord.dll", "PackagesManifest=lib\packages.txt", "CacheDir=lib\cache")
 	# AhkWord compiled beforehand, with the release's own host and libraries (lib\cache\prebuilt), so that even the first
-	# start compiles nothing; AhkWord.cs or an rte_*.cs changed afterwards is compiled at the start as before
+	# start compiles nothing; AhkWord.cs or an rte_*.cs changed afterwards is compiled at the start as before. RteClient2's
+	# snippet too (Rte calls from AhkWord.ahk itself)
 	$prebuild = Join-Path $work "prebuild.ahk"
-	Set-Content $prebuild -Encoding UTF8 @("#Include `"$folder\Csharp-in-AHK.ahk`"", "CSharpPrebuild(A_Args[1])")
+	Set-Content $prebuild -Encoding UTF8 @("#Include `"$folder\Csharp-in-AHK.ahk`"", "#Include `"$folder\RteClient2.ahk`"",
+		"CSharpPrebuild(A_Args[1])", "CSharpPrebuild(Rte._InProcess)", "ExitApp")
 	& $AutoHotkey /ErrorStdOut $prebuild (Join-Path $folder "AhkWord.cs") | Out-Host
 	if (-not (Get-ChildItem (Join-Path $lib "cache\prebuilt") -Filter "AhkWord-*.dll" -ErrorAction SilentlyContinue)) { throw "AhkWord could not be compiled beforehand." }
+	if (-not (Get-ChildItem (Join-Path $lib "cache\prebuilt") -Filter "inline-*.dll" -ErrorAction SilentlyContinue)) { throw "RteClient2's snippet could not be compiled beforehand." }
 	Get-ChildItem (Join-Path $lib "cache") -File | Remove-Item    # (the runtimeconfig of this computer's .NET: made again at the first start)
 
 	# AhkWord.exe, the licenses, what AhkWord.exe is, and the other parts' notices

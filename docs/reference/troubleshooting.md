@@ -2,7 +2,7 @@
 
 ## AhkWord doesn't start
 
-**Nothing happens for a few seconds on the first start.** That is expected: the first start compiles AhkWord, with nothing shown until the window opens. (Run from the repository rather than a release download, it also downloads its components the first time, which can take a minute or two.)
+**Nothing happens for a few seconds on the first start.** That is expected, with nothing shown until the window opens: a release download's first start is slower while Windows checks its new files. Run from the repository, the first start compiles AhkWord (later starts load it compiled, until a source file changes) and downloads its components the first time, which can take a minute or two.
 
 **"Windows protected your PC"** (SmartScreen) the first time: AhkWord isn't signed. Click **More info**, then **Run anyway**; Windows doesn't ask again for that copy.
 
