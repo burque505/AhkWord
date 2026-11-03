@@ -163,6 +163,7 @@ _CSharpHost() {
         if !FileExist(Dll)
             _CSharpBuildHost(Source, Cache, Name, NetCore)
     }
+    EnvSet("CSHARP_IN_AHK_CACHE", Cache)    ; (compiled scripts are kept there too)
     SplitPath(Desktop || NetCore, &Version)
     Config := Cache "\" Name "-" Version ".runtimeconfig.json"
     if !FileExist(Config) {
@@ -335,6 +336,29 @@ _CSharpHostSource() {
 
             string key = string.Join("\0", refs) + "\0" + string.Join("\0", trees.Select(t => t.Path + "\0" + t.Text));
             if (cache.TryGetValue(key, out var cached)) return cached;
+            var traceWatch = System.Diagnostics.Stopwatch.StartNew();
+
+            // A script (from a file, or a string) is kept compiled on disk (CSHARP_IN_AHK_CACHE\scripts), named after a hash of
+            // its path (if any) and of everything compiled (sources, references, runtime and compiler), so that the next start
+            // loads it instead of compiling it again; one file per script path, the older ones removed (strings: kept).
+            string diskBase = null, diskPrefix = null;
+            if (Environment.GetEnvironmentVariable("CSHARP_IN_AHK_CACHE") is string cacheDir && cacheDir != "") {
+                string Hash(string s) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s)), 0, 8);
+                diskPrefix = file != null ? "script-" + Hash(file.ToLowerInvariant()) + "-" : "inline-";
+                diskBase = Path.Combine(cacheDir, "scripts", diskPrefix + Hash(key + "\0" + GlobalUsings + "\0" + RuntimeEnvironment.GetRuntimeDirectory()
+                    + "\0" + typeof(CSharpCompilation).Assembly.GetName().Version + "\0" + typeof(AHK).Assembly.FullName
+                    + "\0" + string.Join("\0", refs.Select(r => File.Exists(r) ? new FileInfo(r).Length + ":" + File.GetLastWriteTimeUtc(r).Ticks : ""))));
+                try {
+                    if (File.Exists(diskBase + ".dll")) {
+                        var loadedMain = Assembly.Load(File.ReadAllBytes(diskBase + ".dll"), File.Exists(diskBase + ".pdb") ? File.ReadAllBytes(diskBase + ".pdb") : null).EntryPoint;
+                        if (loadedMain != null) {
+                            if (Environment.GetEnvironmentVariable("CSHARP_IN_AHK_TRACE") is string tl && tl != "")
+                                File.AppendAllText(tl, $"cached {file}: {traceWatch.ElapsedMilliseconds} ms\r\n");
+                            return cache[key] = loadedMain;
+                        }
+                    }
+                } catch (Exception) { }    // (a damaged file: compiled again below)
+            }
 
             var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
             var syntaxTrees = trees.Select(t => CSharpSyntaxTree.ParseText(t.Text, parseOptions, t.Path, Encoding.UTF8))
@@ -354,6 +378,19 @@ _CSharpHostSource() {
                 throw new Exception("C# compilation failed:\r\n" + string.Join("\r\n",
                     result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.ToString())));
             var main = Assembly.Load(pe.ToArray(), pdb.ToArray()).EntryPoint;
+            if (diskBase != null)
+                try {
+                    string dir = Path.GetDirectoryName(diskBase), tmp = diskBase + "." + Environment.ProcessId + ".tmp";
+                    Directory.CreateDirectory(dir);
+                    foreach (var old in file != null ? Directory.GetFiles(dir, diskPrefix + "*") : Array.Empty<string>())
+                        try { File.Delete(old); } catch (Exception) { }    // (another instance may be loading it: left for later)
+                    File.WriteAllBytes(tmp + "p", pdb.ToArray());
+                    File.Move(tmp + "p", diskBase + ".pdb", true);
+                    File.WriteAllBytes(tmp, pe.ToArray());
+                    File.Move(tmp, diskBase + ".dll", true);    // (the .dll last: it is what says the pair is complete)
+                } catch (Exception) { }    // (a cache that can't be written: compiled again next time)
+            if (Environment.GetEnvironmentVariable("CSHARP_IN_AHK_TRACE") is string tf && tf != "")
+                File.AppendAllText(tf, $"compile {file}: {traceWatch.ElapsedMilliseconds} ms\r\n");
             cache[key] = main;
             return main;
         }
