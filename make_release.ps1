@@ -39,12 +39,14 @@ if (-not $license) { throw "AutoHotkey's license.txt was not found beside $AutoH
 $roslyn = Join-Path $env:LOCALAPPDATA "Csharp-in-AHK\roslyn\5.9.0\tasks\net472"
 if (-not (Test-Path (Join-Path $roslyn "csc.exe"))) { throw "The C# compiler package isn't in $roslyn (Csharp-in-AHK downloads it on a computer without Visual Studio)." }
 
-# the libraries: the restore whose files include every package AhkWord.cs and its rte_*.cs files name
-$wanted = Get-ChildItem $root -Filter "*.cs" | Where-Object { $_.Name -eq "AhkWord.cs" -or $_.Name -like "rte_*.cs" } |
+# the libraries: the restore whose files include every package AhkWord.cs, its rte_*.cs files and (Pro) its pro_*.cs files name
+$wanted = @(Get-ChildItem $root -Filter "*.cs" | Where-Object { $_.Name -eq "AhkWord.cs" -or $_.Name -like "rte_*.cs" }) + @(Get-ChildItem (Join-Path $root "pro") -Filter "pro_*.cs" -ErrorAction SilentlyContinue) |
 	ForEach-Object { Select-String -Path $_.FullName -Pattern '^#:package\s+([^@\s]+)' } | ForEach-Object { $_.Matches[0].Groups[1].Value.ToLowerInvariant() } | Sort-Object -Unique
 $nuget = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path $env:USERPROFILE ".nuget\packages" }
+# (the smallest such restore: one made for another script may have AhkWord's packages and more)
 $restore = Get-ChildItem (Join-Path $env:LOCALAPPDATA "Csharp-in-AHK\nuget\restore") -Directory | Sort-Object LastWriteTime -Descending |
-	Where-Object { $f = Join-Path $_.FullName "assets.txt"; (Test-Path $f) -and -not ($wanted | Where-Object { -not (Select-String -Path $f -SimpleMatch "\$_\" -Quiet) }) } | Select-Object -First 1
+	Where-Object { $f = Join-Path $_.FullName "assets.txt"; (Test-Path $f) -and -not ($wanted | Where-Object { -not (Select-String -Path $f -SimpleMatch "\$_\" -Quiet) }) } |
+	Sort-Object { @(Get-Content (Join-Path $_.FullName "assets.txt")).Count } | Select-Object -First 1
 if (-not $restore) { throw "No NuGet restore has all of AhkWord's packages ($($wanted -join ', ')): start AhkWord once, then make the release." }
 $assets = Get-Content (Join-Path $restore.FullName "assets.txt") | Where-Object { $_ -notmatch '\.pdb$' }
 
@@ -115,7 +117,7 @@ try {
 		$packages["$id|$ver"] = $true
 	}
 	Set-Content (Join-Path $lib "packages.txt") -Encoding UTF8 $manifest
-	# the compiler's DLLs (the scripts are compiled at each start), and the host, built here with that compiler
+	# the compiler's DLLs (for scripts and for AhkWord's sources if they are changed), and the host, built here with that compiler
 	New-Item -ItemType Directory -Force (Join-Path $lib "roslyn"), (Join-Path $lib "host") | Out-Null
 	foreach ($dll in "Microsoft.CodeAnalysis.dll", "Microsoft.CodeAnalysis.CSharp.dll") { Copy-Item (Join-Path $roslyn $dll) (Join-Path $lib "roslyn\$dll") }
 	$build = Join-Path $work "build-host.ahk"
@@ -126,6 +128,13 @@ try {
 		"; AhkWord's own: its libraries, the compiler's DLLs and the C# host are in lib, so that nothing is downloaded and",
 		"; nothing written outside this folder (see Csharp-in-AHK.ahk). The .NET it runs on: AhkWordSetup.ahk.",
 		"[Paths]", "RoslynDir=lib\roslyn", "HostDll=lib\host\CSHost-AhkWord.dll", "PackagesManifest=lib\packages.txt", "CacheDir=lib\cache")
+	# AhkWord compiled beforehand, with the release's own host and libraries (lib\cache\prebuilt), so that even the first
+	# start compiles nothing; AhkWord.cs or an rte_*.cs changed afterwards is compiled at the start as before
+	$prebuild = Join-Path $work "prebuild.ahk"
+	Set-Content $prebuild -Encoding UTF8 @("#Include `"$folder\Csharp-in-AHK.ahk`"", "CSharpPrebuild(A_Args[1])")
+	& $AutoHotkey /ErrorStdOut $prebuild (Join-Path $folder "AhkWord.cs") | Out-Host
+	if (-not (Get-ChildItem (Join-Path $lib "cache\prebuilt") -Filter "AhkWord-*.dll" -ErrorAction SilentlyContinue)) { throw "AhkWord could not be compiled beforehand." }
+	Get-ChildItem (Join-Path $lib "cache") -File | Remove-Item    # (the runtimeconfig of this computer's .NET: made again at the first start)
 
 	# AhkWord.exe, the licenses, what AhkWord.exe is, and the other parts' notices
 	Copy-Item $AutoHotkey (Join-Path $folder "AhkWord.exe")

@@ -261,6 +261,7 @@ _CSharpHostSource() {
 
         static string Execute(string source, string file, string[] args, int mask, ref int exitCode, ref string value) {
             MethodInfo main = ScriptCompiler.Compile(source, file);
+            if (Environment.GetEnvironmentVariable("CSHARP_IN_AHK_PREBUILD") == "1") return "";    // (CSharpPrebuild: compiled only)
             AHK.Reset();
             var output = new StringWriter();
             var writer = TextWriter.Synchronized(output);
@@ -338,11 +339,32 @@ _CSharpHostSource() {
             if (cache.TryGetValue(key, out var cached)) return cached;
             var traceWatch = System.Diagnostics.Stopwatch.StartNew();
 
+            // A program can carry its scripts compiled (CSharpPrebuild): CSHARP_IN_AHK_CACHE\prebuilt\Name-Hash.dll, the hash
+            // of what doesn't depend on where the program is (the sources and their paths from the script's folder, the
+            // references' names and versions, the host's name), so that even its first start compiles nothing.
+            string prebuiltBase = null, prebuiltName = null;
+            bool prebuild = Environment.GetEnvironmentVariable("CSHARP_IN_AHK_PREBUILD") == "1";
+            if (file != null && Environment.GetEnvironmentVariable("CSHARP_IN_AHK_CACHE") is string prebuiltCache && prebuiltCache != "") {
+                prebuiltName = Path.GetFileNameWithoutExtension(file) + "-";
+                prebuiltBase = Path.Combine(prebuiltCache, "prebuilt", prebuiltName + PortableHash(file, trees, refs, packages));
+                if (!prebuild)
+                    try {
+                        if (File.Exists(prebuiltBase + ".dll")) {
+                            var prebuiltMain = Assembly.Load(File.ReadAllBytes(prebuiltBase + ".dll"), File.Exists(prebuiltBase + ".pdb") ? File.ReadAllBytes(prebuiltBase + ".pdb") : null).EntryPoint;
+                            if (prebuiltMain != null) {
+                                if (Environment.GetEnvironmentVariable("CSHARP_IN_AHK_TRACE") is string tp && tp != "")
+                                    File.AppendAllText(tp, $"prebuilt {file}: {traceWatch.ElapsedMilliseconds} ms\r\n");
+                                return cache[key] = prebuiltMain;
+                            }
+                        }
+                    } catch (Exception) { }    // (a damaged file: the cache below, or compiled)
+            }
+
             // A script (from a file, or a string) is kept compiled on disk (CSHARP_IN_AHK_CACHE\scripts), named after a hash of
             // its path (if any) and of everything compiled (sources, references, runtime and compiler), so that the next start
             // loads it instead of compiling it again; one file per script path, the older ones removed (strings: kept).
             string diskBase = null, diskPrefix = null;
-            if (Environment.GetEnvironmentVariable("CSHARP_IN_AHK_CACHE") is string cacheDir && cacheDir != "") {
+            if (!prebuild && Environment.GetEnvironmentVariable("CSHARP_IN_AHK_CACHE") is string cacheDir && cacheDir != "") {
                 string Hash(string s) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s)), 0, 8);
                 diskPrefix = file != null ? "script-" + Hash(file.ToLowerInvariant()) + "-" : "inline-";
                 diskBase = Path.Combine(cacheDir, "scripts", diskPrefix + Hash(key + "\0" + GlobalUsings + "\0" + RuntimeEnvironment.GetRuntimeDirectory()
@@ -389,10 +411,31 @@ _CSharpHostSource() {
                     File.WriteAllBytes(tmp, pe.ToArray());
                     File.Move(tmp, diskBase + ".dll", true);    // (the .dll last: it is what says the pair is complete)
                 } catch (Exception) { }    // (a cache that can't be written: compiled again next time)
+            if (prebuild && prebuiltBase != null) {
+                string dir = Path.GetDirectoryName(prebuiltBase);
+                Directory.CreateDirectory(dir);
+                foreach (var old in Directory.GetFiles(dir, prebuiltName + "*")) File.Delete(old);
+                File.WriteAllBytes(prebuiltBase + ".pdb", pdb.ToArray());
+                File.WriteAllBytes(prebuiltBase + ".dll", pe.ToArray());
+            }
             if (Environment.GetEnvironmentVariable("CSHARP_IN_AHK_TRACE") is string tf && tf != "")
                 File.AppendAllText(tf, $"compile {file}: {traceWatch.ElapsedMilliseconds} ms\r\n");
             cache[key] = main;
             return main;
+        }
+
+        static string PortableHash(string file, List<(string Text, string Path)> trees, List<string> refs, List<string> packages) {
+            string dir = Path.GetDirectoryName(file);
+            var key = new StringBuilder(GlobalUsings).Append('\0').Append(typeof(AHK).Assembly.GetName().Name);
+            foreach (var package in packages) key.Append('\0').Append(package);
+            foreach (var reference in refs) {
+                string version = "";
+                try { version = AssemblyName.GetAssemblyName(reference).Version?.ToString(); } catch (Exception) { }
+                key.Append('\0').Append(Path.GetFileName(reference).ToLowerInvariant()).Append(':').Append(version);
+            }
+            foreach (var tree in trees)
+                key.Append('\0').Append(Path.GetRelativePath(dir, tree.Path).ToLowerInvariant().Replace('\\', '/')).Append('\0').Append(tree.Text);
+            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key.ToString())), 0, 12);
         }
 
         // Handles #r, #load and #: directives, blanking them so that line numbers stay the same.
@@ -733,6 +776,14 @@ CSharpBuildHost(OutDir, Name := "CSHost") {
     for Extension in [".cs", ".rsp", ".log"]
         try FileDelete(OutDir "\" Name Extension)
     return OutDir "\" Name ".dll"
+}
+
+; Compiles a script file without running it, into CacheDir\prebuilt (see Csharp-in-AHK.ini), for a program that carries
+; its scripts compiled: they are loaded from there, wherever the program is, as long as their sources are the same.
+CSharpPrebuild(Path) {
+    EnvSet("CSHARP_IN_AHK_PREBUILD", "1")
+    try RunCSharpFile(Path)
+    finally EnvSet("CSHARP_IN_AHK_PREBUILD")
 }
 
 _CSharpIsManaged(Path) {
