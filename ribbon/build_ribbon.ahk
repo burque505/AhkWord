@@ -17,7 +17,7 @@ FluentCommit := "a347af95478f989038cccbf085978865264c048a"
 try {
     FluentDir := Build "\fluent"
     DirCreate(FluentDir)
-    for Item in ["fonts/FluentSystemIcons-Regular.ttf", "fonts/FluentSystemIcons-Regular.json", "LICENSE"] {
+    for Item in ["fonts/FluentSystemIcons-Regular.ttf", "fonts/FluentSystemIcons-Regular.json", "fonts/FluentSystemIcons-Filled.ttf", "fonts/FluentSystemIcons-Filled.json", "LICENSE"] {
         Target := FluentDir "\" StrSplit(Item, "/")[-1]
         if !FileExist(Target) {
             Report("Downloading " Item)
