@@ -477,15 +477,9 @@ sealed class ParagraphDialog : Form
 		this.fontSize = fontSize;
 		this.defaultTab = defaultTab;
 		tabs = format.Tabs?.ToList();
-		Text = forStyle ? "Paragraph: " + styleName : "Paragraph";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MaximizeBox = MinimizeBox = false;
-		ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
+		Dialogs.Setup(this, forStyle ? "Paragraph: " + styleName : "Paragraph");
+		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		AutoScaleMode = AutoScaleMode.Dpi;
-		Font = SystemFonts.MessageBoxFont ?? Font;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
 
 		// the values
 		align.SelectedIndex = format.Align == null ? -1 : Math.Max(0, Array.IndexOf(Aligns, format.Align));
@@ -578,7 +572,7 @@ sealed class ParagraphDialog : Form
 		var need = new Size(Math.Max(grid.PreferredSize.Width, grid2.PreferredSize.Width), Math.Max(grid.PreferredSize.Height, grid2.PreferredSize.Height));
 		tabsControl.Size = new Size(need.Width + 30, need.Height + 50);
 
-		var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, Padding = new Padding(10), Dock = DockStyle.Fill };
+		var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, Dock = DockStyle.Fill };
 		layout.Controls.Add(tabsControl);
 		layout.Controls.Add(new Label { Text = "Preview", AutoSize = true, Margin = new Padding(3, 8, 3, 2) });
 		layout.Controls.Add(preview);
@@ -589,10 +583,10 @@ sealed class ParagraphDialog : Form
 		buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 		buttons.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 		buttons.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-		var tabsButton = new Button { Text = "&Tabs...", AutoSize = true };
-		var defaultButton = new Button { Text = "Set As &Default...", AutoSize = true };
-		var ok = new Button { Text = "OK", AutoSize = true, MinimumSize = new Size(LogicalToDeviceUnits(80), 0) };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true, MinimumSize = new Size(LogicalToDeviceUnits(80), 0) };
+		var tabsButton = Dialogs.Button(this, "&Tabs...");
+		var defaultButton = Dialogs.Button(this, "Set As &Default...");
+		var ok = Dialogs.Ok(this, closes: false);
+		var cancel = Dialogs.Cancel(this);
 		tabsButton.Click += (s, e) => TabsCommand();
 		defaultButton.Click += (s, e) => DefaultCommand(styleName);
 		ok.Click += (s, e) => { if (Validate(out string message)) { DialogResult = DialogResult.OK; Close(); } else error.Text = message; };
@@ -708,19 +702,17 @@ sealed class ParagraphDialog : Form
 	// Set As Default: the paragraph's style gets this format (as Word's sets the Normal template's), for this document
 	// or for new documents too.
 	void DefaultCommand(string styleName) {
-		using var ask = new Form {
-			Text = "Set As Default", FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false,
-			StartPosition = FormStartPosition.CenterParent, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Font = Font
-		};
-		var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, Padding = new Padding(12), Dock = DockStyle.Fill };
+		using var ask = new Form();
+		Dialogs.Setup(ask, "Set As Default");
+		var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, Dock = DockStyle.Fill };
 		layout.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(380), 0), Text = $"Make these the paragraph settings of the style {styleName} (every paragraph with it changes, as when the style is modified):" });
 		var thisOnly = new RadioButton { Text = "&This document only", AutoSize = true, Checked = true, Margin = new Padding(12, 8, 3, 3) };
 		var all = new RadioButton { Text = "This document and &new documents (Save Styles as My Default)", AutoSize = true, Margin = new Padding(12, 3, 3, 3) };
 		layout.Controls.Add(thisOnly);
 		layout.Controls.Add(all);
 		var row = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 10, 0, 0) };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
+		var cancel = Dialogs.Cancel(this);
+		var ok = Dialogs.Ok(this);
 		row.Controls.Add(cancel);
 		row.Controls.Add(ok);
 		layout.Controls.Add(row);
@@ -830,15 +822,9 @@ sealed class TabsDialog : Form
 	/// tabs: the paragraphs' tab stops (null: they differ: none shown, and setting any replaces theirs); defaultTab: points.
 	public TabsDialog(List<ParagraphTab>? tabs, float defaultTab) {
 		stops = tabs?.ToList() ?? new List<ParagraphTab>();
-		Text = "Tabs";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MaximizeBox = MinimizeBox = false;
-		ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
+		Dialogs.Setup(this, "Tabs");
+		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		AutoScaleMode = AutoScaleMode.Dpi;
-		Font = SystemFonts.MessageBoxFont ?? Font;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
 		defaultStops.Points = defaultTab;
 		alignments[0].Checked = true;
 		leaders[0].Checked = true;
@@ -852,7 +838,7 @@ sealed class TabsDialog : Form
 			leader.Checked = true;
 		};
 
-		var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Padding = new Padding(10), Dock = DockStyle.Fill };
+		var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
 		var stopsColumn = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
 		stopsColumn.Controls.Add(new Label { Text = "&Tab stop position:", AutoSize = true });
 		stopsColumn.Controls.Add(position);
@@ -886,8 +872,8 @@ sealed class TabsDialog : Form
 		grid.Controls.Add(error, 0, 3);
 		grid.SetColumnSpan(error, 2);
 		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var ok = new Button { Text = "OK", AutoSize = true };
+		var cancel = Dialogs.Cancel(this);
+		var ok = Dialogs.Ok(this, closes: false);
 		ok.Click += (s, e) => {
 			// (a position typed and not Set: set, as Word does on OK)
 			if (position.Points is float p && !stops.Any(t => Math.Abs(t.Position - p) < 0.05f) && position.Text.Trim() != "") SetStop();

@@ -693,7 +693,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 73;    // (the About box; make_version.ps1)
+	public const int Iteration = 74;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -2336,7 +2336,8 @@ class WriterForm : Form
 		var tile = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
 		using var g = Graphics.FromImage(tile);
 		g.Clear(Color.White);
-		g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+		// (no TextRenderingHint of its own: AntiAliasGridFit here left the whole window's text without smoothing, iteration
+		// 72-73; on white, the usual ClearType is right)
 		using (var edge = new Pen(Color.FromArgb(0xD0, 0xD0, 0xD0))) g.DrawRectangle(edge, 0, 0, width - 1, height - 1);
 		var look = (style.Bold ? FontStyle.Bold : 0) | (style.Italic ? FontStyle.Italic : 0) | (style.Underline ? FontStyle.Underline : 0);
 		Color ink = Color.Black;
@@ -4429,7 +4430,18 @@ class WriterForm : Form
 		string selected = Editor.SelectedText.Trim();
 		if (Prompt("Insert hyperlink", ("Address", "https://"), ("Text to display", selected != "" ? selected : "")) is not { } values) return;
 		string url = values[0], display = values[1] != "" ? values[1] : values[0];
-		Run(() => Editor.InsertHyperlink(url, display), M("InsertHyperlink", url, display));
+		// (the library's two steps, the text and then its link, frozen and as one undo step: each was drawn, a flicker)
+		var doc = Editor.TextDocument;
+		Run(() => {
+			doc.Freeze();
+			doc.BeginEditCollection();
+			try {
+				Editor.InsertHyperlink(url, display);
+			} finally {
+				doc.EndEditCollection();
+				doc.Unfreeze();
+			}
+		}, M("InsertHyperlink", url, display));
 	}
 
 	void InsertImageDialog() {
@@ -5613,8 +5625,8 @@ class WriterForm : Form
 		var box = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false,
 			Font = new Font("Consolas", 10f), Text = text.Replace("\r\n", "\n").Replace("\n", "\r\n"), BackColor = SystemColors.Window };
 		var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(4) };
-		var close = new Button { Text = "Close", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var copy = new Button { Text = "Copy", AutoSize = true };
+		var close = Dialogs.Cancel(this, "Close");
+		var copy = Dialogs.Button(this, "Copy");
 		copy.Click += (s, e) => { if (text != "") Clipboard.SetText(text); };
 		buttons.Controls.AddRange(new Control[] { close, copy });
 		dlg.Controls.Add(box);
@@ -5625,10 +5637,8 @@ class WriterForm : Form
 	}
 
 	string[]? Prompt(string title, params (string Label, string Value)[] fields) {
-		using var dlg = new Form {
-			Text = title, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false, ShowInTaskbar = false,
-			StartPosition = FormStartPosition.CenterParent, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(8)
-		};
+		using var dlg = new Form();
+		Dialogs.Setup(dlg, title);
 		var table = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
 		var boxes = new List<TextBox>();
 		foreach (var (label, value) in fields) {
@@ -5637,10 +5647,9 @@ class WriterForm : Form
 			table.Controls.Add(box);
 			boxes.Add(box);
 		}
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
+		var buttons = Dialogs.Row(this, 0, ok, cancel);
 		table.Controls.Add(buttons);
 		table.SetColumnSpan(buttons, 2);
 		dlg.Controls.Add(table);
@@ -10315,13 +10324,7 @@ sealed class ColumnsDialog : Form
 	public SectionColumns? Result => SectionColumns.Of((int)count.Value, Twips(gap.Value), line.Checked, equal.Checked ? null : widths.Take((int)count.Value).Select(w => Twips(w.Value)).ToArray());
 
 	public ColumnsDialog(SectionColumns? columns, int sectionNumber, bool sections, bool selection, int textWidth = 9360) {
-		Text = selection ? "Columns: the selected paragraphs" : sections ? $"Columns: Section {sectionNumber}" : "Columns";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(10);
+		Dialogs.Setup(this, selection ? "Columns: the selected paragraphs" : sections ? $"Columns: Section {sectionNumber}" : "Columns");
 		count.Maximum = Math.Max(3, columns?.Count ?? 1);
 		count.Value = columns?.Count ?? 1;
 		gap.Maximum = metric ? 5 : 2;
@@ -10345,10 +10348,9 @@ sealed class ColumnsDialog : Form
 		var note = new Label { Text = "Columns are printed, and Print Preview shows them. You go on editing in one column. Widths are kept in proportion, to fill the page's text width.", AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(280), 0), Margin = new Padding(3, 6, 3, 8) };
 		table.Controls.Add(note, 0, 5);
 		table.SetColumnSpan(note, 2);
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
+		var buttons = Dialogs.Row(this, 0, ok, cancel);
 		table.Controls.Add(buttons, 0, 6);
 		table.SetColumnSpan(buttons, 2);
 		Controls.Add(table);
@@ -10515,13 +10517,9 @@ sealed class SaveMacroDialog : Form
 	public Keys Hotkey => hotkeyBox.Hotkey;
 
 	public SaveMacroDialog(string name, string script, Dictionary<Keys, string> menuShortcuts, WriterForm owner) {
-		Text = "Save recorded macro";
-		StartPosition = FormStartPosition.CenterParent;
-		ShowInTaskbar = false;
-		MinimizeBox = false;
+		Dialogs.Setup(this, "Save recorded macro", sizable: true);
 		Size = new Size(LogicalToDeviceUnits(720), LogicalToDeviceUnits(520));
 		MinimumSize = new Size(LogicalToDeviceUnits(480), LogicalToDeviceUnits(360));
-		Padding = new Padding(8);
 
 		nameBox.Text = name;
 		nameBox.Width = hotkeyBox.Width = LogicalToDeviceUnits(260);
@@ -10544,8 +10542,8 @@ sealed class SaveMacroDialog : Form
 		fields.Controls.Add(new Label { Text = "Script (you can edit it):", AutoSize = true, Margin = new Padding(3, 8, 3, 3) }, 0, 3);
 		fields.SetColumnSpan(fields.GetControlFromPosition(0, 3)!, 2);
 
-		var save = new Button { Text = "Save", AutoSize = true };
-		var discard = new Button { Text = "Discard", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var save = Dialogs.Button(this, "Save");
+		var discard = Dialogs.Cancel(this, "Discard");
 		save.Click += (s, e) => {
 			if (MacroName == "") { MessageBox.Show(this, "Give the macro a name.", Text); return; }
 			DialogResult = DialogResult.OK;
@@ -10570,13 +10568,7 @@ sealed class MacroHotkeysDialog : Form
 
 	public MacroHotkeysDialog(List<string> files, Func<string, Keys> current, Dictionary<Keys, string> menuShortcuts) {
 		this.menuShortcuts = menuShortcuts;
-		Text = "Macro hotkeys";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(10);
+		Dialogs.Setup(this, "Macro hotkeys");
 
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
 		layout.Controls.Add(new Label { AutoSize = true, Text = "Click a box and press a key combination with Ctrl or Alt, or a function key. Backspace clears it.\nThe hotkeys work while the editor window is active." });
@@ -10598,10 +10590,9 @@ sealed class MacroHotkeysDialog : Form
 		scroller.Controls.Add(table);
 		layout.Controls.Add(scroller);
 		layout.Controls.Add(warning);
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
+		var buttons = Dialogs.Row(this, 0, ok, cancel);
 		layout.Controls.Add(buttons);
 		Controls.Add(layout);
 		AcceptButton = ok;
@@ -11550,14 +11541,8 @@ sealed class ListLevelsDialog : Form
 	public LegalLists.Periods LegalFormat => LegalFormats[Math.Max(0, legalFormat.SelectedIndex)].Format;
 
 	public ListLevelsDialog(List<ListLevel> levels, bool inList, LegalLists.Periods legal = LegalLists.Periods.Top, bool automaticPerLevel = true) {
-		Text = "List levels";
+		Dialogs.Setup(this, "List levels");
 		autoLevel.Checked = automaticPerLevel;
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(10);
 
 		var table = new TableLayoutPanel { ColumnCount = 6, AutoSize = true };
 		foreach (var heading in new[] { "Level", "Numbering", "Punctuation", "Start at", "Number at (pt)", "Text at (pt)" })
@@ -11589,7 +11574,7 @@ sealed class ListLevelsDialog : Form
 			table.Controls.Add(textAts[i]);
 		}
 
-		var defaults = new Button { Text = "Defaults", AutoSize = true };
+		var defaults = Dialogs.Button(this, "Defaults");
 		defaults.Click += (s, e) => {
 			var d = ListLevel.Defaults();
 			for (int i = 0; i < 9; i++) {
@@ -11599,11 +11584,10 @@ sealed class ListLevelsDialog : Form
 				numberAts[i].Text = textAts[i].Text = "";
 			}
 		};
-		var ok = new Button { Text = "OK", AutoSize = true };
+		var ok = Dialogs.Ok(this, closes: false);
 		ok.Click += (s, e) => { if (Validate(out string message)) { DialogResult = DialogResult.OK; Close(); } else error.Text = message; };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		buttons.Controls.AddRange(new Control[] { cancel, ok, defaults });
+		var cancel = Dialogs.Cancel(this);
+		var buttons = Dialogs.Row(this, 0, defaults, ok, cancel);
 		apply.Checked = apply.Enabled = inList;
 		if (!inList) apply.Text += " (the caret is not in a list)";
 
@@ -11716,15 +11700,8 @@ sealed class TablePropertiesDialog : Form
 	public TablePropertiesDialog(List<RtfTables.RowFormat> rows, int selectedCells, int pageWidth) {
 		this.rows = rows;
 		this.pageWidth = pageWidth;
-		Text = "Table Properties";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = false;
-		ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Font = SystemFonts.MessageBoxFont;
-		Padding = new Padding(10);
+		Dialogs.Setup(this, "Table Properties");
+		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		var first = rows[0];
 		initialAlignment = first.Alignment;
 		initialPadding = first.Padding;
@@ -11781,8 +11758,8 @@ sealed class TablePropertiesDialog : Form
 			Row(Label("&Borders:"), borders, borderWidth, borderColor), Row(Label("&Shading:"), shading, shadingColor),
 			Row(Label("&Vertical alignment:"), verticalAlign)));
 
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
 		var buttons = Row(ok, cancel);
 		buttons.Anchor = AnchorStyles.Right;
 		layout.Controls.Add(buttons);
@@ -11855,13 +11832,7 @@ sealed class InsertTableDialog : Form
 	public bool Header => header.Checked;
 
 	public InsertTableDialog(int rowCount, int columnCount, bool headerRow) {
-		Text = "Insert table";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(10);
+		Dialogs.Setup(this, "Insert table");
 		rows = new NumericUpDown { Minimum = 1, Maximum = 500, Value = Math.Clamp(rowCount, 1, 500), Width = LogicalToDeviceUnits(70) };
 		columns = new NumericUpDown { Minimum = 1, Maximum = 63, Value = Math.Clamp(columnCount, 1, 63), Width = LogicalToDeviceUnits(70) };
 		header.Checked = headerRow;
@@ -11872,10 +11843,9 @@ sealed class InsertTableDialog : Form
 		table.Controls.Add(columns);
 		table.Controls.Add(header);
 		table.SetColumnSpan(header, 2);
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
+		var buttons = Dialogs.Row(this, 0, ok, cancel);
 		table.Controls.Add(buttons);
 		table.SetColumnSpan(buttons, 2);
 		Controls.Add(table);
@@ -12021,13 +11991,7 @@ sealed class HeaderFooterDialog : Form
 	public HeaderFooterDialog(PageBands bands, PageBands defaultBands, SectionSettings? section = null, int sectionNumber = 0, int[]? margins = null) {
 		defaults_ = defaultBands;
 		this.section = section;
-		Text = "Header and Footer";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(10);
+		Dialogs.Setup(this, "Header and Footer");
 
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
 		if (section != null) {
@@ -12081,12 +12045,11 @@ sealed class HeaderFooterDialog : Form
 		});
 		layout.Controls.Add(makeDefault);
 
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var defaults = new Button { Text = "Defaults", AutoSize = true };
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
+		var defaults = Dialogs.Button(this, "Defaults");
 		defaults.Click += (s, e) => LoadFrom(defaults_);
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		buttons.Controls.AddRange(new Control[] { cancel, ok, defaults });
+		var buttons = Dialogs.Row(this, 0, defaults, ok, cancel);
 		layout.Controls.Add(buttons);
 		Controls.Add(layout);
 		AcceptButton = ok;
@@ -12375,13 +12338,9 @@ sealed class FootnoteDialog : Form
 	public float NoteSize => (float)size.Value;
 
 	public FootnoteDialog(string title, string note, float noteSize) {
-		Text = title;
-		FormBorderStyle = FormBorderStyle.Sizable;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
+		Dialogs.Setup(this, title, sizable: true);
 		Size = new Size(LogicalToDeviceUnits(520), LogicalToDeviceUnits(300));
 		MinimumSize = new Size(LogicalToDeviceUnits(360), LogicalToDeviceUnits(240));
-		Padding = new Padding(10);
 		var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
 		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 		layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -12415,10 +12374,9 @@ sealed class FootnoteDialog : Form
 		sizeRow.Controls.Add(size);
 		sizeRow.Controls.Add(new Label { Text = "(the Footnote Text style; Modify Style changes its font too)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(6, 6, 0, 0) });
 		layout.Controls.Add(sizeRow, 0, 3);
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
+		var buttons = Dialogs.Row(this, 0, ok, cancel);
 		layout.Controls.Add(buttons, 0, 4);
 		Controls.Add(layout);
 		AcceptButton = ok;
@@ -12444,13 +12402,7 @@ sealed class TableOfContentsDialog : Form
 	public string TitleText => title.Text.Trim();
 
 	public TableOfContentsDialog(Toc.Options options, bool isNew) {
-		Text = isNew ? "Table of Contents" : "Table of Contents: change this one";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(12);
+		Dialogs.Setup(this, isNew ? "Table of Contents" : "Table of Contents: change this one");
 		var layout = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill };
 		void Row(string label, Control control) {
 			layout.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 6, 8, 3) });
@@ -12476,10 +12428,9 @@ sealed class TableOfContentsDialog : Form
 			var note = new Label { Text = "The table at the caret is made again from the headings with these options.", AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(360), 0), Margin = new Padding(3, 8, 3, 3) };
 			layout.Controls.Add(note); layout.SetColumnSpan(note, 2);
 		}
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 10, 0, 0) };
-		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
+		var buttons = Dialogs.Row(this, 10, ok, cancel);
 		layout.Controls.Add(buttons); layout.SetColumnSpan(buttons, 2);
 		Controls.Add(layout);
 		AcceptButton = ok;
@@ -12491,8 +12442,25 @@ sealed class CrossReferenceDialog : Form
 {
 	readonly ListBox list = new() { IntegralHeight = false };
 	readonly RadioButton number = new() { Text = "Its number", AutoSize = true }, full = new() { Text = "Its full number (with the levels above it)", AutoSize = true };
-	readonly Label shown = new() { AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+	// (a line of text that only repaints itself: a Label, at each selection, laid out and repainted the whole dialog,
+	// which flickered)
+	readonly TextLine shown = new() { Dock = DockStyle.Fill };
 	readonly List<CrossRefs.Target> targets;
+
+	sealed class BufferedTable : TableLayoutPanel
+	{
+		public BufferedTable() => DoubleBuffered = true;
+	}
+
+	sealed class TextLine : Control
+	{
+		public TextLine() => SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+		protected override void OnTextChanged(EventArgs e) => Invalidate();
+		protected override void OnPaint(PaintEventArgs e) {
+			e.Graphics.Clear(BackColor);
+			TextRenderer.DrawText(e.Graphics, Text, Font, ClientRectangle, ForeColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+		}
+	}
 
 	/// The paragraph chosen (its index in the targets), and whether the full number is shown.
 	public int? Chosen => list.SelectedIndex >= 0 ? list.SelectedIndex : null;
@@ -12500,15 +12468,11 @@ sealed class CrossReferenceDialog : Form
 
 	public CrossReferenceDialog(List<CrossRefs.Target> targets, bool showFull, int selected) {
 		this.targets = targets;
-		Text = "Cross-reference";
-		FormBorderStyle = FormBorderStyle.Sizable;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
+		Dialogs.Setup(this, "Cross-reference", sizable: true);
 		Size = new Size(LogicalToDeviceUnits(620), LogicalToDeviceUnits(460));
 		MinimumSize = new Size(LogicalToDeviceUnits(380), LogicalToDeviceUnits(300));
-		Padding = new Padding(10);
 
-		var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6 };
+		var layout = new BufferedTable { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6 };
 		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 		layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 		for (int i = 0; i < 4; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -12522,15 +12486,16 @@ sealed class CrossReferenceDialog : Form
 		how.Controls.Add(number);
 		how.Controls.Add(full);
 		layout.Controls.Add(how, 0, 2);
+		shown.Height = Font.Height + LogicalToDeviceUnits(4);
+		shown.Margin = new Padding(3, LogicalToDeviceUnits(6), 3, 3);
 		layout.Controls.Add(shown, 0, 3);
 		layout.Controls.Add(new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(560), 0), Margin = new Padding(3, 4, 3, 6),
 			Text = "The number follows the paragraph's when the paragraphs are renumbered (F9 updates them all). Ctrl+click a cross-reference to go to its paragraph."
 		}, 0, 4);
 		var ok = new Button { Text = "Insert", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		var cancel = Dialogs.Cancel(this);
+		var buttons = Dialogs.Row(this, 0, ok, cancel);
 		layout.Controls.Add(buttons, 0, 5);
 		Controls.Add(layout);
 		AcceptButton = ok;
@@ -12705,7 +12670,7 @@ sealed class FindReplaceForm : Form
 		findBox.Width = replaceBox.Width = LogicalToDeviceUnits(260);
 
 		var findButton = new Button { Text = "Find next", AutoSize = true };
-		var closeButton = new Button { Text = "Close", AutoSize = true, DialogResult = DialogResult.Cancel };
+		var closeButton = Dialogs.Cancel(this, "Close");
 		findButton.Click += (s, e) => owner.FindNext();
 		replaceButton.Click += (s, e) => owner.ReplaceNext();
 		replaceAllButton.Click += (s, e) => owner.ReplaceAll();

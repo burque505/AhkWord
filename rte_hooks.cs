@@ -99,13 +99,7 @@ sealed class EventHooksDialog : Form
 	public EventHooksDialog(Dictionary<string, string>? hooks, List<string>? off, string macrosFolder, Action<HookEvent, string> tryHook) {
 		this.macrosFolder = macrosFolder;
 		this.tryHook = tryHook;
-		Text = "Event Hooks";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(12);
+		Dialogs.Setup(this, "Event Hooks");
 		var layout = new TableLayoutPanel { AutoSize = true, ColumnCount = 6, Dock = DockStyle.Fill };
 		var intro = new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(760), 0), Margin = new Padding(3, 0, 3, 10),
@@ -135,12 +129,11 @@ sealed class EventHooksDialog : Form
 			layout.Controls.Add(what);
 			layout.SetColumnSpan(what, 5);
 		}
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
 		var folder = new Button { Text = "Macros Folder", AutoSize = true };
 		folder.Click += (s, a) => { Directory.CreateDirectory(macrosFolder); Process.Start(new ProcessStartInfo(macrosFolder) { UseShellExecute = true }); };
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 12, 0, 0) };
-		buttons.Controls.AddRange(new Control[] { cancel, ok, folder });
+		var buttons = Dialogs.Row(this, 12, folder, ok, cancel);
 		layout.Controls.Add(buttons);
 		layout.SetColumnSpan(buttons, 6);
 		Controls.Add(layout);

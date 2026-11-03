@@ -1422,13 +1422,9 @@ sealed class StyleDialog : Form
 		breaks = style.Copy();
 		this.sheet = sheet;
 		this.isNew = isNew;
-		Text = isNew ? "New Style" : "Modify Style: " + style.Name;
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MaximizeBox = MinimizeBox = false;
-		ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
+		Dialogs.Setup(this, isNew ? "New Style" : "Modify Style: " + style.Name);
+		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		AutoScaleMode = AutoScaleMode.Dpi;
-		Font = SystemFonts.MessageBoxFont ?? Font;
 
 		bool builtIn = !isNew && ParagraphStyle.BuiltIn(style.Name);
 		name.Text = style.Name;
@@ -1488,7 +1484,7 @@ sealed class StyleDialog : Form
 			}
 		preview.Paint += PaintPreview;
 
-		var table = new TableLayoutPanel { ColumnCount = 4, AutoSize = true, Padding = new Padding(12), Dock = DockStyle.Fill };
+		var table = new TableLayoutPanel { ColumnCount = 4, AutoSize = true, Dock = DockStyle.Fill };
 		void Row(string label, Control a, string? label2 = null, Control? b = null) {
 			int r = table.RowCount++;
 			table.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 8, 0) }, 0, r);
@@ -1520,8 +1516,8 @@ sealed class StyleDialog : Form
 		table.Controls.Add(error, 0, er);
 		table.SetColumnSpan(error, 4);
 		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var ok = new Button { Text = "OK", AutoSize = true };
+		var cancel = Dialogs.Cancel(this);
+		var ok = Dialogs.Ok(this, closes: false);
 		ok.Click += (s, e) => { if (Validate(out string message)) { DialogResult = DialogResult.OK; Close(); } else error.Text = message; };
 		buttons.Controls.Add(cancel);
 		buttons.Controls.Add(ok);
@@ -1531,8 +1527,6 @@ sealed class StyleDialog : Form
 		Controls.Add(table);
 		AcceptButton = ok;
 		CancelButton = cancel;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
 	}
 
 	// The Paragraph dialog for the style: everything about its paragraphs (the line and page breaks too).
@@ -1668,16 +1662,9 @@ sealed class CopyStylesDialog : Form
 	readonly List<ParagraphStyle> styles;
 
 	public CopyStylesDialog(string file, StyleSheet source, StyleSheet here) {
-		Text = "Copy Styles from " + Path.GetFileName(file);
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MaximizeBox = MinimizeBox = false;
-		ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
+		Dialogs.Setup(this, "Copy Styles from " + Path.GetFileName(file));
+		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		AutoScaleMode = AutoScaleMode.Dpi;
-		Font = SystemFonts.MessageBoxFont ?? Font;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(10);
 		styles = source.Styles.ToList();
 		foreach (var s in styles) list.Items.Add(s.Name + (here.Find(s.Name) != null ? "   (replaces this document's)" : "   (new here)"));
 		list.SelectedIndexChanged += (s, e) => about.Text = list.SelectedIndex >= 0 ? StyleImport.Describe(styles[list.SelectedIndex]) : "";
@@ -1685,9 +1672,9 @@ sealed class CopyStylesDialog : Form
 		all.Click += (s, e) => { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, true); };
 		var none = new Button { Text = "N&one", AutoSize = true };
 		none.Click += (s, e) => { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, false); };
-		var ok = new Button { Text = "Copy", AutoSize = true };
+		var ok = Dialogs.Button(this, "Copy");
 		ok.Click += (s, e) => { if (list.CheckedIndices.Count == 0) { error.Text = "Tick the styles to copy."; return; } DialogResult = DialogResult.OK; Close(); };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var cancel = Dialogs.Cancel(this);
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
 		layout.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(520, 0), Text = "Tick the styles to copy into this document. One that this document has already takes the copied definition, and its paragraphs the new look (formatting of their own stays)." });
 		layout.Controls.Add(list);
@@ -1697,8 +1684,7 @@ sealed class CopyStylesDialog : Form
 		layout.Controls.Add(pick);
 		layout.Controls.Add(forNew);
 		layout.Controls.Add(error);
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill };
-		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		var buttons = Dialogs.Row(this, 0, ok, cancel);
 		layout.Controls.Add(buttons);
 		Controls.Add(layout);
 		AcceptButton = ok;

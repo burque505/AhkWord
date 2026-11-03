@@ -201,14 +201,10 @@ sealed class SnippetsDialog : Form
 	public SnippetsDialog(List<Snippet> snippets, Func<List<TemplateInfo>> parts, string? selectionRtf, Func<string, string?> loadPart, Action<string, string> savePart, Font textFont) {
 		this.snippets = snippets.ToList();
 		(this.parts, this.selectionRtf, this.loadPart, this.savePart, this.textFont) = (parts, selectionRtf, loadPart, savePart, textFont);
-		Text = "Snippets";
-		FormBorderStyle = FormBorderStyle.Sizable;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
+		Dialogs.Setup(this, "Snippets", sizable: true);
 		// (room for the columns and the buttons at the start: the list's columns, its scroll bar, the buttons' column)
 		Size = new Size(LogicalToDeviceUnits(900), LogicalToDeviceUnits(480));
 		MinimumSize = new Size(LogicalToDeviceUnits(760), LogicalToDeviceUnits(440));
-		Padding = new Padding(10);
 		list.Columns.Add("Abbreviation", LogicalToDeviceUnits(110));
 		list.Columns.Add("Inserts", LogicalToDeviceUnits(230));
 		list.Columns.Add("Fires", LogicalToDeviceUnits(170));
@@ -364,13 +360,7 @@ sealed class SnippetDialog : Form
 
 	public SnippetDialog(string title, Snippet? old, List<Snippet> all, List<string> parts, Func<string, string?> loadPart, Font textFont, string? rtf) {
 		(this.all, this.old, this.parts, this.loadPart) = (all, old, parts, loadPart);
-		Text = title;
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Padding = new Padding(12);
+		Dialogs.Setup(this, title);
 		problem.MaximumSize = partNote.MaximumSize = new Size(LogicalToDeviceUnits(600), 0);
 		var layout = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill };
 		void Row(string label, Control control) {
@@ -400,10 +390,9 @@ sealed class SnippetDialog : Form
 		Whole(keep);
 		Whole(exact);
 		Whole(problem);
-		var ok = new Button { Text = "OK", AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 10, 0, 0) };
-		buttons.Controls.AddRange(new Control[] { cancel, ok });
+		var ok = Dialogs.Ok(this, closes: false);
+		var cancel = Dialogs.Cancel(this);
+		var buttons = Dialogs.Row(this, 10, ok, cancel);
 		Whole(buttons);
 		Controls.Add(layout);
 		AcceptButton = ok;

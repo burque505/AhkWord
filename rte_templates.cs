@@ -116,14 +116,10 @@ sealed class TemplateFieldsDialog : Form
 	/// title: the window's ("New from Letter", "Fill In Fields" ...).
 	/// forget: clears the remembered values (null: no Forget button).
 	public TemplateFieldsDialog(string title, List<(string Name, string Default)> fields, IReadOnlyDictionary<string, string> remembered, Action? forget = null) {
-		Text = title;
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MaximizeBox = MinimizeBox = false;
-		ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
+		Dialogs.Setup(this, title);
+		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		AutoScaleMode = AutoScaleMode.Dpi;
-		Font = SystemFonts.MessageBoxFont ?? Font;
-		var table = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(12), Dock = DockStyle.Fill };
+		var table = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Fill };
 		table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 		table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
 		var intro = new Label {
@@ -156,8 +152,8 @@ sealed class TemplateFieldsDialog : Form
 			row++;
 		}
 		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 10, 0, 0) };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
+		var cancel = Dialogs.Cancel(this);
+		var ok = Dialogs.Ok(this);
 		buttons.Controls.Add(cancel);
 		buttons.Controls.Add(ok);
 		if (forget != null) {
@@ -259,8 +255,9 @@ sealed class TemplatePickerDialog : Form
 			Text = this.templates.Count == 0 ? "There are no templates yet." : "Choose a template. Your own templates go in:\n" + ownFolder + " (parts, to insert into a document, in its Parts folder)."
 		};
 		var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true, Enabled = this.templates.Count > 0 };
+		var cancel = Dialogs.Cancel(this);
+		var ok = Dialogs.Ok(this);
+		ok.Enabled = this.templates.Count > 0;
 		buttons.Controls.Add(cancel);
 		buttons.Controls.Add(ok);
 		var body = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12) };

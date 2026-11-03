@@ -601,15 +601,8 @@ sealed class LineNumbersDialog : Form
 	readonly bool metric = RegionInfo.CurrentRegion.IsMetric;
 
 	public LineNumbersDialog(LineNumbering numbering) {
-		Text = "Line Numbers";
-		FormBorderStyle = FormBorderStyle.FixedDialog;
-		MinimizeBox = MaximizeBox = false;
-		ShowInTaskbar = false;
-		StartPosition = FormStartPosition.CenterParent;
-		AutoSize = true;
-		AutoSizeMode = AutoSizeMode.GrowAndShrink;
-		Font = SystemFonts.MessageBoxFont;
-		Padding = new Padding(10);
+		Dialogs.Setup(this, "Line Numbers");
+		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		on.Checked = numbering.On;
 		start.Value = numbering.Start;
 		countBy.Value = numbering.CountBy;
@@ -640,8 +633,8 @@ sealed class LineNumbersDialog : Form
 		on.CheckedChanged += (s, e) => Enable();
 		Enable();
 
-		var ok = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
-		var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
 		var buttons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Anchor = AnchorStyles.Right };
 		buttons.Controls.AddRange(new Control[] { ok, cancel });
 		layout.Controls.Add(buttons);

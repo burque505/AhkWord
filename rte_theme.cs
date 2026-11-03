@@ -106,3 +106,40 @@ sealed class FlatStripRenderer : ToolStripProfessionalRenderer
 
 	protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e) { }
 }
+
+// The dialogs' common look (iteration 74): the same margin round the contents (scaled for the screen), and buttons at
+// the right of one width at least, OK before Cancel.
+static class Dialogs
+{
+	const int Margin = 10, ButtonWidth = 80;    // (logical pixels)
+
+	/// A dialog: fixed and sized to its contents, or sizable (its size then set by the caller); no minimize and maximize
+	/// boxes, not in the taskbar, centered on its owner.
+	public static void Setup(Form form, string title, bool sizable = false) {
+		form.Text = title;
+		form.FormBorderStyle = sizable ? FormBorderStyle.Sizable : FormBorderStyle.FixedDialog;
+		form.MinimizeBox = form.MaximizeBox = form.ShowInTaskbar = false;
+		form.StartPosition = FormStartPosition.CenterParent;
+		// (the font stays WinForms' own: Windows' message box font, on some screens, looked softer than it, iteration 73)
+		if (!sizable) {
+			form.AutoSize = true;
+			form.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+		}
+		form.Padding = new Padding(form.LogicalToDeviceUnits(Margin));
+	}
+
+	public static Button Button(Control scale, string text, DialogResult result = DialogResult.None) =>
+		new() { Text = text, DialogResult = result, AutoSize = true, MinimumSize = new Size(scale.LogicalToDeviceUnits(ButtonWidth), 0) };
+
+	/// OK (closes: it ends the dialog by itself; otherwise its Click handler decides).
+	public static Button Ok(Control scale, bool closes = true) => Button(scale, "OK", closes ? DialogResult.OK : DialogResult.None);
+
+	public static Button Cancel(Control scale, string text = "Cancel") => Button(scale, text, DialogResult.Cancel);
+
+	/// The buttons at the right, in this order from the left, with a gap above them (logical pixels).
+	public static FlowLayoutPanel Row(Control scale, int gapAbove, params Button[] buttons) {
+		var row = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, scale.LogicalToDeviceUnits(gapAbove), 0, 0) };
+		row.Controls.AddRange(buttons.Reverse().ToArray<Control>());
+		return row;
+	}
+}
