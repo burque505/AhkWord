@@ -22,7 +22,7 @@ var fluent = new Dictionary<string, string> {
 	["new"] = "document_add", ["open"] = "folder_open", ["save"] = "save", ["saveas"] = "save_edit", ["print"] = "print",
 	["printpreview"] = "document_search", ["pagesetup"] = "document_settings", ["exit"] = "dismiss",
 	["export"] = "arrow_export_ltr", ["exportpdf"] = "document_pdf", ["about"] = "info",
-	["undo"] = "arrow_undo", ["redo"] = "arrow_redo", ["paste"] = "clipboard_paste", ["cut"] = "cut", ["copy"] = "copy",
+	["undo"] = "arrow_undo", ["redo"] = "arrow_redo", ["paste"] = "clipboard_paste", ["cut"] = "cut", ["copy"] = "copy", ["formatpainter"] = "paint_brush",
 	["selectall"] = "select_all_on", ["find"] = "search", ["replace"] = "arrow_swap",
 	["font"] = "text_font", ["changecase"] = "text_change_case", ["underline"] = "text_underline",
 	["bullets"] = "text_bullet_list_ltr", ["numbering"] = "text_number_list_ltr",
@@ -51,7 +51,7 @@ var families = new Dictionary<Color, string> {
 	[Color.FromArgb(0xE8, 0xA3, 0x17)] = "open openwindow macrosfolder paste eventhooks snippets",
 	[Color.FromArgb(0xD1, 0x34, 0x38)] = "exit close exportpdf deletestyle deleterow deletecolumn deletetable record datetime",
 	[Color.FromArgb(0x3A, 0x9A, 0x3A)] = "picture thumbnail table tablesettings insertabove insertbelow insertleft insertright macros runscript extensions api fillfields",
-	[Color.FromArgb(0xCA, 0x50, 0x10)] = "stylesmenu applystyles paintbucket modifystyle newstyle updatestyle dictionary nextspelling",
+	[Color.FromArgb(0xCA, 0x50, 0x10)] = "stylesmenu applystyles formatpainter paintbucket modifystyle newstyle updatestyle dictionary nextspelling",
 	[Color.FromArgb(0x03, 0x83, 0x87)] = "find replace commandpalette zoomin zoomout zoom100 updatereferences hotkeys html markdown",
 };
 var tint = families.SelectMany(f => f.Value.Split(' ').Select(n => (n, f.Key))).ToDictionary(p => p.n, p => p.Key);

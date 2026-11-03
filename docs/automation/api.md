@@ -108,6 +108,22 @@ Rte.ClearFormatting()
 
 Clear Formatting (Ctrl+Space): the selected text back to its paragraphs' style (all formatting of its own goes); with no selection, the caret's whole paragraph, its paragraph formatting (spacing, indents ...) too. One undo step.
 
+### CopyFormatting
+
+```autohotkey
+Rte.CopyFormatting()
+```
+
+Copy Formatting (Home > Format Painter): the formatting at the caret (of the character before it; at a paragraph's start, or with a selection, of the first one after), and its paragraph's style and paragraph formatting, kept for PasteFormatting.
+
+### PasteFormatting
+
+```autohotkey
+Rte.PasteFormatting()
+```
+
+Paste Formatting: the selected text takes the formatting CopyFormatting kept (with no selection, the word at the caret). Whole paragraphs selected also take its paragraph's style and paragraph formatting (spacing, indents, alignment), as in Word. One undo step.
+
 ### Close
 
 ```autohotkey

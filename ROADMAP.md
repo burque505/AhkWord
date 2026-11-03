@@ -53,7 +53,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 
 - [ ] **A signed AhkWord:** `AhkWord.exe` and its prebuilt C# host signed, so that Windows' Smart App Control (on by default on some new Windows 11 PCs) lets it run, and SmartScreen doesn't warn on the first start. Unsigned, as AutoHotkey itself is, Smart App Control blocks it with no way round but turning the setting off.
 - [ ] **PDF export in the background:** keep working while a long document's PDF is made (it can't be much faster: most of the time is Microsoft Print to PDF's own work)
-- [ ] **Format Painter:** copy the formatting of the text at the caret and paint it onto other text, as in Word (click once for one use, double-click to keep painting)
+- [x] **Format Painter:** copy the formatting of the text at the caret and paint it onto other text, as in Word (click once for one use, double-click to keep painting)
 
 ## Later, perhaps
 

@@ -1086,6 +1086,20 @@
         <Image Source="icons/updatestyle_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdFormatPainter" Id="402" LabelTitle="Format Painter" Keytip="FP" TooltipTitle="Format Painter" TooltipDescription="Copy the formatting of the text at the caret, then select other text to give it the same look (whole paragraphs take the paragraph's style, spacing and indents too). Click twice quickly to keep painting; Esc or a click here stops.">
+      <Command.LargeImages>
+        <Image Source="icons/formatpainter_32.bmp" MinDPI="96" />
+        <Image Source="icons/formatpainter_40.bmp" MinDPI="120" />
+        <Image Source="icons/formatpainter_48.bmp" MinDPI="144" />
+        <Image Source="icons/formatpainter_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/formatpainter_16.bmp" MinDPI="96" />
+        <Image Source="icons/formatpainter_20.bmp" MinDPI="120" />
+        <Image Source="icons/formatpainter_24.bmp" MinDPI="144" />
+        <Image Source="icons/formatpainter_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdClearFormatting" Id="389" LabelTitle="&amp;Clear Formatting" Keytip="C" TooltipTitle="Clear Formatting (Ctrl+Space)" TooltipDescription="The selected text back to its paragraph's style (formatting of its own goes); with no selection, the whole paragraph, its spacing and indents too.">
       <Command.LargeImages>
         <Image Source="icons/clearformatting_32.bmp" MinDPI="96" />
@@ -2222,6 +2236,7 @@
             <ControlGroup>
               <Button CommandName="cmdCut" />
               <Button CommandName="cmdCopy" />
+              <ToggleButton CommandName="cmdFormatPainter" />
             </ControlGroup>
           </Group>
           <Group CommandName="cmdGroupFont" SizeDefinition="OneFontControl">

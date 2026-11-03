@@ -630,7 +630,7 @@ enum RibbonCommand : uint
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399, Theme = 401, FontName = 410, FontSize = 411, FontBold = 412, FontItalic = 413, FontUnderline = 414, FontStrike = 415, FontSub = 416, FontSuper = 417, FontGrow = 418, FontShrink = 419, FontColor = 420, FontHighlight = 421,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399, Theme = 401, FormatPainter = 402, FontName = 410, FontSize = 411, FontBold = 412, FontItalic = 413, FontUnderline = 414, FontStrike = 415, FontSub = 416, FontSuper = 417, FontGrow = 418, FontShrink = 419, FontColor = 420, FontHighlight = 421,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
 	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
@@ -693,7 +693,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 74;    // (the About box; make_version.ps1)
+	public const int Iteration = 75;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -954,9 +954,10 @@ class WriterForm : Form
 			if (recorder.Recording && (e.KeyChar >= ' ' || e.KeyChar == '\t')) { recorder.Type(e.KeyChar); UpdateRecordingLabel(); }
 		};
 		Editor.MouseDown += (s, e) => {
-			if (recorder.Recording && e.Button == MouseButtons.Left)
+			if (recorder.Recording && e.Button == MouseButtons.Left && painting == Painting.Off)
 				SetStatus("Mouse clicks are not recorded: move with the keyboard (arrows, Home/End, Ctrl to jump, Shift to select).");
 		};
+		Editor.MouseUp += (s, e) => { if (painting != Painting.Off && e.Button == MouseButtons.Left && ModifierKeys != Keys.Control) PaintSelection(); };
 		outlineTimer.Tick += (s, e) => { outlineTimer.Stop(); RefreshOutline(); };
 		outlineTree.NodeMouseClick += (s, e) => { if (e.Button == MouseButtons.Left && e.Node.Tag is int start) Run(() => GoToPosition(start)); };
 		outlineTree.KeyDown += (s, e) => {
@@ -1170,6 +1171,7 @@ class WriterForm : Form
 		Button(RibbonCommand.UpdateStyle, UpdateStyleCommand);
 		Button(RibbonCommand.DeleteStyle, DeleteStyleCommand);
 		Button(RibbonCommand.ClearFormatting, () => api.ClearFormatting(), Keys.Control | Keys.Space, M("ClearFormatting"));
+		Toggle(RibbonCommand.FormatPainter, FormatPainterCommand);
 		foreach (var (id, set) in new[] { (RibbonCommand.StyleSetClassic, "Classic"), (RibbonCommand.StyleSetPlain, "Plain"), (RibbonCommand.StyleSetModern, "Modern") })
 			Toggle(id, () => { api.StyleSet = set; Record(M("StyleSet", set)); });
 		Button(RibbonCommand.ApplyMyStyles, () => { int count = api.ApplyMyStyles(); Record(M("ApplyMyStyles")); SetStatus($"Your styles are this document's now ({count} paragraph{(count == 1 ? "" : "s")} restyled; formatting of their own stayed)."); });
@@ -1311,6 +1313,65 @@ class WriterForm : Form
 	}
 
 	// ---- Themes (iteration 70, rte_theme.cs)
+
+	// ---- Format Painter (iteration 75): Home > Clipboard, as in Word. A click copies the formatting at the caret
+	// (EditorApi.CopyFormatting) and the next text selected with the mouse takes it (PasteFormatting; a click without
+	// dragging: the word there); two clicks within the double-click time keep it painting, until Esc or a click on it.
+	enum Painting { Off, Once, Sticky }
+	Painting painting;
+	long painterClicked;
+
+	void FormatPainterCommand() {
+		long now = Environment.TickCount64;
+		bool twice = now - painterClicked <= SystemInformation.DoubleClickTime;
+		painterClicked = now;
+		if (painting == Painting.Once && twice) {
+			painting = Painting.Sticky;
+			SetStatus("Format Painter stays on: select text to paint it; Esc or a click on Format Painter stops.");
+		} else if (painting != Painting.Off) {
+			StopPainting();
+			SetStatus("Format Painter off.");
+		} else {
+			api.CopyFormatting();
+			Record(M("CopyFormatting"));
+			painting = Painting.Once;
+			Editor.PaintCursor = PaintCursor.Value;
+			SetStatus("Select the text to give this formatting (a click: the word there). Click Format Painter twice to keep painting; Esc stops.");
+		}
+		toggleButtons[RibbonCommand.FormatPainter].BooleanValue = painting != Painting.Off;    // (the ribbon flips it on each click)
+		Editor.Focus();
+	}
+
+	void PaintSelection() {
+		if (painting == Painting.Once) StopPainting();
+		Run(() => api.PasteFormatting(), M("PasteFormatting"));
+	}
+
+	void StopPainting() {
+		painting = Painting.Off;
+		Editor.PaintCursor = null;
+		toggleButtons[RibbonCommand.FormatPainter].BooleanValue = false;
+	}
+
+	// The pointer while painting: an I-beam with a brush beside it (its hot spot the I-beam's middle)
+	static readonly Lazy<Cursor> PaintCursor = new(() => {
+		int size = Math.Max(32, SystemInformation.CursorSize.Width);
+		float k = size / 32f;
+		using var bitmap = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+		using (var g = Graphics.FromImage(bitmap)) {
+			g.SmoothingMode = SmoothingMode.AntiAlias;
+			g.ScaleTransform(k, k);
+			PointF[][] beam = { new PointF[] { new(2, 7), new(8, 7) }, new PointF[] { new(5, 7), new(5, 27) }, new PointF[] { new(2, 27), new(8, 27) } };
+			using (var halo = new Pen(Color.White, 3f)) foreach (var line in beam) g.DrawLines(halo, line);
+			using (var ink = new Pen(Color.Black, 1f)) foreach (var line in beam) g.DrawLines(ink, line);
+			using var outline = new Pen(Color.Black, 1f);
+			void Part(Color color, RectangleF box) { using var fill = new SolidBrush(color); g.FillRectangle(fill, box); g.DrawRectangle(outline, box.X, box.Y, box.Width, box.Height); }
+			Part(Color.FromArgb(0x8A, 0x5A, 0x2B), new RectangleF(19, 1, 4, 10));    // handle
+			Part(Color.Silver, new RectangleF(16, 11, 10, 4));    // ferrule
+			Part(Color.FromArgb(0xE8, 0xA3, 0x17), new RectangleF(16, 15, 10, 7));    // bristles
+		}
+		return WriterEditBox.CursorFrom(bitmap, (int)(5 * k), (int)(17 * k));
+	});
 
 	string ribbonLoaded = "";    // (the file the ribbon came from)
 	RibbonDropDownGallery themeGallery = null!;
@@ -4521,6 +4582,7 @@ class WriterForm : Form
 	// ---------------------------------------------------------------- Keyboard: Tab / Shift+Tab in lists
 
 	protected override bool ProcessCmdKey(ref Message msg, Keys keyData) {
+		if (keyData == Keys.Escape && painting != Painting.Off) { StopPainting(); SetStatus("Format Painter off."); return true; }
 		// The start page: a shortcut leaves it first (Ctrl+O, Ctrl+N ... then act on the document as usual)
 		if (StartShown && startPage!.ContainsFocus && shortcuts.ContainsKey(keyData)) ShowStart(false);
 		// Multiple Pages: its own keys; a shortcut that changes the text goes back to editing first
@@ -4977,6 +5039,7 @@ class WriterForm : Form
 		foreach (var (id, value) in new[] { (RibbonCommand.LineSpacing10, "1"), (RibbonCommand.LineSpacing115, "1.15"), (RibbonCommand.LineSpacing150, "1.5"),
 			(RibbonCommand.LineSpacing200, "2"), (RibbonCommand.LineSpacing250, "2.5"), (RibbonCommand.LineSpacing300, "3") })
 			Push(toggleButtons[id], "BooleanValue", spacing == value, v => toggleButtons[id].BooleanValue = v);
+		Push(toggleButtons[RibbonCommand.FormatPainter], "BooleanValue", painting != Painting.Off, v => toggleButtons[RibbonCommand.FormatPainter].BooleanValue = v);
 		// (page 1's top margin, the page view's space before the first paragraph, isn't the paragraph's)
 		float before = LineSpacing.SpaceOf(range, true);
 		if (pageGaps.Applied) before -= pageGaps.ExtraAt(range.Start);    // (a page's first paragraph: the gap isn't its own space)
@@ -5986,6 +6049,84 @@ public class EditorApi
 		try { StyleEngine.ResetFormatting(doc, form.Styles, selection.Start, selection.End, paragraphs: selection.Start == selection.End); }
 		finally { doc.EndEditCollection(); }
 		form.StylesChanged();
+	}
+
+	// ---- Format Painter (iteration 75)
+
+	ITextFont? copiedFont;
+	ParagraphStyle? copiedStyle;
+	(int Alignment, float First, float Left, float Right, float Before, float After, int Rule, float Line, bool Listed)? copiedPara;
+
+	/// Copy Formatting (Home > Format Painter): the formatting at the caret (of the character before it; at a paragraph's
+	/// start, or with a selection, of the first one after), and its paragraph's style and paragraph formatting, kept for
+	/// PasteFormatting.
+	public void CopyFormatting() {
+		var doc = ed.TextDocument;
+		var selection = doc.Selection2;
+		int start = selection.Start;
+		var para = doc.Range2(start, start).Para;
+		bool before = selection.End == start && start > 0 && StyleEngine.Paragraphs(doc, start, start)[0].Start < start;
+		copiedFont = (before ? doc.Range2(start - 1, start) : doc.Range2(start, start + 1)).Font.Duplicate;
+		copiedStyle = StyleEngine.StyleAt(doc, form.Styles, start);
+		copiedPara = (para.Alignment, para.FirstLineIndent, para.LeftIndent, para.RightIndent, para.SpaceBefore, para.SpaceAfter,
+			para.LineSpacingRule, para.LineSpacing, (para.ListType & 0xFFFF) != tomConstants.tomListNone);
+	}
+
+	/// Paste Formatting: the selected text takes the formatting CopyFormatting kept (with no selection, the word at the
+	/// caret). Whole paragraphs selected also take its paragraph's style and paragraph formatting (spacing, indents,
+	/// alignment), as in Word. One undo step.
+	public void PasteFormatting() {
+		if (copiedFont == null || copiedStyle == null || copiedPara is not { } look) throw new InvalidOperationException("No formatting copied yet: CopyFormatting first.");
+		var doc = ed.TextDocument;
+		var selection = doc.Selection2;
+		int start = selection.Start, end = selection.End;
+		if (end == start) {
+			// (the word at the caret, without the space after it; none there: what is typed next)
+			var word = doc.Range2(start, start);
+			word.Expand(tomConstants.tomWord);
+			string text = word.Text ?? "";
+			int length = text.TrimEnd().Length;
+			if (length > 0 && !char.IsPunctuation(text[0]) && word.Start <= start) (start, end) = (word.Start, word.Start + length);
+		}
+		var paragraphs = StyleEngine.Paragraphs(doc, start, end);
+		var last = paragraphs[^1];
+		bool whole = end > start && start == paragraphs[0].Start && end >= last.End - 1;
+		using var _ = form.FirstParagraphAsIs(changes: true);
+		doc.BeginEditCollection();
+		try {
+			if (whole) {
+				int length = doc.Range2(0, 0).StoryLength;
+				StyleEngine.Apply(doc, form.Styles, form.Styles.Find(copiedStyle.Name) ?? form.Styles.Normal, start, end);
+				foreach (var (pStart, _) in StyleEngine.Paragraphs(doc, start, end)) {
+					var para = doc.Range2(pStart, pStart).Para.Duplicate;    // (set on a copy and put on at once)
+					para.Alignment = look.Alignment;
+					// (a list item keeps its list's indents, and a list's indents don't go onto other paragraphs)
+					if (!look.Listed && (para.ListType & 0xFFFF) == tomConstants.tomListNone) para.SetIndents(look.First, look.Left, look.Right);
+					para.SpaceBefore = look.Before;
+					para.SpaceAfter = look.After;
+					para.SetLineSpacing(look.Rule, look.Line);
+					doc.Range2(pStart, pStart).Para = para;
+				}
+				end += doc.Range2(0, 0).StoryLength - length;    // (a numbered style's numbers move the text after them)
+			}
+			if (end > start) {
+				// (hidden text, a footnote's note or a link's field, stays hidden)
+				var hidden = new List<(int, int)>();
+				for (int at = start; at < end; ) {
+					var run = doc.Range2(at, at);
+					run.MoveEnd(13, 1);    // (tomCharFormat: to where the formatting changes)
+					int to = Math.Min(run.End, end);
+					if (to <= at) break;
+					if (doc.Range2(at, to).Font.Hidden == tomConstants.tomTrue) hidden.Add((at, to));
+					at = to;
+				}
+				doc.Range2(start, end).Font = copiedFont;
+				foreach (var (from, to) in hidden) doc.Range2(from, to).Font.Hidden = tomConstants.tomTrue;
+			} else selection.Font = copiedFont;
+		} finally {
+			doc.EndEditCollection();
+		}
+		if (whole) form.StylesChanged();
 	}
 
 	/// Deletes one of your own styles; its paragraphs become Normal (one undo step).
@@ -10639,6 +10780,27 @@ sealed class WriterEditBox : RichEditBox
 
 	/// Ctrl+click on a cross-reference (iteration 50): its position, to go to the paragraph it refers to; true if it was one.
 	public Func<int, bool>? FollowReference;
+	/// The pointer over the text while the Format Painter is on (null: RichEdit's own).
+	public Cursor? PaintCursor;
+
+	[StructLayout(LayoutKind.Sequential)]
+	struct IconInfo { public bool Icon; public int HotX, HotY; public IntPtr Mask, Color; }
+	[DllImport("user32.dll")] static extern bool GetIconInfo(IntPtr icon, out IconInfo info);
+	[DllImport("user32.dll")] static extern IntPtr CreateIconIndirect(ref IconInfo info);
+	[DllImport("user32.dll")] static extern bool DestroyIcon(IntPtr icon);
+
+	/// A cursor from a picture (its transparency kept), with its hot spot at x, y.
+	public static Cursor CursorFrom(Bitmap picture, int x, int y) {
+		IntPtr icon = picture.GetHicon();
+		GetIconInfo(icon, out var info);
+		DestroyIcon(icon);
+		info.Icon = false;
+		(info.HotX, info.HotY) = (x, y);
+		IntPtr cursor = CreateIconIndirect(ref info);
+		DeleteObject(info.Mask);
+		DeleteObject(info.Color);
+		return new Cursor(cursor);
+	}
 
 	// The right button: a press outside the selection moves the caret there, as in Word (inside it, the selection stays
 	// for the menu's Cut and Copy). Iteration 51: as RichEdit's own hit-testing has it (TOM), as the menu does; the
@@ -11284,7 +11446,8 @@ sealed class WriterEditBox : RichEditBox
 	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendZoom(IntPtr hWnd, int msg, IntPtr numerator, IntPtr denominator);
 
 	protected override void WndProc(ref Message m) {
-		const int WM_CONTEXTMENU = 0x007B, WM_PAINT = 0x000F;
+		const int WM_CONTEXTMENU = 0x007B, WM_PAINT = 0x000F, WM_SETCURSOR = 0x0020, HTCLIENT = 1;
+		if (m.Msg == WM_SETCURSOR && PaintCursor != null && (m.LParam.ToInt64() & 0xFFFF) == HTCLIENT) { Cursor.Current = PaintCursor; m.Result = (IntPtr)1; return; }
 		if (m.Msg is WM_SETTEXT or EM_STREAMIN or EM_SETTEXTEX && IsHandleCreated) {
 			int numerator = 0, denominator = 0;
 			SendZoom(Handle, EM_GETZOOM, ref numerator, ref denominator);
