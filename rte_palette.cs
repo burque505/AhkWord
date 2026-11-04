@@ -30,8 +30,10 @@ public static class RibbonLabels
 			string name = (string?)command.Attribute("Name") ?? "";
 			if (name == "" || !uint.TryParse((string?)command.Attribute("Id"), out uint id)) continue;
 			ids[name] = id;
-			string text = Clean((string?)command.Attribute("LabelTitle") ?? (string?)command.Attribute("TooltipTitle") ?? "");
-			string tip = (string?)command.Attribute("TooltipDescription") ?? "";
+			// (AhkWord-es: in the interface's language, over the markup's English; rte_strings.cs)
+			string? Text(string property) => Lang.Get(name + "." + property) ?? (string?)command.Attribute(property);
+			string text = Clean(Text("LabelTitle") ?? Text("TooltipTitle") ?? "");
+			string tip = Text("TooltipDescription") ?? "";
 			texts[name] = (text, tip);
 		}
 		string TextOf(string? name) => name != null && texts.TryGetValue(name, out var t) ? t.Text : "";

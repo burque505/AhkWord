@@ -996,6 +996,8 @@ class WriterForm : Form
 			Editor.Focus();
 			AhkWordExtensions.Started(this);    // (iteration 60: what a build with more features adds; nothing in AhkWord)
 			BeginInvoke(() => RunHook(HookEvent.Started));    // (iteration 56: once the window is ready)
+			if (Lang.TakeError() is string langError)    // (AhkWord-es: a language file that couldn't be read)
+				BeginInvoke(() => MessageBox.Show(this, langError, "AhkWord", MessageBoxButtons.OK, MessageBoxIcon.Warning));
 			UpdateUi();
 			UpdateTitle();
 			UpdateWordCount();
@@ -1286,7 +1288,9 @@ class WriterForm : Form
 			BeginInvoke(() => Command(RibbonCommand.TableShading, () => api.SetCellShading(color), M("SetCellShading", color)));
 		};
 
-		// (AhkWord-es: the ribbon is compiled without its strings, which every command is given here; rte_strings.cs)
+		// (AhkWord-es: the ribbon is compiled without its strings, which every command is given here, in the language of
+		// the setting Language (or AHKWORD_LANG); rte_strings.cs)
+		Lang.Load(appDir, Settings.Language);
 		RibbonStrings.Give(ribbon, Path.Combine(appDir, "ribbon"));
 	}
 
@@ -9556,6 +9560,7 @@ public sealed class Settings
 	public bool PrintLayout { get; set; } = true;    // View > Print Layout: lines as on the printed page
 	public bool PageView { get; set; } = true;       // View > Show Pages: Print Layout's pages as sheets of their own (on from iteration 48)
 	public string Theme { get; set; } = "Light";    // View > Theme: a name in AppTheme.All (iteration 70)
+	public string Language { get; set; } = Lang.English;    // (AhkWord-es) the interface's language: lang\<code>.json (rte_strings.cs)
 	public string ZoomMode { get; set; } = "PageWidth";    // Print Layout's zoom: PageWidth, OnePage or Manual (View > Zoom)
 	public bool SpellCheck { get; set; } = true;
 	public bool AutoLevelStyles { get; set; } = true;

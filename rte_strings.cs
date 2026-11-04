@@ -11,12 +11,68 @@
 // group's control as a holder, which any command can have, and a control without a property gets that property's
 // provider. Both by reflection, as SetRibbonLabel: WindowsRibbon keeps them private.
 
+//
+// Step 2: the interface's language (Lang). English is the strings as written; another language is a table,
+// lang\<code>.json beside the program, whose strings are shown instead (the ribbon's keyed "cmdPaste.LabelTitle"), and
+// whatever it lacks stays English.
+
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using RibbonLib;
 using RibbonLib.Controls;
 using RibbonLib.Controls.Properties;
 using RibbonLib.Interop;
+
+/// The interface's language: the setting Language, or the AHKWORD_LANG environment variable over it (for tests, and a
+/// try-out without changing the settings). "en", or a language without a file, is English. Read once per process, when
+/// the first window builds its ribbon: a change shows from the next start.
+static class Lang
+{
+	public const string English = "en";
+	/// The language shown (its file's name: "es"), English when none.
+	public static string Code { get; private set; } = English;
+	static Dictionary<string, string> table = new();
+	static string? error;
+	static bool loaded;
+
+	/// The language's string for key; null: English (none in its table).
+	public static string? Get(string key) => table.TryGetValue(key, out var s) ? s : null;
+	public static int Count => table.Count;
+
+	/// The language file that couldn't be read (once: then null), for a message when the window shows.
+	public static string? TakeError() { var e = error; error = null; return e; }
+
+	/// The language's table from lang\<code>.json in appDir ("es-MX": es-MX.json, else es.json). A file that can't be read
+	/// leaves English, and its error for TakeError.
+	public static void Load(string appDir, string? setting) {
+		if (loaded) return;
+		loaded = true;
+		string wanted = (Environment.GetEnvironmentVariable("AHKWORD_LANG") is { Length: > 0 } env ? env : setting ?? "").Trim();
+		if (wanted == "" || wanted.Equals(English, StringComparison.OrdinalIgnoreCase) || !Regex.IsMatch(wanted, "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")) return;
+		string folder = Path.Combine(appDir, "lang");
+		string? path = new[] { wanted, wanted.Split('-')[0] }.Select(c => Path.Combine(folder, c + ".json")).FirstOrDefault(File.Exists);
+		if (path == null) return;
+		try {
+			table = Read(path);
+			Code = Path.GetFileNameWithoutExtension(path);
+		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException) {
+			error = $"The language file {path} could not be read, so AhkWord is in English:\n\n{ex.Message}";
+		}
+	}
+
+	/// A language file: one object of key -> string (comments allowed).
+	public static Dictionary<string, string> Read(string path) {
+		var strings = new Dictionary<string, string>();
+		using var doc = JsonDocument.Parse(File.ReadAllText(path), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+		if (doc.RootElement.ValueKind != JsonValueKind.Object) throw new InvalidDataException($"{path}: not a JSON object of key -> string.");
+		foreach (var p in doc.RootElement.EnumerateObject()) {
+			if (p.Value.ValueKind != JsonValueKind.String) throw new InvalidDataException($"{path}: \"{p.Name}\" is not a string.");
+			strings[p.Name] = p.Value.GetString()!;
+		}
+		return strings;
+	}
+}
 
 static class RibbonStrings
 {
@@ -46,7 +102,16 @@ static class RibbonStrings
 	static readonly FieldInfo PropertiesField = typeof(BaseRibbonControl).GetField("_mapProperties", BindingFlags.NonPublic | BindingFlags.Instance)
 		?? throw new MissingFieldException("WindowsRibbon's BaseRibbonControl._mapProperties (another version of WindowsRibbon?)");
 
-	/// Gives every command of the strings file in folder its strings: to the control AhkWord made for it, or to a holder.
+	/// A command's strings in the language (Lang), over the English ones: a property the language has replaces English's.
+	public static Dictionary<string, string> InLanguage(string command, Dictionary<string, string> english) {
+		var strings = new Dictionary<string, string>(english);
+		foreach (var property in Names)
+			if (Lang.Get(command + "." + property) is string text) strings[property] = text;
+		return strings;
+	}
+
+	/// Gives every command of the strings file in folder its strings, in the language (Lang): to the control AhkWord made
+	/// for it, or to a holder.
 	/// After every control is made (a holder would take a command's place) and before the ribbon loads (until then the
 	/// setters only keep the values: later they would tell the ribbon with a key that isn't pinned; see SetRibbonLabel).
 	public static int Give(Ribbon ribbon, string folder) {
@@ -56,7 +121,8 @@ static class RibbonStrings
 			throw new FileNotFoundException($"The ribbon's strings are missing: {path}. Build them with ribbon\\build_ribbon.ahk, which makes them with the ribbon.");
 		var controls = (Dictionary<uint, BaseRibbonControl>)ControlsField.GetValue(ribbon)!;
 		int given = 0;
-		foreach (var (name, (id, strings)) in Load(path)) {
+		foreach (var (name, (id, english)) in Load(path)) {
+			var strings = InLanguage(name, english);
 			if (strings.Count == 0) continue;
 			if (!controls.TryGetValue(id, out var control)) control = new RibbonGroup(ribbon, id);
 			var properties = (Dictionary<PropertyKey, IPropertiesProvider>)PropertiesField.GetValue(control)!;
