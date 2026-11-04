@@ -3019,9 +3019,12 @@ class WriterForm : Form
 	/// start in view with page 1's top margin.
 	internal void SheetsNow() {
 		if (!PageViewActive || gapsOut) return;
+		measuredPages = null;
 		ReferencesNow();    // (they can change the pages: after it shows, the sheets would be worked out again, and move it)
+		var measured = measuredPages;    // (the pages the references laid out, nothing changed since)
+		measuredPages = null;
 		openingSheets = true;
-		try { RecomputeGaps(); }
+		try { RecomputeGaps(measured); }
 		finally { openingSheets = false; }
 		bandPagesStale = false;
 	}
@@ -3123,7 +3126,7 @@ class WriterForm : Form
 	// The pages laid out again (as printed: without gaps) and their gaps put in. (Rte.PageViewReport and tests: how many
 	// times.)
 	internal int GapsRecomputed;
-	void RecomputeGaps() {
+	void RecomputeGaps((List<(int Start, float Height)> Pages, List<List<Footnotes.NoteLine>> Notes, (string Name, float Size) NoteFont)? measured = null) {
 		GapsRecomputed++;
 		// (not now: the gaps are out for something else, or the page isn't laid out yet: a moment later, as after typing,
 		// rather than a page view left without its gaps)
@@ -3131,7 +3134,8 @@ class WriterForm : Form
 		QuietGaps(() => {
 			pageGaps.Remove();
 			List<(int Start, float Height)>? pages = null;
-			try {
+			if (measured is { } m) (pages, sheetNotes, sheetNoteFont) = (m.Pages, m.Notes, m.NoteFont);
+			else try {
 				using var printer = CreatePrinter();
 				pages = printer.PageHeights();
 				(sheetNotes, sheetNoteFont) = (printer.LastNotes, printer.NoteFontUsed);    // (iteration 51: the sheets' notes, as printed)
@@ -3479,9 +3483,16 @@ class WriterForm : Form
 	// The page each position is printed on (1: the first), as the pages are laid out now.
 	Func<int, int> PageOf() {
 		List<int> starts;
-		using (var printer = CreatePrinter()) starts = printer.PageHeights().Select(p => p.Start).ToList();
+		using (var printer = CreatePrinter()) {
+			var pages = printer.PageHeights();
+			starts = pages.Select(p => p.Start).ToList();
+			measuredPages = pageGaps.Applied ? null : (pages, printer.LastNotes, printer.NoteFontUsed);
+		}
 		return at => Math.Max(1, starts.FindLastIndex(s => s <= at) + 1);
 	}
+	// The pages PageOf laid out (without gaps), for the sheets that follow when nothing changed in between (SheetsNow:
+	// laying out a 100-page document's pages again took up to 0.8 s of its opening)
+	(List<(int Start, float Height)> Pages, List<List<Footnotes.NoteLine>> Notes, (string Name, float Size) NoteFont)? measuredPages;
 
 	// The text's width on the page (points): where a table of contents' page numbers go.
 	float TextWidthPoints() => api.PageTextWidth() / 20f;
@@ -5244,17 +5255,24 @@ class WriterForm : Form
 		if (!Editor.IsHandleCreated || Editor.CanUndo) return;    // (something done since: F9, or saving, updates them)
 		var doc = Editor.TextDocument;
 		bool modified = Editor.Modified;
-		// (the pages first: laying them out takes the page view's gaps out and puts them back, with undo resumed after)
-		var pageOf = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text?.Contains("[[toc=", StringComparison.Ordinal) == true ? PageOf() : null;
+		bool contents = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text?.Contains("[[toc=", StringComparison.Ordinal) == true;
+		int styles = Styles.Styles.Count;
 		doc.Undo(-9999995);    // tomSuspend
 		try {
 			Footnotes.Update(doc);
 			CrossRefs.Update(doc);
-			int styles = Styles.Styles.Count;
-			if (pageOf != null && Toc.Restyle(doc, Styles, TextWidthPoints()) + Toc.FitTabs(doc, TextWidthPoints()) + Toc.UpdatePages(doc, pageOf) > 0) bandPagesStale = true;
-			if (Styles.Styles.Count != styles) BeginInvoke(StylesChanged);
+			// (the tables' look and tabs before their pages are laid out: they don't depend on the pages, and the pages are
+			// then as the sheets that follow would lay them out, which take them as they are when nothing else changed)
+			if (contents && Toc.Restyle(doc, Styles, TextWidthPoints()) + Toc.FitTabs(doc, TextWidthPoints()) > 0) bandPagesStale = true;
 		}
 		finally { doc.Undo(-9999994); Editor.Modified = modified; }    // tomResume
+		if (contents) {
+			var pageOf = PageOf();    // (out of the suspended undo: laying them out takes the page view's gaps out and puts them back)
+			doc.Undo(-9999995);
+			try { if (Toc.UpdatePages(doc, pageOf) > 0) { bandPagesStale = true; measuredPages = null; } }    // (the numbers' new widths may move the pages)
+			finally { doc.Undo(-9999994); Editor.Modified = modified; }
+		}
+		if (Styles.Styles.Count != styles) BeginInvoke(StylesChanged);
 	}
 
 	/// The text to save a .md / .html file with, if the document came from such source text (the file's own, or typed in
@@ -6462,6 +6480,7 @@ public class EditorApi
 		_ = hidden.Handle;
 		hidden.EnableFontSize = ed.EnableFontSize;
 		hidden.SetDefaultSize();
+		hidden.TextDocument.Undo(tomConstants.tomSuspend);    // (no undo kept while it is built: about a second of a 100-page document's opening)
 		building = hidden;
 		try { BuildHtml(html); }
 		finally { building = null; }

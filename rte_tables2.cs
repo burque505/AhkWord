@@ -465,6 +465,7 @@ public static class RtfTables
 		if (cells.All(row => row.All(c => c == null))) return;
 		using var scratch = AppTheme.OnPaper(new RichEditBox { Font = editor.Font, EnableHtmlFontSizing = editor.EnableHtmlFontSizing });
 		_ = scratch.Handle;
+		scratch.TextDocument.Undo(tomConstants.tomSuspend);    // (no undo kept: each cell loaded is thrown away)
 		for (int r = 0; r < cells.Count; r++)
 			for (int c = 0; c < cells[r].Count; c++) {
 				if (cells[r][c] is not string content) continue;
