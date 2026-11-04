@@ -1,0 +1,1264 @@
+{
+  "cmdTabHome": {
+    "Id": 100,
+    "LabelTitle": "Home",
+    "Keytip": "H"
+  },
+  "cmdTabInsert": {
+    "Id": 101,
+    "LabelTitle": "Insert",
+    "Keytip": "N"
+  },
+  "cmdTabLayout": {
+    "Id": 102,
+    "LabelTitle": "Layout",
+    "Keytip": "P"
+  },
+  "cmdTabReview": {
+    "Id": 103,
+    "LabelTitle": "Review",
+    "Keytip": "R"
+  },
+  "cmdTabView": {
+    "Id": 104,
+    "LabelTitle": "View",
+    "Keytip": "W"
+  },
+  "cmdTabTools": {
+    "Id": 105,
+    "LabelTitle": "Tools",
+    "Keytip": "L"
+  },
+  "cmdTableTools": {
+    "Id": 106,
+    "LabelTitle": "Table Tools"
+  },
+  "cmdTabTableLayout": {
+    "Id": 107,
+    "LabelTitle": "Layout",
+    "Keytip": "JL"
+  },
+  "cmdGroupClipboard": {
+    "Id": 110,
+    "LabelTitle": "Clipboard",
+    "Keytip": "ZC"
+  },
+  "cmdGroupFont": {
+    "Id": 111,
+    "LabelTitle": "Font",
+    "Keytip": "ZF"
+  },
+  "cmdGroupText": {
+    "Id": 112,
+    "LabelTitle": "Text",
+    "Keytip": "ZT"
+  },
+  "cmdGroupParagraph": {
+    "Id": 113,
+    "LabelTitle": "Paragraph",
+    "Keytip": "ZP"
+  },
+  "cmdGroupStyles": {
+    "Id": 114,
+    "LabelTitle": "Styles",
+    "Keytip": "ZS"
+  },
+  "cmdGroupEditing": {
+    "Id": 115,
+    "LabelTitle": "Editing",
+    "Keytip": "ZE"
+  },
+  "cmdGroupPages": {
+    "Id": 116,
+    "LabelTitle": "Pages"
+  },
+  "cmdGroupTables": {
+    "Id": 117,
+    "LabelTitle": "Tables"
+  },
+  "cmdGroupIllustrations": {
+    "Id": 118,
+    "LabelTitle": "Illustrations"
+  },
+  "cmdGroupLinks": {
+    "Id": 119,
+    "LabelTitle": "Links"
+  },
+  "cmdGroupInsertText": {
+    "Id": 120,
+    "LabelTitle": "Text"
+  },
+  "cmdGroupPage": {
+    "Id": 121,
+    "LabelTitle": "Page"
+  },
+  "cmdGroupProofing": {
+    "Id": 122,
+    "LabelTitle": "Proofing"
+  },
+  "cmdGroupShow": {
+    "Id": 124,
+    "LabelTitle": "Show"
+  },
+  "cmdGroupZoom": {
+    "Id": 125,
+    "LabelTitle": "Zoom"
+  },
+  "cmdGroupDocumentView": {
+    "Id": 126,
+    "LabelTitle": "Document View"
+  },
+  "cmdGroupMacros": {
+    "Id": 127,
+    "LabelTitle": "Macros"
+  },
+  "cmdGroupScripts": {
+    "Id": 128,
+    "LabelTitle": "Scripts"
+  },
+  "cmdGroupExtensions": {
+    "Id": 136,
+    "LabelTitle": "Extensions"
+  },
+  "cmdExtensions": {
+    "Id": 395,
+    "LabelTitle": "Extensions",
+    "TooltipTitle": "Extensions",
+    "TooltipDescription": "Commands added by an extension of AhkWord.",
+    "Keytip": "X"
+  },
+  "cmdGroupAutomation": {
+    "Id": 129,
+    "LabelTitle": "Automation"
+  },
+  "cmdGroupRowsColumns": {
+    "Id": 130,
+    "LabelTitle": "Rows & Columns"
+  },
+  "cmdGroupDelete": {
+    "Id": 131,
+    "LabelTitle": "Delete"
+  },
+  "cmdGroupTableFormat": {
+    "Id": 132,
+    "LabelTitle": "Format"
+  },
+  "cmdAppMenu": {
+    "Id": 140,
+    "LabelTitle": "File",
+    "Keytip": "F"
+  },
+  "cmdQat": {
+    "Id": 141
+  },
+  "cmdRecent": {
+    "Id": 142,
+    "LabelTitle": "Recent documents"
+  },
+  "cmdHelp": {
+    "Id": 143,
+    "LabelTitle": "Help",
+    "TooltipTitle": "About AhkWord"
+  },
+  "cmdExportMenu": {
+    "Id": 144,
+    "LabelTitle": "&Export",
+    "TooltipTitle": "Export",
+    "TooltipDescription": "Export a copy as PDF, Word or OpenDocument; the document itself stays as it is.",
+    "Keytip": "E"
+  },
+  "cmdPrintMenu": {
+    "Id": 145,
+    "LabelTitle": "&Print",
+    "TooltipTitle": "Print",
+    "TooltipDescription": "Print, preview and set up the page.",
+    "Keytip": "P"
+  },
+  "cmdNew": {
+    "Id": 200,
+    "LabelTitle": "&New",
+    "TooltipTitle": "New (Ctrl+N)",
+    "TooltipDescription": "Start a new, empty document.",
+    "Keytip": "N"
+  },
+  "cmdOpen": {
+    "Id": 201,
+    "LabelTitle": "&Open...",
+    "TooltipTitle": "Open (Ctrl+O)",
+    "TooltipDescription": "Open a document: HTML, Markdown, RTF, Word, OpenDocument or text.",
+    "Keytip": "O"
+  },
+  "cmdSave": {
+    "Id": 202,
+    "LabelTitle": "&Save",
+    "TooltipTitle": "Save (Ctrl+S)",
+    "TooltipDescription": "Save the document.",
+    "Keytip": "S"
+  },
+  "cmdSaveAs": {
+    "Id": 203,
+    "LabelTitle": "Save &As...",
+    "TooltipTitle": "Save As (Ctrl+Shift+S)",
+    "TooltipDescription": "Save the document under a new name or in another format.",
+    "Keytip": "A"
+  },
+  "cmdPrint": {
+    "Id": 204,
+    "LabelTitle": "&Print...",
+    "TooltipTitle": "Print (Ctrl+P)",
+    "TooltipDescription": "Print the document.",
+    "Keytip": "P"
+  },
+  "cmdPrintPreview": {
+    "Id": 205,
+    "LabelTitle": "Print Pre&view",
+    "TooltipTitle": "Print Preview",
+    "TooltipDescription": "See the pages as they will be printed.",
+    "Keytip": "V"
+  },
+  "cmdPageSetup": {
+    "Id": 206,
+    "LabelTitle": "Page Set&up...",
+    "TooltipTitle": "Page Setup",
+    "TooltipDescription": "Paper size, orientation and margins.",
+    "Keytip": "U"
+  },
+  "cmdExportPdf": {
+    "Id": 207,
+    "LabelTitle": "&PDF...",
+    "TooltipTitle": "Export as PDF",
+    "TooltipDescription": "Save a copy as PDF (through Microsoft Print to PDF).",
+    "Keytip": "F"
+  },
+  "cmdExportWord": {
+    "Id": 208,
+    "LabelTitle": "&Word (.docx)...",
+    "TooltipTitle": "Export as Word",
+    "TooltipDescription": "Save a copy as a Word document.",
+    "Keytip": "W"
+  },
+  "cmdExportOdt": {
+    "Id": 209,
+    "LabelTitle": "Open&Document (.odt)...",
+    "TooltipTitle": "Export as OpenDocument",
+    "TooltipDescription": "Save a copy as an OpenDocument text file.",
+    "Keytip": "D"
+  },
+  "cmdExit": {
+    "Id": 210,
+    "LabelTitle": "E&xit",
+    "TooltipTitle": "Exit",
+    "TooltipDescription": "Close AhkWord.",
+    "Keytip": "X"
+  },
+  "cmdNewFromTemplate": {
+    "Id": 212,
+    "LabelTitle": "New from &Template...",
+    "TooltipTitle": "New from Template",
+    "TooltipDescription": "Start a new document from a template (letter, memo, report, court paper ... or your own), filling in its fields.",
+    "Keytip": "T"
+  },
+  "cmdNewWindow": {
+    "Id": 216,
+    "LabelTitle": "New &Window",
+    "TooltipTitle": "New Window",
+    "TooltipDescription": "Open another AhkWord window, with a new document, to work on two documents at once.",
+    "Keytip": "W"
+  },
+  "cmdOpenInNewWindow": {
+    "Id": 217,
+    "LabelTitle": "Open in New W&indow...",
+    "TooltipTitle": "Open in New Window",
+    "TooltipDescription": "Open a document in another AhkWord window, keeping this one as it is.",
+    "Keytip": "I"
+  },
+  "cmdStartPage": {
+    "Id": 215,
+    "LabelTitle": "Start Pa&ge",
+    "TooltipTitle": "Start page",
+    "TooltipDescription": "The start page: a blank document, the templates, the recent documents and the macros (it can also be shown at the start).",
+    "Keytip": "G"
+  },
+  "cmdInsertFromTemplate": {
+    "Id": 214,
+    "LabelTitle": "Insert from Te&mplate...",
+    "TooltipTitle": "Insert from Template",
+    "TooltipDescription": "Insert a template's content at the caret (a caption, a signature block, a certificate of service ...), filling in its fields.",
+    "Keytip": "M"
+  },
+  "cmdFillInFields": {
+    "Id": 213,
+    "LabelTitle": "Fill In &Fields...",
+    "TooltipTitle": "Fill In Fields",
+    "TooltipDescription": "Fill in the {{fields}} left in the document, as a template's are filled in (with the values typed last time).",
+    "Keytip": "F"
+  },
+  "cmdGroupTemplates": {
+    "Id": 133,
+    "LabelTitle": "Templates",
+    "Keytip": "ZT"
+  },
+  "cmdGroupHomeMacros": {
+    "Id": 134,
+    "LabelTitle": "Macros",
+    "Keytip": "ZM"
+  },
+  "cmdClose": {
+    "Id": 211,
+    "LabelTitle": "&Close",
+    "TooltipTitle": "Close (Ctrl+W)",
+    "TooltipDescription": "Close the document (asking to save its changes) and start an empty one; the window stays open.",
+    "Keytip": "C"
+  },
+  "cmdUndo": {
+    "Id": 220,
+    "LabelTitle": "Undo",
+    "TooltipTitle": "Undo (Ctrl+Z)",
+    "Keytip": "Z"
+  },
+  "cmdRedo": {
+    "Id": 221,
+    "LabelTitle": "Redo",
+    "TooltipTitle": "Redo (Ctrl+Y)",
+    "Keytip": "Y"
+  },
+  "cmdPaste": {
+    "Id": 222,
+    "LabelTitle": "Paste",
+    "TooltipTitle": "Paste (Ctrl+V)",
+    "TooltipDescription": "Paste the contents of the clipboard.",
+    "Keytip": "V"
+  },
+  "cmdCut": {
+    "Id": 223,
+    "LabelTitle": "Cut",
+    "TooltipTitle": "Cut (Ctrl+X)",
+    "TooltipDescription": "Cut the selection to the clipboard.",
+    "Keytip": "X"
+  },
+  "cmdCopy": {
+    "Id": 224,
+    "LabelTitle": "Copy",
+    "TooltipTitle": "Copy (Ctrl+C)",
+    "TooltipDescription": "Copy the selection to the clipboard.",
+    "Keytip": "C"
+  },
+  "cmdSelectAll": {
+    "Id": 225,
+    "LabelTitle": "Select All",
+    "TooltipTitle": "Select All (Ctrl+A)",
+    "Keytip": "SA"
+  },
+  "cmdFind": {
+    "Id": 226,
+    "LabelTitle": "Find",
+    "TooltipTitle": "Find (Ctrl+F)",
+    "TooltipDescription": "Find text. F3 finds the next match.",
+    "Keytip": "FD"
+  },
+  "cmdReplace": {
+    "Id": 227,
+    "LabelTitle": "Replace",
+    "TooltipTitle": "Replace (Ctrl+H)",
+    "TooltipDescription": "Find text and replace it.",
+    "Keytip": "R"
+  },
+  "cmdFont": {
+    "Id": 230,
+    "Keytip": "F"
+  },
+  "cmdFontDialog": {
+    "Id": 231,
+    "LabelTitle": "Font...",
+    "TooltipTitle": "Font",
+    "TooltipDescription": "More font options.",
+    "Keytip": "FN"
+  },
+  "cmdChangeCase": {
+    "Id": 232,
+    "LabelTitle": "Change Case",
+    "TooltipTitle": "Change Case",
+    "TooltipDescription": "UPPER CASE, lower case, Title Case or Headline Case.",
+    "Keytip": "7"
+  },
+  "cmdCaseUpper": {
+    "Id": 233,
+    "LabelTitle": "UPPER CASE",
+    "Keytip": "U"
+  },
+  "cmdCaseLower": {
+    "Id": 234,
+    "LabelTitle": "lower case",
+    "Keytip": "L"
+  },
+  "cmdCaseTitle": {
+    "Id": 235,
+    "LabelTitle": "Title Case",
+    "Keytip": "T"
+  },
+  "cmdCaseHeadline": {
+    "Id": 397,
+    "LabelTitle": "Headline Case",
+    "TooltipTitle": "Headline Case",
+    "TooltipDescription": "Capitalize the words of a heading or title, but not the small words (a, the, of, and) inside it, and keep abbreviations (LLC, N.A.) and legal forms (v., a/k/a) as they are. The word lists: headline-case.txt beside the settings.",
+    "Keytip": "H"
+  },
+  "cmdUnderlineStyle": {
+    "Id": 236,
+    "LabelTitle": "Underline Style",
+    "TooltipTitle": "Underline Style",
+    "TooltipDescription": "Single, double, dotted, dashed or wavy underline.",
+    "Keytip": "UL"
+  },
+  "cmdUnderlineSingle": {
+    "Id": 237,
+    "LabelTitle": "Single",
+    "Keytip": "S"
+  },
+  "cmdUnderlineDouble": {
+    "Id": 238,
+    "LabelTitle": "Double",
+    "Keytip": "D"
+  },
+  "cmdUnderlineDotted": {
+    "Id": 239,
+    "LabelTitle": "Dotted",
+    "Keytip": "O"
+  },
+  "cmdUnderlineDashed": {
+    "Id": 240,
+    "LabelTitle": "Dashed",
+    "Keytip": "A"
+  },
+  "cmdUnderlineWavy": {
+    "Id": 241,
+    "LabelTitle": "Wavy",
+    "Keytip": "W"
+  },
+  "cmdBullets": {
+    "Id": 250,
+    "LabelTitle": "Bullets",
+    "TooltipTitle": "Bulleted list (Ctrl+Shift+L)",
+    "TooltipDescription": "Start or end a bulleted list.",
+    "Keytip": "U"
+  },
+  "cmdNumbering": {
+    "Id": 251,
+    "LabelTitle": "Numbering",
+    "TooltipTitle": "Numbered list (Ctrl+Shift+N)",
+    "TooltipDescription": "Start or end a numbered list. Tab and Shift+Tab change the level.",
+    "Keytip": "N"
+  },
+  "cmdLegal": {
+    "Id": 252,
+    "LabelTitle": "Legal numbering",
+    "TooltipTitle": "Legal numbering, 1.1.1 (Ctrl+Shift+G)",
+    "TooltipDescription": "Number list items 1., 1.1, 1.1.1 by level.",
+    "Keytip": "G"
+  },
+  "cmdOutdent": {
+    "Id": 253,
+    "LabelTitle": "Decrease indent",
+    "TooltipTitle": "Decrease indent / list level",
+    "TooltipDescription": "Shift+Tab in a list.",
+    "Keytip": "AO"
+  },
+  "cmdIndent": {
+    "Id": 254,
+    "LabelTitle": "Increase indent",
+    "TooltipTitle": "Increase indent / list level",
+    "TooltipDescription": "Tab in a list.",
+    "Keytip": "AI"
+  },
+  "cmdAlignLeft": {
+    "Id": 255,
+    "LabelTitle": "Align left",
+    "TooltipTitle": "Align left (Ctrl+L)",
+    "Keytip": "AL"
+  },
+  "cmdAlignCenter": {
+    "Id": 256,
+    "LabelTitle": "Center",
+    "TooltipTitle": "Center (Ctrl+E)",
+    "Keytip": "AC"
+  },
+  "cmdAlignRight": {
+    "Id": 257,
+    "LabelTitle": "Align right",
+    "TooltipTitle": "Align right (Ctrl+R)",
+    "Keytip": "AR"
+  },
+  "cmdJustify": {
+    "Id": 258,
+    "LabelTitle": "Justify",
+    "TooltipTitle": "Justify (Ctrl+J)",
+    "Keytip": "AJ"
+  },
+  "cmdLineSpacing": {
+    "Id": 360,
+    "LabelTitle": "Line Spacing",
+    "TooltipTitle": "Line spacing",
+    "TooltipDescription": "The line spacing of the selected paragraphs: 1.0, 1.15, 1.5, 2.0 ... lines, or exactly or at least so many points (Line Spacing Options).",
+    "Keytip": "K"
+  },
+  "cmdLineSpacing10": {
+    "Id": 361,
+    "LabelTitle": "1.0",
+    "Keytip": "1"
+  },
+  "cmdLineSpacing115": {
+    "Id": 362,
+    "LabelTitle": "1.15",
+    "Keytip": "2"
+  },
+  "cmdLineSpacing150": {
+    "Id": 363,
+    "LabelTitle": "1.5",
+    "Keytip": "3"
+  },
+  "cmdLineSpacing200": {
+    "Id": 364,
+    "LabelTitle": "2.0",
+    "Keytip": "4"
+  },
+  "cmdLineSpacing250": {
+    "Id": 365,
+    "LabelTitle": "2.5",
+    "Keytip": "5"
+  },
+  "cmdLineSpacing300": {
+    "Id": 366,
+    "LabelTitle": "3.0",
+    "Keytip": "6"
+  },
+  "cmdLineSpacingOptions": {
+    "Id": 367,
+    "LabelTitle": "Line Spacing &Options...",
+    "TooltipDescription": "The Paragraph dialog: line spacing, the space before and after, indents, and the line and page breaks.",
+    "Keytip": "O"
+  },
+  "cmdParagraphDialog": {
+    "Id": 390,
+    "LabelTitle": "Paragraph...",
+    "TooltipTitle": "Paragraph settings",
+    "TooltipDescription": "Alignment, indents, spacing, line spacing, line and page breaks (keep with next, keep lines together, widow and orphan control, page break before), and tabs, for the selected paragraphs.",
+    "Keytip": "PG"
+  },
+  "cmdSpaceBefore": {
+    "Id": 368,
+    "LabelTitle": "Add Space &Before Paragraph",
+    "TooltipDescription": "12 points before the selected paragraphs (checked: they have space before; click to remove it).",
+    "Keytip": "B"
+  },
+  "cmdSpaceAfter": {
+    "Id": 369,
+    "LabelTitle": "Add Space &After Paragraph",
+    "TooltipDescription": "12 points after the selected paragraphs (checked: they have space after; click to remove it).",
+    "Keytip": "A"
+  },
+  "cmdListOptions": {
+    "Id": 259,
+    "LabelTitle": "List Options",
+    "TooltipTitle": "List options",
+    "TooltipDescription": "List styles, list levels (the numbering style of each level), restarting and continuing numbering.",
+    "Keytip": "LO"
+  },
+  "cmdListStyle": {
+    "Id": 260,
+    "LabelTitle": "List &style",
+    "Keytip": "S"
+  },
+  "cmdListBullet": {
+    "Id": 261,
+    "LabelTitle": "Bullet",
+    "Keytip": "B"
+  },
+  "cmdListDecimal": {
+    "Id": 262,
+    "LabelTitle": "1, 2, 3",
+    "Keytip": "D"
+  },
+  "cmdListLowerAlpha": {
+    "Id": 263,
+    "LabelTitle": "a, b, c",
+    "Keytip": "A"
+  },
+  "cmdListUpperAlpha": {
+    "Id": 264,
+    "LabelTitle": "A, B, C",
+    "Keytip": "U"
+  },
+  "cmdListLowerRoman": {
+    "Id": 265,
+    "LabelTitle": "i, ii, iii",
+    "Keytip": "R"
+  },
+  "cmdListUpperRoman": {
+    "Id": 266,
+    "LabelTitle": "I, II, III",
+    "Keytip": "O"
+  },
+  "cmdListNone": {
+    "Id": 393,
+    "LabelTitle": "&No numbering",
+    "TooltipTitle": "No numbering",
+    "TooltipDescription": "The selected paragraphs are no longer list items: their numbers or bullets go, their text stays.",
+    "Keytip": "N"
+  },
+  "cmdListLevels": {
+    "Id": 267,
+    "LabelTitle": "List &Levels...",
+    "TooltipTitle": "List levels",
+    "TooltipDescription": "Each level's numbering style, punctuation, start number, and where its number and text start (Tab and Shift+Tab change an item's level).",
+    "Keytip": "L"
+  },
+  "cmdAutoLevel": {
+    "Id": 268,
+    "LabelTitle": "&Automatic numbering style per level",
+    "Keytip": "A"
+  },
+  "cmdRestartNumbering": {
+    "Id": 269,
+    "LabelTitle": "&Restart numbering...",
+    "Keytip": "R"
+  },
+  "cmdContinueNumbering": {
+    "Id": 270,
+    "LabelTitle": "&Continue numbering",
+    "Keytip": "C"
+  },
+  "cmdConvertTyped": {
+    "Id": 271,
+    "LabelTitle": "Convert &typed numbers to lists",
+    "TooltipDescription": "Paragraphs that start with typed numbers such as \"1.\", \"a)\" or \"(iv)\" become list items.",
+    "Keytip": "T"
+  },
+  "cmdIndentParagraph": {
+    "Id": 272,
+    "LabelTitle": "&Indent paragraph",
+    "TooltipTitle": "Indent paragraph (Ctrl+M)",
+    "Keytip": "I"
+  },
+  "cmdOutdentParagraph": {
+    "Id": 273,
+    "LabelTitle": "&Outdent paragraph",
+    "TooltipTitle": "Outdent paragraph (Ctrl+Shift+M)",
+    "Keytip": "O"
+  },
+  "cmdNumberingMenu": {
+    "Id": 274,
+    "LabelTitle": "Numbering",
+    "TooltipTitle": "Numbered list (Ctrl+Shift+N)",
+    "TooltipDescription": "Start or end a numbered list. The arrow: numbering styles and list levels.",
+    "Keytip": "N"
+  },
+  "cmdBlockStyle": {
+    "Id": 275,
+    "LabelTitle": "Style",
+    "TooltipTitle": "Paragraph style (Ctrl+0 Normal, Ctrl+1 to Ctrl+6 headings, Ctrl+7 Code)",
+    "TooltipDescription": "The style of the paragraphs the selection is in: Normal, Title, the headings, Quote, Code and your own (the Styles menu changes them).",
+    "Keytip": "Y"
+  },
+  "cmdStylesMenu": {
+    "Id": 380,
+    "LabelTitle": "Styles",
+    "TooltipTitle": "Styles",
+    "TooltipDescription": "Change a style, make a new one from the paragraph at the caret, choose a style set, or keep the styles as your default for new documents.",
+    "Keytip": "YS"
+  },
+  "cmdModifyStyle": {
+    "Id": 381,
+    "LabelTitle": "&Modify Style...",
+    "TooltipTitle": "Modify Style",
+    "TooltipDescription": "Change the style of the paragraph at the caret (font, spacing, indents ...); every paragraph with it changes too.",
+    "Keytip": "M"
+  },
+  "cmdNewStyle": {
+    "Id": 382,
+    "LabelTitle": "&New Style...",
+    "TooltipTitle": "New Style",
+    "TooltipDescription": "A new style, from the paragraph at the caret, given to it.",
+    "Keytip": "N"
+  },
+  "cmdUpdateStyle": {
+    "Id": 383,
+    "LabelTitle": "&Update Style to Match",
+    "TooltipTitle": "Update Style to Match",
+    "TooltipDescription": "Make the caret paragraph's style look like the paragraph (format one paragraph as wanted, then this); every paragraph with the style changes too.",
+    "Keytip": "U"
+  },
+  "cmdFormatPainter": {
+    "Id": 402,
+    "LabelTitle": "Format Painter",
+    "TooltipTitle": "Format Painter",
+    "TooltipDescription": "Copy the formatting of the text at the caret, then select other text to give it the same look (whole paragraphs take the paragraph's style, spacing and indents too). Click twice quickly to keep painting; Esc or a click here stops.",
+    "Keytip": "FP"
+  },
+  "cmdClearFormatting": {
+    "Id": 389,
+    "LabelTitle": "&Clear Formatting",
+    "TooltipTitle": "Clear Formatting (Ctrl+Space)",
+    "TooltipDescription": "The selected text back to its paragraph's style (formatting of its own goes); with no selection, the whole paragraph, its spacing and indents too.",
+    "Keytip": "C"
+  },
+  "cmdDeleteStyle": {
+    "Id": 384,
+    "LabelTitle": "&Delete Style...",
+    "TooltipTitle": "Delete Style",
+    "TooltipDescription": "Delete a style of your own; its paragraphs become Normal.",
+    "Keytip": "D"
+  },
+  "cmdStyleSetClassic": {
+    "Id": 385,
+    "LabelTitle": "C&lassic",
+    "TooltipTitle": "Classic styles",
+    "TooltipDescription": "Times New Roman 12, black headings: court papers, contracts, letters.",
+    "Keytip": "L"
+  },
+  "cmdStyleSetPlain": {
+    "Id": 386,
+    "LabelTitle": "&Plain",
+    "TooltipTitle": "Plain styles",
+    "TooltipDescription": "Segoe UI 11, bold headings: the editor's look before styles.",
+    "Keytip": "P"
+  },
+  "cmdStyleSetModern": {
+    "Id": 387,
+    "LabelTitle": "M&odern",
+    "TooltipTitle": "Modern styles",
+    "TooltipDescription": "Georgia text with Segoe UI headings in dark grey, a little more air between lines.",
+    "Keytip": "O"
+  },
+  "cmdSaveStyles": {
+    "Id": 388,
+    "LabelTitle": "&Save Styles as My Default",
+    "TooltipTitle": "Save Styles as My Default",
+    "TooltipDescription": "New documents get this document's styles (your changes included).",
+    "Keytip": "S"
+  },
+  "cmdCopyStyles": {
+    "Id": 394,
+    "LabelTitle": "&Copy Styles from Document...",
+    "TooltipTitle": "Copy Styles from Document",
+    "TooltipDescription": "Bring styles from another document (AhkWord's, Word's, RTF) into this one, and into your defaults for new documents if you like: choose which.",
+    "Keytip": "C"
+  },
+  "cmdApplyMyStyles": {
+    "Id": 391,
+    "LabelTitle": "&Apply My Styles",
+    "TooltipTitle": "Apply My Styles",
+    "TooltipDescription": "Give this document your styles (the ones new documents get): its headings, Normal text and other styles take your look; formatting of a paragraph's own stays.",
+    "Keytip": "A"
+  },
+  "cmdSectionBreak": {
+    "Id": 396,
+    "LabelTitle": "Section Break",
+    "TooltipTitle": "Section break",
+    "TooltipDescription": "Start a new section on a new page: its own header and footer (Layout > Header & Footer), its page numbers from 1. For a package of papers in one document.",
+    "Keytip": "SB"
+  },
+  "cmdContinuousBreak": {
+    "Id": 399,
+    "LabelTitle": "Continuous Break",
+    "TooltipTitle": "Continuous section break",
+    "TooltipDescription": "Start a new section on this page, so that it can have columns of its own. Layout > Columns with paragraphs selected puts these in for you.",
+    "Keytip": "CB"
+  },
+  "cmdPageBreak": {
+    "Id": 280,
+    "LabelTitle": "Page Break",
+    "TooltipTitle": "Page break (Ctrl+Enter)",
+    "TooltipDescription": "Start a new page here.",
+    "Keytip": "B"
+  },
+  "cmdTable": {
+    "Id": 281,
+    "LabelTitle": "Table",
+    "TooltipTitle": "Insert table",
+    "TooltipDescription": "Insert a table.",
+    "Keytip": "T"
+  },
+  "cmdPicture": {
+    "Id": 282,
+    "LabelTitle": "Picture",
+    "TooltipTitle": "Insert picture",
+    "TooltipDescription": "Insert a picture from a file.",
+    "Keytip": "P"
+  },
+  "cmdThumbnail": {
+    "Id": 283,
+    "LabelTitle": "Linked Thumbnail",
+    "TooltipTitle": "Insert linked thumbnail",
+    "TooltipDescription": "A small picture that links to the full-size picture.",
+    "Keytip": "TH"
+  },
+  "cmdCrossReference": {
+    "Id": 286,
+    "LabelTitle": "Cross-reference",
+    "TooltipTitle": "Insert a cross-reference",
+    "TooltipDescription": "Refer to a numbered paragraph (\"see paragraph 3(b)\"): the number follows the paragraph's when the paragraphs are renumbered. Ctrl+click it to go there.",
+    "Keytip": "R"
+  },
+  "cmdFootnote": {
+    "Id": 288,
+    "LabelTitle": "Footnote",
+    "TooltipTitle": "Insert a footnote (Ctrl+Alt+F)",
+    "TooltipDescription": "A numbered note at the foot of the page. With the caret on a footnote's number: change its note.",
+    "Keytip": "N"
+  },
+  "cmdTableOfContents": {
+    "Id": 289,
+    "LabelTitle": "Table of Contents",
+    "TooltipTitle": "Insert a table of contents",
+    "TooltipDescription": "The headings, each with its page, as Word makes it. Update it with F9 (or right-click it). With the caret in one: change its options.",
+    "Keytip": "TC"
+  },
+  "cmdGroupContents": {
+    "Id": 135,
+    "LabelTitle": "Contents"
+  },
+  "cmdHorizontalLine": {
+    "Id": 292,
+    "LabelTitle": "Horizontal Line",
+    "TooltipTitle": "Horizontal line",
+    "TooltipDescription": "A line across the text, in a paragraph of its own: printed, and kept in Word, OpenDocument and RTF files; Markdown and HTML get a rule.",
+    "Keytip": "H"
+  },
+  "cmdSnippets": {
+    "Id": 291,
+    "LabelTitle": "Snippets...",
+    "TooltipTitle": "Snippets",
+    "TooltipDescription": "Parts with an abbreviation: typed in the document (then Space or Enter, or at once), an abbreviation becomes its part, formatted. Make one from the selection, change them, or export them as a hotstring script for any program.",
+    "Keytip": "S"
+  },
+  "cmdUpdateReferences": {
+    "Id": 287,
+    "LabelTitle": "Update",
+    "TooltipTitle": "Update cross-references (F9)",
+    "TooltipDescription": "Brings every cross-reference's number up to date. Done by itself as paragraphs are renumbered, and before saving and printing.",
+    "Keytip": "U"
+  },
+  "cmdLink": {
+    "Id": 284,
+    "LabelTitle": "Link",
+    "TooltipTitle": "Insert hyperlink (Ctrl+K)",
+    "TooltipDescription": "Insert a link to a web page or file.",
+    "Keytip": "I"
+  },
+  "cmdDateTime": {
+    "Id": 285,
+    "LabelTitle": "Date & Time",
+    "TooltipTitle": "Insert date and time",
+    "Keytip": "D"
+  },
+  "cmdHeaderFooter": {
+    "Id": 290,
+    "LabelTitle": "Header & Footer",
+    "TooltipTitle": "Header and footer",
+    "TooltipDescription": "The document's header and footer, with page numbers and dates.",
+    "Keytip": "H"
+  },
+  "cmdColumns": {
+    "Id": 398,
+    "LabelTitle": "Columns",
+    "TooltipTitle": "Columns",
+    "TooltipDescription": "This section's columns on the printed pages. You go on editing in one column; Print Preview shows them.",
+    "Keytip": "C"
+  },
+  "cmdNextSpelling": {
+    "Id": 295,
+    "LabelTitle": "Next Spelling Error",
+    "TooltipTitle": "Next spelling error (F7)",
+    "TooltipDescription": "Go to the next misspelled word. Right-click it for suggestions.",
+    "Keytip": "S"
+  },
+  "cmdAddToDictionary": {
+    "Id": 296,
+    "LabelTitle": "Add to Dictionary",
+    "TooltipTitle": "Add to dictionary",
+    "TooltipDescription": "Add the selected word to the Windows dictionary.",
+    "Keytip": "D"
+  },
+  "cmdSpellCheck": {
+    "Id": 297,
+    "LabelTitle": "Check spelling as you type",
+    "Keytip": "C"
+  },
+  "cmdWordWrap": {
+    "Id": 302,
+    "LabelTitle": "Wrap to window",
+    "TooltipTitle": "Wrap to window",
+    "TooltipDescription": "Without Print Layout: lines wrap at the window's edge (unchecked: they don't wrap at all, and the window scrolls sideways). With Print Layout, lines break as on the printed page, so this waits until Print Layout is off.",
+    "Keytip": "W"
+  },
+  "cmdPrintLayout": {
+    "Id": 370,
+    "LabelTitle": "Print Layout",
+    "TooltipTitle": "Print layout",
+    "TooltipDescription": "Lines break where they will on the printed page (Page Setup's paper and margins), as in Word and LibreOffice, with the page shown on grey. Off: lines wrap at the window's edge.",
+    "Keytip": "L"
+  },
+  "cmdShowPages": {
+    "Id": 392,
+    "LabelTitle": "Show Pages",
+    "TooltipTitle": "Show pages",
+    "TooltipDescription": "Print Layout: each printed page as a sheet of its own, with its header and footer in its margins, as in Word. A preview, not reliable while typing yet: the view can shift. Off: one long page, with a line where each page begins.",
+    "Keytip": "SP"
+  },
+  "cmdZoomPageWidth": {
+    "Id": 371,
+    "LabelTitle": "Page Width",
+    "TooltipTitle": "Page width",
+    "TooltipDescription": "Zoom so that the page's width fills the window, as the window is resized too (Print Layout).",
+    "Keytip": "P"
+  },
+  "cmdZoomOnePage": {
+    "Id": 372,
+    "LabelTitle": "One Page",
+    "TooltipTitle": "One page",
+    "TooltipDescription": "Zoom so that a whole page's height fits in the window (Print Layout).",
+    "Keytip": "G"
+  },
+  "cmdExportPdfButton": {
+    "Id": 374,
+    "LabelTitle": "Export as &PDF...",
+    "TooltipTitle": "Export as PDF",
+    "TooltipDescription": "Save a copy as PDF, laid out as it prints (through Microsoft Print to PDF; the default printer stays as it is).",
+    "Keytip": "F"
+  },
+  "cmdZoomMultiplePages": {
+    "Id": 373,
+    "LabelTitle": "Multiple Pages",
+    "TooltipTitle": "Multiple pages",
+    "TooltipDescription": "The printed pages side by side, as many as fit (read-only; Zoom In and Out, or Ctrl+wheel, show them larger or smaller). Double-click a page to edit it there; Esc goes back.",
+    "Keytip": "M"
+  },
+  "cmdShowBands": {
+    "Id": 303,
+    "LabelTitle": "Header and footer",
+    "Keytip": "H"
+  },
+  "cmdOutline": {
+    "Id": 304,
+    "LabelTitle": "Outline",
+    "TooltipTitle": "Outline (Ctrl+Shift+O)",
+    "Keytip": "O"
+  },
+  "cmdGroupTheme": {
+    "Id": 400,
+    "LabelTitle": "Theme"
+  },
+  "cmdFontName": {
+    "Id": 410,
+    "LabelTitle": "Font",
+    "TooltipTitle": "Font",
+    "Keytip": "FF"
+  },
+  "cmdFontSize": {
+    "Id": 411,
+    "LabelTitle": "Font Size",
+    "TooltipTitle": "Font size",
+    "Keytip": "FS"
+  },
+  "cmdFontBold": {
+    "Id": 412,
+    "LabelTitle": "Bold",
+    "TooltipTitle": "Bold (Ctrl+B)",
+    "Keytip": "FB"
+  },
+  "cmdFontItalic": {
+    "Id": 413,
+    "LabelTitle": "Italic",
+    "TooltipTitle": "Italic (Ctrl+I)",
+    "Keytip": "FI"
+  },
+  "cmdFontUnderline": {
+    "Id": 414,
+    "LabelTitle": "Underline",
+    "TooltipTitle": "Underline (Ctrl+U)",
+    "Keytip": "FU"
+  },
+  "cmdFontStrike": {
+    "Id": 415,
+    "LabelTitle": "Strikethrough",
+    "TooltipTitle": "Strikethrough",
+    "Keytip": "FT"
+  },
+  "cmdFontSub": {
+    "Id": 416,
+    "LabelTitle": "Subscript",
+    "TooltipTitle": "Subscript",
+    "Keytip": "FD"
+  },
+  "cmdFontSuper": {
+    "Id": 417,
+    "LabelTitle": "Superscript",
+    "TooltipTitle": "Superscript",
+    "Keytip": "FP"
+  },
+  "cmdFontGrow": {
+    "Id": 418,
+    "LabelTitle": "Grow Font",
+    "TooltipTitle": "Grow font",
+    "Keytip": "FG"
+  },
+  "cmdFontShrink": {
+    "Id": 419,
+    "LabelTitle": "Shrink Font",
+    "TooltipTitle": "Shrink font",
+    "Keytip": "FK"
+  },
+  "cmdFontColor": {
+    "Id": 420,
+    "LabelTitle": "Font Color",
+    "TooltipTitle": "Font color",
+    "Keytip": "FC"
+  },
+  "cmdFontHighlight": {
+    "Id": 421,
+    "LabelTitle": "Highlight",
+    "TooltipTitle": "Text highlight color",
+    "Keytip": "FH"
+  },
+  "cmdTheme": {
+    "Id": 401,
+    "LabelTitle": "Theme",
+    "TooltipTitle": "Theme",
+    "TooltipDescription": "The colors of the ribbon and the window. The document page stays white in every theme. Between the darker themes the change is at once; to or from Light it starts with the next window.",
+    "Keytip": "T"
+  },
+  "cmdZoomIn": {
+    "Id": 305,
+    "LabelTitle": "Zoom In",
+    "TooltipTitle": "Zoom in",
+    "Keytip": "I"
+  },
+  "cmdZoomOut": {
+    "Id": 306,
+    "LabelTitle": "Zoom Out",
+    "TooltipTitle": "Zoom out",
+    "Keytip": "O"
+  },
+  "cmdZoom100": {
+    "Id": 307,
+    "LabelTitle": "100%",
+    "TooltipTitle": "Zoom to 100%",
+    "Keytip": "J"
+  },
+  "cmdViewRich": {
+    "Id": 330,
+    "LabelTitle": "Rich Text",
+    "TooltipTitle": "Rich text view",
+    "TooltipDescription": "Edit the document as formatted text.",
+    "Keytip": "VR"
+  },
+  "cmdViewMarkdown": {
+    "Id": 331,
+    "LabelTitle": "Markdown",
+    "TooltipTitle": "Markdown view",
+    "TooltipDescription": "Edit the document as Markdown. Saving a .md file writes your Markdown exactly as typed.",
+    "Keytip": "VM"
+  },
+  "cmdViewHtml": {
+    "Id": 332,
+    "LabelTitle": "HTML",
+    "TooltipTitle": "HTML view",
+    "TooltipDescription": "Edit the document as HTML. Tags and styles the editor doesn't support are dropped when the formatted view is rebuilt.",
+    "Keytip": "VH"
+  },
+  "cmdSideBySide": {
+    "Id": 333,
+    "LabelTitle": "Side by Side",
+    "TooltipTitle": "Side by side",
+    "TooltipDescription": "The Markdown or HTML next to the formatted text, which follows as you type.",
+    "Keytip": "VS"
+  },
+  "cmdSourceWordWrap": {
+    "Id": 334,
+    "LabelTitle": "Wrap source lines",
+    "Keytip": "VW"
+  },
+  "cmdSourceLineNumbers": {
+    "Id": 335,
+    "LabelTitle": "Source line numbers",
+    "Keytip": "VL"
+  },
+  "cmdMacros": {
+    "Id": 310,
+    "LabelTitle": "Macros",
+    "TooltipTitle": "Macros",
+    "TooltipDescription": "Run an AHK script from the rte_macros folder.",
+    "Keytip": "M"
+  },
+  "cmdRecordMacro": {
+    "Id": 311,
+    "LabelTitle": "Record Macro",
+    "TooltipTitle": "Record macro (Ctrl+Shift+R)",
+    "TooltipDescription": "Record typing and commands as an AHK script. Mouse clicks are not recorded.",
+    "Keytip": "R"
+  },
+  "cmdMacroHotkeys": {
+    "Id": 312,
+    "LabelTitle": "Macro Hotkeys",
+    "TooltipTitle": "Macro hotkeys",
+    "TooltipDescription": "Give macros hotkeys that work while the editor is active.",
+    "Keytip": "H"
+  },
+  "cmdRunScript": {
+    "Id": 313,
+    "LabelTitle": "Run Script...",
+    "TooltipTitle": "Run AHK script",
+    "TooltipDescription": "Run any AHK script against this editor.",
+    "Keytip": "S"
+  },
+  "cmdEventHooks": {
+    "Id": 317,
+    "LabelTitle": "Event Hooks",
+    "TooltipTitle": "Event hooks",
+    "TooltipDescription": "Macros that run by themselves when AhkWord starts, a document is opened, made, saved, printed or closed, or a style changes: no script of your own kept running.",
+    "Keytip": "E"
+  },
+  "cmdCommandPalette": {
+    "Id": 318,
+    "LabelTitle": "Command Palette",
+    "TooltipTitle": "Command palette (Ctrl+Shift+P)",
+    "TooltipDescription": "Type part of a command's name and press Enter: any ribbon command, a macro, a style, a snippet or a recent file.",
+    "Keytip": "C"
+  },
+  "cmdMacrosFolder": {
+    "Id": 314,
+    "LabelTitle": "Macros Folder",
+    "TooltipTitle": "Open macros folder",
+    "Keytip": "F"
+  },
+  "cmdAutomationApi": {
+    "Id": 315,
+    "LabelTitle": "Automation API",
+    "TooltipTitle": "Automation API",
+    "TooltipDescription": "What AHK scripts can call (RteClient2.ahk: Rte.<Name>(...)).",
+    "Keytip": "A"
+  },
+  "cmdAbout": {
+    "Id": 316,
+    "LabelTitle": "About",
+    "TooltipTitle": "About AhkWord",
+    "Keytip": "B"
+  },
+  "cmdInsertAbove": {
+    "Id": 320,
+    "LabelTitle": "Insert Above",
+    "TooltipTitle": "Insert row above",
+    "Keytip": "A"
+  },
+  "cmdInsertBelow": {
+    "Id": 321,
+    "LabelTitle": "Insert Below",
+    "TooltipTitle": "Insert row below (Ctrl+Shift+Insert)",
+    "Keytip": "B"
+  },
+  "cmdInsertLeft": {
+    "Id": 322,
+    "LabelTitle": "Insert Left",
+    "TooltipTitle": "Insert column left",
+    "Keytip": "L"
+  },
+  "cmdInsertRight": {
+    "Id": 323,
+    "LabelTitle": "Insert Right",
+    "TooltipTitle": "Insert column right",
+    "Keytip": "R"
+  },
+  "cmdDeleteRow": {
+    "Id": 324,
+    "LabelTitle": "Delete Row",
+    "TooltipTitle": "Delete row (Ctrl+Shift+Delete)",
+    "Keytip": "D"
+  },
+  "cmdDeleteColumn": {
+    "Id": 325,
+    "LabelTitle": "Delete Column",
+    "TooltipTitle": "Delete column",
+    "Keytip": "C"
+  },
+  "cmdDeleteTable": {
+    "Id": 326,
+    "LabelTitle": "Delete Table",
+    "TooltipTitle": "Delete table",
+    "Keytip": "T"
+  },
+  "cmdTableProperties": {
+    "Id": 340,
+    "LabelTitle": "Properties",
+    "TooltipTitle": "Table properties",
+    "TooltipDescription": "Column widths, borders, shading, row height, alignment and cell padding.",
+    "Keytip": "PR"
+  },
+  "cmdTableBorders": {
+    "Id": 341,
+    "LabelTitle": "Borders",
+    "TooltipTitle": "Borders",
+    "TooltipDescription": "Lines around and between the selected cells (or the whole table, if it is selected).",
+    "Keytip": "BO"
+  },
+  "cmdBordersAll": {
+    "Id": 342,
+    "LabelTitle": "All Borders",
+    "Keytip": "A"
+  },
+  "cmdBordersOutside": {
+    "Id": 343,
+    "LabelTitle": "Outside Borders",
+    "Keytip": "O"
+  },
+  "cmdBordersInside": {
+    "Id": 344,
+    "LabelTitle": "Inside Borders",
+    "Keytip": "I"
+  },
+  "cmdBordersNone": {
+    "Id": 345,
+    "LabelTitle": "No Border",
+    "Keytip": "N"
+  },
+  "cmdTableShading": {
+    "Id": 346,
+    "LabelTitle": "Shading",
+    "TooltipTitle": "Shading",
+    "TooltipDescription": "The background color of the selected cells.",
+    "Keytip": "H"
+  },
+  "cmdLineNumbers": {
+    "Id": 350,
+    "LabelTitle": "Line Numbers",
+    "TooltipTitle": "Line numbers",
+    "TooltipDescription": "Number the lines in the left margin, as in Word: continuously or restarting on each page. Lines in tables don't count.",
+    "Keytip": "LN"
+  },
+  "cmdLineNumbersNone": {
+    "Id": 351,
+    "LabelTitle": "&None",
+    "Keytip": "N"
+  },
+  "cmdLineNumbersContinuous": {
+    "Id": 352,
+    "LabelTitle": "&Continuous",
+    "Keytip": "C"
+  },
+  "cmdLineNumbersEachPage": {
+    "Id": 353,
+    "LabelTitle": "Restart Each &Page",
+    "Keytip": "P"
+  },
+  "cmdSuppressLineNumbers": {
+    "Id": 354,
+    "LabelTitle": "&Suppress for Current Paragraph",
+    "TooltipDescription": "The selected paragraphs' lines get no numbers and are not counted.",
+    "Keytip": "S"
+  },
+  "cmdLineNumberOptions": {
+    "Id": 355,
+    "LabelTitle": "Line Numbering &Options...",
+    "TooltipDescription": "The first number, the distance from the text, and which numbers are shown (every line's, or every 5th ...).",
+    "Keytip": "O"
+  }
+}

@@ -4,10 +4,13 @@
 ; compiled ribbons that AhkWord.cs loads, from RteRibbon.xml:
 ;   1. make_icons.cs draws the icons into build\icons (32-bit BMPs, 16 to 64 pixels for the DPI steps) from Microsoft's
 ;      Fluent UI System Icons (MIT license), whose font is downloaded once into build\fluent, at a fixed commit;
-;   2. uicc.exe (Windows SDK) compiles the markup into a binary ribbon (.bml) and a resource script (.rc);
+;   2. ribbon_strings.cs takes the labels, keytips and tooltips out of the markup into RteRibbon.strings.json, which
+;      AhkWord gives the ribbon (rte_strings.cs: so that one ribbon serves every language; AhkWord-es), and uicc.exe
+;      (Windows SDK) compiles the markup without them into a binary ribbon (.bml) and a resource script (.rc);
 ;   3. rc.exe (Windows SDK) compiles that into a .res file;
 ;   4. link.exe (Visual Studio C++ tools) wraps it in a resource-only DLL: RteRibbon.ribbon.
-; Only needed after changing the markup or the icons; running AhkWord needs only RteRibbon.ribbon.
+; Only needed after changing the markup or the icons; running AhkWord needs only RteRibbon.ribbon (RteRibbonDark.ribbon)
+; and RteRibbon.strings.json, which belong together: they are built, and committed, together.
 ; Pass "console" to report on the console instead of in a message box.
 
 Console := A_Args.Length && A_Args[1] = "console"
@@ -53,7 +56,15 @@ MakeRibbon(Folder, Target, Ink) {
             FileDelete(Markup)
         FileAppend(Text, Markup, "UTF-8")
     }
-    Step(Folder, "uicc", SdkBin "\uicc.exe", '"' Markup '" RteRibbon.bml /header:RteRibbon.h /res:RteRibbon.rc /name:APPLICATION')
+    ; (the strings: the light ribbon's go beside RteRibbon.ribbon; the dark ribbon's, from the same commands, must be the same)
+    Strings := Ink = "dark" ? A_ScriptDir "\RteRibbon.strings.json" : Folder "\RteRibbon.strings.json"
+    Stripped := Folder "\RteRibbon.nostrings.xml"
+    Report(RunCSharpFile(A_ScriptDir "\ribbon_strings.cs", Markup, Stripped, Strings))
+    if CSExitCode
+        throw Error("ribbon_strings.cs failed:`n" CSOutput)
+    if Ink = "light" && FileRead(Strings, "UTF-8") != FileRead(A_ScriptDir "\RteRibbon.strings.json", "UTF-8")
+        throw Error("The dark ribbon's strings differ from RteRibbon.strings.json.")
+    Step(Folder, "uicc", SdkBin "\uicc.exe", '"' Stripped '" RteRibbon.bml /header:RteRibbon.h /res:RteRibbon.rc /name:APPLICATION')
     Step(Folder, "rc", SdkBin "\rc.exe", "/nologo RteRibbon.rc")
     Step(Folder, "link", LinkExe(), '/NOLOGO /NOENTRY /DLL /MACHINE:X64 /OUT:"' A_ScriptDir "\" Target '" RteRibbon.res')
     Report("Built " Target " (" FileGetSize(A_ScriptDir "\" Target) " bytes)")

@@ -31,6 +31,7 @@
 #load "rte_sections.cs"
 #load "rte_extensions.cs"
 #load "rte_headline.cs"
+#load "rte_strings.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
 // Run it with AhkWord.ahk. Iteration 66 adds to iteration 65:
 //   - Print Layout: a document whose first paragraphs are hidden (Word puts floating shapes' anchors there) no longer has
@@ -1284,6 +1285,9 @@ class WriterForm : Form
 			string color = picked.ColorType == SwatchColorType.RGB && picked.RGBColor is Color c ? $"#{c.R:X2}{c.G:X2}{c.B:X2}" : "none";
 			BeginInvoke(() => Command(RibbonCommand.TableShading, () => api.SetCellShading(color), M("SetCellShading", color)));
 		};
+
+		// (AhkWord-es: the ribbon is compiled without its strings, which every command is given here; rte_strings.cs)
+		RibbonStrings.Give(ribbon, Path.Combine(appDir, "ribbon"));
 	}
 
 	// Ribbon commands run after the ribbon's callback has returned (BeginInvoke): dialogs opened from inside it would run
