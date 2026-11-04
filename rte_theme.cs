@@ -132,9 +132,20 @@ static class Dialogs
 		new() { Text = text, DialogResult = result, AutoSize = true, MinimumSize = new Size(scale.LogicalToDeviceUnits(ButtonWidth), 0) };
 
 	/// OK (closes: it ends the dialog by itself; otherwise its Click handler decides).
-	public static Button Ok(Control scale, bool closes = true) => Button(scale, "OK", closes ? DialogResult.OK : DialogResult.None);
+	public static Button Ok(Control scale, bool closes = true) => Button(scale, T("dlg.ok", "OK"), closes ? DialogResult.OK : DialogResult.None);
 
-	public static Button Cancel(Control scale, string text = "Cancel") => Button(scale, text, DialogResult.Cancel);
+	/// Cancel, or another text for the button that ends the dialog with Cancel (Close, Discard).
+	public static Button Cancel(Control scale, string? text = null) => Button(scale, text ?? T("dlg.cancel", "Cancel"), DialogResult.Cancel);
+
+	/// Widens a box (never narrows it) so that the longest of texts fits, in font: a translation can be longer than the
+	/// English the box's width was chosen for. A combo box: its items, and room for its arrow.
+	public static void FitWidth(Control box, Font font, IEnumerable<string> texts) {
+		int extra = box.LogicalToDeviceUnits(10) + (box is ComboBox ? SystemInformation.VerticalScrollBarWidth : 0);
+		int need = texts.Select(t => TextRenderer.MeasureText(t, font).Width).DefaultIfEmpty(0).Max() + extra;
+		if (need > box.Width) box.Width = need;
+	}
+
+	public static void FitWidth(ComboBox box, Font font) => FitWidth(box, font, box.Items.Cast<object>().Select(o => o.ToString() ?? ""));
 
 	/// The buttons at the right, in this order from the left, with a gap above them (logical pixels).
 	public static FlowLayoutPanel Row(Control scale, int gapAbove, params Button[] buttons) {

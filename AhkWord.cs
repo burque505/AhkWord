@@ -4466,7 +4466,7 @@ class WriterForm : Form
 
 	void RestartNumberingCommand() {
 		if (!api.InList()) throw new InvalidOperationException("Put the caret in a numbered list item first.");
-		if (Prompt("Restart numbering", ("Start at", "1")) is not { } values) return;
+		if (Prompt(T("dlg.restartNumbering.title", "Restart numbering"), (T("dlg.restartNumbering.startAt", "Start at"), "1")) is not { } values) return;
 		if (!int.TryParse(values[0], out int start) || start < 0) throw new ArgumentException("The start number must be 0 or more.");
 		Run(() => api.RestartNumbering(start), M("RestartNumbering", start));
 	}
@@ -4515,7 +4515,7 @@ class WriterForm : Form
 
 	void InsertHyperlinkDialog() {
 		string selected = Editor.SelectedText.Trim();
-		if (Prompt("Insert hyperlink", ("Address", "https://"), ("Text to display", selected != "" ? selected : "")) is not { } values) return;
+		if (Prompt(T("dlg.hyperlink.title", "Insert hyperlink"), (T("dlg.hyperlink.address", "Address"), "https://"), (T("dlg.hyperlink.display", "Text to display"), selected != "" ? selected : "")) is not { } values) return;
 		string url = values[0], display = values[1] != "" ? values[1] : values[0];
 		// (the library's two steps, the text and then its link, frozen and as one undo step: each was drawn, a flicker)
 		var doc = Editor.TextDocument;
@@ -4533,26 +4533,26 @@ class WriterForm : Form
 
 	void InsertImageDialog() {
 		if (ChooseImage() is not { } path) return;
-		if (Prompt("Insert image", ("Alt text: what the picture shows, for screen readers (empty for a decorative picture)", Path.GetFileNameWithoutExtension(path))) is not { } values) return;
+		if (Prompt(T("dlg.image.title", "Insert image"), (T("dlg.image.altText", "Alt text: what the picture shows, for screen readers (empty for a decorative picture)"), Path.GetFileNameWithoutExtension(path))) is not { } values) return;
 		Run(() => api.InsertImageFile(path, values[0]), M("InsertImageFile", path, values[0]));
 	}
 
 	// Right-click a picture > Alt text...
 	void AltTextCommand(int position) {
 		string current = api.PictureAltText(position);
-		if (Prompt("Alt text", ("Alt text: what the picture shows, for screen readers (empty for a decorative picture)", current)) is not { } values) return;
+		if (Prompt(T("dlg.altText.title", "Alt text"), (T("dlg.image.altText", "Alt text: what the picture shows, for screen readers (empty for a decorative picture)"), current)) is not { } values) return;
 		if (values[0] == current) return;
 		Run(() => api.SetPictureAltText(position, values[0]), M("SetPictureAltText", position, values[0]));
 	}
 
 	void InsertThumbnailDialog() {
 		if (ChooseImage() is not { } path) return;
-		if (Prompt("Insert linked thumbnail", ("Link to the full-size image", new Uri(path).AbsoluteUri), ("Alt text", Path.GetFileNameWithoutExtension(path))) is not { } values) return;
+		if (Prompt(T("dlg.thumbnail.title", "Insert linked thumbnail"), (T("dlg.thumbnail.link", "Link to the full-size image"), new Uri(path).AbsoluteUri), (T("dlg.altText.title", "Alt text"), Path.GetFileNameWithoutExtension(path))) is not { } values) return;
 		Run(() => api.InsertLinkedThumbnailFile(values[0], path, values[1]), M("InsertLinkedThumbnailFile", values[0], path, values[1]));
 	}
 
 	string? ChooseImage() {
-		using var dlg = new OpenFileDialog { Title = "Insert image", Filter = "Images (*.png;*.jpg;*.jpeg;*.gif)|*.png;*.jpg;*.jpeg;*.gif" };
+		using var dlg = new OpenFileDialog { Title = T("dlg.image.title", "Insert image"), Filter = "Images (*.png;*.jpg;*.jpeg;*.gif)|*.png;*.jpg;*.jpeg;*.gif" };
 		return dlg.ShowDialog(this) == DialogResult.OK ? dlg.FileName : null;
 	}
 
@@ -5598,7 +5598,7 @@ class WriterForm : Form
 
 	void SourceLink() {
 		string selected = sourceBox.SelectedText.Trim();
-		if (Prompt("Insert hyperlink", ("Address", "https://"), ("Text to display", selected)) is not { } values) return;
+		if (Prompt(T("dlg.hyperlink.title", "Insert hyperlink"), (T("dlg.hyperlink.address", "Address"), "https://"), (T("dlg.hyperlink.display", "Text to display"), selected)) is not { } values) return;
 		string url = values[0], display = values[1] != "" ? values[1] : values[0];
 		sourceBox.SelectedText = InMarkdown ? $"[{display}]({url})" : $"<a href=\"{WebUtility.HtmlEncode(url)}\">{WebUtility.HtmlEncode(display)}</a>";
 	}
@@ -5606,7 +5606,7 @@ class WriterForm : Form
 	// The picture travels with the document: it goes in as a data: URI, shown as embedded-N.png.
 	void SourcePicture() {
 		if (ChooseImage() is not { } path) return;
-		if (Prompt("Insert image", ("Alt text: what the picture shows, for screen readers (empty for a decorative picture)", Path.GetFileNameWithoutExtension(path))) is not { } values) return;
+		if (Prompt(T("dlg.image.title", "Insert image"), (T("dlg.image.altText", "Alt text: what the picture shows, for screen readers (empty for a decorative picture)"), Path.GetFileNameWithoutExtension(path))) is not { } values) return;
 		string type = Path.GetExtension(path).ToLowerInvariant() switch { ".jpg" or ".jpeg" => "jpeg", ".gif" => "gif", _ => "png" };
 		string name = Embedded($"data:image/{type};base64,{Convert.ToBase64String(File.ReadAllBytes(path))}");
 		sourceBox.SelectedText = InMarkdown ? $"![{values[0]}]({name})" : $"<img src=\"{name}\" alt=\"{WebUtility.HtmlEncode(values[0])}\">";
@@ -5723,8 +5723,8 @@ class WriterForm : Form
 		var box = new TextBox { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false,
 			Font = new Font("Consolas", 10f), Text = text.Replace("\r\n", "\n").Replace("\n", "\r\n"), BackColor = SystemColors.Window };
 		var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(4) };
-		var close = Dialogs.Cancel(this, "Close");
-		var copy = Dialogs.Button(this, "Copy");
+		var close = Dialogs.Cancel(this, T("dlg.close", "Close"));
+		var copy = Dialogs.Button(this, T("dlg.copy", "Copy"));
 		copy.Click += (s, e) => { if (text != "") Clipboard.SetText(text); };
 		buttons.Controls.AddRange(new Control[] { close, copy });
 		dlg.Controls.Add(box);
@@ -10695,7 +10695,7 @@ sealed class SaveMacroDialog : Form
 	public Keys Hotkey => hotkeyBox.Hotkey;
 
 	public SaveMacroDialog(string name, string script, Dictionary<Keys, string> menuShortcuts, WriterForm owner) {
-		Dialogs.Setup(this, "Save recorded macro", sizable: true);
+		Dialogs.Setup(this, T("dlg.saveMacro.title", "Save recorded macro"), sizable: true);
 		Size = new Size(LogicalToDeviceUnits(720), LogicalToDeviceUnits(520));
 		MinimumSize = new Size(LogicalToDeviceUnits(480), LogicalToDeviceUnits(360));
 
@@ -10708,20 +10708,20 @@ sealed class SaveMacroDialog : Form
 		scriptBox.Dock = DockStyle.Fill;
 		scriptBox.Text = script;
 		hotkeyBox.HotkeyChanged += (s, e) => {
-			warning.Text = menuShortcuts.TryGetValue(hotkeyBox.Hotkey, out var item) ? $"This replaces the menu shortcut of {item} while the editor is active." : "";
+			warning.Text = menuShortcuts.TryGetValue(hotkeyBox.Hotkey, out var item) ? T("dlg.saveMacro.replacesShortcut", "This replaces the menu shortcut of {0} while the editor is active.", item) : "";
 		};
 
 		var fields = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Top };
-		fields.Controls.Add(new Label { Text = "Name:", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
+		fields.Controls.Add(new Label { Text = T("dlg.saveMacro.name", "Name:"), AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
 		fields.Controls.Add(nameBox, 1, 0);
-		fields.Controls.Add(new Label { Text = "Hotkey (optional):", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 1);
+		fields.Controls.Add(new Label { Text = T("dlg.saveMacro.hotkey", "Hotkey (optional):"), AutoSize = true, Anchor = AnchorStyles.Left }, 0, 1);
 		fields.Controls.Add(hotkeyBox, 1, 1);
 		fields.Controls.Add(warning, 1, 2);
-		fields.Controls.Add(new Label { Text = "Script (you can edit it):", AutoSize = true, Margin = new Padding(3, 8, 3, 3) }, 0, 3);
+		fields.Controls.Add(new Label { Text = T("dlg.saveMacro.script", "Script (you can edit it):"), AutoSize = true, Margin = new Padding(3, 8, 3, 3) }, 0, 3);
 		fields.SetColumnSpan(fields.GetControlFromPosition(0, 3)!, 2);
 
-		var save = Dialogs.Button(this, "Save");
-		var discard = Dialogs.Cancel(this, "Discard");
+		var save = Dialogs.Button(this, T("dlg.saveMacro.save", "Save"));
+		var discard = Dialogs.Cancel(this, T("dlg.saveMacro.discard", "Discard"));
 		save.Click += (s, e) => {
 			if (MacroName == "") { MessageBox.Show(this, T("msg.macroNoName", "Give the macro a name."), Text); return; }
 			DialogResult = DialogResult.OK;
@@ -10746,10 +10746,10 @@ sealed class MacroHotkeysDialog : Form
 
 	public MacroHotkeysDialog(List<string> files, Func<string, Keys> current, Dictionary<Keys, string> menuShortcuts) {
 		this.menuShortcuts = menuShortcuts;
-		Dialogs.Setup(this, "Macro hotkeys");
+		Dialogs.Setup(this, T("dlg.macroHotkeys.title", "Macro hotkeys"));
 
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
-		layout.Controls.Add(new Label { AutoSize = true, Text = "Click a box and press a key combination with Ctrl or Alt, or a function key. Backspace clears it.\nThe hotkeys work while the editor window is active." });
+		layout.Controls.Add(new Label { AutoSize = true, Text = T("dlg.macroHotkeys.help", "Click a box and press a key combination with Ctrl or Alt, or a function key. Backspace clears it.\nThe hotkeys work while the editor window is active.") });
 		var scroller = new Panel { AutoScroll = true, Width = LogicalToDeviceUnits(560), Height = LogicalToDeviceUnits(Math.Min(360, 34 * files.Count + 10)) };
 		var table = new TableLayoutPanel { ColumnCount = 3, AutoSize = true, Dock = DockStyle.Top };
 		int row = 0;
@@ -10757,7 +10757,7 @@ sealed class MacroHotkeysDialog : Form
 			var box = new HotkeyBox { Width = LogicalToDeviceUnits(170) };
 			box.SetHotkey(current(file));
 			box.HotkeyChanged += (s, e) => Check();
-			var clear = new Button { Text = "Clear", AutoSize = true };
+			var clear = new Button { Text = T("dlg.macroHotkeys.clear", "Clear"), AutoSize = true };
 			clear.Click += (s, e) => box.SetHotkey(Keys.None);
 			table.Controls.Add(new Label { Text = Path.GetFileNameWithoutExtension(file), AutoSize = true, Anchor = AnchorStyles.Left, MaximumSize = new Size(LogicalToDeviceUnits(280), 0) }, 0, row);
 			table.Controls.Add(box, 1, row);
@@ -10781,9 +10781,9 @@ sealed class MacroHotkeysDialog : Form
 	void Check() {
 		var messages = new List<string>();
 		foreach (var group in boxes.Where(p => p.Value.Hotkey != Keys.None).GroupBy(p => p.Value.Hotkey)) {
-			string keys = HotkeyBox.Describe(group.Key);
-			if (group.Count() > 1) messages.Add($"{keys} is used by more than one macro; only one of them will run.");
-			if (menuShortcuts.TryGetValue(group.Key, out var item)) messages.Add($"{keys} replaces the menu shortcut of {item}.");
+			string keys = TKeys(HotkeyBox.Describe(group.Key));
+			if (group.Count() > 1) messages.Add(T("dlg.macroHotkeys.twice", "{0} is used by more than one macro; only one of them will run.", keys));
+			if (menuShortcuts.TryGetValue(group.Key, out var item)) messages.Add(T("dlg.macroHotkeys.replacesShortcut", "{0} replaces the menu shortcut of {1}.", keys, item));
 		}
 		warning.Text = string.Join("\n", messages);
 	}
@@ -12025,21 +12025,21 @@ sealed class TablePropertiesDialog : Form
 sealed class InsertTableDialog : Form
 {
 	readonly NumericUpDown rows, columns;
-	readonly CheckBox header = new() { Text = "Header row (bold)", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+	readonly CheckBox header = new() { Text = T("dlg.insertTable.header", "Header row (bold)"), AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
 
 	public int Rows => (int)rows.Value;
 	public int Columns => (int)columns.Value;
 	public bool Header => header.Checked;
 
 	public InsertTableDialog(int rowCount, int columnCount, bool headerRow) {
-		Dialogs.Setup(this, "Insert table");
+		Dialogs.Setup(this, T("dlg.insertTable.title", "Insert table"));
 		rows = new NumericUpDown { Minimum = 1, Maximum = 500, Value = Math.Clamp(rowCount, 1, 500), Width = LogicalToDeviceUnits(70) };
 		columns = new NumericUpDown { Minimum = 1, Maximum = 63, Value = Math.Clamp(columnCount, 1, 63), Width = LogicalToDeviceUnits(70) };
 		header.Checked = headerRow;
 		var table = new TableLayoutPanel { ColumnCount = 2, AutoSize = true };
-		table.Controls.Add(new Label { Text = "&Rows:", AutoSize = true, Anchor = AnchorStyles.Left });
+		table.Controls.Add(new Label { Text = T("dlg.insertTable.rows", "&Rows:"), AutoSize = true, Anchor = AnchorStyles.Left });
 		table.Controls.Add(rows);
-		table.Controls.Add(new Label { Text = "&Columns:", AutoSize = true, Anchor = AnchorStyles.Left });
+		table.Controls.Add(new Label { Text = T("dlg.insertTable.columns", "&Columns:"), AutoSize = true, Anchor = AnchorStyles.Left });
 		table.Controls.Add(columns);
 		table.Controls.Add(header);
 		table.SetColumnSpan(header, 2);
@@ -12849,9 +12849,9 @@ sealed class FindReplaceForm : Form
 {
 	readonly WriterForm owner;
 	readonly TextBox findBox = new(), replaceBox = new();
-	readonly CheckBox matchCase = new() { Text = "Match case", AutoSize = true }, wholeWord = new() { Text = "Whole words", AutoSize = true };
-	readonly Label replaceLabel = new() { Text = "Replace with:", AutoSize = true, Anchor = AnchorStyles.Left };
-	readonly Button replaceButton = new() { Text = "Replace", AutoSize = true }, replaceAllButton = new() { Text = "Replace all", AutoSize = true };
+	readonly CheckBox matchCase = new() { Text = T("dlg.find.matchCase", "Match case"), AutoSize = true }, wholeWord = new() { Text = T("dlg.find.wholeWords", "Whole words"), AutoSize = true };
+	readonly Label replaceLabel = new() { Text = T("dlg.find.replaceWith", "Replace with:"), AutoSize = true, Anchor = AnchorStyles.Left };
+	readonly Button replaceButton = new() { Text = T("dlg.find.replace", "Replace"), AutoSize = true }, replaceAllButton = new() { Text = T("dlg.find.replaceAll", "Replace all"), AutoSize = true };
 
 	public string FindText => findBox.Text;
 	public string ReplaceText => replaceBox.Text;
@@ -12860,7 +12860,7 @@ sealed class FindReplaceForm : Form
 
 	public FindReplaceForm(WriterForm owner) {
 		this.owner = owner;
-		Text = "Find and Replace";
+		Text = T("dlg.find.title", "Find and Replace");
 		FormBorderStyle = FormBorderStyle.FixedToolWindow;
 		ShowInTaskbar = false;
 		StartPosition = FormStartPosition.Manual;
@@ -12869,15 +12869,15 @@ sealed class FindReplaceForm : Form
 		Padding = new Padding(8);
 		findBox.Width = replaceBox.Width = LogicalToDeviceUnits(260);
 
-		var findButton = new Button { Text = "Find next", AutoSize = true };
-		var closeButton = Dialogs.Cancel(this, "Close");
+		var findButton = new Button { Text = T("dlg.find.findNext", "Find next"), AutoSize = true };
+		var closeButton = Dialogs.Cancel(this, T("dlg.close", "Close"));
 		findButton.Click += (s, e) => owner.FindNext();
 		replaceButton.Click += (s, e) => owner.ReplaceNext();
 		replaceAllButton.Click += (s, e) => owner.ReplaceAll();
 		closeButton.Click += (s, e) => Hide();
 
 		var table = new TableLayoutPanel { ColumnCount = 3, AutoSize = true, Dock = DockStyle.Fill };
-		table.Controls.Add(new Label { Text = "Find what:", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
+		table.Controls.Add(new Label { Text = T("dlg.find.findWhat", "Find what:"), AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
 		table.Controls.Add(findBox, 1, 0);
 		table.Controls.Add(findButton, 2, 0);
 		table.Controls.Add(replaceLabel, 0, 1);

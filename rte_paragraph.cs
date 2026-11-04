@@ -436,16 +436,16 @@ sealed class MeasureBox : NumericUpDown
 // don't share is left empty, and stays as each has it unless one is given), or (forStyle) a style's paragraph format.
 sealed class ParagraphDialog : Form
 {
-	readonly ComboBox align = Combo("Left", "Centered", "Right", "Justified");
-	readonly ComboBox level = Combo("Body Text", "Level 1", "Level 2", "Level 3", "Level 4", "Level 5", "Level 6");
+	readonly ComboBox align = Combo(T("dlg.paragraph.left", "Left"), T("dlg.paragraph.centered", "Centered"), T("dlg.paragraph.right", "Right"), T("dlg.paragraph.justified", "Justified"));
+	readonly ComboBox level = Combo(new[] { T("dlg.paragraph.bodyText", "Body Text") }.Concat(Enumerable.Range(1, 6).Select(n => T("dlg.paragraph.levelN", "Level {0}", n))).ToArray());
 	readonly MeasureBox left = new(true, -1584, 1584), right = new(true, -1584, 1584), by = new(true, 0, 1584);
-	readonly ComboBox special = Combo("(none)", "First line", "Hanging");
+	readonly ComboBox special = Combo(T("dlg.paragraph.none", "(none)"), T("dlg.paragraph.firstLine", "First line"), T("dlg.paragraph.hanging", "Hanging"));
 	readonly MeasureBox before = new(false, 0, 1584), after = new(false, 0, 1584);
-	readonly ComboBox line = Combo("Single", "1.5 lines", "Double", "At least", "Exactly", "Multiple");
+	readonly ComboBox line = Combo(T("dlg.paragraph.single", "Single"), T("dlg.paragraph.oneAndHalf", "1.5 lines"), T("dlg.paragraph.double", "Double"), T("dlg.paragraph.atLeast", "At least"), T("dlg.paragraph.exactly", "Exactly"), T("dlg.paragraph.multiple", "Multiple"));
 	readonly NumericUpDown at = new() { DecimalPlaces = 2, Increment = 0.25m, Minimum = 0.25m, Maximum = 1584, Width = 70 };
-	readonly CheckBox contextual = Check("Don't add spa&ce between paragraphs of the same style");
-	readonly CheckBox widow = Check("&Widow/Orphan control"), keepNext = Check("Keep with ne&xt"), keepLines = Check("&Keep lines together"),
-		pageBreak = Check("Page &break before"), noNumber = Check("&Suppress line numbers");
+	readonly CheckBox contextual = Check(T("dlg.paragraph.contextual", "Don't add spa&ce between paragraphs of the same style"));
+	readonly CheckBox widow = Check(T("dlg.paragraph.widow", "&Widow/Orphan control")), keepNext = Check(T("dlg.paragraph.keepNext", "Keep with ne&xt")), keepLines = Check(T("dlg.paragraph.keepLines", "&Keep lines together")),
+		pageBreak = Check(T("dlg.paragraph.pageBreak", "Page &break before")), noNumber = Check(T("dlg.paragraph.noLineNumbers", "&Suppress line numbers"));
 	readonly Panel preview = new() { Height = 120, Dock = DockStyle.Fill, BackColor = AppTheme.Paper, BorderStyle = BorderStyle.FixedSingle };
 	readonly Label error = new() { AutoSize = true, ForeColor = AppTheme.Warning };
 	readonly ParagraphFormat original;
@@ -477,9 +477,10 @@ sealed class ParagraphDialog : Form
 		this.fontSize = fontSize;
 		this.defaultTab = defaultTab;
 		tabs = format.Tabs?.ToList();
-		Dialogs.Setup(this, forStyle ? "Paragraph: " + styleName : "Paragraph");
+		Dialogs.Setup(this, forStyle ? T("dlg.paragraph.titleStyle", "Paragraph: {0}", styleName) : T("dlg.paragraph.title", "Paragraph"));
 		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		AutoScaleMode = AutoScaleMode.Dpi;
+		foreach (var combo in new[] { align, level, special, line }) Dialogs.FitWidth(combo, Font);    // (a language's longer items)
 
 		// the values
 		align.SelectedIndex = format.Align == null ? -1 : Math.Max(0, Array.IndexOf(Aligns, format.Align));
@@ -505,8 +506,8 @@ sealed class ParagraphDialog : Form
 		SetCheck(noNumber, format.NoLineNumber);
 		contextual.Enabled = forStyle;
 		var tips = new ToolTip();
-		if (!forStyle) tips.SetToolTip(contextual, $"A setting of the paragraph's style ({styleName}): Home > Styles > Modify Style > Paragraph.");
-		tips.SetToolTip(level, "The style's heading level (Home > Styles > Modify Style): headings are levels 1 to 6.");
+		if (!forStyle) tips.SetToolTip(contextual, T("dlg.paragraph.contextualTip", "A setting of the paragraph's style ({0}): Home > Styles > Modify Style > Paragraph.", styleName));
+		tips.SetToolTip(level, T("dlg.paragraph.levelTip", "The style's heading level (Home > Styles > Modify Style): headings are levels 1 to 6."));
 
 		// what was changed (only that is given to the paragraphs)
 		void Mark(string what) { if (loading) return; changed.Add(what); preview.Invalidate(); }
@@ -530,35 +531,35 @@ sealed class ParagraphDialog : Form
 		preview.Paint += PaintPreview;
 
 		// Indents and Spacing
-		var spacingPage = new TabPage("Indents and Spacing") { Padding = new Padding(8), UseVisualStyleBackColor = !AppTheme.DarkWindows };
+		var spacingPage = new TabPage(T("dlg.paragraph.indentsPage", "Indents and Spacing")) { Padding = new Padding(8), UseVisualStyleBackColor = !AppTheme.DarkWindows };
 		var grid = Grid();
-		Heading(grid, "General");
-		Row(grid, "&Alignment:", align, "&Outline level:", level);
-		Heading(grid, "Indentation");
-		Row(grid, "&Left:", left, "S&pecial:", special);
-		Row(grid, "&Right:", right, "B&y:", by);
-		Heading(grid, "Spacing");
-		Row(grid, "&Before:", before, "L&ine spacing:", line);
-		Row(grid, "Aft&er:", after, "&At:", at);
+		Heading(grid, T("dlg.paragraph.general", "General"));
+		Row(grid, T("dlg.paragraph.alignment", "&Alignment:"), align, T("dlg.paragraph.outlineLevel", "&Outline level:"), level);
+		Heading(grid, T("dlg.paragraph.indentation", "Indentation"));
+		Row(grid, T("dlg.paragraph.leftIndent", "&Left:"), left, T("dlg.paragraph.special", "S&pecial:"), special);
+		Row(grid, T("dlg.paragraph.rightIndent", "&Right:"), right, T("dlg.paragraph.by", "B&y:"), by);
+		Heading(grid, T("dlg.paragraph.spacing", "Spacing"));
+		Row(grid, T("dlg.paragraph.before", "&Before:"), before, T("dlg.paragraph.lineSpacing", "L&ine spacing:"), line);
+		Row(grid, T("dlg.paragraph.after", "Aft&er:"), after, T("dlg.paragraph.at", "&At:"), at);
 		int cr = grid.RowCount++;
 		grid.Controls.Add(contextual, 0, cr);
 		grid.SetColumnSpan(contextual, 4);
 		spacingPage.Controls.Add(grid);
 
 		// Line and Page Breaks
-		var breaksPage = new TabPage("Line and Page Breaks") { Padding = new Padding(8), UseVisualStyleBackColor = !AppTheme.DarkWindows };
+		var breaksPage = new TabPage(T("dlg.paragraph.breaksPage", "Line and Page Breaks")) { Padding = new Padding(8), UseVisualStyleBackColor = !AppTheme.DarkWindows };
 		var grid2 = Grid();
-		Heading(grid2, "Pagination");
+		Heading(grid2, T("dlg.paragraph.pagination", "Pagination"));
 		foreach (var box in new[] { widow, keepNext, keepLines, pageBreak }) { int r = grid2.RowCount++; grid2.Controls.Add(box, 0, r); grid2.SetColumnSpan(box, 4); }
 		if (!forStyle) {
-			Heading(grid2, "Formatting exceptions");
+			Heading(grid2, T("dlg.paragraph.exceptions", "Formatting exceptions"));
 			int r = grid2.RowCount++;
 			grid2.Controls.Add(noNumber, 0, r);
 			grid2.SetColumnSpan(noNumber, 4);
 		}
 		var note = new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(400), 0), ForeColor = SystemColors.GrayText, Margin = new Padding(3, 12, 3, 3),
-			Text = "Printing, Print Preview, Export as PDF and Multiple Pages keep these; Word and LibreOffice get them in their files."
+			Text = T("dlg.paragraph.breaksNote", "Printing, Print Preview, Export as PDF and Multiple Pages keep these; Word and LibreOffice get them in their files.")
 		};
 		int nr = grid2.RowCount++;
 		grid2.Controls.Add(note, 0, nr);
@@ -574,7 +575,7 @@ sealed class ParagraphDialog : Form
 
 		var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, Dock = DockStyle.Fill };
 		layout.Controls.Add(tabsControl);
-		layout.Controls.Add(new Label { Text = "Preview", AutoSize = true, Margin = new Padding(3, 8, 3, 2) });
+		layout.Controls.Add(new Label { Text = T("dlg.paragraph.preview", "Preview"), AutoSize = true, Margin = new Padding(3, 8, 3, 2) });
 		layout.Controls.Add(preview);
 		layout.Controls.Add(error);
 		var buttons = new TableLayoutPanel { ColumnCount = 5, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 6, 0, 0) };
@@ -583,8 +584,8 @@ sealed class ParagraphDialog : Form
 		buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 		buttons.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 		buttons.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-		var tabsButton = Dialogs.Button(this, "&Tabs...");
-		var defaultButton = Dialogs.Button(this, "Set As &Default...");
+		var tabsButton = Dialogs.Button(this, T("dlg.paragraph.tabs", "&Tabs..."));
+		var defaultButton = Dialogs.Button(this, T("dlg.paragraph.setAsDefault", "Set As &Default..."));
 		var ok = Dialogs.Ok(this, closes: false);
 		var cancel = Dialogs.Cancel(this);
 		tabsButton.Click += (s, e) => TabsCommand();
@@ -664,7 +665,7 @@ sealed class ParagraphDialog : Form
 
 	bool Validate(out string message) {
 		message = "";
-		if (special.SelectedIndex > 0 && by.Points is not > 0) { message = "Give the first line's indent (By)."; return false; }
+		if (special.SelectedIndex > 0 && by.Points is not > 0) { message = T("dlg.paragraph.needBy", "Give the first line's indent (By)."); return false; }
 		return true;
 	}
 
@@ -703,11 +704,11 @@ sealed class ParagraphDialog : Form
 	// or for new documents too.
 	void DefaultCommand(string styleName) {
 		using var ask = new Form();
-		Dialogs.Setup(ask, "Set As Default");
+		Dialogs.Setup(ask, T("dlg.setAsDefault.title", "Set As Default"));
 		var layout = new TableLayoutPanel { ColumnCount = 1, AutoSize = true, Dock = DockStyle.Fill };
-		layout.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(380), 0), Text = $"Make these the paragraph settings of the style {styleName} (every paragraph with it changes, as when the style is modified):" });
-		var thisOnly = new RadioButton { Text = "&This document only", AutoSize = true, Checked = true, Margin = new Padding(12, 8, 3, 3) };
-		var all = new RadioButton { Text = "This document and &new documents (Save Styles as My Default)", AutoSize = true, Margin = new Padding(12, 3, 3, 3) };
+		layout.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(380), 0), Text = T("dlg.setAsDefault.text", "Make these the paragraph settings of the style {0} (every paragraph with it changes, as when the style is modified):", styleName) });
+		var thisOnly = new RadioButton { Text = T("dlg.setAsDefault.thisOnly", "&This document only"), AutoSize = true, Checked = true, Margin = new Padding(12, 8, 3, 3) };
+		var all = new RadioButton { Text = T("dlg.setAsDefault.newToo", "This document and &new documents (Save Styles as My Default)"), AutoSize = true, Margin = new Padding(12, 3, 3, 3) };
 		layout.Controls.Add(thisOnly);
 		layout.Controls.Add(all);
 		var row = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 10, 0, 0) };
@@ -742,7 +743,7 @@ sealed class ParagraphDialog : Form
 		try { sample = new Font(fontName, pointSize, GraphicsUnit.Pixel); } catch (ArgumentException) { sample = new Font("Segoe UI", pointSize, GraphicsUnit.Pixel); }
 		using (sample) {
 			float y = area.Top;
-			y = Paragraph(g, "Previous Paragraph ", 3, greyFont, grey, area, y, 0, 0, 0, 0, 1, scale) + 2;
+			y = Paragraph(g, T("dlg.paragraph.previousSample", "Previous Paragraph") + " ", 3, greyFont, grey, area, y, 0, 0, 0, 0, 1, scale) + 2;
 			var result = Result;
 			ParagraphFormat Effective() {
 				var f = original.Copy();
@@ -762,10 +763,10 @@ sealed class ParagraphDialog : Form
 			} catch (ArgumentException) { }
 			y += (shown.Before ?? 0) * scale;
 			using var ink = new SolidBrush(AppTheme.Ink);
-			y = Paragraph(g, "Sample Text ", 4, sample, ink, area, y, shown.Left ?? 0, shown.Right ?? 0, shown.FirstLine ?? 0,
+			y = Paragraph(g, T("dlg.paragraph.sample", "Sample Text") + " ", 4, sample, ink, area, y, shown.Left ?? 0, shown.Right ?? 0, shown.FirstLine ?? 0,
 				Array.IndexOf(Aligns, shown.Align ?? "left"), lineFactor, scale, exact);
 			y += (shown.After ?? 0) * scale + 2;
-			Paragraph(g, "Following Paragraph ", 4, greyFont, grey, area, y, 0, 0, 0, 0, 1, scale);
+			Paragraph(g, T("dlg.paragraph.followingSample", "Following Paragraph") + " ", 4, greyFont, grey, area, y, 0, 0, 0, 0, 1, scale);
 		}
 	}
 
@@ -807,8 +808,8 @@ sealed class TabsDialog : Form
 {
 	readonly MeasureBox position = new(true, 0, 1584), defaultStops = new(true, 1, 1584);
 	readonly ListBox list = new() { Width = 120, Height = 110, IntegralHeight = false };
-	readonly RadioButton[] alignments = ParagraphTab.Alignments.Select(a => new RadioButton { Text = Title(a), AutoSize = true, Margin = new Padding(3, 1, 3, 1) }).ToArray();
-	readonly RadioButton[] leaders = new[] { "none", "dots", "dashes", "underline" }.Select((l, i) => new RadioButton { Text = (i + 1) + " " + l switch { "none" => "None", "dots" => ".......", "dashes" => "-------", _ => "_______" }, Tag = l, AutoSize = true, Margin = new Padding(3, 1, 3, 1) }).ToArray();
+	readonly RadioButton[] alignments = ParagraphTab.Alignments.Select(a => new RadioButton { Text = AlignName(a), AutoSize = true, Margin = new Padding(3, 1, 3, 1) }).ToArray();
+	readonly RadioButton[] leaders = new[] { "none", "dots", "dashes", "underline" }.Select((l, i) => new RadioButton { Text = (i + 1) + " " + l switch { "none" => T("dlg.tabs.leaderNone", "None"), "dots" => ".......", "dashes" => "-------", _ => "_______" }, Tag = l, AutoSize = true, Margin = new Padding(3, 1, 3, 1) }).ToArray();
 	readonly Label error = new() { AutoSize = true, ForeColor = AppTheme.Warning };
 	List<ParagraphTab> stops;
 
@@ -816,13 +817,26 @@ sealed class TabsDialog : Form
 	public bool TabsChanged { get; private set; }
 	public float? DefaultTabStop => defaultStops.Points;
 
-	static string Title(string s) => char.ToUpperInvariant(s[0]) + s[1..];
+	static string AlignName(string a) => a switch {
+		"left" => T("dlg.tabs.left", "Left"),
+		"center" => T("dlg.tabs.center", "Center"),
+		"right" => T("dlg.tabs.right", "Right"),
+		"decimal" => T("dlg.tabs.decimal", "Decimal"),
+		"bar" => T("dlg.tabs.bar", "Bar"),
+		_ => a
+	};
+	static string LeaderName(string l) => l switch {
+		"dots" => T("dlg.tabs.dots", "dots"),
+		"dashes" => T("dlg.tabs.dashes", "dashes"),
+		"underline" => T("dlg.tabs.underline", "underline"),
+		_ => l
+	};
 	static string Show(float points) => (points / 72).ToString("0.##", CultureInfo.CurrentCulture) + "\"";
 
 	/// tabs: the paragraphs' tab stops (null: they differ: none shown, and setting any replaces theirs); defaultTab: points.
 	public TabsDialog(List<ParagraphTab>? tabs, float defaultTab) {
 		stops = tabs?.ToList() ?? new List<ParagraphTab>();
-		Dialogs.Setup(this, "Tabs");
+		Dialogs.Setup(this, T("dlg.tabs.title", "Tabs"));
 		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		AutoScaleMode = AutoScaleMode.Dpi;
 		defaultStops.Points = defaultTab;
@@ -840,28 +854,28 @@ sealed class TabsDialog : Form
 
 		var grid = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
 		var stopsColumn = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
-		stopsColumn.Controls.Add(new Label { Text = "&Tab stop position:", AutoSize = true });
+		stopsColumn.Controls.Add(new Label { Text = T("dlg.tabs.position", "&Tab stop position:"), AutoSize = true });
 		stopsColumn.Controls.Add(position);
 		stopsColumn.Controls.Add(list);
 		var defaultColumn = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Margin = new Padding(16, 3, 3, 3) };
-		defaultColumn.Controls.Add(new Label { Text = "De&fault tab stops:", AutoSize = true });
+		defaultColumn.Controls.Add(new Label { Text = T("dlg.tabs.defaultStops", "De&fault tab stops:"), AutoSize = true });
 		defaultColumn.Controls.Add(defaultStops);
-		defaultColumn.Controls.Add(new Label { Text = "(the whole document's)", AutoSize = true, ForeColor = SystemColors.GrayText });
+		defaultColumn.Controls.Add(new Label { Text = T("dlg.tabs.wholeDocument", "(the whole document's)"), AutoSize = true, ForeColor = SystemColors.GrayText });
 		grid.Controls.Add(stopsColumn, 0, 0);
 		grid.Controls.Add(defaultColumn, 1, 0);
-		var alignBox = new GroupBox { Text = "Alignment", AutoSize = true, Dock = DockStyle.Fill };
+		var alignBox = new GroupBox { Text = T("dlg.tabs.alignment", "Alignment"), AutoSize = true, Dock = DockStyle.Fill };
 		var alignFlow = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
 		alignFlow.Controls.AddRange(alignments);
 		alignBox.Controls.Add(alignFlow);
-		var leaderBox = new GroupBox { Text = "Leader", AutoSize = true, Dock = DockStyle.Fill };
+		var leaderBox = new GroupBox { Text = T("dlg.tabs.leader", "Leader"), AutoSize = true, Dock = DockStyle.Fill };
 		var leaderFlow = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
 		leaderFlow.Controls.AddRange(leaders);
 		leaderBox.Controls.Add(leaderFlow);
 		grid.Controls.Add(alignBox, 0, 1);
 		grid.Controls.Add(leaderBox, 1, 1);
-		var setButton = new Button { Text = "&Set", AutoSize = true };
-		var clearButton = new Button { Text = "Cl&ear", AutoSize = true };
-		var clearAllButton = new Button { Text = "Clear &All", AutoSize = true };
+		var setButton = new Button { Text = T("dlg.tabs.set", "&Set"), AutoSize = true };
+		var clearButton = new Button { Text = T("dlg.tabs.clear", "Cl&ear"), AutoSize = true };
+		var clearAllButton = new Button { Text = T("dlg.tabs.clearAll", "Clear &All"), AutoSize = true };
 		setButton.Click += (s, e) => SetStop();
 		clearButton.Click += (s, e) => ClearStop();
 		clearAllButton.Click += (s, e) => { stops.Clear(); TabsChanged = true; Fill(); };
@@ -892,11 +906,11 @@ sealed class TabsDialog : Form
 
 	void Fill() {
 		list.Items.Clear();
-		foreach (var tab in Tabs) list.Items.Add(Show(tab.Position) + (tab.Alignment == "left" ? "" : " " + tab.Alignment) + (tab.Leader == "none" ? "" : " " + tab.Leader));
+		foreach (var tab in Tabs) list.Items.Add(Show(tab.Position) + (tab.Alignment == "left" ? "" : " " + AlignName(tab.Alignment).ToLower(CultureInfo.CurrentCulture)) + (tab.Leader == "none" ? "" : " " + LeaderName(tab.Leader)));
 	}
 
 	void SetStop() {
-		if (position.Points is not float p) { error.Text = "Type the tab stop's position."; return; }
+		if (position.Points is not float p) { error.Text = T("dlg.tabs.needPosition", "Type the tab stop's position."); return; }
 		error.Text = "";
 		string alignment = ParagraphTab.Alignments[Math.Max(0, Array.FindIndex(alignments, r => r.Checked))];
 		string leader = (string)(leaders.FirstOrDefault(r => r.Checked)?.Tag ?? "none");

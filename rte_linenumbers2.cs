@@ -592,21 +592,23 @@ static class PrintedLineNumbers
 // Layout > Line Numbers > Line Numbering Options: Word's Line Numbers dialog.
 sealed class LineNumbersDialog : Form
 {
-	readonly CheckBox on = new() { Text = "&Add line numbering", AutoSize = true };
+	readonly CheckBox on = new() { Text = T("dlg.lineNumbers.on", "&Add line numbering"), AutoSize = true };
 	readonly NumericUpDown start = new() { Minimum = 1, Maximum = 32767, Width = 80 };
 	readonly NumericUpDown countBy = new() { Minimum = 1, Maximum = 100, Width = 80 };
 	readonly TextBox distance = new() { Width = 80 };
-	readonly RadioButton eachPage = new() { Text = "Restart each &page", AutoSize = true };
-	readonly RadioButton continuous = new() { Text = "&Continuous", AutoSize = true };
+	readonly RadioButton eachPage = new() { Text = T("dlg.lineNumbers.eachPage", "Restart each &page"), AutoSize = true };
+	readonly RadioButton continuous = new() { Text = T("dlg.lineNumbers.continuous", "&Continuous"), AutoSize = true };
 	readonly bool metric = RegionInfo.CurrentRegion.IsMetric;
+	readonly string auto = T("dlg.lineNumbers.auto", "Auto");    // (shown, and typed: Auto is too)
 
 	public LineNumbersDialog(LineNumbering numbering) {
-		Dialogs.Setup(this, "Line Numbers");
+		Dialogs.Setup(this, T("dlg.lineNumbers.title", "Line Numbers"));
 		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
+		Dialogs.FitWidth(distance, Font, new[] { auto, "0.88 cm" });    // (a language's longer Auto)
 		on.Checked = numbering.On;
 		start.Value = numbering.Start;
 		countBy.Value = numbering.CountBy;
-		distance.Text = numbering.Distance == 0 ? "Auto" : metric
+		distance.Text = numbering.Distance == 0 ? auto : metric
 			? (numbering.Distance * 2.54 / 1440).ToString("0.##", CultureInfo.CurrentCulture) + " cm"
 			: (numbering.Distance / 1440.0).ToString("0.##", CultureInfo.CurrentCulture) + " in";
 		(numbering.Mode == LineNumbering.Modes.EachPage ? eachPage : continuous).Checked = true;
@@ -616,18 +618,18 @@ sealed class LineNumbersDialog : Form
 		layout.Controls.Add(on);
 		var options = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Margin = new Padding(20, 3, 3, 3) };
 		void Option(string label, Control control) { options.Controls.Add(Label(label)); options.Controls.Add(control); }
-		Option("&Start at:", start);
-		Option("From &text:", distance);
-		Option("Count &by:", countBy);
-		options.Controls.Add(Label("Numbering:"));
+		Option(T("dlg.lineNumbers.startAt", "&Start at:"), start);
+		Option(T("dlg.lineNumbers.fromText", "From &text:"), distance);
+		Option(T("dlg.lineNumbers.countBy", "Count &by:"), countBy);
+		options.Controls.Add(Label(T("dlg.lineNumbers.numbering", "Numbering:")));
 		var modes = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
 		modes.Controls.AddRange(new Control[] { eachPage, continuous });
 		options.Controls.Add(modes);
 		layout.Controls.Add(options);
 		layout.Controls.Add(new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(360), 0), ForeColor = SystemColors.GrayText, Margin = new Padding(3, 8, 3, 3),
-			Text = "From text: Auto, or e.g. 0.3 in or 0.8 cm (for Word and LibreOffice). Count by 5 shows 5, 10, 15 ... "
-				+ "Lines in tables don't count. Saved with the document, and printed (also in Print Preview and PDF), numbered as the printed lines."
+			Text = T("dlg.lineNumbers.note", "From text: Auto, or e.g. 0.3 in or 0.8 cm (for Word and LibreOffice). Count by 5 shows 5, 10, 15 ... "
+				+ "Lines in tables don't count. Saved with the document, and printed (also in Print Preview and PDF), numbered as the printed lines.")
 		});
 		void Enable() => options.Enabled = on.Checked;
 		on.CheckedChanged += (s, e) => Enable();
@@ -642,7 +644,7 @@ sealed class LineNumbersDialog : Form
 		CancelButton = cancel;
 		FormClosing += (s, e) => {
 			if (DialogResult == DialogResult.OK && on.Checked && Distance() == null) {
-				MessageBox.Show(this, $"\"{distance.Text}\" is not a distance: use Auto, or e.g. 0.3 in, 0.8 cm or 20 pt.", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+				MessageBox.Show(this, T("msg.notADistance", "\"{0}\" is not a distance: use Auto, or e.g. 0.3 in, 0.8 cm or 20 pt.", distance.Text), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
 				e.Cancel = true;
 			}
 		};
@@ -653,7 +655,7 @@ sealed class LineNumbersDialog : Form
 	// Twips (0: automatic), or null if the text isn't a distance. A plain number is in the region's unit.
 	int? Distance() {
 		string text = distance.Text.Trim().ToLowerInvariant().Replace(" ", "").Replace(',', '.');
-		if (text is "" or "auto") return 0;
+		if (text is "" or "auto" || text == auto.ToLowerInvariant().Replace(" ", "")) return 0;
 		if (Regex.IsMatch(text, @"^[\d.]+$")) text += metric ? "cm" : "in";
 		return RtfTables.CssLength(text) is int twips && twips >= 0 && twips <= 31680 ? twips : null;
 	}
