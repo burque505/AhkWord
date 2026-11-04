@@ -312,14 +312,14 @@ sealed class SnippetsDialog : Form
 		if (!dlg.TextEdited) return true;
 		try { savePart(name, dlg.Rtf); return true; }
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
-			MessageBox.Show(this, $"The text couldn't be saved as the part \"{name}\": {ex.Message}", Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+			MessageBox.Show(this, T("msg.partNotSaved", "The text couldn't be saved as the part \"{0}\": {1}", name, ex.Message), Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
 			return false;
 		}
 	}
 
 	void RemoveSelected() {
 		if (Selected is not { } s) return;
-		if (MessageBox.Show(this, $"Remove the snippet \"{s.Abbreviation}\"? (Its part, {s.Part}, stays a part.)", Text, MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+		if (MessageBox.Show(this, T("msg.removeSnippet", "Remove the snippet \"{0}\"? (Its part, {1}, stays a part.)", s.Abbreviation, s.Part), Text, MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
 		snippets.Remove(s);
 		Save(null);
 	}

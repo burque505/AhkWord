@@ -15,7 +15,13 @@
 // Step 2: the interface's language (Lang). English is the strings as written; another language is a table,
 // lang\<code>.json beside the program, whose strings are shown instead (the ribbon's keyed "cmdPaste.LabelTitle"), and
 // whatever it lacks stays English.
+//
+// Step 4: the program's own strings (Tr): T("msg.saveChanges", "Save changes to {0}?", name) is the language's string
+// for that key, or the English written beside it. The English stays in the code, where it's read and edited; the key
+// keeps the translation when the English is reworded. lang\check_lang.ahk lists what a language lacks.
 
+global using static Tr;    // (T and TN in every file)
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -71,6 +77,61 @@ static class Lang
 			strings[p.Name] = p.Value.GetString()!;
 		}
 		return strings;
+	}
+}
+
+/// The program's strings in the interface's language (Lang), English when it has none.
+/// Keys by where the string shows: "msg." a message box, "status." the status bar, "menu." a context menu, "ui." the
+/// window's own texts, "dlg.<Dialog>." a dialog's. Key and English are written as literals, so that check_lang.cs can find
+/// them; a key is used with one English only. Formatting, with arguments: {0}, {1} ... as string.Format, in the user's
+/// culture; a translation whose placeholders don't fit its arguments shows the English.
+static class Tr
+{
+	/// key's string in the language, or english: as it is (braces too).
+	public static string T(string key, string english) => Lang.Get(key) ?? english;
+
+	/// key's string in the language, or english, formatted with args.
+	public static string T(string key, string english, params object?[] args) => Format(Lang.Get(key), english, args);
+
+	/// A count's string: key + ".one" for 1, key + ".other" for any other count (English's and Spanish's rule), formatted
+	/// with the count as {0} and args after it: TN("status.restyled", "{0} paragraph restyled.", "{0} paragraphs restyled.", n).
+	public static string TN(string key, string one, string other, int count, params object?[] args) {
+		bool single = count == 1;
+		return Format(Lang.Get(key + (single ? ".one" : ".other")), single ? one : other, args.Prepend(count).ToArray());
+	}
+
+	/// A shortcut as shown, its key names in the language: "Ctrl+Shift+Del" -> "Ctrl+Mayús+Supr". Only for showing: a
+	/// shortcut kept (settings, the macro API) stays as Keys or KeysConverter write it.
+	public static string TKeys(string shortcut) => string.Join("+", shortcut.Split('+').Select(part => part.Trim() switch {
+		"Shift" => T("key.Shift", "Shift"),
+		"Del" => T("key.Del", "Del"),
+		"Delete" => T("key.Delete", "Delete"),
+		"Ins" => T("key.Ins", "Ins"),
+		"Insert" => T("key.Insert", "Insert"),
+		"Enter" => T("key.Enter", "Enter"),
+		"Return" => T("key.Return", "Return"),
+		"Space" => T("key.Space", "Space"),
+		"Home" => T("key.Home", "Home"),
+		"End" => T("key.End", "End"),
+		"PgUp" => T("key.PgUp", "PgUp"),
+		"PageUp" => T("key.PageUp", "PageUp"),
+		"PgDn" => T("key.PgDn", "PgDn"),
+		"PageDown" => T("key.PageDown", "PageDown"),
+		"Next" => T("key.Next", "Next"),
+		"Back" => T("key.Back", "Back"),
+		"Backspace" => T("key.Backspace", "Backspace"),
+		"Up" => T("key.Up", "Up"),
+		"Down" => T("key.Down", "Down"),
+		"Left" => T("key.Left", "Left"),
+		"Right" => T("key.Right", "Right"),
+		_ => part,
+	}));
+
+	static string Format(string? translated, string english, object?[] args) {
+		if (translated != null)
+			try { return string.Format(CultureInfo.CurrentCulture, translated, args); }
+			catch (FormatException) { }    // (a placeholder it shouldn't have: check_lang.cs reports it)
+		return string.Format(CultureInfo.CurrentCulture, english, args);
 	}
 }
 

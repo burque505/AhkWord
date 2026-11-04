@@ -595,7 +595,9 @@ using RibbonLib.Interop;
 Application.EnableVisualStyles();
 AppFolders.ProgramFolder = args.Length > 1 ? args[1] : Environment.CurrentDirectory;    // (portable mode: before the settings)
 AppFolders.HostScript = args.Length > 3 && args[3] != "" ? args[3] : null;    // (AhkWord.ahk: New Window starts it again)
-AppTheme.Named(Settings.Load().Theme).SetColorMode();    // (before anything of WinForms is made: see SetColorMode)
+var startSettings = Settings.Load();
+AppTheme.Named(startSettings.Theme).SetColorMode();    // (before anything of WinForms is made: see SetColorMode)
+Lang.Load(AppFolders.ProgramFolder, startSettings.Language);    // (AhkWord-es: before any string is made: T, rte_strings.cs)
 using var form = new WriterForm(
 	args.Length > 0 ? args[0] : "",
 	args.Length > 1 ? args[1] : Environment.CurrentDirectory,
@@ -761,11 +763,11 @@ class WriterForm : Form
 
 	// Iteration 6: macro recording and hotkeys
 	readonly MacroRecorder recorder = new();
-	readonly ToolStripStatusLabel recordingLabel = new() { ForeColor = AppTheme.Warning, Visible = false, IsLink = false, ToolTipText = "Recording a macro - click to stop" };
+	readonly ToolStripStatusLabel recordingLabel = new() { ForeColor = AppTheme.Warning, Visible = false, IsLink = false, ToolTipText = T("ui.recordingTip", "Recording a macro - click to stop") };
 	readonly SplitContainer outlineSplit = new() { Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1 };
 	readonly TreeView outlineTree = new() { Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, HideSelection = false, FullRowSelect = true, ShowLines = false, ShowPlusMinus = true };
 	readonly Label outlineHint = new() { Dock = DockStyle.Fill, ForeColor = SystemColors.GrayText, Padding = new Padding(6), Visible = false,
-		Text = "No headings yet.\n\nGive paragraphs a heading style (Home > Styles, Ctrl+1 to Ctrl+6) and they appear here." };
+		Text = T("ui.outlineEmpty", "No headings yet.\n\nGive paragraphs a heading style (Home > Styles, Ctrl+1 to Ctrl+6) and they appear here.") };
 	readonly System.Windows.Forms.Timer outlineTimer = new() { Interval = 400 };
 	List<(int Level, int Start, string Text)> outline = new();
 	bool updatingOutline, outlineBuilt;
@@ -867,7 +869,7 @@ class WriterForm : Form
 		};
 		bandTimer.Tick += (s, e) => UpdateBands();
 		bandTimer.Start();
-		var outlineTitle = new Label { Text = "Outline", Dock = DockStyle.Top, Height = LogicalToDeviceUnits(26), Padding = new Padding(6, 6, 0, 0),
+		var outlineTitle = new Label { Text = T("ui.outline", "Outline"), Dock = DockStyle.Top, Height = LogicalToDeviceUnits(26), Padding = new Padding(6, 6, 0, 0),
 			Font = new Font(Font, FontStyle.Bold), ForeColor = SystemColors.GrayText };
 		outlineSplit.Panel1.BackColor = outlineTree.BackColor = outlineHint.BackColor = SystemColors.Control;
 		outlineSplit.Panel1.Controls.Add(outlineTree);
@@ -912,8 +914,8 @@ class WriterForm : Form
 		// Automation: in-process (AppContext) and cross-process (hidden window) entry points.
 		AppContext.SetData("rte.dispatch", (Func<string[], string>)DispatchFromAutomation);
 		server = new AutomationServer(DispatchFromAutomation);
-		automationLabel.Text = "Automation: ready";
-		automationLabel.ToolTipText = $"AHK scripts can control this editor (RteClient2.ahk). Server window 0x{server.Handle.ToInt64():X}";
+		automationLabel.Text = T("ui.automationReady", "Automation: ready");
+		automationLabel.ToolTipText = T("ui.automationTip", "AHK scripts can control this editor (RteClient2.ahk). Server window 0x{0:X}", server.Handle.ToInt64());
 
 		Editor.SelectionChanged += (s, e) => {
 			if (pageGaps.Applied && !quietGaps) pageGaps.TypingFormat();    // (typed in a raised line: raised as it is)
@@ -956,7 +958,7 @@ class WriterForm : Form
 		};
 		Editor.MouseDown += (s, e) => {
 			if (recorder.Recording && e.Button == MouseButtons.Left && painting == Painting.Off)
-				SetStatus("Mouse clicks are not recorded: move with the keyboard (arrows, Home/End, Ctrl to jump, Shift to select).");
+				SetStatus(T("status.mouseNotRecorded", "Mouse clicks are not recorded: move with the keyboard (arrows, Home/End, Ctrl to jump, Shift to select)."));
 		};
 		Editor.MouseUp += (s, e) => { if (painting != Painting.Off && e.Button == MouseButtons.Left && ModifierKeys != Keys.Control) PaintSelection(); };
 		outlineTimer.Tick += (s, e) => { outlineTimer.Stop(); RefreshOutline(); };
@@ -1003,7 +1005,7 @@ class WriterForm : Form
 			UpdateWordCount();
 			UpdateRecentItems();
 			if (Enum.TryParse<SourceKind>(Settings.SourceView, out var lastView) && lastView != SourceKind.None) SetView(lastView, Settings.SideBySide);
-			SetStatus(startFile != null ? "" : "New document. Press Alt for the ribbon's KeyTips. View > Document View edits it as Markdown or HTML; the Tools tab runs AHK macros.");
+			SetStatus(startFile != null ? "" : T("status.newDocument", "New document. Press Alt for the ribbon's KeyTips. View > Document View edits it as Markdown or HTML; the Tools tab runs AHK macros."));
 			autosaveTimer.Tick += (s, e) => Autosave();
 			StartAutosave();
 			BeginInvoke(() => {
@@ -1056,7 +1058,7 @@ class WriterForm : Form
 		Button(RibbonCommand.Close, CloseDocumentCommand, Keys.Control | Keys.W);
 		Button(RibbonCommand.NewFromTemplate, NewFromTemplateCommand);
 		Button(RibbonCommand.StartPage, () => ShowStart(true));
-		Button(RibbonCommand.NewWindow, () => { StartWindow(null); SetStatus("Opening a new AhkWord window..."); });
+		Button(RibbonCommand.NewWindow, () => { StartWindow(null); SetStatus(T("status.openingNewWindow", "Opening a new AhkWord window...")); });
 		Button(RibbonCommand.OpenInNewWindow, OpenInNewWindowDialog);
 		Button(RibbonCommand.InsertFromTemplate, InsertTemplateCommand);
 		Button(RibbonCommand.FillInFields, FillFieldsCommand);
@@ -1138,8 +1140,8 @@ class WriterForm : Form
 		Button(RibbonCommand.ContinueNumbering, () => api.ContinueNumbering(), Keys.None, M("ContinueNumbering"));
 		Button(RibbonCommand.ConvertTyped, () => {
 			int count = api.ConvertTypedNumbers();
-			SetStatus(count == 0 ? "No typed list numbers found (paragraphs that start with \"1.\", \"a)\", \"(i)\", \"•\" ... and a tab or space, two or more in a row)."
-				: $"{count} paragraph{(count == 1 ? "" : "s")} became list items.");
+			SetStatus(count == 0 ? T("status.noTypedNumbers", "No typed list numbers found (paragraphs that start with \"1.\", \"a)\", \"(i)\", \"•\" ... and a tab or space, two or more in a row).")
+				: TN("status.becameListItems", "{0} paragraph became list items.", "{0} paragraphs became list items.", count));
 		}, Keys.None, M("ConvertTypedNumbers"));
 		Button(RibbonCommand.IndentParagraph, () => Editor.Indent(), Keys.Control | Keys.M, M("Indent"));
 		Button(RibbonCommand.OutdentParagraph, () => Editor.Outdent(), Keys.Control | Keys.Shift | Keys.M, M("Outdent"));
@@ -1155,7 +1157,7 @@ class WriterForm : Form
 				LeaveOverlays();
 				if (SourceActive) {
 					if (SourceBlockOf(name) is BlockStyle block) RunSource(() => SourceBlockStyle(block));
-					else SetStatus($"The {name} style works in the Rich Text view (View > Rich Text); Markdown and HTML have headings, normal text and code.");
+					else SetStatus(T("status.styleRichTextOnly", "The {0} style works in the Rich Text view (View > Rich Text); Markdown and HTML have headings, normal text and code.", name));
 					return;
 				}
 				Run(() => api.SetStyle(name), M("SetStyle", name));
@@ -1177,9 +1179,9 @@ class WriterForm : Form
 		Toggle(RibbonCommand.FormatPainter, FormatPainterCommand);
 		foreach (var (id, set) in new[] { (RibbonCommand.StyleSetClassic, "Classic"), (RibbonCommand.StyleSetPlain, "Plain"), (RibbonCommand.StyleSetModern, "Modern") })
 			Toggle(id, () => { api.StyleSet = set; Record(M("StyleSet", set)); });
-		Button(RibbonCommand.ApplyMyStyles, () => { int count = api.ApplyMyStyles(); Record(M("ApplyMyStyles")); SetStatus($"Your styles are this document's now ({count} paragraph{(count == 1 ? "" : "s")} restyled; formatting of their own stayed)."); });
+		Button(RibbonCommand.ApplyMyStyles, () => { int count = api.ApplyMyStyles(); Record(M("ApplyMyStyles")); SetStatus(TN("status.myStylesApplied", "Your styles are this document's now ({0} paragraph restyled; formatting of their own stayed).", "Your styles are this document's now ({0} paragraphs restyled; formatting of their own stayed).", count)); });
 		Button(RibbonCommand.CopyStyles, CopyStylesCommand);
-		Button(RibbonCommand.SaveStyles, () => { api.SaveStylesAsDefault(); SetStatus("New documents get these styles now (Styles > Classic, Plain or Modern, then this, to change them again)."); });
+		Button(RibbonCommand.SaveStyles, () => { api.SaveStylesAsDefault(); SetStatus(T("status.stylesSaved", "New documents get these styles now (Styles > Classic, Plain or Modern, then this, to change them again).")); });
 
 		// Insert
 		Button(RibbonCommand.PageBreak, () => api.InsertPageBreak(), Keys.None, M("InsertPageBreak"));    // Ctrl+Enter: ProcessCmdKey
@@ -1210,7 +1212,7 @@ class WriterForm : Form
 			string word = Editor.SelectedText.Trim();
 			if (word == "" || word.Any(char.IsWhiteSpace)) throw new InvalidOperationException("Select a single word first.");
 			api.AddToDictionary(word);
-			SetStatus($"\"{word}\" was added to the Windows dictionary.");
+			SetStatus(T("status.addedToDictionary", "\"{0}\" was added to the Windows dictionary.", word));
 		});
 		Check(RibbonCommand.SpellCheck, () => Editor.EnableSpellCheck = !Editor.EnableSpellCheck);
 
@@ -1289,7 +1291,7 @@ class WriterForm : Form
 		};
 
 		// (AhkWord-es: the ribbon is compiled without its strings, which every command is given here, in the language of
-		// the setting Language (or AHKWORD_LANG); rte_strings.cs)
+		// the setting Language (or AHKWORD_LANG); rte_strings.cs. Loaded at the start already: this only when it wasn't)
 		Lang.Load(appDir, Settings.Language);
 		RibbonStrings.Give(ribbon, Path.Combine(appDir, "ribbon"));
 	}
@@ -1335,16 +1337,16 @@ class WriterForm : Form
 		painterClicked = now;
 		if (painting == Painting.Once && twice) {
 			painting = Painting.Sticky;
-			SetStatus("Format Painter stays on: select text to paint it; Esc or a click on Format Painter stops.");
+			SetStatus(T("status.painterStays", "Format Painter stays on: select text to paint it; Esc or a click on Format Painter stops."));
 		} else if (painting != Painting.Off) {
 			StopPainting();
-			SetStatus("Format Painter off.");
+			SetStatus(T("status.painterOff", "Format Painter off."));
 		} else {
 			api.CopyFormatting();
 			Record(M("CopyFormatting"));
 			painting = Painting.Once;
 			Editor.PaintCursor = PaintCursor.Value;
-			SetStatus("Select the text to give this formatting (a click: the word there). Click Format Painter twice to keep painting; Esc stops.");
+			SetStatus(T("status.painterSelect", "Select the text to give this formatting (a click: the word there). Click Format Painter twice to keep painting; Esc stops."));
 		}
 		toggleButtons[RibbonCommand.FormatPainter].BooleanValue = painting != Painting.Off;    // (the ribbon flips it on each click)
 		Editor.Focus();
@@ -1500,7 +1502,7 @@ class WriterForm : Form
 		if (!ribbon.Initialized) return;
 		ShowThemeChosen();
 		if (RibbonFile == ribbonLoaded) PaintTheme();
-		else SetStatus($"The {Settings.Theme} theme starts with the next AhkWord window: File > New Window, or the next time AhkWord starts.");
+		else SetStatus(T("status.themeNextWindow", "The {0} theme starts with the next AhkWord window: File > New Window, or the next time AhkWord starts.", Settings.Theme));
 	}
 
 	// ---- The command palette (iteration 57, rte_palette.cs)
@@ -1614,7 +1616,7 @@ class WriterForm : Form
 		if (StartShown && id != RibbonCommand.StartPage) ShowStart(false);
 		if (SourceActive && !SourceDocumentCommands.Contains(id)) {
 			if (sourceCommands.TryGetValue(id, out var markup)) RunSource(markup);
-			else { SetStatus($"{CommandName(id)} works in the Rich Text view (View > Rich Text)."); UpdateUi(); }
+			else { SetStatus(T("status.richTextOnly", "{0} works in the Rich Text view (View > Rich Text).", CommandName(id))); UpdateUi(); }
 			return;
 		}
 		Run(action, macro);
@@ -1637,8 +1639,8 @@ class WriterForm : Form
 		_ => "Heading " + (int)style
 	};
 
-	void ShowAbout() => MessageBox.Show(this, $"{AppName} (iteration {Iteration})\n\n{api.Version}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{OfficeConverters.Describe()}",
-		AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+	void ShowAbout() => MessageBox.Show(this, T("msg.about", "{0} (iteration {1})\n\n{2}\n\nA word processor built on RichEditorNET, hosted in AutoHotkey with Csharp-in-AHK. The ribbon is the Windows Ribbon, through WindowsRibbon.\n\nConverters for .docx and .odt:\n{3}",
+		AppName, Iteration, api.Version, OfficeConverters.Describe()), AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
 	// Applies what the user changed in the font control (the ribbon lists only those). Colors come with a type:
 	// "Automatic" text color and "No Color" highlight are not RGB values (the color itself then reads as black).
@@ -1701,7 +1703,7 @@ class WriterForm : Form
 	void FillMacrosGallery(bool force = false) {
 		if (macrosGallery == null || !ribbon.Initialized || macrosGallery.ItemsSource is not { } items) return;
 		var files = Directory.Exists(MacrosDir) ? Directory.GetFiles(MacrosDir, "*.ahk").OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList() : new List<string>();
-		var labels = files.Select(f => Path.GetFileNameWithoutExtension(f) + (HotkeyOf(Path.GetFileName(f)) is Keys keys ? $"    ({HotkeyBox.Describe(keys)})" : "")).ToList();
+		var labels = files.Select(f => Path.GetFileNameWithoutExtension(f) + (HotkeyOf(Path.GetFileName(f)) is Keys keys ? $"    ({TKeys(HotkeyBox.Describe(keys))})" : "")).ToList();
 		if (!force && files.SequenceEqual(galleryMacros) && labels.SequenceEqual(galleryLabels)) return;
 		(galleryMacros, galleryLabels) = (files, labels);
 		items.Clear();
@@ -1913,7 +1915,7 @@ class WriterForm : Form
 			recovery.Write(api.RecoveryRtf(), FileName, DocumentName);
 			autosaveFailed = false;
 		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
-			if (!autosaveFailed) SetStatus("⚠ The recovery copy could not be written: " + ex.Message);
+			if (!autosaveFailed) SetStatus("⚠ " + T("status.recoveryNotWritten", "The recovery copy could not be written: {0}", ex.Message));
 			autosaveFailed = true;
 		}
 	}
@@ -1930,14 +1932,14 @@ class WriterForm : Form
 		try { orphans = Recovery.Orphans(recovery.Folder); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
 		if (orphans.Count == 0) return false;
 		var newest = orphans[0];
-		string when = $"{newest.Info.Saved.ToShortTimeString()} on {newest.Info.Saved.ToShortDateString()}";
+		string when = T("ui.timeOnDate", "{0} on {1}", newest.Info.Saved.ToShortTimeString(), newest.Info.Saved.ToShortDateString());
 		if (startedWithFile) {
-			SetStatus($"AhkWord didn't close normally last time: start it without a file to recover \"{newest.Info.Name}\" (autosaved at {when}).");
+			SetStatus(T("status.recoverLater", "AhkWord didn't close normally last time: start it without a file to recover \"{0}\" (autosaved at {1}).", newest.Info.Name, when));
 			return false;
 		}
-		string more = orphans.Count > 1 ? $"\n\n({orphans.Count - 1} more recovery cop{(orphans.Count == 2 ? "y is" : "ies are")} offered at the next start.)" : "";
-		var answer = MessageBox.Show(this, $"AhkWord didn't close normally last time. It had autosaved \"{newest.Info.Name}\" at {when}.\n\n"
-			+ "Yes: recover it (then save it to keep it).\nNo: discard the recovery copy.\nCancel: decide at the next start." + more,
+		string more = orphans.Count > 1 ? "\n\n" + TN("msg.recoverMore", "({0} more recovery copy is offered at the next start.)", "({0} more recovery copies are offered at the next start.)", orphans.Count - 1) : "";
+		var answer = MessageBox.Show(this, T("msg.recover", "AhkWord didn't close normally last time. It had autosaved \"{0}\" at {1}.\n\n"
+			+ "Yes: recover it (then save it to keep it).\nNo: discard the recovery copy.\nCancel: decide at the next start.", newest.Info.Name, when) + more,
 			AppName, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
 		if (answer == DialogResult.Yes) { Recover(newest); return true; }
 		if (answer == DialogResult.No) Recovery.Discard(newest);
@@ -1949,13 +1951,13 @@ class WriterForm : Form
 		try {
 			api.Recover(Recovery.Read(orphan), orphan.Info.FileName);
 		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
-			MessageBox.Show(this, "The recovery copy could not be read: " + ex.Message, AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+			MessageBox.Show(this, T("msg.recoveryUnreadable", "The recovery copy could not be read: {0}", ex.Message), AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
 			return;
 		}
 		Recovery.Discard(orphan);
 		Autosave();    // (a copy of its own at once)
-		string file = orphan.Info.FileName is { Length: > 0 } f ? $" Save replaces {Path.GetFileName(f)}; Save As keeps both." : " Save it to keep it.";
-		SetStatus($"Recovered \"{orphan.Info.Name}\" as autosaved at {orphan.Info.Saved.ToShortTimeString()}.{file}");
+		string file = orphan.Info.FileName is { Length: > 0 } f ? " " + T("status.recoveredHasFile", "Save replaces {0}; Save As keeps both.", Path.GetFileName(f)) : " " + T("status.recoveredNoFile", "Save it to keep it.");
+		SetStatus(T("status.recovered", "Recovered \"{0}\" as autosaved at {1}.", orphan.Info.Name, orphan.Info.Saved.ToShortTimeString()) + file);
 	}
 
 	// ---- Templates and the start page (iteration 30)
@@ -2000,7 +2002,7 @@ class WriterForm : Form
 			startPage.TemplatesFolderChosen += () => Run(() => {
 				Directory.CreateDirectory(OwnTemplatesFolder);
 				System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(OwnTemplatesFolder) { UseShellExecute = true });
-				SetStatus("Your templates folder: put documents there (with {{Field}} fields if you like) to use them as templates.");
+				SetStatus(T("status.templatesFolder", "Your templates folder: put documents there (with {{Field}} fields if you like) to use them as templates."));
 			});
 			startPage.ShowAtStartChanged += on => { Settings.ShowStartPage = on; Settings.Save(); };
 			sourceSplit.Parent!.Controls.Add(startPage);
@@ -2029,7 +2031,7 @@ class WriterForm : Form
 		Editor.ClearUndo();
 		Editor.Select(0, 0);
 		Editor.Modified = filled > 0;
-		SetStatus($"New document from the {template.Name} template" + (filled > 0 ? $" ({filled} field{(filled == 1 ? "" : "s")} filled in)." : "."));
+		SetStatus(T("status.newFromTemplate", "New document from the {0} template", template.Name) + (filled > 0 ? " " + TN("status.fieldsFilledIn", "({0} field filled in).", "({0} fields filled in).", filled) : "."));
 		return true;
 	}
 
@@ -2077,7 +2079,7 @@ class WriterForm : Form
 		using var font = new Font(Styles.Normal.Font, Styles.Normal.Size);
 		using var dlg = new SnippetsDialog(SnippetList(), TemplateList, selection, LoadPart, SavePart, font);
 		dlg.Changed += list => Snippets.Save(SnippetsFile, list);
-		dlg.Export += path => Run(() => SetStatus("The snippets were exported to " + api.ExportSnippets(path) + ". Run it with AutoHotkey v2 to have them in any program."));
+		dlg.Export += path => Run(() => SetStatus(T("status.snippetsExported", "The snippets were exported to {0}. Run it with AutoHotkey v2 to have them in any program.", api.ExportSnippets(path))));
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		if (dlg.ToInsert is { } insert) {
 			string abbreviation = insert.Abbreviation;
@@ -2104,7 +2106,7 @@ class WriterForm : Form
 	/// (target: "rich" or "source", the document or the source view, whichever has the focus or not: tests.)
 	internal void FireSnippet(string abbreviation, string ending, string? target = null) {
 		if (SnippetList().FirstOrDefault(s => string.Equals(s.Abbreviation, abbreviation, s.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)) is not { } snippet) return;
-		if (SnippetPart(snippet) is not { } part) { SetStatus($"⚠ The snippet \"{abbreviation}\" inserts the part {snippet.Part}, which isn't in the templates' Parts folders any more."); return; }
+		if (SnippetPart(snippet) is not { } part) { SetStatus("⚠ " + T("status.snippetPartGone", "The snippet \"{0}\" inserts the part {1}, which isn't in the templates' Parts folders any more.", abbreviation, snippet.Part)); return; }
 		bool source = target == "source" || target == null && view != SourceKind.None && sourceBox.Focused;
 		if (target == null && !source && !Editor.Focused) return;
 		int tries = 0;
@@ -2210,7 +2212,8 @@ class WriterForm : Form
 			doc.EndEditCollection();
 		}
 		if (asSection) BandsChangedNow();
-		SetStatus($"Inserted the {template.Name} template" + (asSection ? " as a new section" : "") + (filled > 0 ? $" ({filled} field{(filled == 1 ? "" : "s")} filled in)." : "."));
+		SetStatus((asSection ? T("status.insertedTemplateSection", "Inserted the {0} template as a new section", template.Name) : T("status.insertedTemplate", "Inserted the {0} template", template.Name))
+			+ (filled > 0 ? " " + TN("status.fieldsFilledIn", "({0} field filled in).", "({0} fields filled in).", filled) : "."));
 		return filled;
 	}
 
@@ -2220,11 +2223,13 @@ class WriterForm : Form
 		bool rendered = RenderDocument(ask: true);    // (iteration 62: an extension's template language first)
 		if (Templates.Fields(FieldText()).Count == 0) {
 			bool bands = FillBands(_ => null) > 0;    // (an extension's language in the header or footer)
-			SetStatus(rendered || bands ? "The template was filled in." : "There are no {{fields}} to fill in in this document (fields are written {{Name}} or {{Name|default}}).");
+			SetStatus(rendered || bands ? T("status.templateFilled", "The template was filled in.") : T("status.noFields", "There are no {{fields}} to fill in in this document (fields are written {{Name}} or {{Name|default}})."));
 			return;
 		}
 		int filled = FillFields(null, ask: true, rendered: true);
-		SetStatus((rendered ? "The template was filled in; " : "") + (filled > 0 ? $"{filled} field{(filled == 1 ? "" : "s")} filled in." : "no fields were filled in."));
+		SetStatus(rendered
+			? (filled > 0 ? TN("status.templateFilledFields", "The template was filled in; {0} field filled in.", "The template was filled in; {0} fields filled in.", filled) : T("status.templateFilledNoFields", "The template was filled in; no fields were filled in."))
+			: (filled > 0 ? TN("status.fieldsFilled", "{0} field filled in.", "{0} fields filled in.", filled) : T("status.noFieldsFilled", "no fields were filled in.")));
 	}
 
 	/// Fills in the document's fields (one undo step): values given, then (ask) the dialog, or the values typed last time;
@@ -2534,7 +2539,7 @@ class WriterForm : Form
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		int count = ChangeStyle(style, dlg.Result);
 		Record(M("ModifyStyle", style.Name, StyleSettings(dlg.Result)));
-		SetStatus($"The {dlg.Result.Name} style changed ({count} paragraph{(count == 1 ? "" : "s")}). Styles > Save Styles as My Default keeps it for new documents.");
+		SetStatus(TN("status.styleChanged", "The {1} style changed ({0} paragraph). Styles > Save Styles as My Default keeps it for new documents.", "The {1} style changed ({0} paragraphs). Styles > Save Styles as My Default keeps it for new documents.", count, dlg.Result.Name));
 	}
 
 	// Home > Styles > New Style: from the caret paragraph, which gets it.
@@ -2547,22 +2552,22 @@ class WriterForm : Form
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		api.NewStyle(dlg.Result.Name, StyleSettings(dlg.Result));
 		Record(M("NewStyle", dlg.Result.Name, StyleSettings(dlg.Result)));
-		SetStatus($"New style {dlg.Result.Name}, given to the paragraph{(StyleEngine.Paragraphs(doc, doc.Selection2.Start, doc.Selection2.End).Count == 1 ? "" : "s")} at the caret.");
+		SetStatus(TN("status.newStyle", "New style {1}, given to the paragraph at the caret.", "New style {1}, given to the paragraphs at the caret.", StyleEngine.Paragraphs(doc, doc.Selection2.Start, doc.Selection2.End).Count, dlg.Result.Name));
 	}
 
 	// Home > Styles > Update Style to Match: the caret paragraph's style becomes like it.
 	void UpdateStyleCommand() {
 		string name = api.UpdateStyleToMatch();
 		Record(M("UpdateStyleToMatch"));
-		SetStatus($"The {name} style now looks like the paragraph at the caret, and so do its other paragraphs.");
+		SetStatus(T("status.styleFromParagraph", "The {0} style now looks like the paragraph at the caret, and so do its other paragraphs.", name));
 	}
 
 	// Home > Styles > Delete Style: the caret paragraph's style, if it is one of the user's.
 	void DeleteStyleCommand() {
 		string name = CaretStyleName();
-		if (name == "" || Styles.Find(name) is not { } style) { SetStatus("Put the caret in a paragraph with the style to delete."); return; }
-		if (StyleSets.Get("Classic").Find(name) != null) { SetStatus($"{name} is one of the usual styles, which stay (Modify Style changes it)."); return; }
-		if (MessageBox.Show(this, $"Delete the {name} style? Its paragraphs become Normal.", AppName, MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+		if (name == "" || Styles.Find(name) is not { } style) { SetStatus(T("status.deleteStyleCaret", "Put the caret in a paragraph with the style to delete.")); return; }
+		if (StyleSets.Get("Classic").Find(name) != null) { SetStatus(T("status.usualStyle", "{0} is one of the usual styles, which stay (Modify Style changes it).", name)); return; }
+		if (MessageBox.Show(this, T("msg.deleteStyle", "Delete the {0} style? Its paragraphs become Normal.", name), AppName, MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
 		api.DeleteStyle(name);
 		Record(M("DeleteStyle", name));
 	}
@@ -2598,7 +2603,7 @@ class WriterForm : Form
 		using var dlg = new OpenFileDialog { Title = "Open in New Window", Filter = Filter(OpenTypes), InitialDirectory = StartFolder };
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		StartWindow(dlg.FileName);
-		SetStatus("Opening " + Path.GetFileName(dlg.FileName) + " in a new window...");
+		SetStatus(T("status.openingInNewWindow", "Opening {0} in a new window...", Path.GetFileName(dlg.FileName)));
 	}
 
 	/// A window's place a step down and to the right of bounds, back at the top left of the working area once it would
@@ -2614,16 +2619,16 @@ class WriterForm : Form
 		string name = DocumentName;
 		if (!ConfirmDiscard()) return;
 		api.Close();
-		SetStatus($"Closed {name}.");
+		SetStatus(T("status.closed", "Closed {0}.", name));
 	}
 
 	bool ConfirmDiscard() {
 		if (!Editor.Modified) return true;
-		var answer = MessageBox.Show(this, $"Save changes to {DocumentName}?", AppName, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+		var answer = MessageBox.Show(this, T("msg.saveChanges", "Save changes to {0}?", DocumentName), AppName, MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
 		return answer == DialogResult.No || (answer == DialogResult.Yes && SaveCommand());
 	}
 
-	string DocumentName => FileName != null ? Path.GetFileName(FileName) : "Untitled";
+	string DocumentName => FileName != null ? Path.GetFileName(FileName) : T("ui.untitled", "Untitled");
 
 	// File types for the Open, Save As and Export dialogs. Word and OpenDocument have one entry per converter as well as
 	// the automatic one (Via ""), so that a particular converter can be chosen.
@@ -2675,7 +2680,7 @@ class WriterForm : Form
 			Cursor = Cursors.WaitCursor;
 			try { api.Open(dlg.FileName, ViaOf(OpenTypes, dlg.FilterIndex)); }
 			finally { Cursor = Cursors.Default; }
-			SetStatus("Opened " + dlg.FileName + (api.LastConverter != "" ? " (converted by " + api.LastConverter + ")" : "") + api.OpenNotice());
+			SetStatus(T("status.opened", "Opened {0}", dlg.FileName) + (api.LastConverter != "" ? " " + T("status.convertedBy", "(converted by {0})", api.LastConverter) : "") + api.OpenNotice());
 		}
 	}
 
@@ -2683,7 +2688,7 @@ class WriterForm : Form
 		if (FileName == null) return SaveAsDialog();
 		try {
 			api.Save();
-			SetStatus("Saved " + FileName);
+			SetStatus(T("status.saved", "Saved {0}", FileName));
 			return true;
 		} catch (Exception ex) {
 			MessageBox.Show(this, ex.Message, AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -2701,7 +2706,7 @@ class WriterForm : Form
 		Cursor = Cursors.WaitCursor;
 		try {
 			api.SaveAs(dlg.FileName, ViaOf(SaveTypes, dlg.FilterIndex));
-			SetStatus("Saved " + dlg.FileName + (api.LastConverter != "" ? " (converted by " + api.LastConverter + ")" : ""));
+			SetStatus(T("status.saved", "Saved {0}", dlg.FileName) + (api.LastConverter != "" ? " " + T("status.convertedBy", "(converted by {0})", api.LastConverter) : ""));
 			return true;
 		} catch (Exception ex) {
 			MessageBox.Show(this, ex.Message, AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -2765,7 +2770,7 @@ class WriterForm : Form
 		}
 		if (!ConfirmDiscard()) return;
 		api.Open(path);
-		SetStatus("Opened " + path + api.OpenNotice());
+		SetStatus(T("status.opened", "Opened {0}", path) + api.OpenNotice());
 	}
 
 	// ---------------------------------------------------------------- Iteration 3: drag and drop
@@ -2791,7 +2796,7 @@ class WriterForm : Form
 			if (files.FirstOrDefault(IsDocument) is { } document) {
 				if (!ConfirmDiscard()) return;
 				api.Open(document);
-				SetStatus("Opened " + document + api.OpenNotice());
+				SetStatus(T("status.opened", "Opened {0}", document) + api.OpenNotice());
 				return;
 			}
 			if (screenPoint is { } point) Editor.Select(Editor.GetCharIndexFromPosition(Editor.PointToClient(point)), 0);
@@ -2800,7 +2805,7 @@ class WriterForm : Form
 				api.InsertImageFile(image, Path.GetFileNameWithoutExtension(image));
 				count++;
 			}
-			SetStatus($"Inserted {count} image{(count == 1 ? "" : "s")}.");
+			SetStatus(TN("status.insertedImages", "Inserted {0} image.", "Inserted {0} images.", count));
 		}));
 	}
 
@@ -3433,8 +3438,8 @@ class WriterForm : Form
 	void UpdateReferencesCommand() {
 		bool contents = Toc.Any(Editor.Text);
 		int changed = UpdateReferences(tables: true);
-		SetStatus(contents ? "The cross-references, footnotes and tables of contents are up to date."
-			: changed == 0 ? "The cross-references are up to date." : $"{changed} cross-reference{(changed == 1 ? "" : "s")} updated.");
+		SetStatus(contents ? T("status.allUpToDate", "The cross-references, footnotes and tables of contents are up to date.")
+			: changed == 0 ? T("status.crossRefsUpToDate", "The cross-references are up to date.") : TN("status.crossRefsUpdated", "{0} cross-reference updated.", "{0} cross-references updated.", changed));
 	}
 
 	// ---- Tables of contents (iteration 52, rte_toc.cs)
@@ -3514,7 +3519,7 @@ class WriterForm : Form
 		var o = dlg.Options;
 		string title = dlg.TitleText;
 		Run(() => api.InsertTableOfContents(o.Levels, title, o.PageNumbers, o.RightAlign, o.Leader), M("InsertTableOfContents", o.Levels, title, o.PageNumbers, o.RightAlign, o.Leader));
-		SetStatus(existing != null ? "The table of contents was made again with these options." : "Table of contents inserted. Ctrl+click an entry to go to its heading; F9 (or right-click it > Update table) brings it up to date.");
+		SetStatus(existing != null ? T("status.tocRemade", "The table of contents was made again with these options.") : T("status.tocInserted", "Table of contents inserted. Ctrl+click an entry to go to its heading; F9 (or right-click it > Update table) brings it up to date."));
 	}
 
 	// Ctrl+click on a cross-reference: the caret to the paragraph it refers to (on a footnote's number: its note, to
@@ -3529,22 +3534,22 @@ class WriterForm : Form
 		// (iteration 52) a table of contents' entry: its heading
 		if (Toc.EntryAt(story, position) is { } heading) {
 			int target = CrossRefs.TargetPosition(story, heading);
-			if (target < 0) { SetStatus("⚠ This entry's heading is gone: update the table of contents (F9)."); return true; }
+			if (target < 0) { SetStatus("⚠ " + T("status.tocHeadingGone", "This entry's heading is gone: update the table of contents (F9).")); return true; }
 			var line = doc.Range2(target, target);
 			line.StartOf(tomConstants.tomParagraph, 0);
 			Editor.Select(line.Start, 0);
 			Editor.ScrollToCaret();
-			SetStatus("The heading of the table of contents' entry.");
+			SetStatus(T("status.tocHeading", "The heading of the table of contents' entry."));
 			return true;
 		}
 		if (!CrossRefs.Any(story) || CrossRefs.ReferenceAt(story, position) is not { } name) return false;
 		int at = CrossRefs.TargetPosition(story, name);
-		if (at < 0) { SetStatus("⚠ The paragraph this cross-reference referred to is gone."); return true; }
+		if (at < 0) { SetStatus("⚠ " + T("status.crossRefGone", "The paragraph this cross-reference referred to is gone.")); return true; }
 		var paragraph = doc.Range2(at, at);
 		paragraph.StartOf(tomConstants.tomParagraph, 0);
 		Editor.Select(paragraph.Start, 0);
 		Editor.ScrollToCaret();
-		SetStatus("The paragraph the cross-reference refers to.");
+		SetStatus(T("status.crossRefTarget", "The paragraph the cross-reference refers to."));
 		return true;
 	}
 
@@ -3587,7 +3592,7 @@ class WriterForm : Form
 		string note = Footnotes.Paragraphs(Footnotes.ToTags(dlg.Note));
 		NoteSizeFrom(dlg);
 		Run(() => api.InsertFootnote(note), M("InsertFootnote", note));
-		SetStatus("Footnote inserted. Its note is at the foot of the page (Show Pages, printing); hover over its number to see it, Ctrl+click to change it.");
+		SetStatus(T("status.footnoteInserted", "Footnote inserted. Its note is at the foot of the page (Show Pages, printing); hover over its number to see it, Ctrl+click to change it."));
 	}
 
 	// The notes' size the dialog was given another (all the document's notes: its Footnote Text style).
@@ -3611,7 +3616,7 @@ class WriterForm : Form
 	void CrossReferenceCommand() {
 		var targets = CrossRefs.Targets(Editor.TextDocument);
 		if (targets.Count == 0) {
-			MessageBox.Show(this, "There are no numbered paragraphs to refer to yet. Number the paragraphs first (Numbering, Legal, or a numbered style such as Numbered Paragraph).", AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+			MessageBox.Show(this, T("msg.noNumberedParagraphs", "There are no numbered paragraphs to refer to yet. Number the paragraphs first (Numbering, Legal, or a numbered style such as Numbered Paragraph)."), AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 			return;
 		}
 		int caret = Editor.TextDocument.Selection2.Start;
@@ -3620,7 +3625,7 @@ class WriterForm : Form
 		if (Settings.CrossReferenceFull != dlg.Full) { Settings.CrossReferenceFull = dlg.Full; Settings.Save(); }
 		string show = dlg.Full ? "full" : "number";
 		Run(() => api.InsertCrossReference(index + 1, show), M("InsertCrossReference", index + 1, show));
-		SetStatus("Cross-reference inserted: its number follows the paragraph's. Ctrl+click it to go there; F9 updates them all.");
+		SetStatus(T("status.crossRefInserted", "Cross-reference inserted: its number follows the paragraph's. Ctrl+click it to go there; F9 updates them all."));
 	}
 
 	/// The header or footer changed: shown at once (iteration 49), not at the strips' next look, half a second on.
@@ -3645,7 +3650,7 @@ class WriterForm : Form
 		string widths = columns?.Widths is { } own ? string.Join(",", own.Select(w => (int)Math.Round(w / 14.4))) : "";
 		if (to > at) api.SetColumnsOn(at, to, columns?.Count ?? 1, gap, columns?.Line ?? false, widths);
 		else api.SetColumns(at, columns?.Count ?? 1, gap, columns?.Line ?? false, widths);
-		SetStatus(columns == null ? "One column." : $"{columns.Count} columns, on the printed pages: you go on editing in one column, and Print Preview shows them.");
+		SetStatus(columns == null ? T("status.oneColumn", "One column.") : T("status.columns", "{0} columns, on the printed pages: you go on editing in one column, and Print Preview shows them.", columns.Count));
 	}
 
 	void HeaderFooterCommand() {
@@ -3663,7 +3668,7 @@ class WriterForm : Form
 			Editor.Modified = true;
 			BandsChangedNow();
 			if (sectionDialog.MakeDefault) MakeDefault(sectionDialog.Result());
-			SetStatus($"Header, footer and page numbers set for section {index + 1}.");
+			SetStatus(T("status.headerFooterSection", "Header, footer and page numbers set for section {0}.", index + 1));
 			return;
 		}
 		using var dlg = new HeaderFooterDialog(Bands, DefaultBands());
@@ -3675,8 +3680,8 @@ class WriterForm : Form
 			BandsChangedNow();
 		}
 		if (dlg.MakeDefault) MakeDefault(bands);
-		SetStatus((dlg.MakeDefault ? "Header and footer set for this document and new ones." : "Header and footer set for this document.")
-			+ " File > Print Preview shows them; Word and OpenDocument files get them too.");
+		SetStatus((dlg.MakeDefault ? T("status.headerFooterNew", "Header and footer set for this document and new ones.") : T("status.headerFooter", "Header and footer set for this document."))
+			+ " " + T("status.headerFooterWhere", "File > Print Preview shows them; Word and OpenDocument files get them too."));
 	}
 
 	// ---- line spacing (iteration 22)
@@ -3712,7 +3717,8 @@ class WriterForm : Form
 			api.ModifyStyle(style.Name, styleSettings);
 			Record(M("ModifyStyle", style.Name, styleSettings));
 			if (dlg.NewDocumentsToo) { api.SaveStylesAsDefault(); Record(M("SaveStylesAsDefault")); }
-			SetStatus($"The {style.Name} style has these paragraph settings now" + (dlg.NewDocumentsToo ? ", in new documents too." : " (Styles > Save Styles as My Default keeps them for new documents)."));
+			SetStatus(dlg.NewDocumentsToo ? T("status.styleParagraphsNew", "The {0} style has these paragraph settings now, in new documents too.", style.Name)
+			: T("status.styleParagraphs", "The {0} style has these paragraph settings now (Styles > Save Styles as My Default keeps them for new documents).", style.Name));
 		}
 	}
 
@@ -3915,7 +3921,7 @@ class WriterForm : Form
 					ShowPages(false);
 					Editor.Select(Math.Min(start, Editor.TextLength), 0);
 					Editor.ScrollToCaret();
-					SetStatus($"Page {page + 1}.");
+					SetStatus(T("status.page", "Page {0}.", page + 1));
 				};
 				pageView.Closing += () => ShowPages(false);
 				sourceSplit.Parent!.Controls.Add(pageView);
@@ -3925,7 +3931,7 @@ class WriterForm : Form
 			pageView.Visible = true;
 			pageView.BringToFront();
 			pageView.Focus();
-			SetStatus($"Multiple Pages: {pageView.PageCount} page{(pageView.PageCount == 1 ? "" : "s")}, read-only. Double-click a page to edit it there; Esc goes back. Zoom or Ctrl+wheel shows them larger or smaller.");
+			SetStatus(TN("status.multiplePages", "Multiple Pages: {0} page, read-only. Double-click a page to edit it there; Esc goes back. Zoom or Ctrl+wheel shows them larger or smaller.", "Multiple Pages: {0} pages, read-only. Double-click a page to edit it there; Esc goes back. Zoom or Ctrl+wheel shows them larger or smaller.", pageView.PageCount));
 		} else {
 			pageView!.Visible = false;
 			pageView.Clear();
@@ -3953,7 +3959,7 @@ class WriterForm : Form
 		SetLineNumbering(numbering);
 		Record(numbering.On ? M("SetLineNumbers", LineNumbering.ModeName(numbering.Mode), numbering.Start, numbering.CountBy, (float)(numbering.Distance / 20.0))
 			: M("LineNumbers", "none"));
-		SetStatus(numbering.On ? "Line numbers: " + numbering.Describe() + ". Saved with the document (RTF, Word, OpenDocument, HTML, Markdown)." : "Line numbers are off.");
+		SetStatus(numbering.On ? T("status.lineNumbers", "Line numbers: {0}. Saved with the document (RTF, Word, OpenDocument, HTML, Markdown).", numbering.Describe()) : T("status.lineNumbersOff", "Line numbers are off."));
 	}
 
 	void PageSetupCommand() {
@@ -4000,7 +4006,7 @@ class WriterForm : Form
 		if (dlg.ShowDialog(owner) != DialogResult.OK) return;
 		EscPressed();    // (an Esc from before, the dialog's: not this one's)
 		printer.Document.Print();
-		SetStatus(printer.Cancelled ? "Printing stopped (Esc): the pages printed so far may come out." : "Sent to " + printer.Document.PrinterSettings.PrinterName);
+		SetStatus(printer.Cancelled ? T("status.printingStopped", "Printing stopped (Esc): the pages printed so far may come out.") : T("status.sentTo", "Sent to {0}", printer.Document.PrinterSettings.PrinterName));
 	}
 
 	void ExportPdfDialog() {
@@ -4012,7 +4018,7 @@ class WriterForm : Form
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		Cursor = Cursors.WaitCursor;
 		try {
-			SetStatus("Exported " + api.ExportPdf(dlg.FileName));
+			SetStatus(T("status.exported", "Exported {0}", api.ExportPdf(dlg.FileName)));
 		} catch (OperationCanceledException ex) {
 			SetStatus(ex.Message);
 		} finally {
@@ -4026,12 +4032,12 @@ class WriterForm : Form
 	// behind it) after asking.
 	void OpenLinkCommand(string url) {
 		bool web = Regex.IsMatch(url, @"^(https?|mailto):", RegexOptions.IgnoreCase);
-		if (!web && MessageBox.Show(this, $"Open this link?\n\n{url}", AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+		if (!web && MessageBox.Show(this, T("msg.openLink", "Open this link?\n\n{0}", url), AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 		try {
 			System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();
-			SetStatus("Opened " + url);
+			SetStatus(T("status.opened", "Opened {0}", url));
 		} catch (Exception ex) {
-			SetStatus("⚠ Could not open " + url + ": " + ex.Message);
+			SetStatus("⚠ " + T("status.couldNotOpen", "Could not open {0}: {1}", url, ex.Message));
 		}
 	}
 
@@ -4140,11 +4146,11 @@ class WriterForm : Form
 		};
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		Cursor = Cursors.WaitCursor;
-		SetStatus("Converting...");
+		SetStatus(T("status.converting", "Converting..."));
 		try {
 			string via = ViaOf(types, dlg.FilterIndex);
 			string path = format == "docx" ? api.ExportDocx(dlg.FileName, via) : api.ExportOdt(dlg.FileName, via);
-			SetStatus($"Exported {path} (converted by {api.LastConverter})");
+			SetStatus(T("status.exported", "Exported {0}", path) + " " + T("status.convertedBy", "(converted by {0})", api.LastConverter));
 		} finally {
 			Cursor = Cursors.Default;
 		}
@@ -4186,11 +4192,11 @@ class WriterForm : Form
 		if (picture >= 0) {
 			selected.SetRange(picture, picture + 1);
 			var pictureMenu = new ContextMenuStrip { ShowImageMargin = false };
-			pictureMenu.Items.Add(new ToolStripMenuItem("Cu&t", null, (s, e) => Run(Editor.Cut, M("Cut"))));
-			pictureMenu.Items.Add(new ToolStripMenuItem("&Copy", null, (s, e) => Run(Editor.Copy, M("Copy"))));
-			pictureMenu.Items.Add(new ToolStripMenuItem("&Paste", null, (s, e) => Run(Editor.Paste, M("Paste"))));
+			pictureMenu.Items.Add(new ToolStripMenuItem(T("menu.cut", "Cu&t"), null, (s, e) => Run(Editor.Cut, M("Cut"))));
+			pictureMenu.Items.Add(new ToolStripMenuItem(T("menu.copy", "&Copy"), null, (s, e) => Run(Editor.Copy, M("Copy"))));
+			pictureMenu.Items.Add(new ToolStripMenuItem(T("menu.paste", "&Paste"), null, (s, e) => Run(Editor.Paste, M("Paste"))));
 			pictureMenu.Items.Add(new ToolStripSeparator());
-			pictureMenu.Items.Add(new ToolStripMenuItem("&Alt text...", null, (s, e) => Run(() => AltTextCommand(picture))));
+			pictureMenu.Items.Add(new ToolStripMenuItem(T("menu.altText", "&Alt text..."), null, (s, e) => Run(() => AltTextCommand(picture))));
 			pictureMenu.Closed += (s, e) => BeginInvoke(pictureMenu.Dispose);
 			pictureMenu.Show(screenPoint);
 			return true;
@@ -4216,39 +4222,39 @@ class WriterForm : Form
 			menu.Items.Add(new ToolStripSeparator());
 		}
 		bool selection = tom.End > tom.Start;
-		menu.Items.Add(new ToolStripMenuItem("Cu&t", null, (s, e) => Run(cutAction, M("Cut"))) { Enabled = selection, ShortcutKeyDisplayString = "Ctrl+X" });
-		menu.Items.Add(new ToolStripMenuItem("&Copy", null, (s, e) => Run(copyAction, M("Copy"))) { Enabled = selection, ShortcutKeyDisplayString = "Ctrl+C" });
-		menu.Items.Add(new ToolStripMenuItem("&Paste", null, (s, e) => Run(pasteAction, M("Paste"))) { ShortcutKeyDisplayString = "Ctrl+V" });
-		menu.Items.Add(new ToolStripMenuItem("Paste as Plain Te&xt", null, (s, e) => Run(pastePlainAction, M("PastePlainText"))) { ShortcutKeyDisplayString = "Ctrl+Shift+V" });
+		menu.Items.Add(new ToolStripMenuItem(T("menu.cut", "Cu&t"), null, (s, e) => Run(cutAction, M("Cut"))) { Enabled = selection, ShortcutKeyDisplayString = "Ctrl+X" });
+		menu.Items.Add(new ToolStripMenuItem(T("menu.copy", "&Copy"), null, (s, e) => Run(copyAction, M("Copy"))) { Enabled = selection, ShortcutKeyDisplayString = "Ctrl+C" });
+		menu.Items.Add(new ToolStripMenuItem(T("menu.paste", "&Paste"), null, (s, e) => Run(pasteAction, M("Paste"))) { ShortcutKeyDisplayString = "Ctrl+V" });
+		menu.Items.Add(new ToolStripMenuItem(T("menu.pastePlain", "Paste as Plain Te&xt"), null, (s, e) => Run(pastePlainAction, M("PastePlainText"))) { ShortcutKeyDisplayString = TKeys("Ctrl+Shift+V") });
 		menu.Items.Add(new ToolStripSeparator());
 		void Add(string text, Action action, string macro, string keys = "") =>
-			menu.Items.Add(new ToolStripMenuItem(text, null, (s, e) => Run(action, macro)) { ShortcutKeyDisplayString = keys });
+			menu.Items.Add(new ToolStripMenuItem(text, null, (s, e) => Run(action, macro)) { ShortcutKeyDisplayString = TKeys(keys) });
 		string story = Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "";
 		if ((Footnotes.At(story, position) ?? Footnotes.At(story, Math.Max(0, position - 1))) is { } footnote) {
-			menu.Items.Add(new ToolStripMenuItem($"Edit &footnote {footnote.Number}...", null, (s, e) => Run(() => EditFootnote(footnote))));
+			menu.Items.Add(new ToolStripMenuItem(T("menu.editFootnote", "Edit &footnote {0}...", footnote.Number), null, (s, e) => Run(() => EditFootnote(footnote))));
 			menu.Items.Add(new ToolStripSeparator());
 		}
 		if (Toc.TableAt(story, position) != null) {
-			menu.Items.Add(new ToolStripMenuItem("&Update table", null, (s, e) => Run(() => api.UpdateTableOfContents(false), M("UpdateTableOfContents", false))) { ShortcutKeyDisplayString = "F9" });
-			menu.Items.Add(new ToolStripMenuItem("Update page &numbers only", null, (s, e) => Run(() => api.UpdateTableOfContents(true), M("UpdateTableOfContents", true))));
+			menu.Items.Add(new ToolStripMenuItem(T("menu.updateToc", "&Update table"), null, (s, e) => Run(() => api.UpdateTableOfContents(false), M("UpdateTableOfContents", false))) { ShortcutKeyDisplayString = "F9" });
+			menu.Items.Add(new ToolStripMenuItem(T("menu.updateTocPages", "Update page &numbers only"), null, (s, e) => Run(() => api.UpdateTableOfContents(true), M("UpdateTableOfContents", true))));
 			menu.Items.Add(new ToolStripSeparator());
 		}
-		menu.Items.Add(new ToolStripMenuItem("&Font...", null, (s, e) => Run(FontDialogCommand)));
-		menu.Items.Add(new ToolStripMenuItem("P&aragraph...", null, (s, e) => Run(ParagraphCommand)));
+		menu.Items.Add(new ToolStripMenuItem(T("menu.font", "&Font..."), null, (s, e) => Run(FontDialogCommand)));
+		menu.Items.Add(new ToolStripMenuItem(T("menu.paragraph", "P&aragraph..."), null, (s, e) => Run(ParagraphCommand)));
 		if (!inTable) return menu;
 		menu.Items.Add(new ToolStripSeparator());
-		Add("Insert row &above", () => api.InsertRow(false), M("InsertRow", false));
-		Add("Insert row &below", () => api.InsertRow(true), M("InsertRow", true), "Ctrl+Shift+Ins");
-		Add("Insert column &left", () => api.InsertColumn(false), M("InsertColumn", false));
-		Add("Insert column &right", () => api.InsertColumn(true), M("InsertColumn", true));
+		Add(T("menu.insertRowAbove", "Insert row &above"), () => api.InsertRow(false), M("InsertRow", false));
+		Add(T("menu.insertRowBelow", "Insert row &below"), () => api.InsertRow(true), M("InsertRow", true), "Ctrl+Shift+Ins");
+		Add(T("menu.insertColumnLeft", "Insert column &left"), () => api.InsertColumn(false), M("InsertColumn", false));
+		Add(T("menu.insertColumnRight", "Insert column &right"), () => api.InsertColumn(true), M("InsertColumn", true));
 		menu.Items.Add(new ToolStripSeparator());
 		int selectedRows = api.SelectedRows();
-		if (selectedRows > 1) Add($"&Delete {selectedRows} rows", () => api.DeleteSelectedRows(), M("DeleteSelectedRows"), "Del");
-		else Add("&Delete row", () => api.DeleteRow(), M("DeleteRow"), "Ctrl+Shift+Del");
-		Add("Delete colu&mn", () => api.DeleteColumn(), M("DeleteColumn"));
-		Add("Delete &table", () => api.DeleteTable(), M("DeleteTable"));
+		if (selectedRows > 1) Add(T("menu.deleteRows", "&Delete {0} rows", selectedRows), () => api.DeleteSelectedRows(), M("DeleteSelectedRows"), "Del");
+		else Add(T("menu.deleteRow", "&Delete row"), () => api.DeleteRow(), M("DeleteRow"), "Ctrl+Shift+Del");
+		Add(T("menu.deleteColumn", "Delete colu&mn"), () => api.DeleteColumn(), M("DeleteColumn"));
+		Add(T("menu.deleteTable", "Delete &table"), () => api.DeleteTable(), M("DeleteTable"));
 		menu.Items.Add(new ToolStripSeparator());
-		menu.Items.Add(new ToolStripMenuItem("Table &properties...", null, (s, e) => Run(TablePropertiesCommand)));
+		menu.Items.Add(new ToolStripMenuItem(T("menu.tableProperties", "Table &properties..."), null, (s, e) => Run(TablePropertiesCommand)));
 		return menu;
 	}
 
@@ -4268,16 +4274,16 @@ class WriterForm : Form
 		var bold = new Font(menu.Font, FontStyle.Bold);
 		menu.Disposed += (s, e) => bold.Dispose();
 		if (error.Action == Spelling.DeleteAction) {
-			menu.Items.Add(new ToolStripMenuItem($"Delete repeated word \"{error.Word}\"", null, (s, e) => Run(() => api.DeleteRepeatedWord(error))) { Font = bold });
+			menu.Items.Add(new ToolStripMenuItem(T("menu.deleteRepeated", "Delete repeated word \"{0}\"", error.Word), null, (s, e) => Run(() => api.DeleteRepeatedWord(error))) { Font = bold });
 		} else {
 			var suggestions = error.Action == Spelling.ReplaceAction && error.Replacement != "" ? new List<string> { error.Replacement } : Spelling.Suggest(error.Word);
 			foreach (var suggestion in suggestions)
 				menu.Items.Add(new ToolStripMenuItem(suggestion, null, (s, e) => Run(() => api.ReplaceRange(error.Start, error.Length, suggestion))) { Font = bold });
-			if (suggestions.Count == 0) menu.Items.Add(new ToolStripMenuItem("(no suggestions)") { Enabled = false });
+			if (suggestions.Count == 0) menu.Items.Add(new ToolStripMenuItem(T("menu.noSuggestions", "(no suggestions)")) { Enabled = false });
 			menu.Items.Add(new ToolStripSeparator());
-			menu.Items.Add(new ToolStripMenuItem($"Add \"{error.Word}\" to dictionary", null, (s, e) => Run(() => {
+			menu.Items.Add(new ToolStripMenuItem(T("menu.addToDictionary", "Add \"{0}\" to dictionary", error.Word), null, (s, e) => Run(() => {
 				api.AddToDictionary(error.Word);
-				SetStatus($"\"{error.Word}\" was added to the Windows dictionary.");
+				SetStatus(T("status.addedToDictionary", "\"{0}\" was added to the Windows dictionary.", error.Word));
 			})));
 		}
 	}
@@ -4285,7 +4291,7 @@ class WriterForm : Form
 	void NextSpellingErrorCommand() {
 		if (Spelling == null) throw new InvalidOperationException("The Windows spell checker is not available.");
 		if (api.NextSpellingError() == "") {
-			SetStatus("No spelling errors found.");
+			SetStatus(T("status.noSpellingErrors", "No spelling errors found."));
 			return;
 		}
 		// Open the suggestions just below the word.
@@ -4387,11 +4393,11 @@ class WriterForm : Form
 		if (node.Tag is not int start) return;
 		var level = outline.FirstOrDefault(h => h.Start == start).Level;
 		var menu = new ContextMenuStrip { ShowImageMargin = false };
-		menu.Items.Add(new ToolStripMenuItem("Go to heading", null, (s, e) => Run(() => GoToPosition(start))));
+		menu.Items.Add(new ToolStripMenuItem(T("menu.goToHeading", "Go to heading"), null, (s, e) => Run(() => GoToPosition(start))));
 		menu.Items.Add(new ToolStripSeparator());
-		menu.Items.Add(new ToolStripMenuItem($"Promote (to Heading {Math.Max(1, level - 1)})", null, (s, e) => Run(() => api.SetHeadingLevel(start, level - 1))) { Enabled = level > 1 });
-		menu.Items.Add(new ToolStripMenuItem($"Demote (to Heading {Math.Min(6, level + 1)})", null, (s, e) => Run(() => api.SetHeadingLevel(start, level + 1))) { Enabled = level < 6 });
-		menu.Items.Add(new ToolStripMenuItem("Make normal text", null, (s, e) => Run(() => api.SetHeadingLevel(start, 0))));
+		menu.Items.Add(new ToolStripMenuItem(T("menu.promote", "Promote (to Heading {0})", Math.Max(1, level - 1)), null, (s, e) => Run(() => api.SetHeadingLevel(start, level - 1))) { Enabled = level > 1 });
+		menu.Items.Add(new ToolStripMenuItem(T("menu.demote", "Demote (to Heading {0})", Math.Min(6, level + 1)), null, (s, e) => Run(() => api.SetHeadingLevel(start, level + 1))) { Enabled = level < 6 });
+		menu.Items.Add(new ToolStripMenuItem(T("menu.makeNormal", "Make normal text"), null, (s, e) => Run(() => api.SetHeadingLevel(start, 0))));
 		menu.Closed += (s, e) => BeginInvoke(menu.Dispose);
 		menu.Show(screenPoint);
 	}
@@ -4407,11 +4413,11 @@ class WriterForm : Form
 		StyleSheet? source;
 		try { source = StyleImport.From(open.FileName); }
 		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Xml.XmlException) {
-			MessageBox.Show(this, $"{Path.GetFileName(open.FileName)} could not be read: {ex.Message}", AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+			MessageBox.Show(this, T("msg.fileUnreadable", "{0} could not be read: {1}", Path.GetFileName(open.FileName), ex.Message), AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
 			return;
 		}
 		if (source == null) {
-			MessageBox.Show(this, $"{Path.GetFileName(open.FileName)} has no paragraph styles that AhkWord can read (AhkWord's own RTF and HTML, Word's .docx, other RTF).", AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
+			MessageBox.Show(this, T("msg.noStylesInFile", "{0} has no paragraph styles that AhkWord can read (AhkWord's own RTF and HTML, Word's .docx, other RTF).", Path.GetFileName(open.FileName)), AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
 			return;
 		}
 		using var dlg = new CopyStylesDialog(open.FileName, source, Styles);
@@ -4419,7 +4425,8 @@ class WriterForm : Form
 		string names = string.Join(", ", dlg.Chosen);
 		int count = api.CopyStyles(open.FileName, names, dlg.ForNewDocuments);
 		Record(M("CopyStyles", open.FileName, names, dlg.ForNewDocuments));
-		SetStatus($"Copied {count} style{(count == 1 ? "" : "s")} ({names}) from {Path.GetFileName(open.FileName)}" + (dlg.ForNewDocuments ? ", for new documents too." : "."));
+		SetStatus(dlg.ForNewDocuments ? TN("status.copiedStylesNew", "Copied {0} style ({1}) from {2}, for new documents too.", "Copied {0} styles ({1}) from {2}, for new documents too.", count, names, Path.GetFileName(open.FileName))
+			: TN("status.copiedStyles", "Copied {0} style ({1}) from {2}.", "Copied {0} styles ({1}) from {2}.", count, names, Path.GetFileName(open.FileName)));
 	}
 
 	// ---------------------------------------------------------------- Iteration 8: list levels
@@ -4451,9 +4458,9 @@ class WriterForm : Form
 		if (dlg.ApplyToCurrentList) {
 			api.ApplyListLevels();
 			Record(M("ApplyListLevels"));
-			SetStatus("List levels saved and applied to the current list.");
+			SetStatus(T("status.listLevelsApplied", "List levels saved and applied to the current list."));
 		} else {
-			SetStatus("List levels saved. They are used for new numbered lists and when nesting with Tab.");
+			SetStatus(T("status.listLevelsSaved", "List levels saved. They are used for new numbered lists and when nesting with Tab."));
 		}
 	}
 
@@ -4501,7 +4508,7 @@ class WriterForm : Form
 		if (Editor.EnableFontSize && legal) api.SetFontSize(chosen.SizeInPoints);
 		Record(M("SetFontName", chosen.Name));
 		if (Editor.EnableFontSize) Record(M("SetFontSize", chosen.SizeInPoints));
-		else SetStatus("Font applied. Font sizes need free-form mode (View > Free-form).");
+		else SetStatus(T("status.fontSizesFreeform", "Font applied. Font sizes need free-form mode (View > Free-form)."));
 		if (bold >= 0 || italic >= 0 || underline >= 0 || strike >= 0) Record(M("SetFontStyle", bold, italic, underline, strike));
 		if (newColor) Record(M("SetFontColor", chosenColor));
 	}
@@ -4565,7 +4572,7 @@ class WriterForm : Form
 		if (SourceActive) return FindInSource();
 		int index = api.Find(findForm.FindText, findForm.MatchCase, findForm.WholeWord);
 		Record(M("Find", findForm.FindText, findForm.MatchCase, findForm.WholeWord));
-		SetStatus(index < 0 ? $"\"{findForm.FindText}\" was not found." : "");
+		SetStatus(index < 0 ? T("status.notFound", "\"{0}\" was not found.", findForm.FindText) : "");
 		return index >= 0;
 	}
 
@@ -4590,18 +4597,18 @@ class WriterForm : Form
 			string replacement = findForm.ReplaceText;
 			string text = pattern.Replace(sourceBox.Text, m => { count++; return replacement; });
 			if (count > 0) { sourceBox.SelectAll(); sourceBox.SelectedText = text; }    // one undo step
-			SetStatus($"{count} replacement{(count == 1 ? "" : "s")} made.");
+			SetStatus(TN("status.replacements", "{0} replacement made.", "{0} replacements made.", count));
 			return;
 		}
 		Run(() => count = api.Replace(findForm.FindText, findForm.ReplaceText, findForm.MatchCase, findForm.WholeWord),
 			M("Replace", findForm.FindText, findForm.ReplaceText, findForm.MatchCase, findForm.WholeWord));
-		SetStatus($"{count} replacement{(count == 1 ? "" : "s")} made.");
+		SetStatus(TN("status.replacements", "{0} replacement made.", "{0} replacements made.", count));
 	}
 
 	// ---------------------------------------------------------------- Keyboard: Tab / Shift+Tab in lists
 
 	protected override bool ProcessCmdKey(ref Message msg, Keys keyData) {
-		if (keyData == Keys.Escape && painting != Painting.Off) { StopPainting(); SetStatus("Format Painter off."); return true; }
+		if (keyData == Keys.Escape && painting != Painting.Off) { StopPainting(); SetStatus(T("status.painterOff", "Format Painter off.")); return true; }
 		// The start page: a shortcut leaves it first (Ctrl+O, Ctrl+N ... then act on the document as usual)
 		if (StartShown && startPage!.ContainsFocus && shortcuts.ContainsKey(keyData)) ShowStart(false);
 		// Multiple Pages: its own keys; a shortcut that changes the text goes back to editing first
@@ -4697,7 +4704,7 @@ class WriterForm : Form
 		if (arguments.Length > 0) start.Environment["AHKWORD_EVENT"] = arguments[0];
 		if (arguments.Length > 1) start.Environment["AHKWORD_EVENT_DETAIL"] = arguments[1];
 		var process = System.Diagnostics.Process.Start(start);
-		SetStatus("Running " + Path.GetFileName(path));
+		SetStatus(T("status.running", "Running {0}", Path.GetFileName(path)));
 		return process;
 	}
 
@@ -4725,14 +4732,14 @@ class WriterForm : Form
 			hooksRunning.Remove(e);
 		}
 		string path = EventHooks.PathOf(macro, MacrosDir);
-		if (!File.Exists(path)) { SetStatus($"⚠ The {e} hook's macro, {macro}, isn't there any more (Tools > Event Hooks)."); return; }
+		if (!File.Exists(path)) { SetStatus("⚠ " + T("status.hookMacroGone", "The {0} hook's macro, {1}, isn't there any more (Tools > Event Hooks).", e, macro)); return; }
 		System.Diagnostics.Process? process;
 		try { process = RunScript(path, e.ToString(), detail); }
-		catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { SetStatus($"⚠ The {e} hook couldn't run: {ex.Message}"); return; }
+		catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { SetStatus("⚠ " + T("status.hookFailed", "The {0} hook couldn't run: {1}", e, ex.Message)); return; }
 		if (process == null) return;
 		hooksRunning[e] = process;
 		HooksStarted.Add($"{e}: {macro}");
-		SetStatus($"{e}: running the {Path.GetFileNameWithoutExtension(macro)} macro.");
+		SetStatus(T("status.hookRunning", "{0}: running the {1} macro.", e, Path.GetFileNameWithoutExtension(macro)));
 		if (!EventHooks.Waits(e)) return;
 		// (waits: the macro's calls are answered meanwhile, the window takes no typing or clicks)
 		bool enabled = Enabled, focused = Editor.Focused;
@@ -4751,8 +4758,8 @@ class WriterForm : Form
 		}
 		if (!HasEnded(process)) {
 			HooksStarted.Add($"{e}: {macro} (still running after {EventHooks.WaitSeconds} s)");
-			SetStatus($"⚠ The {e} hook's macro, {Path.GetFileNameWithoutExtension(macro)}, was still running after {EventHooks.WaitSeconds} seconds: AhkWord went on without waiting.");
-		} else SetStatus($"{e}: the {Path.GetFileNameWithoutExtension(macro)} macro is done.");
+			SetStatus("⚠ " + T("status.hookStillRunning", "The {0} hook's macro, {1}, was still running after {2} seconds: AhkWord went on without waiting.", e, Path.GetFileNameWithoutExtension(macro), EventHooks.WaitSeconds));
+		} else SetStatus(T("status.hookDone", "{0}: the {1} macro is done.", e, Path.GetFileNameWithoutExtension(macro)));
 	}
 
 	static bool HasEnded(System.Diagnostics.Process process) {
@@ -4769,8 +4776,8 @@ class WriterForm : Form
 		Settings.EventHooksOff = dlg.Off;
 		Settings.Save();
 		int count = Settings.EventHooks.Count;
-		SetStatus(count == 0 ? "No event hooks." : $"{count} event hook{(count == 1 ? "" : "s")}: " + string.Join(", ", Settings.EventHooks.Select(h => $"{h.Key} runs {Path.GetFileNameWithoutExtension(h.Value)}"
-			+ (EventHooks.IsOn(Settings.EventHooksOff, EventHooks.Parse(h.Key)) ? "" : " (off)"))) + ".");
+		SetStatus(count == 0 ? T("status.noHooks", "No event hooks.") : TN("status.hooks", "{0} event hook: {1}.", "{0} event hooks: {1}.", count, string.Join(", ", Settings.EventHooks.Select(h => T("status.hookRuns", "{0} runs {1}", h.Key, Path.GetFileNameWithoutExtension(h.Value))
+			+ (EventHooks.IsOn(Settings.EventHooksOff, EventHooks.Parse(h.Key)) ? "" : " " + T("status.hookOff", "(off)"))))));
 	}
 
 	// ---------------------------------------------------------------- Iteration 6: recording macros
@@ -4800,8 +4807,8 @@ class WriterForm : Form
 		// Macros that react to events (Rte.On) keep running until the editor closes, so a replay would wait for ever.
 		bool keepsRunning = File.ReadAllText(path).Contains("Rte.On(", StringComparison.OrdinalIgnoreCase);
 		SetStatus(keepsRunning
-			? $"⚠ Recorded: run the \"{name}\" macro - but it keeps running, so a replay would wait for it forever. Remove its RunWait line when you save."
-			: $"Recorded: run the \"{name}\" macro. A replay waits for it to finish before going on.");
+			? "⚠ " + T("status.recordedRunKeeps", "Recorded: run the \"{0}\" macro - but it keeps running, so a replay would wait for it forever. Remove its RunWait line when you save.", name)
+			: T("status.recordedRun", "Recorded: run the \"{0}\" macro. A replay waits for it to finish before going on.", name));
 	}
 
 	static readonly Dictionary<Keys, string> RecordedKeys = new() {
@@ -4825,14 +4832,14 @@ class WriterForm : Form
 
 	void UpdateRecordingLabel() {
 		recordingLabel.Visible = recorder.Recording;
-		recordingLabel.Text = $"● Recording ({recorder.Steps} step{(recorder.Steps == 1 ? "" : "s")})";
+		recordingLabel.Text = "● " + TN("ui.recordingSteps", "Recording ({0} step)", "Recording ({0} steps)", recorder.Steps);
 		if (toggleButtons.TryGetValue(RibbonCommand.RecordMacro, out var record) && ribbon.Initialized) record.BooleanValue = recorder.Recording;
 	}
 
 	internal void StartRecording() {
 		recorder.Start();
 		UpdateRecordingLabel();
-		SetStatus("Recording: type and use the menus and toolbar. Mouse clicks are not recorded. Ctrl+Shift+R stops.");
+		SetStatus(T("status.recording", "Recording: type and use the menus and toolbar. Mouse clicks are not recorded. Ctrl+Shift+R stops."));
 	}
 
 	internal string StopRecording() {
@@ -4848,24 +4855,25 @@ class WriterForm : Form
 		}
 		string script = StopRecording();
 		if (script == "") {
-			SetStatus("Nothing was recorded.");
+			SetStatus(T("status.nothingRecorded", "Nothing was recorded."));
 			return;
 		}
 		using var dlg = new SaveMacroDialog(UniqueMacroName(), script, MenuShortcuts(), this);
 		if (dlg.ShowDialog(this) != DialogResult.OK) {
-			SetStatus("The recording was discarded.");
+			SetStatus(T("status.recordingDiscarded", "The recording was discarded."));
 			return;
 		}
 		Directory.CreateDirectory(MacrosDir);
 		string path = Path.Combine(MacrosDir, dlg.MacroName + ".ahk");
-		if (File.Exists(path) && MessageBox.Show(this, $"Replace the existing macro \"{dlg.MacroName}\"?", AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) {
-			SetStatus("The recording was not saved.");
+		if (File.Exists(path) && MessageBox.Show(this, T("msg.replaceMacro", "Replace the existing macro \"{0}\"?", dlg.MacroName), AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) {
+			SetStatus(T("status.recordingNotSaved", "The recording was not saved."));
 			return;
 		}
 		File.WriteAllText(path, dlg.Script.Replace("\r\n", "\n").Replace("\n", "\r\n"), new UTF8Encoding(false));
 		SetMacroHotkey(Path.GetFileName(path), dlg.Hotkey);
 		FillMacrosGallery();
-		SetStatus($"Saved macro \"{dlg.MacroName}\"" + (dlg.Hotkey != Keys.None ? $" ({HotkeyBox.Describe(dlg.Hotkey)})" : "") + ". It is in Tools > Macros.");
+		SetStatus(dlg.Hotkey != Keys.None ? T("status.savedMacroHotkey", "Saved macro \"{0}\" ({1}). It is in Tools > Macros.", dlg.MacroName, TKeys(HotkeyBox.Describe(dlg.Hotkey)))
+			: T("status.savedMacro", "Saved macro \"{0}\". It is in Tools > Macros.", dlg.MacroName));
 	}
 
 	static string MacroScript(List<string> lines) =>
@@ -4927,7 +4935,7 @@ class WriterForm : Form
 		foreach (var (file, keys) in dlg.Hotkeys) if (keys != Keys.None) Settings.MacroHotkeys[file] = HotkeyBox.Describe(keys);
 		Settings.Save();
 		FillMacrosGallery();
-		SetStatus($"{Settings.MacroHotkeys.Count} macro hotkey{(Settings.MacroHotkeys.Count == 1 ? "" : "s")} set. They work while the editor is active.");
+		SetStatus(TN("status.macroHotkeys", "{0} macro hotkey set. They work while the editor is active.", "{0} macro hotkeys set. They work while the editor is active.", Settings.MacroHotkeys.Count));
 	}
 
 	void OpenMacrosFolder() {
@@ -4954,7 +4962,7 @@ class WriterForm : Form
 			inCommand = false;
 		}
 		RefreshSource();
-		if (request.Length > 1) automationLabel.Text = $"Automation: {request[1]}";
+		if (request.Length > 1) automationLabel.Text = T("ui.automation", "Automation: {0}", request[1]);
 		UpdateUi();
 		UpdateTitle();
 		return reply;
@@ -4969,7 +4977,7 @@ class WriterForm : Form
 				SetStatus("⚠ " + api.LastAsyncError);
 				Events.Raise(EditorEvent.AsyncError);
 			}
-			automationLabel.Text = $"Automation: {call[0]} (posted)";
+			automationLabel.Text = T("ui.automationPosted", "Automation: {0} (posted)", call[0]);
 		}
 		UpdateUi();
 		UpdateTitle();
@@ -4986,7 +4994,7 @@ class WriterForm : Form
 		}
 	}
 
-	void UpdateWordCount() => wordsLabel.Text = $"{api.WordCount()} words";
+	void UpdateWordCount() => wordsLabel.Text = TN("ui.words", "{0} words", "{0} words", api.WordCount());    // (English: "1 words", as before)
 
 	void UpdateUi() {
 		if (!Editor.IsHandleCreated || updatingUi) return;
@@ -5003,8 +5011,8 @@ class WriterForm : Form
 				line = Editor.GetLineFromCharIndex(Editor.SelectionStart);
 				column = Editor.SelectionStart - Editor.GetFirstCharIndexFromLine(line);
 			}
-			positionLabel.Text = $"Ln {line + 1}, Col {column + 1}";
-			modeLabel.Text = view != SourceKind.None ? ViewName(view) + (sideBySide ? " | side by side" : "") : "";
+			positionLabel.Text = T("ui.position", "Ln {0}, Col {1}", line + 1, column + 1);
+			modeLabel.Text = view != SourceKind.None ? ViewName(view) + (sideBySide ? " | " + T("ui.sideBySide", "side by side") : "") : "";
 		} catch (COMException) {
 			// The document can be briefly unavailable while it is being replaced.
 		} finally {
@@ -5110,7 +5118,7 @@ class WriterForm : Form
 	internal SourceKind View => view;
 	internal bool SideBySide => sideBySide;
 
-	static string ViewName(SourceKind kind) => kind switch { SourceKind.Markdown => "Markdown", SourceKind.Html => "HTML", _ => "Rich text" };
+	static string ViewName(SourceKind kind) => kind switch { SourceKind.Markdown => "Markdown", SourceKind.Html => "HTML", _ => T("ui.richText", "Rich text") };
 
 	// The source editor is the one in use: it has the focus, or had it last (a ribbon click doesn't take it away).
 	bool SourceActive => view != SourceKind.None && (sourceBox.Focused || sourceHadFocus && !Editor.Focused);
@@ -5153,9 +5161,10 @@ class WriterForm : Form
 			sourceSplit.Panel2Collapsed = !side;
 			if (side) sourceSplit.SplitterDistance = Math.Clamp(sourceSplit.Width * Settings.SourceSplit / 100, 50, Math.Max(50, sourceSplit.Width - 50));
 		}
-		sourceTitle.Text = kind == SourceKind.None ? "" : ViewName(kind) + (kind == SourceKind.Markdown
-			? (side ? ": the formatted text follows as you type" : ": View > Rich Text shows it formatted") : (side ? ": the formatted text follows as you type; tags and styles it doesn't support are dropped" : ""))
-			+ (embeddedData.Count > 0 ? ". Pictures appear as embedded-1.png ..." : "");
+		sourceTitle.Text = kind == SourceKind.None ? "" : (kind == SourceKind.Markdown
+			? (side ? T("ui.sourceMarkdownSide", "Markdown: the formatted text follows as you type") : T("ui.sourceMarkdown", "Markdown: View > Rich Text shows it formatted"))
+			: side ? T("ui.sourceHtmlSide", "HTML: the formatted text follows as you type; tags and styles it doesn't support are dropped") : ViewName(kind))
+			+ (embeddedData.Count > 0 ? ". " + T("ui.sourcePictures", "Pictures appear as embedded-1.png ...") : "");
 		if (kind == SourceKind.None) Editor.Focus(); else sourceBox.Focus();
 		UpdateUi();
 	}
@@ -5302,7 +5311,7 @@ class WriterForm : Form
 		int index = sourceBox.Find(findForm.FindText, start, sourceBox.TextLength, options);
 		if (index < 0 && start > 0) index = sourceBox.Find(findForm.FindText, 0, sourceBox.TextLength, options);
 		if (index >= 0) sourceBox.ScrollToCaret();
-		SetStatus(index < 0 ? $"\"{findForm.FindText}\" was not found." : "");
+		SetStatus(index < 0 ? T("status.notFound", "\"{0}\" was not found.", findForm.FindText) : "");
 		return index >= 0;
 	}
 
@@ -5365,7 +5374,7 @@ class WriterForm : Form
 		sourceCommands[RibbonCommand.Link] = SourceLink;
 		sourceCommands[RibbonCommand.Picture] = SourcePicture;
 		sourceCommands[RibbonCommand.Table] = () => {
-			if (InMarkdown && SourceTableAt(sourceBox.SelectionStart) != null) { FormatSourceTable(0); SetStatus("The table's columns are lined up. Tab and Shift+Tab move between cells and do the same."); }
+			if (InMarkdown && SourceTableAt(sourceBox.SelectionStart) != null) { FormatSourceTable(0); SetStatus(T("status.tableLinedUp", "The table's columns are lined up. Tab and Shift+Tab move between cells and do the same.")); }
 			else SourceTable();
 		};
 		sourceKeys[Keys.Control | Keys.B] = () => Wrap(InMarkdown ? "**" : "<strong>", InMarkdown ? "**" : "</strong>");
@@ -5703,7 +5712,7 @@ class WriterForm : Form
 			&& !(Has(FontPropertiesEnum.BackgroundColorType) && (SwatchColorType)Number(FontPropertiesEnum.BackgroundColorType) != SwatchColorType.RGB))
 			style.Add($"background-color: {Hex(back)}");
 		if (style.Count > 0) Wrap($"<span style=\"{string.Join("; ", style)}\">", "</span>");
-		if (Has(FontPropertiesEnum.DeltaSize) && !Has(FontPropertiesEnum.Size)) SetStatus("Grow and shrink font work in the Rich Text view; choose a size instead.");
+		if (Has(FontPropertiesEnum.DeltaSize) && !Has(FontPropertiesEnum.Size)) SetStatus(T("status.growShrinkRichText", "Grow and shrink font work in the Rich Text view; choose a size instead."));
 	}
 
 	// ---------------------------------------------------------------- Small dialogs
@@ -6349,7 +6358,7 @@ public class EditorApi
 				// paragraphs spaced as Word spaces them (RTF from Word or LibreOffice: RichEdit can't leave out the space
 				// between paragraphs of the same style, nor give cells their table style's spacing)
 				if (extension == ".docx" && kind == "rtf" && !DocxLineSpacing.IntoEditor(ed, full))
-					form.SetStatus("The paragraphs' spacing could not be matched to the file's; it is as the converter made it.");
+					form.SetStatus(T("status.spacingNotMatched", "The paragraphs' spacing could not be matched to the file's; it is as the converter made it."));
 				if (kind == "rtf") LinkFonts(ed);
 				// (a .docx's list levels: where its lists put their numbers and text, from its most used list definition;
 				// the document's lists and legal numbering take them)
@@ -6768,7 +6777,7 @@ public class EditorApi
 				if (url != "") doc.Range2(at, at + 1).URL = "\"" + url.Replace("\"", "%22") + "\"";
 			}
 		} catch (Exception ex) {
-			form.SetStatus("Some pictures could not be made editor pictures again: " + ex.Message);
+			form.SetStatus(T("status.picturesNotEditable", "Some pictures could not be made editor pictures again: {0}", ex.Message));
 		} finally {
 			ed.DefaultImageWidth = oldWidth;
 			ed.DefaultImageHeight = oldHeight;
@@ -6816,7 +6825,7 @@ public class EditorApi
 				Footnotes.IntoDocx(full, Footnotes.All(Story()).Select(f => f.Text).ToList(), form.NoteSizeNow());    // (iteration 51: real footnotes)
 			}
 		} catch (Exception ex) {
-			form.SetStatus("⚠ The header and footer could not be added to " + Path.GetFileName(full) + ": " + ex.Message);
+			form.SetStatus("⚠ " + T("status.headerFooterNotAdded", "The header and footer could not be added to {0}: {1}", Path.GetFileName(full), ex.Message));
 		}
 		return full;
 	}
@@ -7127,7 +7136,7 @@ public class EditorApi
 		try { Sections.Insert(ed); }
 		finally { doc.EndEditCollection(); }
 		form.BandsChangedNow();
-		form.SetStatus("Section break inserted: the next page starts a new section, its page numbers from 1. Layout > Header & Footer (with the caret in it) gives it its own footer.");
+		form.SetStatus(T("status.sectionBreak", "Section break inserted: the next page starts a new section, its page numbers from 1. Layout > Header & Footer (with the caret in it) gives it its own footer."));
 	}
 
 	/// The sections: where each starts (characters), whether its page numbers start again and at what, whether its
@@ -7166,7 +7175,7 @@ public class EditorApi
 		finally { doc.EndEditCollection(); }
 		ed.Modified = true;
 		form.BandsChangedNow();
-		form.SetStatus("Continuous section break inserted: the next section starts on this page. Layout > Columns, with the caret in it, gives it columns.");
+		form.SetStatus(T("status.continuousBreak", "Continuous section break inserted: the next section starts on this page. Layout > Columns, with the caret in it, gives it columns."));
 	}
 
 	/// Puts the paragraphs from start to end in columns, as Word does: continuous breaks around them where there are none,
@@ -7284,10 +7293,10 @@ public class EditorApi
 				if (para.ListLevelIndex == 0) {
 					bool continued = true;
 					try { ContinueNumbering(); } catch (InvalidOperationException) { continued = false; }
-					if (continued) hint = "Page break inserted. The numbering after it goes on from the list before it, but stays as it is: if you add or remove items "
-						+ "before the break, put the caret in the first item after it and use Home > List options > Continue numbering.";
+					if (continued) hint = T("status.pageBreakListGoesOn", "Page break inserted. The numbering after it goes on from the list before it, but stays as it is: if you add or remove items "
+						+ "before the break, put the caret in the first item after it and use Home > List options > Continue numbering.");
 				} else {
-					hint = "Page break inserted. The sub-list after it is numbered from the start again (a break before or after the list keeps its numbering).";
+					hint = T("status.pageBreakSubList", "Page break inserted. The sub-list after it is numbered from the start again (a break before or after the list keeps its numbering).");
 				}
 			}
 			if (LegalLists.AnyLegal(doc)) LegalLists.Renumber(ed);
@@ -8262,7 +8271,7 @@ public class EditorApi
 		if (places.Bookmarks.Count + places.Links.Count > 0) {
 			form.ShowProgress("Exporting as PDF: adding the bookmarks and links…");
 			try { PdfMarks.Add(full, places.Bookmarks, places.Links); }
-			catch (Exception ex) { form.SetStatus("⚠ The PDF was made, but its bookmarks couldn't be put in: " + ex.Message); }
+			catch (Exception ex) { form.SetStatus("⚠ " + T("status.pdfNoBookmarks", "The PDF was made, but its bookmarks couldn't be put in: {0}", ex.Message)); }
 		}
 		return full;
 	}
@@ -10714,7 +10723,7 @@ sealed class SaveMacroDialog : Form
 		var save = Dialogs.Button(this, "Save");
 		var discard = Dialogs.Cancel(this, "Discard");
 		save.Click += (s, e) => {
-			if (MacroName == "") { MessageBox.Show(this, "Give the macro a name.", Text); return; }
+			if (MacroName == "") { MessageBox.Show(this, T("msg.macroNoName", "Give the macro a name."), Text); return; }
 			DialogResult = DialogResult.OK;
 		};
 		var buttons = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Dock = DockStyle.Bottom };
@@ -11064,7 +11073,7 @@ sealed class WriterEditBox : RichEditBox
 			// (at the end of a line of text, where joining paragraphs leaves one: under that line, not through it)
 			int y = at > 0 && TextDocument.Range2(at - 1, at).Text != "\r" ? bottom : (top + bottom) / 2;
 			g.DrawLine(pen, client.Left + 4, y, client.Right - 4, y);
-			const string text = "Page break";
+			string text = T("ui.pageBreak", "Page break");
 			var size = g.MeasureString(text, label);
 			float x = client.Left + (client.Width - size.Width) / 2;
 			g.FillRectangle(back, x - 4, y - size.Height / 2, size.Width + 8, size.Height);
@@ -11251,7 +11260,7 @@ sealed class WriterEditBox : RichEditBox
 			bool afterBreak = at >= 2 && story[at - 2] == PageBreaks.Break;    // (the page break's own line is there)
 			int line = Math.Max(client.Top, y - 1);
 			if (!afterBreak) g.DrawLine(pen, client.Left + 4, line, client.Right - 4, line);
-			string text = "Page " + (n + 1);
+			string text = T("ui.pageNumber", "Page {0}", n + 1);
 			var size = g.MeasureString(text, label);
 			float x = client.Right - size.Width - 8;
 			float top = Math.Max(client.Top, line - size.Height / 2);
