@@ -17,11 +17,16 @@ Type `%APPDATA%\AhkWord` into Explorer's address bar to open the folder.
 
 Put an empty file named `portable` (or `portable.txt`) beside `AhkWord.exe` or `AhkWord.ahk`, and AhkWord keeps its settings, templates, recovery copies and the converters' state in a `data` folder beside itself instead, so the folder can be carried to another computer. The .NET packages and the C# compiler stay in the computer's own caches, so a computer that hasn't run AhkWord before downloads them once.
 
+## Language
+
+AhkWord's interface (the ribbon, the menus, the status bar, most dialogs) is in English, or in Spanish with the setting `"Language": "es"` in `settings.json` (set it while AhkWord is closed; it shows from the next start). A few of the rarer dialogs are still in English only. The texts are in the `lang` folder beside AhkWord: `en.json` lists every English text with its key, `es.json` the Spanish; a text a language lacks shows in English.
+
 ## Environment variables
 
 | Variable | Does |
 |---|---|
 | `AHKWORD_DATA` | a folder for all of AhkWord's files (settings, templates, recovery copies, the converters' state), as portable mode's `data` folder |
+| `AHKWORD_LANG` | the interface's language over the setting `Language` (`es`, or `en`), to try one without changing the settings |
 | `AHKWORD_SETTINGS` | the settings file to use instead of `settings.json` |
 | `AHKWORD_CONVERTERS` | the converters to use for Word and OpenDocument files, only those and in that order: `word`, `libreoffice`, `openxml`, `pandoc` (for example `libreoffice,openxml`) |
 

@@ -55,6 +55,8 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 - [ ] **PDF export in the background:** keep working while a long document's PDF is made (it can't be much faster: most of the time is Microsoft Print to PDF's own work)
 - [x] **Format Painter:** copy the formatting of the text at the caret and paint it onto other text, as in Word (click once for one use, double-click to keep painting)
 - [x] **Ruler:** View > Ruler shows the margins, and the indents and tab stops of the paragraph at the caret, as Word's ruler (for looking)
+- [x] **Spanish:** the interface in Spanish (the setting `Language`), its texts in `lang\es.json`; the rarer dialogs still in English
+- [ ] **Choosing the language** in AhkWord itself (now only the setting `Language` in `settings.json`)
 - [ ] **Clicking on the ruler:** add a tab stop where the ruler is clicked; double-click to open Paragraph or Tabs
 
 ## Later, perhaps
