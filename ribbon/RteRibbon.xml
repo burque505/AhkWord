@@ -1513,6 +1513,7 @@
     </Command>
     <Command Name="cmdShowBands" Id="303" LabelTitle="Header and footer" Keytip="H" />
     <Command Name="cmdOutline" Id="304" LabelTitle="Outline" Keytip="O" TooltipTitle="Outline (Ctrl+Shift+O)" />
+    <Command Name="cmdRuler" Id="403" LabelTitle="Ruler" Keytip="R" TooltipTitle="Ruler" TooltipDescription="Show the ruler above the page: the margins, and the indents and tab stops of the paragraph at the caret." />
     <Command Name="cmdGroupTheme" Id="400" LabelTitle="Theme">
       <Command.LargeImages>
         <Image Source="icons/themecolor_32.bmp" MinDPI="96" />
@@ -2602,6 +2603,7 @@
             <CheckBox CommandName="cmdWordWrap" />
             <CheckBox CommandName="cmdShowBands" />
             <CheckBox CommandName="cmdOutline" />
+            <CheckBox CommandName="cmdRuler" />
           </Group>
           <Group CommandName="cmdGroupZoom" SizeDefinition="SixButtons">
             <ToggleButton CommandName="cmdZoomPageWidth" />

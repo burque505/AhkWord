@@ -944,6 +944,13 @@
     "TooltipTitle": "Outline (Ctrl+Shift+O)",
     "Keytip": "O"
   },
+  "cmdRuler": {
+    "Id": 403,
+    "LabelTitle": "Ruler",
+    "TooltipTitle": "Ruler",
+    "TooltipDescription": "Show the ruler above the page: the margins, and the indents and tab stops of the paragraph at the caret.",
+    "Keytip": "R"
+  },
   "cmdGroupTheme": {
     "Id": 400,
     "LabelTitle": "Theme"
