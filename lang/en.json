@@ -891,7 +891,7 @@
   "status.pageBreakListGoesOn": "Page break inserted. The numbering after it goes on from the list before it, but stays as it is: if you add or remove items before the break, put the caret in the first item after it and use Home > List options > Continue numbering.",
   "status.pageBreakSubList": "Page break inserted. The sub-list after it is numbered from the start again (a break before or after the list keeps its numbering).",
   "status.painterOff": "Format Painter off.",
-  "status.painterSelect": "Select the text to give this formatting (a click: the word there). Click Format Painter twice to keep painting; Esc stops.",
+  "status.painterSelect": "Click in a paragraph to give it this formatting (and the word there), or select text. Click Format Painter twice to keep painting; Esc stops.",
   "status.painterStays": "Format Painter stays on: select text to paint it; Esc or a click on Format Painter stops.",
   "status.pdfNoBookmarks": "The PDF was made, but its bookmarks couldn't be put in: {0}",
   "status.picturesNotEditable": "Some pictures could not be made editor pictures again: {0}",

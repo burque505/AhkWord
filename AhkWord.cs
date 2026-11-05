@@ -696,7 +696,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 76;    // (the About box; make_version.ps1)
+	public const int Iteration = 77;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1325,8 +1325,9 @@ class WriterForm : Form
 	// ---- Themes (iteration 70, rte_theme.cs)
 
 	// ---- Format Painter (iteration 75): Home > Clipboard, as in Word. A click copies the formatting at the caret
-	// (EditorApi.CopyFormatting) and the next text selected with the mouse takes it (PasteFormatting; a click without
-	// dragging: the word there); two clicks within the double-click time keep it painting, until Esc or a click on it.
+	// (EditorApi.CopyFormatting: the caret's paragraph's, and its characters') and the next text selected with the mouse
+	// takes it (PasteFormatting; a click without dragging: that paragraph, and the word there); two clicks within the
+	// double-click time keep it painting, until Esc or a click on it.
 	enum Painting { Off, Once, Sticky }
 	Painting painting;
 	long painterClicked;
@@ -1346,7 +1347,7 @@ class WriterForm : Form
 			Record(M("CopyFormatting"));
 			painting = Painting.Once;
 			Editor.PaintCursor = PaintCursor.Value;
-			SetStatus(T("status.painterSelect", "Select the text to give this formatting (a click: the word there). Click Format Painter twice to keep painting; Esc stops."));
+			SetStatus(T("status.painterSelect", "Click in a paragraph to give it this formatting (and the word there), or select text. Click Format Painter twice to keep painting; Esc stops."));
 		}
 		toggleButtons[RibbonCommand.FormatPainter].BooleanValue = painting != Painting.Off;    // (the ribbon flips it on each click)
 		Editor.Focus();
@@ -6086,82 +6087,176 @@ public class EditorApi
 		form.StylesChanged();
 	}
 
-	// ---- Format Painter (iteration 75)
+	// ---- Format Painter (iteration 75; as Word's, iteration 77)
 
 	ITextFont? copiedFont;
 	ParagraphStyle? copiedStyle;
-	(int Alignment, float First, float Left, float Right, float Before, float After, int Rule, float Line, bool Listed)? copiedPara;
+	ParaLook? copiedPara;    // (null: characters only, a selection without a paragraph mark)
 
-	/// Copy Formatting (Home > Format Painter): the formatting at the caret (of the character before it; at a paragraph's
-	/// start, or with a selection, of the first one after), and its paragraph's style and paragraph formatting, kept for
-	/// PasteFormatting.
+	// A paragraph's formatting, as the Format Painter copies it: alignment, indents, spacing, keep options, tabs and its
+	// numbering (list, level, series); its style is copiedStyle.
+	sealed record ParaLook(int Alignment, float First, float Left, float Right, float Before, float After, int Rule, float Line,
+		int KeepWithNext, int KeepTogether, int WidowControl, int PageBreakBefore, int ListType, int ListLevel, int ListStart,
+		float ListTab, (float Position, int Alignment, int Leader)[] Tabs) {
+		public bool Legal => LegalLists.IsLegal(ListType);
+
+		public static ParaLook Of(ITextPara p) {
+			var tabs = new List<(float, int, int)>();
+			for (int i = 0; i < p.TabCount; i++) { p.GetTab(i, out float position, out int alignment, out int leader); tabs.Add((position, alignment, leader)); }
+			return new(p.Alignment, p.FirstLineIndent, p.LeftIndent, p.RightIndent, p.SpaceBefore, p.SpaceAfter, p.LineSpacingRule,
+				p.LineSpacing, p.KeepWithNext, p.KeepTogether, p.WidowControl, p.PageBreakBefore, p.ListType, p.ListLevelIndex,
+				p.ListStart, p.ListTab, tabs.ToArray());
+		}
+
+		public void PutOn(ITextPara p) {
+			// (the list first: RichEdit gives a paragraph that becomes a list item indents of its own)
+			if (p.ListType != ListType) p.ListType = ListType;
+			if ((ListType & 0xFFFF) != tomConstants.tomListNone) {
+				if (p.ListLevelIndex != ListLevel) p.ListLevelIndex = ListLevel;
+				if (p.ListStart != ListStart) p.ListStart = ListStart;
+				if (Math.Abs(p.ListTab - ListTab) > 0.01f) p.ListTab = ListTab;
+			}
+			p.Alignment = Alignment;
+			p.SetIndents(First, Left, Right);
+			p.SpaceBefore = Before;
+			p.SpaceAfter = After;
+			p.SetLineSpacing(Rule, Line);
+			p.KeepWithNext = KeepWithNext;
+			p.KeepTogether = KeepTogether;
+			p.WidowControl = WidowControl;
+			p.PageBreakBefore = PageBreakBefore;
+			p.ClearAllTabs();
+			foreach (var (position, alignment, leader) in Tabs) p.AddTab(position, alignment, leader);
+		}
+	}
+
+	/// Copy Formatting (Home > Format Painter), as Word's: with no selection, the caret's paragraph formatting (its style,
+	/// numbering, indents, spacing, alignment, tabs) and the character formatting at the caret (of the character before
+	/// it; at a paragraph's start, of the first one); with a selection, the formatting most of the selected text has (a
+	/// paragraph with a bold lead-in: its plain text's), and its paragraph formatting too only if the selection takes in a
+	/// paragraph mark (or runs to the document's end). Kept for PasteFormatting.
 	public void CopyFormatting() {
 		var doc = ed.TextDocument;
 		var selection = doc.Selection2;
-		int start = selection.Start;
-		var para = doc.Range2(start, start).Para;
-		bool before = selection.End == start && start > 0 && StyleEngine.Paragraphs(doc, start, start)[0].Start < start;
-		copiedFont = (before ? doc.Range2(start - 1, start) : doc.Range2(start, start + 1)).Font.Duplicate;
+		int start = selection.Start, end = selection.End;
+		bool before = end == start && start > 0 && StyleEngine.Paragraphs(doc, start, start)[0].Start < start;
+		copiedFont = (end > start ? MostFont(doc, start, end) : null)
+			?? (before ? doc.Range2(start - 1, start) : doc.Range2(start, start + 1)).Font.Duplicate;
+		bool paragraph = end == start || (doc.Range2(start, end).Text ?? "").Contains('\r') || end >= doc.Range2(0, 0).StoryLength - 1;
 		copiedStyle = StyleEngine.StyleAt(doc, form.Styles, start);
-		copiedPara = (para.Alignment, para.FirstLineIndent, para.LeftIndent, para.RightIndent, para.SpaceBefore, para.SpaceAfter,
-			para.LineSpacingRule, para.LineSpacing, (para.ListType & 0xFFFF) != tomConstants.tomListNone);
+		copiedPara = paragraph ? ParaLook.Of(doc.Range2(start, start).Para) : null;
 	}
 
-	/// Paste Formatting: the selected text takes the formatting CopyFormatting kept (with no selection, the word at the
-	/// caret). Whole paragraphs selected also take its paragraph's style and paragraph formatting (spacing, indents,
-	/// alignment), as in Word. One undo step.
+	// The formatting that covers most of the text from start to end (a paragraph with a bold lead-in: its plain text's),
+	// hidden text and paragraph marks not counted; null when there is no such text.
+	static ITextFont? MostFont(ITextDocument2 doc, int start, int end) {
+		var counts = new List<(string Key, ITextFont Font, int Length)>();
+		for (int at = start; at < end; ) {
+			var run = doc.Range2(at, at);
+			run.MoveEnd(13, 1);    // (tomCharFormat: to where the formatting changes)
+			int to = Math.Min(run.End, end);
+			if (to <= at) break;
+			var range = doc.Range2(at, to);
+			at = to;
+			var font = range.Font;
+			if (font.Hidden == tomConstants.tomTrue) continue;
+			int length = (range.Text ?? "").Count(c => c != '\r' && c != '\n');
+			if (length == 0) continue;
+			string key = string.Join("|", font.Name, font.Size, font.Bold, font.Italic, font.Underline, font.StrikeThrough,
+				font.ForeColor, font.BackColor, font.Superscript, font.Subscript, font.SmallCaps, font.AllCaps, font.Spacing);
+			int i = counts.FindIndex(c => c.Key == key);
+			if (i < 0) counts.Add((key, font.Duplicate, length));
+			else counts[i] = (key, counts[i].Font, counts[i].Length + length);
+		}
+		return counts.Count == 0 ? null : counts.Aggregate((a, b) => b.Length > a.Length ? b : a).Font;
+	}
+
+	// Paragraphs by number (0: the first), which stays the same while numbers written in front of items change.
+	static int ParagraphIndex(ITextDocument2 doc, int position) {
+		var range = doc.Range2(position, position);
+		range.Expand(tomConstants.tomParagraph);
+		if (range.Start == 0) return 0;
+		var at = doc.Range2(range.Start, range.Start);
+		return -at.Move(tomConstants.tomParagraph, -int.MaxValue);
+	}
+
+	static (int Start, int End) ParagraphNumbered(ITextDocument2 doc, int index) {
+		var range = doc.Range2(0, 0);
+		if (index > 0) range.Move(tomConstants.tomParagraph, index);
+		range.Expand(tomConstants.tomParagraph);
+		return (range.Start, range.End);
+	}
+
+	/// Paste Formatting, as Word's: a click (no selection) gives the caret's paragraph the copied paragraph formatting
+	/// (style, numbering, indents ...; its text keeps its bold, italic ...), and the word clicked in the copied character
+	/// formatting; a selection takes the character formatting, and its paragraphs the paragraph formatting. Paragraph
+	/// formatting goes on only if CopyFormatting took it (no selection, or one with a paragraph mark). One undo step.
 	public void PasteFormatting() {
-		if (copiedFont == null || copiedStyle == null || copiedPara is not { } look) throw new InvalidOperationException("No formatting copied yet: CopyFormatting first.");
+		if (copiedFont == null || copiedStyle == null) throw new InvalidOperationException("No formatting copied yet: CopyFormatting first.");
 		var doc = ed.TextDocument;
 		var selection = doc.Selection2;
 		int start = selection.Start, end = selection.End;
+		var paragraphs = StyleEngine.Paragraphs(doc, start, end);
 		if (end == start) {
-			// (the word at the caret, without the space after it; none there: what is typed next)
+			// (the word the caret is in, without the space after it; none there: what is typed next)
 			var word = doc.Range2(start, start);
 			word.Expand(tomConstants.tomWord);
 			string text = word.Text ?? "";
 			int length = text.TrimEnd().Length;
-			if (length > 0 && !char.IsPunctuation(text[0]) && word.Start <= start) (start, end) = (word.Start, word.Start + length);
+			if (length > 0 && !char.IsPunctuation(text[0]) && !char.IsWhiteSpace(text[0]) && word.Start <= start && word.Start + length > start)
+				(start, end) = (word.Start, word.Start + length);
 		}
-		var paragraphs = StyleEngine.Paragraphs(doc, start, end);
-		var last = paragraphs[^1];
-		bool whole = end > start && start == paragraphs[0].Start && end >= last.End - 1;
+		// (the characters to paint, as paragraph numbers and distances from their paragraphs' ends: numbers written in
+		// front of items change the positions, not those)
+		int first = ParagraphIndex(doc, paragraphs[0].Start), count = paragraphs.Count;
+		int last = Math.Max(start, end - 1);
+		var startAt = (Index: ParagraphIndex(doc, start), FromEnd: StyleEngine.Paragraphs(doc, start, start)[0].End - start);
+		var endAt = (Index: ParagraphIndex(doc, last), FromEnd: StyleEngine.Paragraphs(doc, last, last)[0].End - end);
+		bool characters = end > start;
 		using var _ = form.FirstParagraphAsIs(changes: true);
 		doc.BeginEditCollection();
 		try {
-			if (whole) {
-				int length = doc.Range2(0, 0).StoryLength;
-				StyleEngine.Apply(doc, form.Styles, form.Styles.Find(copiedStyle.Name) ?? form.Styles.Normal, start, end);
-				foreach (var (pStart, _) in StyleEngine.Paragraphs(doc, start, end)) {
-					var para = doc.Range2(pStart, pStart).Para.Duplicate;    // (set on a copy and put on at once)
-					para.Alignment = look.Alignment;
-					// (a list item keeps its list's indents, and a list's indents don't go onto other paragraphs)
-					if (!look.Listed && (para.ListType & 0xFFFF) == tomConstants.tomListNone) para.SetIndents(look.First, look.Left, look.Right);
-					para.SpaceBefore = look.Before;
-					para.SpaceAfter = look.After;
-					para.SetLineSpacing(look.Rule, look.Line);
-					doc.Range2(pStart, pStart).Para = para;
+			if (copiedPara is { } look) {
+				var style = form.Styles.Find(copiedStyle.Name) ?? form.Styles.Normal;
+				bool legal = look.Legal;
+				for (int i = first; i < first + count; i++) {
+					int pStart = ParagraphNumbered(doc, i).Start;
+					if (StyleEngine.StyleAt(doc, form.Styles, pStart).Name != style.Name) {
+						StyleEngine.Apply(doc, form.Styles, style, pStart, pStart);
+						pStart = ParagraphNumbered(doc, i).Start;
+					}
+					if (LegalLists.IsLegal(doc.Range2(pStart, pStart).Para.ListType)) {
+						legal = true;
+						// (an item that won't be one any more: its written number goes)
+						if (!look.Legal) {
+							int pEnd = ParagraphNumbered(doc, i).End;
+							int prefix = LegalLists.Prefix.Match(doc.Range2(pStart, pEnd).Text ?? "").Length;
+							if (prefix > 0) doc.Range2(pStart, pStart + prefix).Text = "";
+						}
+					}
+					look.PutOn(doc.Range2(pStart, pStart).Para);
 				}
-				end += doc.Range2(0, 0).StoryLength - length;    // (a numbered style's numbers move the text after them)
+				if (legal) LegalLists.Renumber(ed);    // (an item's number written in front of it, or the others' changed)
 			}
-			if (end > start) {
+			if (characters) {
+				int from = ParagraphNumbered(doc, startAt.Index).End - startAt.FromEnd, to = ParagraphNumbered(doc, endAt.Index).End - endAt.FromEnd;
 				// (hidden text, a footnote's note or a link's field, stays hidden)
 				var hidden = new List<(int, int)>();
-				for (int at = start; at < end; ) {
+				for (int at = from; at < to; ) {
 					var run = doc.Range2(at, at);
 					run.MoveEnd(13, 1);    // (tomCharFormat: to where the formatting changes)
-					int to = Math.Min(run.End, end);
-					if (to <= at) break;
-					if (doc.Range2(at, to).Font.Hidden == tomConstants.tomTrue) hidden.Add((at, to));
-					at = to;
+					int stop = Math.Min(run.End, to);
+					if (stop <= at) break;
+					if (doc.Range2(at, stop).Font.Hidden == tomConstants.tomTrue) hidden.Add((at, stop));
+					at = stop;
 				}
-				doc.Range2(start, end).Font = copiedFont;
-				foreach (var (from, to) in hidden) doc.Range2(from, to).Font.Hidden = tomConstants.tomTrue;
-			} else selection.Font = copiedFont;
+				if (to > from) doc.Range2(from, to).Font = copiedFont;
+				foreach (var (a, b) in hidden) doc.Range2(a, b).Font.Hidden = tomConstants.tomTrue;
+			} else if (copiedPara == null) selection.Font = copiedFont;
 		} finally {
 			doc.EndEditCollection();
 		}
-		if (whole) form.StylesChanged();
+		if (copiedPara != null) form.StylesChanged();
 	}
 
 	/// Deletes one of your own styles; its paragraphs become Normal (one undo step).

@@ -490,7 +490,7 @@
   "status.addedToDictionary": "\"{0}\" se agregó al diccionario de Windows.",
   "status.painterStays": "Copiar formato sigue activo: seleccione texto para darle el formato; Esc o un clic en Copiar formato lo detiene.",
   "status.painterOff": "Copiar formato desactivado.",
-  "status.painterSelect": "Seleccione el texto al que dar este formato (un clic: la palabra ahí). Haga doble clic en Copiar formato para seguir aplicándolo; Esc lo detiene.",
+  "status.painterSelect": "Haga clic en un párrafo para darle este formato (y a la palabra ahí), o seleccione texto. Haga doble clic en Copiar formato para seguir aplicándolo; Esc lo detiene.",
   "status.themeNextWindow": "El tema {0} se aplica desde la próxima ventana de AhkWord: Archivo > Nueva ventana, o la próxima vez que se inicie AhkWord.",
   "status.richTextOnly": "{0} funciona en la vista de texto enriquecido (Vista > Texto enriquecido).",
   "status.recoveryNotWritten": "No se pudo escribir la copia de recuperación: {0}",
