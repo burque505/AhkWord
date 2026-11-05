@@ -9,7 +9,7 @@ AhkWord's commands are on a ribbon, the one built into Windows (as in Paint and 
 | **Insert** | Page Break, Table of Contents, Table, Picture, Linked Thumbnail, Horizontal Line, Link, Cross-reference, Footnote, Update (F9), Date & Time, Insert from Template, Fill In Fields, Snippets |
 | **Layout** | Page Setup, Header & Footer, Line Numbers, Print Preview, Export as PDF |
 | **Review** | Next Spelling Error, Add to Dictionary, Check spelling as you type |
-| **View** | Document View (Rich Text, Markdown, HTML, Side by Side, Wrap source lines, Source line numbers), Print Layout, Show Pages, Wrap to window, Header and footer, Outline, Zoom (Page Width, One Page, Multiple Pages, Zoom In, Zoom Out, 100%) |
+| **View** | Document View (Rich Text, Markdown, HTML, Side by Side, Wrap source lines, Source line numbers), Print Layout, Show Pages, Wrap to window, Header and footer, Outline, Ruler, Zoom (Page Width, One Page, Multiple Pages, Zoom In, Zoom Out, 100%) |
 | **Tools** | Macros, Record Macro, Macro Hotkeys, Event Hooks, Run Script, Macros Folder, Command Palette, Automation API, About |
 | **Table Tools** | while the caret is in a table: rows and columns, Properties, Borders, Shading, delete |
 
@@ -55,3 +55,5 @@ Press ++alt++ to see the KeyTips: ++h++ Home, ++n++ Insert, ++p++ Layout, ++r++ 
 | ++ctrl+shift+r++ | record a macro |
 
 The outline panel (View > Outline) lists the headings: click one to go there; right-click it to promote or demote it.
+
+The ruler (View > Ruler) shows, above the page, the margins in grey and the text's width in white, measured in inches (or centimetres where Windows measures in them) from the text's left edge. On it are the indents of the paragraph at the caret (the first line's, the triangle at the top; the hanging indent, the triangle at the bottom, with the left indent's box under it; the right indent's, at the right), its tab stops, and the default tab stops after them as small grey ticks. With several paragraphs selected it shows the first one's; in a table, only the scale. It is for looking only: change indents and tabs with **Paragraph...** and its **Tabs...** (see [Formatting](formatting.md)).

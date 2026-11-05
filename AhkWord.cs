@@ -31,6 +31,7 @@
 #load "rte_sections.cs"
 #load "rte_extensions.cs"
 #load "rte_headline.cs"
+#load "rte_ruler.cs"
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
 // Run it with AhkWord.ahk. Iteration 66 adds to iteration 65:
 //   - Print Layout: a document whose first paragraphs are hidden (Word puts floating shapes' anchors there) no longer has
@@ -630,7 +631,7 @@ enum RibbonCommand : uint
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399, Theme = 401, FormatPainter = 402, FontName = 410, FontSize = 411, FontBold = 412, FontItalic = 413, FontUnderline = 414, FontStrike = 415, FontSub = 416, FontSuper = 417, FontGrow = 418, FontShrink = 419, FontColor = 420, FontHighlight = 421,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399, Theme = 401, FormatPainter = 402, Ruler = 403, FontName = 410, FontSize = 411, FontBold = 412, FontItalic = 413, FontUnderline = 414, FontStrike = 415, FontSub = 416, FontSuper = 417, FontGrow = 418, FontShrink = 419, FontColor = 420, FontHighlight = 421,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
 	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
@@ -882,6 +883,15 @@ class WriterForm : Form
 		sourceSplit.Panel1.Controls.Add(sourcePanel);
 		pageHost.Controls.Add(page);
 		sourceSplit.Panel2.Controls.Add(pageHost);
+		// (iteration 78) the ruler above the page, outside what scrolls down; it follows the page sideways and the zoom
+		ruler.Height = LogicalToDeviceUnits(22);
+		ruler.Visible = Settings.ShowRuler;
+		sourceSplit.Panel2.Controls.Add(ruler);    // (added after the page, so docked before it)
+		Editor.Painted += () => FollowRuler();
+		pagePanel.LocationChanged += (s, e) => FollowRuler();
+		pagePanel.SizeChanged += (s, e) => FollowRuler();
+		Editor.SizeChanged += (s, e) => FollowRuler();
+		ruler.VisibleChanged += (s, e) => FollowRuler(true);
 		outlineSplit.Panel2.Controls.Add(sourceSplit);
 		sourceBox.TextChanged += (s, e) => SourceTextChanged();
 		sourceBox.SelectionChanged += (s, e) => UpdateUi();
@@ -1217,6 +1227,7 @@ class WriterForm : Form
 		Check(RibbonCommand.ShowPages, () => api.PageView = !Settings.PageView);    // (a check box: the ribbon showed the toggle button's state wrongly)
 		Check(RibbonCommand.ShowBands, () => api.HeaderFooterVisible = !Settings.ShowBands);
 		Check(RibbonCommand.Outline, () => api.OutlineVisible = outlineSplit.Panel1Collapsed, Keys.Control | Keys.Shift | Keys.O);
+		Check(RibbonCommand.Ruler, () => api.RulerVisible = !Settings.ShowRuler);
 		Button(RibbonCommand.ZoomIn, () => { if (PagesShown) pageView!.Zoom(1.1f); else ManualZoom(Math.Min(5f, EditorZoom() + 0.1f)); });
 		Button(RibbonCommand.ZoomOut, () => { if (PagesShown) pageView!.Zoom(1 / 1.1f); else ManualZoom(Math.Max(0.5f, EditorZoom() - 0.1f)); });
 		Button(RibbonCommand.Zoom100, () => { if (PagesShown) pageView!.Zoom(0); else ManualZoom(1f); });
@@ -3893,7 +3904,7 @@ class WriterForm : Form
 	static readonly HashSet<RibbonCommand> PageViewCommands = new() {
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100, RibbonCommand.Print,
 		RibbonCommand.PrintPreview, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Save,
-		RibbonCommand.SaveAs, RibbonCommand.PageSetup, RibbonCommand.HeaderFooter, RibbonCommand.Columns, RibbonCommand.ShowBands, RibbonCommand.Outline,
+		RibbonCommand.SaveAs, RibbonCommand.PageSetup, RibbonCommand.HeaderFooter, RibbonCommand.Columns, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.Ruler,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.Exit, RibbonCommand.NewWindow, RibbonCommand.OpenInNewWindow,
 		RibbonCommand.Theme,
 	};
@@ -4295,6 +4306,45 @@ class WriterForm : Form
 	}
 
 	internal bool OutlineVisible => !outlineSplit.Panel1Collapsed;
+
+	// ---------------------------------------------------------------- Iteration 78: the ruler (rte_ruler.cs)
+
+	readonly RulerView ruler = new();
+
+	internal void SetRulerVisible(bool visible) {
+		Settings.ShowRuler = visible;
+		ruler.Visible = visible && !PagesShown;
+		UpdateUi();
+	}
+
+	/// Shows the page's place and, with paragraph, the caret's paragraph's indents and tab stops (only on a selection
+	/// change or a command: the page's place on every paint, cheaply).
+	void FollowRuler(bool paragraph = false) {
+		if (!ruler.Visible || !Editor.IsHandleCreated || !ruler.IsHandleCreated) return;
+		var area = Editor.TextArea;
+		int textLeft = ruler.PointToClient(Editor.PointToScreen(new Point(area.Left, 0))).X, textRight, paperLeft, paperRight;
+		if (pageLayout != null) {
+			var (marginLeft, text, marginRight) = PrintLayoutPage.Pixels(pageLayout, EditorZoom(), DeviceDpi);
+			textRight = textLeft + text; paperLeft = textLeft - marginLeft; paperRight = textRight + marginRight;
+		} else {
+			textRight = textLeft + area.Width; paperLeft = textLeft; paperRight = textRight;
+		}
+		var frame = new RulerView.Frame(paperLeft, textLeft, textRight, paperRight, Editor.PixelsPerPoint);
+		ruler.Show(frame, paragraph ? RulerParagraph() : ruler.ShownParagraph);
+	}
+
+	// The paragraph at the selection's start (Word's ruler shows the first one's); none in a table.
+	RulerView.Paragraph? RulerParagraph() {
+		try {
+			if (CaretInTable()) return null;
+			var doc = Editor.TextDocument;
+			var start = doc.Selection2.Start;
+			var p = doc.Range2(start, start).Para;
+			var tabs = new (float, int)[p.TabCount];
+			for (int i = 0; i < tabs.Length; i++) { p.GetTab(i, out float position, out int alignment, out _); tabs[i] = (position, alignment); }
+			return new(p.FirstLineIndent, p.LeftIndent, p.RightIndent, tabs, doc.DefaultTabStop);
+		} catch (Exception) { return null; }
+	}
 
 	internal List<(int Level, int Start, string Text)> CurrentOutline() {
 		RefreshOutline();
@@ -4987,6 +5037,8 @@ class WriterForm : Form
 		try {
 			var range = api.SelectionRange();
 			if (ribbon.Initialized) UpdateRibbon(range);
+			if (ruler.Visible != (Settings.ShowRuler && !PagesShown)) ruler.Visible = Settings.ShowRuler && !PagesShown;    // (not over Multiple Pages)
+			FollowRuler(true);
 
 			int line, column;
 			if (SourceActive) {
@@ -5089,6 +5141,7 @@ class WriterForm : Form
 		zoomClicked = false;
 		Push(checkBoxes[RibbonCommand.ShowBands], "BooleanValue", Settings.ShowBands, v => checkBoxes[RibbonCommand.ShowBands].BooleanValue = v);
 		Push(checkBoxes[RibbonCommand.Outline], "BooleanValue", !outlineSplit.Panel1Collapsed, v => checkBoxes[RibbonCommand.Outline].BooleanValue = v);
+		Push(checkBoxes[RibbonCommand.Ruler], "BooleanValue", Settings.ShowRuler, v => checkBoxes[RibbonCommand.Ruler].BooleanValue = v);
 		Push(checkBoxes[RibbonCommand.SpellCheck], "BooleanValue", Editor.EnableSpellCheck, v => checkBoxes[RibbonCommand.SpellCheck].BooleanValue = v);
 		Push(undoButton, "Enabled", Editor.CanUndo, v => undoButton.Enabled = v);
 		Push(redoButton, "Enabled", Editor.CanRedo, v => redoButton.Enabled = v);
@@ -5115,7 +5168,7 @@ class WriterForm : Form
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.RecordMacro, RibbonCommand.MacroHotkeys, RibbonCommand.EventHooks, RibbonCommand.CommandPalette,
 		RibbonCommand.RunScript, RibbonCommand.MacrosFolder, RibbonCommand.Snippets, RibbonCommand.ViewRich, RibbonCommand.ViewMarkdown, RibbonCommand.ViewHtml,
 		RibbonCommand.SideBySide, RibbonCommand.SourceWordWrap, RibbonCommand.SourceLineNumbers, RibbonCommand.WordWrap, RibbonCommand.PrintLayout, RibbonCommand.ZoomPageWidth, RibbonCommand.ZoomOnePage,
-		RibbonCommand.ZoomMultiplePages, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
+		RibbonCommand.ZoomMultiplePages, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.Ruler, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
 		RibbonCommand.HeaderFooter, RibbonCommand.Columns, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
 		RibbonCommand.LineNumberOptions, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
 		RibbonCommand.SelectAll, RibbonCommand.Find, RibbonCommand.Replace, RibbonCommand.Theme,
@@ -8899,6 +8952,12 @@ public class EditorApi
 		set => form.SetOutlineVisible(value);
 	}
 
+	/// Whether the ruler (View > Show > Ruler) is shown. Remembered.
+	public bool RulerVisible {
+		get => form.Settings.ShowRuler;
+		set => form.SetRulerVisible(value);
+	}
+
 	/// Changes the heading level (1-6, or 0 for normal text) of the paragraph at a position.
 	public void SetHeadingLevel(int position, int level) {
 		int selStart = ed.SelectionStart, selLength = ed.SelectionLength;
@@ -9658,6 +9717,7 @@ public sealed class Settings
 	public string[] Header { get; set; } = DefaultHeader;
 	public bool ShowFooter { get; set; } = true;
 	public bool ShowOutline { get; set; } = true;
+	public bool ShowRuler { get; set; }    // View > Show > Ruler (iteration 78)
 	public string SourceView { get; set; } = "None";    // View > Document View: None (rich text), Markdown or Html
 	public bool SideBySide { get; set; }
 	public int SourceSplit { get; set; } = 50;    // side by side: the source's share of the width, in percent

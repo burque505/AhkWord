@@ -1868,6 +1868,17 @@ Rte.OutlineVisible := value
 
 Whether the outline panel is shown.
 
+### RulerVisible
+
+```autohotkey
+value := Rte.RulerVisible
+Rte.RulerVisible := value
+```
+
+1/0
+
+Whether the ruler (View > Show > Ruler) is shown. Remembered.
+
 ### SetHeadingLevel
 
 ```autohotkey
