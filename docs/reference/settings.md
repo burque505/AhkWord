@@ -19,7 +19,7 @@ Put an empty file named `portable` (or `portable.txt`) beside `AhkWord.exe` or `
 
 ## Language
 
-AhkWord's interface (the ribbon, the menus, the status bar, most dialogs) is in English, or in Spanish with the setting `"Language": "es"` in `settings.json` (set it while AhkWord is closed; it shows from the next start). A few of the rarer dialogs are still in English only. The texts are in the `lang` folder beside AhkWord: `en.json` lists every English text with its key, `es.json` the Spanish; a text a language lacks shows in English.
+AhkWord's interface (the ribbon, the menus, the status bar, most dialogs) is in English, or in Spanish: choose it in **Review > Language** (or the command palette's *Language: Español*), and it shows the next time AhkWord starts. That is the setting `"Language": "es"` in `settings.json`, which can also be set by hand while AhkWord is closed. A few of the rarer dialogs are still in English only. The texts are in the `lang` folder beside AhkWord: `en.json` lists every English text with its key, `es.json` the Spanish; a text a language lacks shows in English. A folder beside AhkWord with a `lang` folder of its own (an add-on's) can have its texts there too, as `<folder>\lang\es.json`: they are read after AhkWord's.
 
 ## Environment variables
 

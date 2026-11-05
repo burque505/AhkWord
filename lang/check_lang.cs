@@ -6,6 +6,10 @@
 // English must be literals). Writes lang\en.json, every key with its English: the table a new language starts from, and,
 // committed, a record whose changes (git diff) show which translations to look at again; what changed since the last
 // run is reported too.
+// Iteration 80: an extension's strings (a build with more features: rte_extensions.cs), in a folder of the program's that
+// has a lang folder of its own (as Lang.ExtensionFolders finds them: pro\lang). Its code is that folder's *.cs (and its
+// subfolders'), its translations <folder>\lang\<code>.json (read over AhkWord's), its English <folder>\lang\en.json. A
+// key the extension's code uses goes in its own file, AhkWord's in lang\<code>.json; the ribbon's in either.
 // args: [0] the program's folder, [1] a language code (optional: every lang\*.json)
 // Returns the report; exit code 1 when there are errors (not for strings a language lacks).
 using System.Text;
@@ -21,11 +25,15 @@ void Error(string text) { report.AppendLine("  ERROR " + text); errors++; }
 
 // --- the program's strings
 var code = new Dictionary<string, Entry>(StringComparer.Ordinal);    // key -> its English (TN: key.one, key.other)
-var files = Directory.GetFiles(root, "*.cs").OrderBy(f => Path.GetFileName(f) == "AhkWord.cs" ? "" : Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
+var extensions = Directory.GetDirectories(root).Where(d => !Path.GetFileName(d).Equals("lang", StringComparison.OrdinalIgnoreCase) && Directory.Exists(Path.Combine(d, "lang")))
+	.Select(d => Path.GetFileName(d)).OrderBy(d => d, StringComparer.OrdinalIgnoreCase).ToList();    // (as Lang.ExtensionFolders)
+var files = Directory.GetFiles(root, "*.cs").OrderBy(f => Path.GetFileName(f) == "AhkWord.cs" ? "" : Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
+	.Select(f => (File: f, Origin: ""))
+	.Concat(extensions.SelectMany(x => Directory.GetFiles(Path.Combine(root, x), "*.cs", SearchOption.AllDirectories).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).Select(f => (File: f, Origin: x))));
 int calls = 0;
-foreach (var file in files) {
+foreach (var (file, origin) in files) {
 	string text = File.ReadAllText(file);
-	string name = Path.GetFileName(file);
+	string name = Path.GetRelativePath(root, file);
 	var toks = new List<Tok>();
 	int i = 0;
 	try { Lex(text, ref i, false, toks); }
@@ -47,20 +55,21 @@ foreach (var file in files) {
 		if (parts == null) { Error($"{where}: a {toks[t].Text} call whose key and English aren't literals: \"{Excerpt(text, toks[t].Pos)}\""); continue; }
 		bool formatted = plural || (j < toks.Count && toks[j].Is(','));
 		calls++;
-		if (plural) { Add(parts[0] + ".one", parts[1], true, where); Add(parts[0] + ".other", parts[2], true, where); }
-		else Add(parts[0], parts[1], formatted, where);
+		if (plural) { Add(parts[0] + ".one", parts[1], true, where, origin); Add(parts[0] + ".other", parts[2], true, where, origin); }
+		else Add(parts[0], parts[1], formatted, where, origin);
 	}
 }
-void Add(string key, string english, bool formatted, string where) {
+void Add(string key, string english, bool formatted, string where, string origin) {
 	if (!Regex.IsMatch(key, @"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$")) { Error($"{where}: \"{key}\" is not a key (words with dots: msg.saveChanges)."); return; }
 	if (key.StartsWith("cmd")) { Error($"{where}: \"{key}\": keys starting with cmd are the ribbon's."); return; }
 	if (code.TryGetValue(key, out var had)) {
 		if (had.English != english) Error($"{where}: \"{key}\" is used with another English at {had.Where}: \"{english}\" / \"{had.English}\".");
 		else if (had.Formatted != formatted) Error($"{where}: \"{key}\" is formatted (arguments) here and not at {had.Where}, or the other way round.");
+		else if (had.Origin != origin) Error($"{where}: \"{key}\" is used by {(had.Origin == "" ? "AhkWord" : "the extension " + had.Origin)} ({had.Where}) too: an extension's keys are its own.");
 		return;
 	}
 	if (formatted && Placeholders(english) == null) Error($"{where}: \"{key}\": its English isn't a format string (a {{ or }} not doubled?): \"{english}\".");
-	code[key] = new Entry(english, formatted, where);
+	code[key] = new Entry(english, formatted, where, origin);
 }
 
 // --- the ribbon's strings
@@ -73,47 +82,70 @@ using (var doc = JsonDocument.Parse(File.ReadAllText(stringsFile)))
 
 report.Insert(0, $"Strings: {code.Count} of the program's ({calls} T and TN calls), {ribbon.Count} of the ribbon's.\n");
 
-// --- en.json: every key and its English; what changed since it was written
-string enFile = Path.Combine(langDir, "en.json");
-var english = ribbon.Concat(code.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, c.Value.English))).ToList();
+// --- en.json: every key and its English (an extension's in its own); what changed since it was written
+var english = ribbon.Concat(code.Select(c => KeyValuePair.Create(c.Key, c.Value.English))).ToDictionary(e => e.Key, e => e.Value);
 var changed = new Dictionary<string, string>();    // key -> the English before
-if (File.Exists(enFile))
-	try {
-		foreach (var (key, was) in ReadTable(enFile))
-			if (english.FirstOrDefault(e => e.Key == key) is { Key: not null } now && now.Value != was) changed[key] = was;
-	} catch (Exception ex) { report.AppendLine($"  (en.json could not be read, so what changed isn't known: {ex.Message})"); }
-var json = new MemoryStream();
-using (var w = new Utf8JsonWriter(json, new JsonWriterOptions { Indented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping })) {
-	w.WriteStartObject();
-	foreach (var (key, value) in english) w.WriteString(key, value);
-	w.WriteEndObject();
+foreach (var origin in extensions.Prepend("")) {
+	string enFile = Path.Combine(LangDir(origin), "en.json");
+	var mine = (origin == "" ? ribbon.ToList() : new List<KeyValuePair<string, string>>())
+		.Concat(code.Where(c => c.Value.Origin == origin).OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => KeyValuePair.Create(c.Key, c.Value.English))).ToList();
+	if (File.Exists(enFile))
+		try {
+			foreach (var (key, was) in ReadTable(enFile))
+				if (english.TryGetValue(key, out var now) && now != was) changed[key] = was;
+		} catch (Exception ex) { report.AppendLine($"  ({Shown(enFile)} could not be read, so what changed isn't known: {ex.Message})"); }
+	var json = new MemoryStream();
+	using (var w = new Utf8JsonWriter(json, new JsonWriterOptions { Indented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping })) {
+		w.WriteStartObject();
+		foreach (var (key, value) in mine) w.WriteString(key, value);
+		w.WriteEndObject();
+	}
+	string header = origin == ""
+		? "// English: every string of AhkWord's interface by its key, the table a language's file translates (lang\\<code>.json).\n"
+			+ "// Written by check_lang.ahk; don't edit: the English is in the code (T and TN calls) and in ribbon\\RteRibbon.xml.\n"
+		: $"// English: every string of the extension {origin} by its key, the table a language's file translates ({origin}\\lang\\<code>.json).\n"
+			+ "// Written by check_lang.ahk; don't edit: the English is in the code (T and TN calls).\n";
+	File.WriteAllText(enFile, header + Encoding.UTF8.GetString(json.ToArray()) + "\n", new UTF8Encoding(false));
 }
-string header = "// English: every string of AhkWord's interface by its key, the table a language's file translates (lang\\<code>.json).\n"
-	+ "// Written by check_lang.ahk; don't edit: the English is in the code (T and TN calls) and in ribbon\\RteRibbon.xml.\n";
-File.WriteAllText(enFile, header + Encoding.UTF8.GetString(json.ToArray()) + "\n", new UTF8Encoding(false));
 
-// --- each language
+// --- each language: AhkWord's file and the extensions'
 var codes = args.Length > 1 && args[1] != ""
 	? new[] { args[1] }
-	: Directory.GetFiles(langDir, "*.json").Select(Path.GetFileNameWithoutExtension).Where(c => c != "en").OrderBy(c => c).ToArray();
+	: extensions.Prepend("").SelectMany(o => Directory.Exists(LangDir(o)) ? Directory.GetFiles(LangDir(o), "*.json") : Array.Empty<string>())
+		.Select(f => Path.GetFileNameWithoutExtension(f)).Where(c => c != "en").Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c).ToArray();
 foreach (var lang in codes) {
-	string file = Path.Combine(langDir, lang + ".json");
 	report.AppendLine().AppendLine($"{lang}.json");
-	Dictionary<string, string> table;
-	try { table = ReadTable(file); }
-	catch (Exception ex) { Error($"{lang}.json could not be read: {ex.Message}"); continue; }
-	var missingCode = code.Where(c => !table.ContainsKey(c.Key)).ToList();
-	var missingRibbon = ribbon.Keys.Where(k => !k.EndsWith(".Keytip") && !table.ContainsKey(k)).ToList();    // (a keytip: may stay English)
-	var unused = table.Keys.Where(k => !code.ContainsKey(k) && !ribbon.ContainsKey(k)).ToList();
+	var tables = new Dictionary<string, Dictionary<string, string>>();    // origin -> its file's table (an extension's only when it has one)
+	bool unreadable = false;
+	foreach (var origin in extensions.Prepend("")) {
+		string file = Path.Combine(LangDir(origin), lang + ".json");
+		if (!File.Exists(file)) { if (origin == "") tables[""] = new(); continue; }    // (AhkWord's: none, every string lacking)
+		try { tables[origin] = ReadTable(file); }
+		catch (Exception ex) { Error($"{Shown(file)} could not be read: {ex.Message}"); unreadable = true; }
+	}
+	if (unreadable) continue;
+	foreach (var origin in tables.Keys.Where(o => o != "")) report.AppendLine($"  and {Shown(Path.Combine(LangDir(origin), lang + ".json"))}");
+	bool Has(string key) => tables.Values.Any(t => t.ContainsKey(key));
+	var missingCode = code.Where(c => !(tables.TryGetValue(c.Value.Origin, out var t) && t.ContainsKey(c.Key))).ToList();
+	var missingRibbon = ribbon.Keys.Where(k => !k.EndsWith(".Keytip") && !Has(k)).ToList();    // (a keytip: may stay English)
+	var unused = new List<string>();    // (each as the report shows it)
 	int done = code.Count - missingCode.Count;
-	report.AppendLine($"  the program's: {done} of {code.Count} translated; the ribbon's: {ribbon.Keys.Count(k => !k.EndsWith(".Keytip")) - missingRibbon.Count} of {ribbon.Keys.Count(k => !k.EndsWith(".Keytip"))} (and {ribbon.Keys.Count(k => k.EndsWith(".Keytip") && table.ContainsKey(k))} keytips)");
-	foreach (var (key, value) in table) {
-		if (value.Trim() == "") Error($"\"{key}\" is empty.");
-		if (code.TryGetValue(key, out var e) && e.Formatted) {
-			var want = Placeholders(e.English);
-			var have = Placeholders(value);
-			if (have == null) Error($"\"{key}\" isn't a format string (a {{ or }} not doubled?): \"{value}\".");
-			else if (want != null && !have.SetEquals(want)) Error($"\"{key}\": placeholders {Show(have)}, the English's {Show(want)}: \"{value}\".");
+	report.AppendLine($"  the program's: {done} of {code.Count} translated; the ribbon's: {ribbon.Keys.Count(k => !k.EndsWith(".Keytip")) - missingRibbon.Count} of {ribbon.Keys.Count(k => !k.EndsWith(".Keytip"))} (and {ribbon.Keys.Count(k => k.EndsWith(".Keytip") && Has(k))} keytips)");
+	foreach (var (origin, table) in tables) {
+		string FileOf(string o) => Shown(Path.Combine(LangDir(o), lang + ".json"));
+		foreach (var (key, value) in table) {
+			if (value.Trim() == "") Error($"\"{key}\" is empty.");
+			if (code.TryGetValue(key, out var e)) {
+				if (e.Origin != origin) Error($"\"{key}\" is in {FileOf(origin)}, but it is {(e.Origin == "" ? "AhkWord's" : "the extension " + e.Origin + "'s")}: it goes in {FileOf(e.Origin)}.");
+				if (e.Formatted) {
+					var want = Placeholders(e.English);
+					var have = Placeholders(value);
+					if (have == null) Error($"\"{key}\" isn't a format string (a {{ or }} not doubled?): \"{value}\".");
+					else if (want != null && !have.SetEquals(want)) Error($"\"{key}\": placeholders {Show(have)}, the English's {Show(want)}: \"{value}\".");
+				}
+			} else if (ribbon.ContainsKey(key)) {
+				if (origin != "" && tables[""].ContainsKey(key)) Error($"\"{key}\" is in {FileOf("")} and in {FileOf(origin)}: a string goes in one file.");
+			} else unused.Add($"{key}  {Q(value)}" + (origin == "" ? "" : $"  ({FileOf(origin)})"));
 		}
 	}
 	if (missingRibbon.Count > 0) {
@@ -126,17 +158,21 @@ foreach (var lang in codes) {
 	}
 	if (unused.Count > 0) {
 		report.AppendLine($"  keys nothing uses any more ({unused.Count}):");
-		foreach (var k in unused) report.AppendLine($"    {k}  {Q(table[k])}");
+		foreach (var line in unused) report.AppendLine("    " + line);
 	}
-	var review = changed.Keys.Where(table.ContainsKey).ToList();
+	var review = changed.Keys.Where(Has).ToList();
 	if (review.Count > 0) {
 		report.AppendLine($"  English changed since the last check, translation to look at again ({review.Count}):");
-		foreach (var k in review) report.AppendLine($"    {k}  {Q(changed[k])} -> {Q(english.First(e => e.Key == k).Value)}; now {Q(table[k])}");
+		foreach (var k in review) report.AppendLine($"    {k}  {Q(changed[k])} -> {Q(english[k])}; now {Q(tables.Values.First(t => t.ContainsKey(k))[k])}");
 	}
 }
 report.AppendLine().Append(errors == 0 ? "No errors." : $"{errors} error{(errors == 1 ? "" : "s")}.");
 AHK.Return(report.ToString());
 return errors == 0 ? 0 : 1;
+
+// The language files' folder: AhkWord's (origin "") or an extension's; a file's name as the report shows it.
+string LangDir(string origin) => origin == "" ? langDir : Path.Combine(root, origin, "lang");
+string Shown(string path) => Path.GetRelativePath(root, path);
 
 // A language's file (as Lang.Read: one object of key -> string, comments allowed).
 static Dictionary<string, string> ReadTable(string path) {
@@ -284,4 +320,4 @@ static string Escape(string s, ref int i) {
 
 enum K { Ident, Punct, Str, IStr, Other }
 record Tok(K Kind, string Text, int Pos) { public bool Is(char c) => Kind == K.Punct && Text.Length == 1 && Text[0] == c; }
-record Entry(string English, bool Formatted, string Where);
+record Entry(string English, bool Formatted, string Where, string Origin);

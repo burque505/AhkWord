@@ -634,7 +634,7 @@ enum RibbonCommand : uint
 	AddToDictionary = 296, SpellCheck = 297, WordWrap = 302, PrintLayout = 370, ShowPages = 392, ListNone = 393, ZoomPageWidth = 371,
 	ZoomOnePage = 372, ExportPdfButton = 374, ZoomMultiplePages = 373, ShowBands = 303, Outline = 304, ZoomIn = 305,
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
-	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399, Theme = 401, FormatPainter = 402, Ruler = 403, FontName = 410, FontSize = 411, FontBold = 412, FontItalic = 413, FontUnderline = 414, FontStrike = 415, FontSub = 416, FontSuper = 417, FontGrow = 418, FontShrink = 419, FontColor = 420, FontHighlight = 421,
+	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399, Theme = 401, FormatPainter = 402, Ruler = 403, Language = 405, FontName = 410, FontSize = 411, FontBold = 412, FontItalic = 413, FontUnderline = 414, FontStrike = 415, FontSub = 416, FontSuper = 417, FontGrow = 418, FontShrink = 419, FontColor = 420, FontHighlight = 421,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
 	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
@@ -697,7 +697,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 79;    // (the About box; make_version.ps1)
+	public const int Iteration = 80;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1246,6 +1246,14 @@ class WriterForm : Form
 				BeginInvoke(() => Command(RibbonCommand.Theme, () => api.Theme = name, M("Theme", name)));
 			}
 		};
+		languageGallery = new RibbonDropDownGallery(ribbon, (uint)RibbonCommand.Language);    // (iteration 80)
+		languageGallery.ItemsSourceReady += (s, e) => FillLanguageGallery();
+		languageGallery.ExecuteEvent += (s, e) => {
+			if (GalleryItemEventArgs.Create(languageGallery, e).SelectedItem is { } item && item.SelectedItemIndex >= 0 && item.SelectedItemIndex < languages.Count) {
+				string code = languages[(int)item.SelectedItemIndex].Code;
+				BeginInvoke(() => Command(RibbonCommand.Language, () => ChooseLanguage(code), M("Language", code)));
+			}
+		};
 		Toggle(RibbonCommand.ZoomMultiplePages, () => { bool show = !PagesShown; api.MultiplePages = show; Record(M("MultiplePages", show)); });
 		Toggle(RibbonCommand.ViewRich, () => SetView(SourceKind.None, false));
 		Toggle(RibbonCommand.ViewMarkdown, () => SetView(SourceKind.Markdown, sideBySide));
@@ -1397,6 +1405,7 @@ class WriterForm : Form
 
 	string ribbonLoaded = "";    // (the file the ribbon came from)
 	RibbonDropDownGallery themeGallery = null!;
+	RibbonDropDownGallery languageGallery = null!;
 
 	// The dark ribbon's Font group (ribbon\RteRibbonDarkFont.xml). Windows' font control doesn't follow a dark ribbon: its
 	// B, I, U ... stay dark navy, and its font list near-black, whatever the colors. These do what it does, by the same way
@@ -1486,6 +1495,39 @@ class WriterForm : Form
 
 	void ShowThemeChosen() => themeGallery.SelectedItem = (uint)Array.IndexOf(AppTheme.All, AppTheme.Named(Settings.Theme));
 
+	// Review > Language (iteration 80): the languages there are files for, each by its own name; the one chosen in the
+	// settings ticked. A choice is saved for the next start: the interface's strings are made as the window is.
+	List<(string Code, string Name)> languages = new();
+	void FillLanguageGallery() {
+		if (!ribbon.Initialized || languageGallery.ItemsSource is not { } items) return;
+		languages = Lang.Available(appDir);
+		items.Clear();
+		foreach (var (_, name) in languages)
+			items.Add(new GalleryItemPropertySet { Label = name, CategoryID = Constants.UI_Collection_InvalidIndex });
+		ShowLanguageChosen();
+	}
+
+	void ShowLanguageChosen() {
+		if (!ribbon.Initialized) return;
+		int index = languages.FindIndex(l => l.Code.Equals(Lang.Chosen(appDir, Settings.Language), StringComparison.OrdinalIgnoreCase));
+		languageGallery.SelectedItem = (uint)Math.Max(0, index);
+	}
+
+	/// Review > Language and the command palette: the setting Language, and when AhkWord isn't in that language now, when
+	/// it will be.
+	internal void ChooseLanguage(string code) {
+		api.Language = code;
+		ShowLanguageChosen();
+		string chosen = Lang.Chosen(appDir, Settings.Language);
+		string name = Lang.NameOf(chosen);
+		if (Environment.GetEnvironmentVariable("AHKWORD_LANG") is { Length: > 0 } env)
+			MessageBox.Show(this, T("msg.languageEnvironment", "AhkWord will be in {0} when it starts without the environment variable AHKWORD_LANG, which sets its language to \"{1}\" now.", name, env),
+				"AhkWord", MessageBoxButtons.OK, MessageBoxIcon.Information);
+		else if (!chosen.Equals(Lang.Code, StringComparison.OrdinalIgnoreCase))
+			MessageBox.Show(this, T("msg.languageNextStart", "AhkWord will be in {0} the next time it starts.", name), "AhkWord", MessageBoxButtons.OK, MessageBoxIcon.Information);
+		else SetStatus(T("status.languageKept", "AhkWord is in {0}.", name));
+	}
+
 	// The theme's colors, on the ribbon as soon as it is there.
 	void PaintTheme() {
 		var theme = AppTheme.Named(Settings.Theme);
@@ -1563,6 +1605,11 @@ class WriterForm : Form
 			string styleName = style.Name;
 			items.Add(new PaletteItem("Style: " + styleName, "Home > Styles", "", "", () => !SourceActive,
 				() => Run(() => api.SetStyle(styleName), M("SetStyle", styleName)), "style:" + styleName));
+		}
+		foreach (var (code, languageName) in Lang.Available(appDir)) {
+			string chosen = code;
+			items.Add(new PaletteItem(T("palette.language", "Language: {0}", languageName), "Review > Language", "", "", () => true,
+				() => Run(() => ChooseLanguage(chosen), M("Language", chosen)), "lang:" + code));
 		}
 		foreach (var snippet in SnippetList()) {
 			string abbreviation = snippet.Abbreviation;
@@ -3920,7 +3967,7 @@ class WriterForm : Form
 		RibbonCommand.PrintPreview, RibbonCommand.ExportPdf, RibbonCommand.ExportPdfButton, RibbonCommand.ExportWord, RibbonCommand.ExportOdt, RibbonCommand.Save,
 		RibbonCommand.SaveAs, RibbonCommand.PageSetup, RibbonCommand.HeaderFooter, RibbonCommand.Columns, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.Ruler,
 		RibbonCommand.Help, RibbonCommand.About, RibbonCommand.AutomationApi, RibbonCommand.Exit, RibbonCommand.NewWindow, RibbonCommand.OpenInNewWindow,
-		RibbonCommand.Theme,
+		RibbonCommand.Theme, RibbonCommand.Language,
 	};
 
 	/// Shows the printed pages in the editor's place (show) or goes back to editing where the caret was.
@@ -5187,7 +5234,7 @@ class WriterForm : Form
 		RibbonCommand.ZoomMultiplePages, RibbonCommand.ShowBands, RibbonCommand.Outline, RibbonCommand.Ruler, RibbonCommand.ZoomIn, RibbonCommand.ZoomOut, RibbonCommand.Zoom100,
 		RibbonCommand.HeaderFooter, RibbonCommand.Columns, RibbonCommand.LineNumbersNone, RibbonCommand.LineNumbersContinuous, RibbonCommand.LineNumbersEachPage,
 		RibbonCommand.LineNumberOptions, RibbonCommand.Undo, RibbonCommand.Redo, RibbonCommand.Cut, RibbonCommand.Copy, RibbonCommand.Paste,
-		RibbonCommand.SelectAll, RibbonCommand.Find, RibbonCommand.Replace, RibbonCommand.Theme,
+		RibbonCommand.SelectAll, RibbonCommand.Find, RibbonCommand.Replace, RibbonCommand.Theme, RibbonCommand.Language,
 	};
 
 	// Keys the source editor handles itself (RichEdit's own editing), and the document's commands it lets through.
@@ -8967,6 +9014,18 @@ public class EditorApi
 	public bool OutlineVisible {
 		get => form.OutlineVisible;
 		set => form.SetOutlineVisible(value);
+	}
+
+	/// <summary>The interface's language, as the setting Language has it: "en" (English) or a language AhkWord has a file
+	/// for in its lang folder ("es": Spanish). Set, it is saved, and shows the next time AhkWord starts (Review > Language).</summary>
+	public string Language {
+		get => Lang.Chosen(AppFolders.ProgramFolder, form.Settings.Language);
+		set {
+			var found = Lang.Available(AppFolders.ProgramFolder).FirstOrDefault(l => l.Code.Equals(value?.Trim(), StringComparison.OrdinalIgnoreCase));
+			if (found.Code == null) throw new ArgumentException($"No language \"{value}\": {string.Join(", ", Lang.Available(AppFolders.ProgramFolder).Select(l => l.Code))}.");
+			form.Settings.Language = found.Code;
+			form.Settings.Save();
+		}
 	}
 
 	/// Whether the ruler (View > Show > Ruler) is shown. Remembered.

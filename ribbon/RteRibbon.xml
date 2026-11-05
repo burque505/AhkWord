@@ -1514,6 +1514,34 @@
     <Command Name="cmdShowBands" Id="303" LabelTitle="Header and footer" Keytip="H" />
     <Command Name="cmdOutline" Id="304" LabelTitle="Outline" Keytip="O" TooltipTitle="Outline (Ctrl+Shift+O)" />
     <Command Name="cmdRuler" Id="403" LabelTitle="Ruler" Keytip="R" TooltipTitle="Ruler" TooltipDescription="Show the ruler above the page: the margins, and the indents and tab stops of the paragraph at the caret." />
+    <Command Name="cmdGroupLanguage" Id="404" LabelTitle="Language">
+      <Command.LargeImages>
+        <Image Source="icons/language_32.bmp" MinDPI="96" />
+        <Image Source="icons/language_40.bmp" MinDPI="120" />
+        <Image Source="icons/language_48.bmp" MinDPI="144" />
+        <Image Source="icons/language_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/language_16.bmp" MinDPI="96" />
+        <Image Source="icons/language_20.bmp" MinDPI="120" />
+        <Image Source="icons/language_24.bmp" MinDPI="144" />
+        <Image Source="icons/language_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdLanguage" Id="405" LabelTitle="Language" Keytip="L" TooltipTitle="Language" TooltipDescription="The language of AhkWord's ribbon, menus and dialogs. It changes when AhkWord starts again.">
+      <Command.LargeImages>
+        <Image Source="icons/language_32.bmp" MinDPI="96" />
+        <Image Source="icons/language_40.bmp" MinDPI="120" />
+        <Image Source="icons/language_48.bmp" MinDPI="144" />
+        <Image Source="icons/language_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/language_16.bmp" MinDPI="96" />
+        <Image Source="icons/language_20.bmp" MinDPI="120" />
+        <Image Source="icons/language_24.bmp" MinDPI="144" />
+        <Image Source="icons/language_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdGroupTheme" Id="400" LabelTitle="Theme">
       <Command.LargeImages>
         <Image Source="icons/themecolor_32.bmp" MinDPI="96" />
@@ -2586,6 +2614,13 @@
             <Button CommandName="cmdNextSpelling" />
             <Button CommandName="cmdAddToDictionary" />
             <CheckBox CommandName="cmdSpellCheck" />
+          </Group>
+          <Group CommandName="cmdGroupLanguage" SizeDefinition="OneButton">
+            <DropDownGallery CommandName="cmdLanguage" Type="Items" TextPosition="Right" HasLargeItems="false">
+              <DropDownGallery.MenuLayout>
+                <VerticalMenuLayout />
+              </DropDownGallery.MenuLayout>
+            </DropDownGallery>
           </Group>
         </Tab>
         <Tab CommandName="cmdTabView">

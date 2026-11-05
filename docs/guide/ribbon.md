@@ -8,7 +8,7 @@ AhkWord's commands are on a ribbon, the one built into Windows (as in Paint and 
 | **Home** | Clipboard; Font; Text (change case, underline style, the Font dialog); Paragraph (lists, levels, No numbering, alignment, Line Spacing, List Options, the Paragraph dialog); Styles; Editing (find, replace, select all) |
 | **Insert** | Page Break, Table of Contents, Table, Picture, Linked Thumbnail, Horizontal Line, Link, Cross-reference, Footnote, Update (F9), Date & Time, Insert from Template, Fill In Fields, Snippets |
 | **Layout** | Page Setup, Header & Footer, Line Numbers, Print Preview, Export as PDF |
-| **Review** | Next Spelling Error, Add to Dictionary, Check spelling as you type |
+| **Review** | Next Spelling Error, Add to Dictionary, Check spelling as you type; Language (English or Español, from the next start) |
 | **View** | Document View (Rich Text, Markdown, HTML, Side by Side, Wrap source lines, Source line numbers), Print Layout, Show Pages, Wrap to window, Header and footer, Outline, Ruler, Zoom (Page Width, One Page, Multiple Pages, Zoom In, Zoom Out, 100%) |
 | **Tools** | Macros, Record Macro, Macro Hotkeys, Event Hooks, Run Script, Macros Folder, Command Palette, Automation API, About |
 | **Table Tools** | while the caret is in a table: rows and columns, Properties, Borders, Shading, delete |

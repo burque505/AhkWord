@@ -1879,6 +1879,17 @@ Rte.RulerVisible := value
 
 Whether the ruler (View > Show > Ruler) is shown. Remembered.
 
+### Language
+
+```autohotkey
+value := Rte.Language
+Rte.Language := value
+```
+
+text
+
+The interface's language, as the setting Language has it: "en" (English) or a language AhkWord has a file for in its lang folder ("es": Spanish). Set, it is saved, and shows the next time AhkWord starts (Review > Language).
+
 ### SetHeadingLevel
 
 ```autohotkey

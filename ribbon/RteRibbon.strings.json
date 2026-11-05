@@ -951,6 +951,17 @@
     "TooltipDescription": "Show the ruler above the page: the margins, and the indents and tab stops of the paragraph at the caret.",
     "Keytip": "R"
   },
+  "cmdGroupLanguage": {
+    "Id": 404,
+    "LabelTitle": "Language"
+  },
+  "cmdLanguage": {
+    "Id": 405,
+    "LabelTitle": "Language",
+    "TooltipTitle": "Language",
+    "TooltipDescription": "The language of AhkWord's ribbon, menus and dialogs. It changes when AhkWord starts again.",
+    "Keytip": "L"
+  },
   "cmdGroupTheme": {
     "Id": 400,
     "LabelTitle": "Theme"

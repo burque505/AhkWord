@@ -30,7 +30,7 @@ var fluent = new Dictionary<string, string> {
 	["alignleft"] = "text_align_left", ["aligncenter"] = "text_align_center", ["alignright"] = "text_align_right", ["justify"] = "text_align_justify",
 	["pagebreak"] = "document_page_break", ["sectionbreak"] = "document_split_hint", ["table"] = "table", ["picture"] = "image", ["thumbnail"] = "image_multiple",
 	["link"] = "link", ["crossreference"] = "number_symbol_square", ["updatereferences"] = "arrow_sync", ["footnote"] = "text_footnote", ["tableofcontents"] = "document_bullet_list", ["snippets"] = "text_expand", ["horizontalline"] = "divider_short", ["datetime"] = "calendar_clock", ["headerfooter"] = "document_header_footer", ["columns"] = "text_column_two",
-	["nextspelling"] = "text_proofing_tools", ["dictionary"] = "book_add",
+	["nextspelling"] = "text_proofing_tools", ["dictionary"] = "book_add", ["language"] = "local_language",
 	["structured"] = "text_header_1", ["freeform"] = "text_font_size",
 	["fontbold"] = "text_bold", ["fontitalic"] = "text_italic", ["fontunderline"] = "text_underline", ["fontstrike"] = "text_strikethrough",
 	["fontsub"] = "text_subscript", ["fontsuper"] = "text_superscript", ["fontgrow"] = "font_increase", ["fontshrink"] = "font_decrease",
@@ -52,7 +52,7 @@ var families = new Dictionary<Color, string> {
 	[Color.FromArgb(0xD1, 0x34, 0x38)] = "exit close exportpdf deletestyle deleterow deletecolumn deletetable record datetime",
 	[Color.FromArgb(0x3A, 0x9A, 0x3A)] = "picture thumbnail table tablesettings insertabove insertbelow insertleft insertright macros runscript extensions api fillfields",
 	[Color.FromArgb(0xCA, 0x50, 0x10)] = "stylesmenu applystyles formatpainter paintbucket modifystyle newstyle updatestyle dictionary nextspelling",
-	[Color.FromArgb(0x03, 0x83, 0x87)] = "find replace commandpalette zoomin zoomout zoom100 updatereferences hotkeys html markdown",
+	[Color.FromArgb(0x03, 0x83, 0x87)] = "find replace commandpalette language zoomin zoomout zoom100 updatereferences hotkeys html markdown",
 };
 var tint = families.SelectMany(f => f.Value.Split(' ').Select(n => (n, f.Key))).ToDictionary(p => p.n, p => p.Key);
 // arrows, whose Filled shape is only a thicker line (a halo under the outline): their outline takes the colour instead

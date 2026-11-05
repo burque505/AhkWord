@@ -16,6 +16,9 @@
 // lang\<code>.json beside the program, whose strings are shown instead (the ribbon's keyed "cmdPaste.LabelTitle"), and
 // whatever it lacks stays English.
 //
+// Iteration 80: an extension's strings (a build with more features, rte_extensions.cs) in a file of its own,
+// <folder>\lang\<code>.json, read over AhkWord's: so they never go into AhkWord's lang\<code>.json.
+//
 // Step 4: the program's own strings (Tr): T("msg.saveChanges", "Save changes to {0}?", name) is the language's string
 // for that key, or the English written beside it. The English stays in the code, where it's read and edited; the key
 // keeps the translation when the English is reworded. lang\check_lang.ahk lists what a language lacks.
@@ -49,22 +52,68 @@ static class Lang
 	/// The language file that couldn't be read (once: then null), for a message when the window shows.
 	public static string? TakeError() { var e = error; error = null; return e; }
 
-	/// The language's table from lang\<code>.json in appDir ("es-MX": es-MX.json, else es.json). A file that can't be read
-	/// leaves English, and its error for TakeError.
+	/// The language's table from lang\<code>.json in appDir ("es-MX": es-MX.json, else es.json), and an extension's over
+	/// it (iteration 80): a folder in appDir with a lang folder of its own (a build with more features keeps its strings
+	/// there, out of AhkWord's file: pro\lang\es.json), in order of their names. A file that can't be read is left out
+	/// (its strings show in English), and its error kept for TakeError.
 	public static void Load(string appDir, string? setting) {
 		if (loaded) return;
 		loaded = true;
 		string wanted = (Environment.GetEnvironmentVariable("AHKWORD_LANG") is { Length: > 0 } env ? env : setting ?? "").Trim();
 		if (wanted == "" || wanted.Equals(English, StringComparison.OrdinalIgnoreCase) || !Regex.IsMatch(wanted, "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")) return;
-		string folder = Path.Combine(appDir, "lang");
-		string? path = new[] { wanted, wanted.Split('-')[0] }.Select(c => Path.Combine(folder, c + ".json")).FirstOrDefault(File.Exists);
-		if (path == null) return;
-		try {
-			table = Read(path);
-			Code = Path.GetFileNameWithoutExtension(path);
-		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException) {
-			error = $"The language file {path} could not be read, so AhkWord is in English:\n\n{ex.Message}";
+		string? File(string folder) => new[] { wanted, wanted.Split('-')[0] }.Select(c => Path.Combine(folder, c + ".json")).FirstOrDefault(System.IO.File.Exists);
+		var files = new[] { File(Path.Combine(appDir, "lang")) }.Concat(ExtensionFolders(appDir).Select(f => File(Path.Combine(f, "lang")))).OfType<string>().ToList();
+		var errors = new List<string>();
+		foreach (var path in files) {
+			try {
+				foreach (var (key, text) in Read(path)) table[key] = text;
+				if (Code == English) Code = Path.GetFileNameWithoutExtension(path);
+			} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidDataException) {
+				errors.Add($"{path}:\n{ex.Message}");
+			}
 		}
+		if (errors.Count > 0)
+			error = $"The language file{(errors.Count == 1 ? "" : "s")} below could not be read, so {(errors.Count == 1 ? "its" : "their")} strings show in English:\n\n" + string.Join("\n\n", errors);
+	}
+
+	/// The languages there are files for in appDir's lang folder, English first, then by code: each with its own name for
+	/// itself ("Español"). (Review > Language, Rte.Language; iteration 80)
+	public static List<(string Code, string Name)> Available(string appDir) {
+		var codes = new List<string> { English };
+		try {
+			codes.AddRange(Directory.GetFiles(Path.Combine(appDir, "lang"), "*.json").Select(f => Path.GetFileNameWithoutExtension(f))
+				.Where(c => !c.Equals(English, StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(c, "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"))
+				.OrderBy(c => c, StringComparer.OrdinalIgnoreCase));
+		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+		return codes.Select(c => (c, NameOf(c))).ToList();
+	}
+
+	/// A language's own name for itself, capitalized: "es" -> "Español"; the code when Windows doesn't know it.
+	public static string NameOf(string code) {
+		try {
+			var culture = CultureInfo.GetCultureInfo(code);
+			if (culture.Name == "" || culture.NativeName == "" || culture.NativeName.StartsWith("Unknown")) return code;
+			string name = code.Equals(English, StringComparison.OrdinalIgnoreCase) ? "English" : culture.NativeName;
+			return culture.TextInfo.ToUpper(name[0]) + name[1..];
+		} catch (CultureNotFoundException) { return code; }
+	}
+
+	/// The language a setting chooses, as Load would find its file: "es-MX" with only es.json is "es"; one without a file,
+	/// or none, is English.
+	public static string Chosen(string appDir, string? setting) {
+		string wanted = (setting ?? "").Trim();
+		if (wanted == "") return English;
+		var available = Available(appDir).Select(l => l.Code).ToList();
+		return new[] { wanted, wanted.Split('-')[0] }.Select(c => available.FirstOrDefault(a => a.Equals(c, StringComparison.OrdinalIgnoreCase))).FirstOrDefault(c => c != null) ?? English;
+	}
+
+	/// The extensions' folders in appDir that have strings of their own: those with a lang folder, by name (as
+	/// lang\check_lang.cs finds them).
+	public static IEnumerable<string> ExtensionFolders(string appDir) {
+		try {
+			return Directory.GetDirectories(appDir).Where(d => !Path.GetFileName(d).Equals("lang", StringComparison.OrdinalIgnoreCase) && Directory.Exists(Path.Combine(d, "lang")))
+				.OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase).ToList();
+		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return Array.Empty<string>(); }
 	}
 
 	/// A language file: one object of key -> string (comments allowed).
