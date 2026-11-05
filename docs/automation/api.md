@@ -114,7 +114,7 @@ Clear Formatting (Ctrl+Space): the selected text back to its paragraphs' style (
 Rte.CopyFormatting()
 ```
 
-Copy Formatting (Home > Format Painter): the formatting at the caret (of the character before it; at a paragraph's start, or with a selection, of the first one after), and its paragraph's style and paragraph formatting, kept for PasteFormatting.
+Copy Formatting (Home > Format Painter), as Word's: with no selection, the caret's paragraph formatting (its style, numbering, indents, spacing, alignment, tabs) and the character formatting at the caret (of the character before it; at a paragraph's start, of the first one); with a selection, the formatting most of the selected text has (a paragraph with a bold lead-in: its plain text's), and its paragraph formatting too only if the selection takes in a paragraph mark (or runs to the document's end). Kept for PasteFormatting.
 
 ### PasteFormatting
 
@@ -122,7 +122,7 @@ Copy Formatting (Home > Format Painter): the formatting at the caret (of the cha
 Rte.PasteFormatting()
 ```
 
-Paste Formatting: the selected text takes the formatting CopyFormatting kept (with no selection, the word at the caret). Whole paragraphs selected also take its paragraph's style and paragraph formatting (spacing, indents, alignment), as in Word. One undo step.
+Paste Formatting, as Word's: a click (no selection) gives the caret's paragraph the copied paragraph formatting (style, numbering, indents ...; its text keeps its bold, italic ...), and the word clicked in the copied character formatting; a selection takes the character formatting, and its paragraphs the paragraph formatting. Paragraph formatting goes on only if CopyFormatting took it (no selection, or one with a paragraph mark). One undo step.
 
 ### Close
 

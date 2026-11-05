@@ -122,12 +122,20 @@
 #HotIf
 
 ; Events work in-process too: a tray notification whenever the document is saved. The subscription is made from a
-; timer, which runs as soon as the editor is up (this script's main thread is busy running it).
+; timer, which runs as soon as the editor is up (this script's main thread is busy running it). A save made on closing
+; (Save changes? Yes) reaches the callback after the window has gone, when Rte can't be asked any more: then the
+; notification has no file name.
 SetTimer(SubscribeToSaved, -100)
 SubscribeToSaved() {
-    try Rte.On("Saved", (e) => TrayTip(Rte.FileName, "AhkWord: saved", "Iconi Mute"))
+    try Rte.On("Saved", SavedNotice)
     catch TargetError    ; the editor is not up yet
         SetTimer(SubscribeToSaved, -200)
+}
+SavedNotice(e) {
+    try FileName := Rte.FileName
+    catch TargetError    ; (closed already)
+        FileName := "AhkWord"
+    TrayTip(FileName, "AhkWord: saved", "Iconi Mute")
 }
 
 ; Iteration 55: the snippets (Insert > Snippets) as hotstrings. Typed in this AhkWord's document, an abbreviation (then
