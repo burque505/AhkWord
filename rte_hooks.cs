@@ -41,6 +41,19 @@ public static class EventHooks
 		_ => ""
 	};
 
+	/// Describe in the interface's language, for the dialog (a new hook's script keeps Describe's English).
+	public static string Shown(HookEvent e) => e switch {
+		HookEvent.Started => T("dlg.hooks.started", "AhkWord has started (its window is open, with its first document)"),
+		HookEvent.Opened => T("dlg.hooks.opened", "A document was opened (A_Args[2]: its file)"),
+		HookEvent.NewDocument => T("dlg.hooks.newDocument", "A new document was made (File > New)"),
+		HookEvent.BeforeSave => T("dlg.hooks.beforeSave", "A document is about to be saved: AhkWord waits for the macro (A_Args[2]: the file)"),
+		HookEvent.Saved => T("dlg.hooks.saved", "A document was saved (A_Args[2]: its file)"),
+		HookEvent.StyleChanged => T("dlg.hooks.styleChanged", "A style was changed, made, deleted or copied, or the style set (A_Args[2]: the style)"),
+		HookEvent.Printed => T("dlg.hooks.printed", "A document was printed or exported as PDF (A_Args[2]: the printer, or the PDF)"),
+		HookEvent.Closing => T("dlg.hooks.closing", "The window is about to close: AhkWord waits for the macro (A_Args[2]: the file)"),
+		_ => ""
+	};
+
 	public static HookEvent Parse(string name) =>
 		Enum.TryParse<HookEvent>(name.Trim(), true, out var e) && Enum.IsDefined(e) ? e
 			: throw new ArgumentException($"Unknown event \"{name}\". Hook events: {string.Join(", ", Enum.GetNames<HookEvent>())}.");
@@ -99,39 +112,39 @@ sealed class EventHooksDialog : Form
 	public EventHooksDialog(Dictionary<string, string>? hooks, List<string>? off, string macrosFolder, Action<HookEvent, string> tryHook) {
 		this.macrosFolder = macrosFolder;
 		this.tryHook = tryHook;
-		Dialogs.Setup(this, "Event Hooks");
+		Dialogs.Setup(this, T("dlg.hooks.title", "Event Hooks"));
 		var layout = new TableLayoutPanel { AutoSize = true, ColumnCount = 6, Dock = DockStyle.Fill };
 		var intro = new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(760), 0), Margin = new Padding(3, 0, 3, 10),
-			Text = "A macro for an event runs by itself when it happens: no script of yours has to keep running. It is told the event in A_Args[1] and the document or style in A_Args[2], and works on this window through Rte (RteClient2.ahk). Macros are AutoHotkey scripts in the macros folder. Untick On to keep a macro chosen without it running."
+			Text = T("dlg.hooks.intro", "A macro for an event runs by itself when it happens: no script of yours has to keep running. It is told the event in A_Args[1] and the document or style in A_Args[2], and works on this window through Rte (RteClient2.ahk). Macros are AutoHotkey scripts in the macros folder. Untick On to keep a macro chosen without it running.")
 		};
 		layout.Controls.Add(intro);
 		layout.SetColumnSpan(intro, 6);
 		var tip = new ToolTip();
 		foreach (var e in Enum.GetValues<HookEvent>()) {
 			var name = new Label { Text = e.ToString(), AutoSize = true, Anchor = AnchorStyles.Left, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(3, 8, 8, 0) };
-			var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = LogicalToDeviceUnits(260), AccessibleName = e + " macro", Margin = new Padding(3, 4, 3, 0) };
+			var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = LogicalToDeviceUnits(260), AccessibleName = T("dlg.hooks.macroName", "{0} macro", e), Margin = new Padding(3, 4, 3, 0) };
 			boxes[e] = box;
-			var on = new CheckBox { Text = "On", AutoSize = true, Anchor = AnchorStyles.Left, Checked = EventHooks.IsOn(off, e), AccessibleName = e + " on", Margin = new Padding(8, 6, 3, 0) };
+			var on = new CheckBox { Text = T("dlg.hooks.on", "On"), AutoSize = true, Anchor = AnchorStyles.Left, Checked = EventHooks.IsOn(off, e), AccessibleName = T("dlg.hooks.onName", "{0} on", e), Margin = new Padding(8, 6, 3, 0) };
 			ons[e] = on;
 			Fill(box, EventHooks.MacroFor(hooks, e));
-			var make = Small("New...", () => NewMacro(e), e + " new macro");
-			var edit = Small("Edit", () => { if (box.SelectedIndex > 0) EditMacro((string)box.SelectedItem!); }, e + " edit");
-			var run = Small("Run Now", () => { if (box.SelectedIndex > 0) tryHook(e, (string)box.SelectedItem!); }, e + " run now");
+			var make = Small(T("dlg.hooks.new", "New..."), () => NewMacro(e), T("dlg.hooks.newName", "{0} new macro", e));
+			var edit = Small(T("dlg.hooks.edit", "Edit"), () => { if (box.SelectedIndex > 0) EditMacro((string)box.SelectedItem!); }, T("dlg.hooks.editName", "{0} edit", e));
+			var run = Small(T("dlg.hooks.run", "Run Now"), () => { if (box.SelectedIndex > 0) tryHook(e, (string)box.SelectedItem!); }, T("dlg.hooks.runName", "{0} run now", e));
 			void Enable() => edit.Enabled = run.Enabled = on.Enabled = box.SelectedIndex > 0;
 			box.SelectedIndexChanged += (s, a) => Enable();
 			Enable();
-			tip.SetToolTip(name, EventHooks.Describe(e));
-			tip.SetToolTip(on, "Ticked: the macro runs on the event. Unticked: it stays chosen, and doesn't run (Run Now still tries it).");
+			tip.SetToolTip(name, EventHooks.Shown(e));
+			tip.SetToolTip(on, T("dlg.hooks.onTip", "Ticked: the macro runs on the event. Unticked: it stays chosen, and doesn't run (Run Now still tries it)."));
 			layout.Controls.AddRange(new Control[] { name, box, on, make, edit, run });
-			var what = new Label { Text = EventHooks.Describe(e), AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(3, 0, 3, 2) };
+			var what = new Label { Text = EventHooks.Shown(e), AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(3, 0, 3, 2) };
 			layout.Controls.Add(new Label { AutoSize = true });
 			layout.Controls.Add(what);
 			layout.SetColumnSpan(what, 5);
 		}
 		var ok = Dialogs.Ok(this);
 		var cancel = Dialogs.Cancel(this);
-		var folder = new Button { Text = "Macros Folder", AutoSize = true };
+		var folder = new Button { Text = T("dlg.hooks.folder", "Macros Folder"), AutoSize = true };
 		folder.Click += (s, a) => { Directory.CreateDirectory(macrosFolder); Process.Start(new ProcessStartInfo(macrosFolder) { UseShellExecute = true }); };
 		var buttons = Dialogs.Row(this, 12, folder, ok, cancel);
 		layout.Controls.Add(buttons);
@@ -152,7 +165,7 @@ sealed class EventHooksDialog : Form
 		var macros = Directory.Exists(macrosFolder) ? Directory.GetFiles(macrosFolder, "*.ahk").Select(Path.GetFileName).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList() : new();
 		if (chosen != null && !macros.Contains(chosen, StringComparer.OrdinalIgnoreCase)) macros.Insert(0, chosen);
 		box.Items.Clear();
-		box.Items.Add("(none)");
+		box.Items.Add(T("dlg.hooks.none", "(none)"));
 		foreach (var m in macros) box.Items.Add(m!);
 		int at = chosen == null ? 0 : box.Items.Cast<string>().ToList().FindIndex(i => string.Equals(i, chosen, StringComparison.OrdinalIgnoreCase));
 		box.SelectedIndex = Math.Max(0, at);

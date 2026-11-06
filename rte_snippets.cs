@@ -54,11 +54,11 @@ public static class Snippets
 	/// What is wrong with an abbreviation ("": nothing): 1 to 40 letters, digits and marks that aren't spaces, no colon
 	/// or backtick (AutoHotkey's), and not another snippet's (other: that snippet's own, when it is being changed).
 	public static string Problem(string abbreviation, IEnumerable<Snippet> all, string? other = null) {
-		if (abbreviation.Length is 0 or > 40) return "An abbreviation is 1 to 40 characters.";
-		if (abbreviation.Any(char.IsWhiteSpace)) return "An abbreviation has no spaces.";
-		if (abbreviation.IndexOfAny(new[] { ':', '`' }) >= 0) return "An abbreviation can't have a colon or a backtick in it.";
+		if (abbreviation.Length is 0 or > 40) return T("dlg.snippets.length", "An abbreviation is 1 to 40 characters.");
+		if (abbreviation.Any(char.IsWhiteSpace)) return T("dlg.snippets.spaces", "An abbreviation has no spaces.");
+		if (abbreviation.IndexOfAny(new[] { ':', '`' }) >= 0) return T("dlg.snippets.colon", "An abbreviation can't have a colon or a backtick in it.");
 		if (all.Any(s => string.Equals(s.Abbreviation, abbreviation, StringComparison.OrdinalIgnoreCase) && !string.Equals(s.Abbreviation, other, StringComparison.OrdinalIgnoreCase)))
-			return $"Another snippet has the abbreviation \"{abbreviation}\".";
+			return T("dlg.snippets.taken", "Another snippet has the abbreviation \"{0}\".", abbreviation);
 		return "";
 	}
 
@@ -73,8 +73,8 @@ public static class Snippets
 
 	/// A warning for an abbreviation that is also a word ("": none): it fires whenever the word is typed.
 	public static string Warning(string abbreviation, bool instant) =>
-		Common.Contains(abbreviation) ? $"\"{abbreviation}\" is also a word: the snippet will come up whenever it is typed as one. A letter or symbol in front of it (;{abbreviation}, x{abbreviation}) avoids that."
-		: instant && abbreviation.Length < 3 ? $"\"{abbreviation}\" is short to fire at once: it would fire inside other words that have it."
+		Common.Contains(abbreviation) ? T("dlg.snippets.isWord", "\"{0}\" is also a word: the snippet will come up whenever it is typed as one. A letter or symbol in front of it (;{0}, x{0}) avoids that.", abbreviation)
+		: instant && abbreviation.Length < 3 ? T("dlg.snippets.short", "\"{0}\" is short to fire at once: it would fire inside other words that have it.", abbreviation)
 		: "";
 
 	/// AutoHotkey's options for a snippet's hotstring: B0 (the editor takes the abbreviation out, not keystrokes), * at
@@ -157,7 +157,7 @@ static class RichFormat
 		bool showing;
 		public Buttons(Control into, Font font, Func<int, int> scale, Action<FontStyle, bool> set) {
 			var tip = new ToolTip();
-			foreach (var (label, flag, name) in new[] { ("B", FontStyle.Bold, "Bold (Ctrl+B)"), ("I", FontStyle.Italic, "Italic (Ctrl+I)"), ("U", FontStyle.Underline, "Underline (Ctrl+U)") }) {
+			foreach (var (label, flag, name) in new[] { (T("dlg.format.b", "B"), FontStyle.Bold, T("dlg.format.bold", "Bold (Ctrl+B)")), (T("dlg.format.i", "I"), FontStyle.Italic, T("dlg.format.italic", "Italic (Ctrl+I)")), (T("dlg.format.u", "U"), FontStyle.Underline, T("dlg.format.underline", "Underline (Ctrl+U)")) }) {
 				var button = new CheckBox {
 					Appearance = Appearance.Button, Text = label, Font = new Font(font, flag), TextAlign = ContentAlignment.MiddleCenter,
 					Width = scale(30), Height = scale(26), TabStop = false, AccessibleName = name.Split(' ')[0]
@@ -201,14 +201,16 @@ sealed class SnippetsDialog : Form
 	public SnippetsDialog(List<Snippet> snippets, Func<List<TemplateInfo>> parts, string? selectionRtf, Func<string, string?> loadPart, Action<string, string> savePart, Font textFont) {
 		this.snippets = snippets.ToList();
 		(this.parts, this.selectionRtf, this.loadPart, this.savePart, this.textFont) = (parts, selectionRtf, loadPart, savePart, textFont);
-		Dialogs.Setup(this, "Snippets", sizable: true);
+		Dialogs.Setup(this, T("dlg.snippets.title", "Snippets"), sizable: true);
 		// (room for the columns and the buttons at the start: the list's columns, its scroll bar, the buttons' column)
 		Size = new Size(LogicalToDeviceUnits(900), LogicalToDeviceUnits(480));
 		MinimumSize = new Size(LogicalToDeviceUnits(760), LogicalToDeviceUnits(440));
-		list.Columns.Add("Abbreviation", LogicalToDeviceUnits(110));
-		list.Columns.Add("Inserts", LogicalToDeviceUnits(230));
-		list.Columns.Add("Fires", LogicalToDeviceUnits(170));
-		list.Columns.Add("Case", LogicalToDeviceUnits(70));
+		list.Columns.Add(T("dlg.snippets.abbreviationColumn", "Abbreviation"), LogicalToDeviceUnits(110));
+		list.Columns.Add(T("dlg.snippets.insertsColumn", "Inserts"), LogicalToDeviceUnits(230));
+		list.Columns.Add(T("dlg.snippets.firesColumn", "Fires"), LogicalToDeviceUnits(170));
+		list.Columns.Add(T("dlg.snippets.caseColumn", "Case"), LogicalToDeviceUnits(70));
+		foreach (ColumnHeader column in list.Columns)    // (iteration 81: each as wide as its heading at least, a longer translation's too)
+			column.Width = Math.Max(column.Width, TextRenderer.MeasureText(column.Text, list.Font).Width + LogicalToDeviceUnits(16));
 		var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3 };
 		layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 		layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -217,7 +219,7 @@ sealed class SnippetsDialog : Form
 		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 		layout.Controls.Add(new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(660), 0), Margin = new Padding(3, 0, 3, 8),
-			Text = "Type a snippet's abbreviation in the document (then Space or Enter, unless it fires at once) and it becomes its text, formatted, its fields asked for. Snippets work in AhkWord only; Export as Script makes them plain-text hotstrings for any program."
+			Text = T("dlg.snippets.intro", "Type a snippet's abbreviation in the document (then Space or Enter, unless it fires at once) and it becomes its text, formatted, its fields asked for. Snippets work in AhkWord only; Export as Script makes them plain-text hotstrings for any program.")
 		}, 0, 0);
 		layout.SetColumnSpan(layout.GetControlFromPosition(0, 0)!, 2);
 		layout.Controls.Add(list, 0, 1);
@@ -228,13 +230,13 @@ sealed class SnippetsDialog : Form
 			buttons.Controls.Add(button);
 			return button;
 		}
-		Add("&New...", () => NewSnippet(null));
-		Add("New from &Selection...", () => NewSnippet(selectionRtf), selectionRtf != null);
-		var change = Add("&Change...", ChangeSelected);
-		var remove = Add("&Remove", RemoveSelected);
-		var insert = Add("&Insert Now", () => { if (Selected is { } s) { ToInsert = s; DialogResult = DialogResult.OK; } });
-		Add("E&xport as Script...", ExportCommand);
-		var close = Add("Close", () => DialogResult = DialogResult.Cancel);
+		Add(T("dlg.snippets.new", "&New..."), () => NewSnippet(null));
+		Add(T("dlg.snippets.newFromSelection", "New from &Selection..."), () => NewSnippet(selectionRtf), selectionRtf != null);
+		var change = Add(T("dlg.snippets.change", "&Change..."), ChangeSelected);
+		var remove = Add(T("dlg.snippets.remove", "&Remove"), RemoveSelected);
+		var insert = Add(T("dlg.snippets.insert", "&Insert Now"), () => { if (Selected is { } s) { ToInsert = s; DialogResult = DialogResult.OK; } });
+		Add(T("dlg.snippets.export", "E&xport as Script..."), ExportCommand);
+		var close = Add(T("dlg.close", "Close"), () => DialogResult = DialogResult.Cancel);
 		layout.Controls.Add(buttons, 1, 1);
 		layout.Controls.Add(note, 0, 2);
 		layout.SetColumnSpan(note, 2);
@@ -263,13 +265,13 @@ sealed class SnippetsDialog : Form
 	TemplateInfo? PartOf(Snippet s) => parts().FirstOrDefault(p => string.Equals(p.Name, s.Part, StringComparison.OrdinalIgnoreCase));
 	List<string> PartNames() => parts().Where(p => p.Part && p.Path.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase)).Select(p => p.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-	static string Fires(Snippet s) => s.Instant ? "at once" : "on Space, Enter, Tab ..." + (s.KeepEnding ? " (kept)" : "");
+	static string Fires(Snippet s) => s.Instant ? T("dlg.snippets.atOnce", "at once") : s.KeepEnding ? T("dlg.snippets.onEndingKept", "on Space, Enter, Tab ... (kept)") : T("dlg.snippets.onEnding", "on Space, Enter, Tab ...");
 
 	void Fill(string? select = null) {
 		list.BeginUpdate();
 		list.Items.Clear();
 		foreach (var s in snippets.OrderBy(s => s.Abbreviation, StringComparer.OrdinalIgnoreCase)) {
-			var item = new ListViewItem(new[] { s.Abbreviation, s.Part + (PartOf(s) == null ? "  (missing)" : ""), Fires(s), s.CaseSensitive ? "exact" : "any" }) { Tag = s };
+			var item = new ListViewItem(new[] { s.Abbreviation, s.Part + (PartOf(s) == null ? "  " + T("dlg.snippets.missing", "(missing)") : ""), Fires(s), s.CaseSensitive ? T("dlg.snippets.exact", "exact") : T("dlg.snippets.any", "any") }) { Tag = s };
 			list.Items.Add(item);
 			if (string.Equals(s.Abbreviation, select, StringComparison.OrdinalIgnoreCase)) item.Selected = true;
 		}
@@ -278,8 +280,8 @@ sealed class SnippetsDialog : Form
 	}
 
 	void ShowNote() {
-		note.Text = snippets.Count == 0 ? "There are no snippets yet: choose New and type or paste its text, or select a signature block (or any text) in the document and choose New from Selection."
-			: Selected is { } s ? (PartOf(s) == null ? $"The part \"{s.Part}\" isn't in the templates' Parts folders any more: Change it to give it its text again." : Snippets.Warning(s.Abbreviation, s.Instant))
+		note.Text = snippets.Count == 0 ? T("dlg.snippets.none", "There are no snippets yet: choose New and type or paste its text, or select a signature block (or any text) in the document and choose New from Selection.")
+			: Selected is { } s ? (PartOf(s) == null ? T("dlg.snippets.partGone", "The part \"{0}\" isn't in the templates' Parts folders any more: Change it to give it its text again.", s.Part) : Snippets.Warning(s.Abbreviation, s.Instant))
 			: "";
 	}
 
@@ -290,7 +292,7 @@ sealed class SnippetsDialog : Form
 
 	// New: the text typed or pasted (or the selection's); its part saved, and the snippet added
 	void NewSnippet(string? rtf) {
-		using var dlg = new SnippetDialog(rtf != null ? "New Snippet from the Selection" : "New Snippet", null, snippets, PartNames(), loadPart, textFont, rtf);
+		using var dlg = new SnippetDialog(rtf != null ? T("dlg.snippets.titleNewFromSelection", "New Snippet from the Selection") : T("dlg.snippets.titleNew", "New Snippet"), null, snippets, PartNames(), loadPart, textFont, rtf);
 		if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Result is not { } made) return;
 		if (!SavePart(made.Part, dlg)) return;
 		snippets.Add(made);
@@ -299,7 +301,7 @@ sealed class SnippetsDialog : Form
 
 	void ChangeSelected() {
 		if (Selected is not { } s) return;
-		using var dlg = new SnippetDialog("Change Snippet", s, snippets, PartNames(), loadPart, textFont, null);
+		using var dlg = new SnippetDialog(T("dlg.snippets.titleChange", "Change Snippet"), s, snippets, PartNames(), loadPart, textFont, null);
 		if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Result is not { } changed) return;
 		if (!SavePart(changed.Part, dlg)) return;
 		snippets.Remove(s);
@@ -326,7 +328,7 @@ sealed class SnippetsDialog : Form
 
 	void ExportCommand() {
 		if (snippets.Count == 0) return;
-		using var save = new SaveFileDialog { Title = "Export the Snippets as a Hotstring Script", Filter = "AutoHotkey script (*.ahk)|*.ahk", FileName = "AhkWord snippets.ahk", OverwritePrompt = true };
+		using var save = new SaveFileDialog { Title = T("dlg.snippets.exportTitle", "Export the Snippets as a Hotstring Script"), Filter = T("dlg.snippets.exportFilter", "AutoHotkey script (*.ahk)|*.ahk"), FileName = "AhkWord snippets.ahk", OverwritePrompt = true };
 		if (save.ShowDialog(this) == DialogResult.OK) Export?.Invoke(save.FileName);
 	}
 }
@@ -335,14 +337,14 @@ sealed class SnippetsDialog : Form
 /// part of that name, a new one or one there is), and how it fires.
 sealed class SnippetDialog : Form
 {
-	readonly TextBox abbreviation = new() { Width = 160, AccessibleName = "Abbreviation" };
-	readonly ComboBox part = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 300, AccessibleName = "Part" };
-	readonly RichTextBox text = AppTheme.OnPaper(new RichTextBox { Multiline = true, WordWrap = true, ScrollBars = RichTextBoxScrollBars.Vertical, DetectUrls = false, HideSelection = false, AccessibleName = "Snippet text" });
+	readonly TextBox abbreviation = new() { Width = 160, AccessibleName = T("dlg.snippets.abbreviationColumn", "Abbreviation") };
+	readonly ComboBox part = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 300, AccessibleName = T("dlg.snippets.partName", "Part") };
+	readonly RichTextBox text = AppTheme.OnPaper(new RichTextBox { Multiline = true, WordWrap = true, ScrollBars = RichTextBoxScrollBars.Vertical, DetectUrls = false, HideSelection = false, AccessibleName = T("dlg.snippets.textName", "Snippet text") });
 	readonly Label partNote = new() { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(3, 0, 3, 4) };
-	readonly RadioButton onEnding = new() { Text = "On an ending character: Space, Enter, Tab or punctuation (AutoHotkey's usual)", AutoSize = true, Checked = true };
-	readonly RadioButton instant = new() { Text = "At once, as soon as the abbreviation is typed (AutoHotkey's *)", AutoSize = true };
-	readonly CheckBox keep = new() { Text = "Keep the ending character after the snippet (Enter: a new paragraph after it)", AutoSize = true };
-	readonly CheckBox exact = new() { Text = "Case-sensitive: the abbreviation fires only typed as it is here (AutoHotkey's C)", AutoSize = true };
+	readonly RadioButton onEnding = new() { Text = T("dlg.snippets.fireOnEnding", "On an ending character: Space, Enter, Tab or punctuation (AutoHotkey's usual)"), AutoSize = true, Checked = true };
+	readonly RadioButton instant = new() { Text = T("dlg.snippets.fireAtOnce", "At once, as soon as the abbreviation is typed (AutoHotkey's *)"), AutoSize = true };
+	readonly CheckBox keep = new() { Text = T("dlg.snippets.keep", "Keep the ending character after the snippet (Enter: a new paragraph after it)"), AutoSize = true };
+	readonly CheckBox exact = new() { Text = T("dlg.snippets.caseSensitive", "Case-sensitive: the abbreviation fires only typed as it is here (AutoHotkey's C)"), AutoSize = true };
 	readonly Label problem = new() { AutoSize = true, ForeColor = AppTheme.Warning, Margin = new Padding(3, 8, 3, 3) };
 	readonly List<Snippet> all;
 	readonly Snippet? old;
@@ -368,23 +370,23 @@ sealed class SnippetDialog : Form
 			layout.Controls.Add(control);
 		}
 		void Whole(Control control) { layout.Controls.Add(control); layout.SetColumnSpan(control, 2); }
-		Row("Abbreviation:", abbreviation);
+		Row(T("dlg.snippets.abbreviation", "Abbreviation:"), abbreviation);
 		foreach (var name in parts) part.Items.Add(name);
-		Row("Part (its name):", part);
+		Row(T("dlg.snippets.part", "Part (its name):"), part);
 		Whole(partNote);
 		// the text: typed or pasted (Ctrl+V), formatted
 		var tools = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 0) };
-		tools.Controls.Add(new Label { Text = "Text:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 8, 0) });
+		tools.Controls.Add(new Label { Text = T("dlg.snippets.text", "Text:"), AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 8, 0) });
 		styleButtons = new RichFormat.Buttons(tools, Font, LogicalToDeviceUnits, (flag, on) => { RichFormat.Set(text, flag, on); text.Focus(); });
-		var fontButton = new Button { Text = "Font...", AutoSize = true, TabStop = false, AccessibleName = "Text font" };
+		var fontButton = new Button { Text = T("dlg.snippets.font", "Font..."), AutoSize = true, TabStop = false, AccessibleName = T("dlg.snippets.fontName", "Text font") };
 		fontButton.Click += (s, e) => ChooseFont();
 		tools.Controls.Add(fontButton);
-		tools.Controls.Add(new Label { Text = "Type it, or paste it (Ctrl+V). Fields such as {{Your Name}} are asked for when it goes in.", AutoSize = true, ForeColor = SystemColors.GrayText, Anchor = AnchorStyles.Left, Margin = new Padding(8, 7, 0, 0) });
+		tools.Controls.Add(new Label { Text = T("dlg.snippets.typeIt", "Type it, or paste it (Ctrl+V). Fields such as {{Your Name}} are asked for when it goes in."), AutoSize = true, ForeColor = SystemColors.GrayText, Anchor = AnchorStyles.Left, Margin = new Padding(8, 7, 0, 0) });
 		Whole(tools);
 		text.Font = textFont;
 		text.Size = new Size(LogicalToDeviceUnits(800), LogicalToDeviceUnits(170));
 		Whole(text);
-		Whole(new Label { Text = "Fires:", AutoSize = true, Margin = new Padding(3, 10, 3, 0) });
+		Whole(new Label { Text = T("dlg.snippets.fires", "Fires:"), AutoSize = true, Margin = new Padding(3, 10, 3, 0) });
 		Whole(onEnding);
 		Whole(instant);
 		Whole(keep);
@@ -427,9 +429,9 @@ sealed class SnippetDialog : Form
 	void ShowPart() {
 		string name = PartName;
 		bool existing = parts.Contains(name, StringComparer.OrdinalIgnoreCase);
-		partNote.Text = name == "" ? "Name the part the text is kept as (in your templates' Parts folder): a new name makes a new part; a part there is shows its text below, and changing it changes the part."
-			: existing ? $"The part \"{name}\" is there already: its text is below, and changing it changes the part (in templates too)."
-			: $"A new part, \"{name}\", is made with the text below.";
+		partNote.Text = name == "" ? T("dlg.snippets.partNote", "Name the part the text is kept as (in your templates' Parts folder): a new name makes a new part; a part there is shows its text below, and changing it changes the part.")
+			: existing ? T("dlg.snippets.partThere", "The part \"{0}\" is there already: its text is below, and changing it changes the part (in templates too).", name)
+			: T("dlg.snippets.partNew", "A new part, \"{0}\", is made with the text below.", name);
 		if (!existing || edited || string.Equals(loadedFor, name, StringComparison.OrdinalIgnoreCase)) return;
 		bool was = edited;
 		if (loadPart(name) is { } rtf) { try { text.Rtf = rtf; } catch (ArgumentException) { text.Text = ""; } }
@@ -468,9 +470,9 @@ sealed class SnippetDialog : Form
 	bool Check(bool ok) {
 		string typed = abbreviation.Text.Trim();
 		string wrong = typed == "" && !ok ? "" : Snippets.Problem(typed, all, old?.Abbreviation);
-		if (wrong == "" && ok && PartName == "") wrong = "Give the part a name.";
-		if (wrong == "" && PartName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) wrong = "A part's name can't have \\ / : * ? \" < > | in it.";
-		if (wrong == "" && ok && text.TextLength == 0) wrong = "Type or paste the snippet's text.";
+		if (wrong == "" && ok && PartName == "") wrong = T("dlg.snippets.nameIt", "Give the part a name.");
+		if (wrong == "" && PartName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) wrong = T("dlg.snippets.badName", "A part's name can't have \\ / : * ? \" < > | in it.");
+		if (wrong == "" && ok && text.TextLength == 0) wrong = T("dlg.snippets.noText", "Type or paste the snippet's text.");
 		problem.ForeColor = wrong != "" ? AppTheme.Warning : SystemColors.GrayText;
 		problem.Text = wrong != "" ? wrong : typed == "" ? "" : Snippets.Warning(typed, instant.Checked);
 		if (!ok || wrong != "") return false;

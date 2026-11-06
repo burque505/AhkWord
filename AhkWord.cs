@@ -697,7 +697,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 80;    // (the About box; make_version.ps1)
+	public const int Iteration = 81;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1578,11 +1578,11 @@ class WriterForm : Form
 			if (command.On != null) {
 				bool? on = null;
 				try { on = command.On(); } catch (Exception) { }
-				if (on is bool b) name += b ? "  (on)" : "  (off)";
+				if (on is bool b) name += "  " + (b ? T("palette.on", "(on)") : T("palette.off", "(off)"));
 			}
 			items.Add(new PaletteItem(name, label?.Where ?? "", label?.Tooltip ?? "", keysOf.TryGetValue(id, out var k) ? k : "", command.Enabled, command.Run, "cmd:" + id));
 		}
-		items.Add(new PaletteItem("Paste as Plain Text", "Home > Clipboard", "The clipboard's text only, taking the formatting where it lands (a web page's or a chat's fonts and spacing left behind).",
+		items.Add(new PaletteItem(T("palette.pastePlain", "Paste as Plain Text"), T("palette.homeClipboard", "Home > Clipboard"), T("palette.pastePlainTip", "The clipboard's text only, taking the formatting where it lands (a web page's or a chat's fonts and spacing left behind)."),
 			ShortcutText(Keys.Control | Keys.Shift | Keys.V), () => true, () => Run(pastePlainAction, M("PastePlainText")), "paste:plain"));
 		// (the Font block is one ribbon control, not buttons: its commands, as their keys run them, in the source views too)
 		foreach (var (fontName, keys, run, call) in new (string, Keys, Action, string)[] {
@@ -1592,35 +1592,39 @@ class WriterForm : Form
 			("Increase Font Size", Keys.Control | Keys.OemCloseBrackets, () => api.IncreaseFontSize(), M("IncreaseFontSize")),
 			("Decrease Font Size", Keys.Control | Keys.OemOpenBrackets, () => api.DecreaseFontSize(), M("DecreaseFontSize")) }) {
 			var (key, action, macro) = (keys, run, call);
-			items.Add(new PaletteItem(fontName, "Home > Font", "", key == Keys.None ? "" : ShortcutText(key), () => key != Keys.None || !SourceActive, () => {
+			items.Add(new PaletteItem(fontName switch {
+					"Bold" => T("palette.bold", "Bold"), "Italic" => T("palette.italic", "Italic"), "Underline" => T("palette.underline", "Underline"),
+					"Strikethrough" => T("palette.strikethrough", "Strikethrough"), "Superscript" => T("palette.superscript", "Superscript"), "Subscript" => T("palette.subscript", "Subscript"),
+					"Increase Font Size" => T("palette.increaseFontSize", "Increase Font Size"), "Decrease Font Size" => T("palette.decreaseFontSize", "Decrease Font Size"), _ => fontName,
+				}, T("palette.homeFont", "Home > Font"), "", key == Keys.None ? "" : ShortcutText(key), () => key != Keys.None || !SourceActive, () => {
 				LeaveOverlays();
 				if (SourceActive && key != Keys.None && sourceKeys.TryGetValue(key, out var inSource)) inSource();
 				else Run(action, macro);
 			}, "font:" + fontName));
 		}
 		foreach (var file in MacroPaths())
-			items.Add(new PaletteItem("Run macro: " + Path.GetFileNameWithoutExtension(file), "Tools > Macros", "", MacroHotkeyFor(file), () => true,
+			items.Add(new PaletteItem(T("palette.runMacro", "Run macro: {0}", Path.GetFileNameWithoutExtension(file)), T("palette.toolsMacros", "Tools > Macros"), "", MacroHotkeyFor(file), () => true,
 				() => { LeaveOverlays(); Run(() => RunMacroFromUi(file)); }, "macro:" + Path.GetFileName(file)));
 		foreach (var style in Styles.Styles) {
 			string styleName = style.Name;
-			items.Add(new PaletteItem("Style: " + styleName, "Home > Styles", "", "", () => !SourceActive,
+			items.Add(new PaletteItem(T("palette.style", "Style: {0}", styleName), T("palette.homeStyles", "Home > Styles"), "", "", () => !SourceActive,
 				() => Run(() => api.SetStyle(styleName), M("SetStyle", styleName)), "style:" + styleName));
 		}
 		foreach (var (code, languageName) in Lang.Available(appDir)) {
 			string chosen = code;
-			items.Add(new PaletteItem(T("palette.language", "Language: {0}", languageName), "Review > Language", "", "", () => true,
+			items.Add(new PaletteItem(T("palette.language", "Language: {0}", languageName), T("palette.reviewLanguage", "Review > Language"), "", "", () => true,
 				() => Run(() => ChooseLanguage(chosen), M("Language", chosen)), "lang:" + code));
 		}
 		foreach (var snippet in SnippetList()) {
 			string abbreviation = snippet.Abbreviation;
-			items.Add(new PaletteItem($"Snippet: {abbreviation}  →  {snippet.Part}", "Insert > Snippets", "", "", () => true,
+			items.Add(new PaletteItem(T("palette.snippet", "Snippet: {0}  →  {1}", abbreviation, snippet.Part), T("palette.insertSnippets", "Insert > Snippets"), "", "", () => true,
 				() => Run(() => api.InsertSnippet(abbreviation, "", true), M("InsertSnippet", abbreviation, "", true)), "snippet:" + abbreviation));
 		}
 		foreach (var command in extensionCommands)
-			items.Add(new PaletteItem(command.Name, "Tools > Extensions", command.Description, "", () => true, () => Run(command.Run), "ext:" + command.Name));
+			items.Add(new PaletteItem(command.Name, T("palette.toolsExtensions", "Tools > Extensions"), command.Description, "", () => true, () => Run(command.Run), "ext:" + command.Name));
 		foreach (var path in Settings.RecentFiles) {
 			string file = path;
-			items.Add(new PaletteItem("Open: " + Path.GetFileName(file), Path.GetDirectoryName(file) ?? "", "", "", () => File.Exists(file),
+			items.Add(new PaletteItem(T("palette.open", "Open: {0}", Path.GetFileName(file)), Path.GetDirectoryName(file) ?? "", "", "", () => File.Exists(file),
 				() => Run(() => OpenRecent(file)), "open:" + file));
 		}
 		return items;
@@ -2084,7 +2088,7 @@ class WriterForm : Form
 		api.OpenTemplate(template.Path);
 		if (RenderTemplate?.Invoke(Editor.Rtf, ask) is string rendered) Editor.Rtf = rendered;    // (iteration 62: an extension's template language)
 		var doc = Editor.TextDocument;
-		var given = FieldValues("New from " + template.Name, FieldText(), values, ask);
+		var given = FieldValues(T("dlg.fields.titleNew", "New from {0}", template.Name), FieldText(), values, ask);
 		int filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null);
 		filled += FillBands(name => given.TryGetValue(name, out var value) ? value : null);    // (iteration 62)
 		Editor.ClearUndo();
@@ -2188,7 +2192,7 @@ class WriterForm : Form
 			int length = Snippets.Typed(before, before.Length, snippet, ending);
 			if (length < 0) return false;
 			string text = SnippetPlainText(part);
-			var given = FieldValues("Insert " + part.Name, text, null, ask: true);
+			var given = FieldValues(T("dlg.fields.titleInsert", "Insert {0}", part.Name), text, null, ask: true);
 			text = Templates.FillText(text, name => given.TryGetValue(name, out var value) ? value : null).Replace("\r\n", "\n").Replace('\r', '\n');
 			int begin = caret - length;
 			sourceBox.DeleteRange(begin, length - kept);
@@ -2225,13 +2229,13 @@ class WriterForm : Form
 
 	// File > New from Template: the documents (not the parts) to choose from.
 	void NewFromTemplateCommand() {
-		using var dlg = new TemplatePickerDialog("New from Template", TemplateList().Where(t => !t.Part).ToList(), OwnTemplatesFolder);
+		using var dlg = new TemplatePickerDialog(T("dlg.templates.titleNew", "New from Template"), TemplateList().Where(t => !t.Part).ToList(), OwnTemplatesFolder);
 		if (dlg.ShowDialog(this) == DialogResult.OK && dlg.Chosen is { } template) NewFromTemplate(template, null, ask: true);
 	}
 
 	// Insert > Insert from Template: the parts first, then the documents.
 	void InsertTemplateCommand() {
-		using var dlg = new TemplatePickerDialog("Insert from Template", InsertChoices(), OwnTemplatesFolder, insertAsSection);
+		using var dlg = new TemplatePickerDialog(T("dlg.templates.titleInsert", "Insert from Template"), InsertChoices(), OwnTemplatesFolder, insertAsSection);
 		if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Chosen is not { } template) return;
 		insertAsSection = dlg.AsSection;    // (remembered while AhkWord runs)
 		InsertTemplate(template, null, ask: true, asSection: dlg.AsSection);
@@ -2262,7 +2266,7 @@ class WriterForm : Form
 			string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 			string asked = story[Math.Min(start, story.Length)..Math.Min(end, story.Length)];
 			if (bands != null) asked += "\n" + string.Join("\n", BandParts(bands).SelectMany(parts => parts));    // (its header's and footer's fields too)
-			var given = FieldValues("Insert " + template.Name, asked, values, ask);
+			var given = FieldValues(T("dlg.fields.titleInsert", "Insert {0}", template.Name), asked, values, ask);
 			int before = Editor.TextLength;
 			filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null, start, end);
 			Editor.Select(Math.Max(start, end + Editor.TextLength - before), 0);    // (after what was inserted)
@@ -2296,7 +2300,7 @@ class WriterForm : Form
 	internal int FillFields(IDictionary<string, string>? values, bool ask, bool rendered = false) {
 		if (!rendered) RenderDocument(ask);
 		var doc = Editor.TextDocument;
-		var given = FieldValues("Fill In Fields", FieldText(), values, ask);
+		var given = FieldValues(T("dlg.fields.title", "Fill In Fields"), FieldText(), values, ask);
 		int filled;
 		doc.BeginEditCollection();
 		try { filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null); }
@@ -2417,10 +2421,10 @@ class WriterForm : Form
 
 	/// The Styles drop-down's label: the document's style set, and whether its styles have been changed from the set's.
 	internal string StyleSetLabel() {
-		if (Styles.Set == "") return "Styles: The document's";    // (its own, from the file: Apply My Styles gives it yours)
+		if (Styles.Set == "") return T("ui.stylesDocument", "Styles: The document's");    // (its own, from the file: Apply My Styles gives it yours)
 		var set = StyleSets.Get(Styles.Set);
 		bool changed = set.Styles.Any(s => Styles.Find(s.Name) is not { } mine || System.Text.Json.JsonSerializer.Serialize(mine) != System.Text.Json.JsonSerializer.Serialize(s));
-		return "Styles: " + set.Set + (changed ? " (changed)" : "");
+		return changed ? T("ui.stylesSetChanged", "Styles: {0} (changed)", set.Set) : T("ui.stylesSet", "Styles: {0}", set.Set);
 	}
 
 	// (only when the styles may have changed: StylesChanged, a document loaded, a set chosen)
@@ -2659,7 +2663,7 @@ class WriterForm : Form
 
 	// File > Open in New Window
 	void OpenInNewWindowDialog() {
-		using var dlg = new OpenFileDialog { Title = "Open in New Window", Filter = Filter(OpenTypes), InitialDirectory = StartFolder };
+		using var dlg = new OpenFileDialog { Title = T("file.openInNewWindow", "Open in New Window"), Filter = Filter(OpenTypes), InitialDirectory = StartFolder };
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		StartWindow(dlg.FileName);
 		SetStatus(T("status.openingInNewWindow", "Opening {0} in a new window...", Path.GetFileName(dlg.FileName)));
@@ -2720,7 +2724,17 @@ class WriterForm : Form
 			new FileType("Markdown", "*.md"), new FileType("Rich Text Format", "*.rtf") }
 		.Concat(WordTypes).Concat(OdtTypes).Append(new FileType("Text", "*.txt")).ToArray();
 
-	static string Filter(IEnumerable<FileType> types) => string.Join("|", types.Select(t => $"{t.Label} ({t.Patterns.Replace(";*.htm;", ";").Replace(";*.markdown", "")})|{t.Patterns}"));
+	// (a type's name in the interface's language)
+	static string TypeLabel(string label) => label switch {
+		"Documents" => T("file.documents", "Documents"), "All files" => T("file.all", "All files"), "Text" => T("file.text", "Text"),
+		"HTML, pictures in a folder" => T("file.htmlFolder", "HTML, pictures in a folder"), "HTML, pictures inside (one file)" => T("file.htmlInside", "HTML, pictures inside (one file)"),
+		"OpenDocument text" => T("file.odt", "OpenDocument text"), "Word, built-in converter" => T("file.wordBuiltIn", "Word, built-in converter"),
+		"Word, converted by Word" => T("file.wordByWord", "Word, converted by Word"), "Word, converted by LibreOffice" => T("file.wordByLibreOffice", "Word, converted by LibreOffice"),
+		"Word, converted by pandoc" => T("file.wordByPandoc", "Word, converted by pandoc"), "OpenDocument, converted by LibreOffice" => T("file.odtByLibreOffice", "OpenDocument, converted by LibreOffice"),
+		"OpenDocument, converted by Word" => T("file.odtByWord", "OpenDocument, converted by Word"), "OpenDocument, converted by pandoc" => T("file.odtByPandoc", "OpenDocument, converted by pandoc"),
+		"Rich Text Format" => T("file.rtf", "Rich Text Format"), _ => label,
+	};
+	static string Filter(IEnumerable<FileType> types) => string.Join("|", types.Select(t => $"{TypeLabel(t.Label)} ({t.Patterns.Replace(";*.htm;", ";").Replace(";*.markdown", "")})|{t.Patterns}"));
 
 	// The dialog's FilterIndex (from 1) for a file name and converter: the first type with its extension and converter.
 	static int FilterIndex(FileType[] types, string? fileName, string via) {
@@ -2734,7 +2748,7 @@ class WriterForm : Form
 
 	void OpenDialog() {
 		if (!ConfirmDiscard()) return;
-		using var dlg = new OpenFileDialog { Title = "Open", Filter = Filter(OpenTypes), InitialDirectory = StartFolder };
+		using var dlg = new OpenFileDialog { Title = T("file.open", "Open"), Filter = Filter(OpenTypes), InitialDirectory = StartFolder };
 		if (dlg.ShowDialog(this) == DialogResult.OK) {
 			Cursor = Cursors.WaitCursor;
 			try { api.Open(dlg.FileName, ViaOf(OpenTypes, dlg.FilterIndex)); }
@@ -2757,7 +2771,7 @@ class WriterForm : Form
 
 	bool SaveAsDialog() {
 		using var dlg = new SaveFileDialog {
-			Title = "Save As", Filter = Filter(SaveTypes), FilterIndex = FilterIndex(SaveTypes, FileName ?? "Untitled.html", api.FileConverter),
+			Title = T("file.saveAs", "Save As"), Filter = Filter(SaveTypes), FilterIndex = FilterIndex(SaveTypes, FileName ?? "Untitled.html", api.FileConverter),
 			FileName = FileName != null ? Path.GetFileName(FileName) : "Untitled.html",
 			InitialDirectory = FileName != null ? Path.GetDirectoryName(FileName) : StartFolder
 		};
@@ -3646,7 +3660,7 @@ class WriterForm : Form
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 		int caret = doc.Selection2.Start;
 		if (Footnotes.At(story, caret) is { } existing) { EditFootnote(existing); return; }
-		using var dlg = new FootnoteDialog("Insert Footnote", "", NoteSizeNow());
+		using var dlg = new FootnoteDialog(T("dlg.footnote.titleInsert", "Insert Footnote"), "", NoteSizeNow());
 		if (dlg.ShowDialog(this) != DialogResult.OK || Footnotes.Plain(dlg.Note).Trim() == "") return;
 		string note = Footnotes.Paragraphs(Footnotes.ToTags(dlg.Note));
 		NoteSizeFrom(dlg);
@@ -3662,7 +3676,7 @@ class WriterForm : Form
 	}
 
 	void EditFootnote(Footnotes.Footnote footnote) {
-		using var dlg = new FootnoteDialog($"Footnote {footnote.Number}", footnote.Text, NoteSizeNow());
+		using var dlg = new FootnoteDialog(T("dlg.footnote.title", "Footnote {0}", footnote.Number), footnote.Text, NoteSizeNow());
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		NoteSizeFrom(dlg);
 		int index = Footnotes.All(Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "").FindIndex(f => f.Start == footnote.Start) + 1;
@@ -4070,7 +4084,7 @@ class WriterForm : Form
 
 	void ExportPdfDialog() {
 		using var dlg = new SaveFileDialog {
-			Title = "Export as PDF", Filter = "PDF (*.pdf)|*.pdf",
+			Title = T("file.exportPdf", "Export as PDF"), Filter = "PDF (*.pdf)|*.pdf",
 			FileName = Path.ChangeExtension(DocumentName, ".pdf"),
 			InitialDirectory = FileName != null ? Path.GetDirectoryName(FileName) : StartFolder
 		};
@@ -4505,8 +4519,8 @@ class WriterForm : Form
 	// Home > Styles > Copy Styles from Document: a document, then which of its styles come into this one (and into
 	// your defaults for new documents, if ticked).
 	void CopyStylesCommand() {
-		using var open = new OpenFileDialog { Title = "Copy Styles from Document", InitialDirectory = StartFolder,
-			Filter = "Documents with styles (*.rtf;*.docx;*.html;*.htm)|*.rtf;*.docx;*.html;*.htm|All files (*.*)|*.*" };
+		using var open = new OpenFileDialog { Title = T("file.copyStyles", "Copy Styles from Document"), InitialDirectory = StartFolder,
+			Filter = T("file.withStyles", "Documents with styles") + " (*.rtf;*.docx;*.html;*.htm)|*.rtf;*.docx;*.html;*.htm|" + T("file.all", "All files") + " (*.*)|*.*" };
 		if (open.ShowDialog(this) != DialogResult.OK) return;
 		StyleSheet? source;
 		try { source = StyleImport.From(open.FileName); }
@@ -4788,7 +4802,7 @@ class WriterForm : Form
 	internal string MacrosFolderPath => MacrosDir;
 
 	void RunScriptDialog() {
-		using var dlg = new OpenFileDialog { Title = "Run AHK script", Filter = "AutoHotkey scripts (*.ahk)|*.ahk", InitialDirectory = Directory.Exists(MacrosDir) ? MacrosDir : appDir };
+		using var dlg = new OpenFileDialog { Title = T("file.runScript", "Run AHK script"), Filter = T("file.ahkScripts", "AutoHotkey scripts") + " (*.ahk)|*.ahk", InitialDirectory = Directory.Exists(MacrosDir) ? MacrosDir : appDir };
 		if (dlg.ShowDialog(this) == DialogResult.OK) Run(() => RunMacroFromUi(dlg.FileName));
 	}
 
@@ -10702,11 +10716,11 @@ sealed class DocumentPrinter : IDisposable
 // (iteration 67) Layout > Columns: the columns of the caret's section.
 sealed class ColumnsDialog : Form
 {
-	readonly NumericUpDown count = new() { Minimum = 1, Width = 60, AccessibleName = "Number of columns" };
-	readonly NumericUpDown gap = new() { DecimalPlaces = 2, Increment = 0.05m, Width = 70, AccessibleName = "Gap between columns" };
-	readonly CheckBox line = new() { Text = "Line between columns", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
-	readonly CheckBox equal = new() { Text = "Equal widths", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
-	readonly NumericUpDown[] widths = Enumerable.Range(1, 6).Select(i => new NumericUpDown { DecimalPlaces = 2, Increment = 0.05m, Minimum = 0.05m, Maximum = 99, Width = 62, Margin = new Padding(0, 3, 6, 3), AccessibleName = $"Width of column {i}" }).ToArray();
+	readonly NumericUpDown count = new() { Minimum = 1, Width = 60, AccessibleName = T("dlg.columns.countName", "Number of columns") };
+	readonly NumericUpDown gap = new() { DecimalPlaces = 2, Increment = 0.05m, Width = 70, AccessibleName = T("dlg.columns.gapName", "Gap between columns") };
+	readonly CheckBox line = new() { Text = T("dlg.columns.line", "Line between columns"), AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+	readonly CheckBox equal = new() { Text = T("dlg.columns.equal", "Equal widths"), AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+	readonly NumericUpDown[] widths = Enumerable.Range(1, 6).Select(i => new NumericUpDown { DecimalPlaces = 2, Increment = 0.05m, Minimum = 0.05m, Maximum = 99, Width = 62, Margin = new Padding(0, 3, 6, 3), AccessibleName = T("dlg.columns.widthName", "Width of column {0}", i) }).ToArray();
 	readonly bool metric = System.Globalization.RegionInfo.CurrentRegion.IsMetric;
 
 	int Twips(decimal shown) => (int)Math.Round(Math.Round(metric ? shown / 0.0254m : shown * 100) * 14.4m);
@@ -10716,7 +10730,7 @@ sealed class ColumnsDialog : Form
 	public SectionColumns? Result => SectionColumns.Of((int)count.Value, Twips(gap.Value), line.Checked, equal.Checked ? null : widths.Take((int)count.Value).Select(w => Twips(w.Value)).ToArray());
 
 	public ColumnsDialog(SectionColumns? columns, int sectionNumber, bool sections, bool selection, int textWidth = 9360) {
-		Dialogs.Setup(this, selection ? "Columns: the selected paragraphs" : sections ? $"Columns: Section {sectionNumber}" : "Columns");
+		Dialogs.Setup(this, selection ? T("dlg.columns.titleSelection", "Columns: the selected paragraphs") : sections ? T("dlg.columns.titleSection", "Columns: Section {0}", sectionNumber) : T("dlg.columns.title", "Columns"));
 		count.Maximum = Math.Max(3, columns?.Count ?? 1);
 		count.Value = columns?.Count ?? 1;
 		gap.Maximum = metric ? 5 : 2;
@@ -10724,9 +10738,9 @@ sealed class ColumnsDialog : Form
 		gap.Value = Math.Min(gap.Maximum, Math.Round(metric ? hundredths * 0.0254m : hundredths / 100m, 2));
 		line.Checked = columns?.Line ?? false;
 		var table = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, Dock = DockStyle.Fill };
-		table.Controls.Add(new Label { Text = "Columns:", AutoSize = true, Margin = new Padding(3, 7, 3, 0) }, 0, 0);
+		table.Controls.Add(new Label { Text = T("dlg.columns.count", "Columns:"), AutoSize = true, Margin = new Padding(3, 7, 3, 0) }, 0, 0);
 		table.Controls.Add(count, 1, 0);
-		table.Controls.Add(new Label { Text = metric ? "Gap (cm):" : "Gap (in):", AutoSize = true, Margin = new Padding(3, 7, 3, 0) }, 0, 1);
+		table.Controls.Add(new Label { Text = metric ? T("dlg.columns.gapCm", "Gap (cm):") : T("dlg.columns.gapIn", "Gap (in):"), AutoSize = true, Margin = new Padding(3, 7, 3, 0) }, 0, 1);
 		table.Controls.Add(gap, 1, 1);
 		table.Controls.Add(line, 0, 2);
 		table.SetColumnSpan(line, 2);
@@ -10735,9 +10749,9 @@ sealed class ColumnsDialog : Form
 		table.SetColumnSpan(equal, 2);
 		var widthRow = new FlowLayoutPanel { AutoSize = true, WrapContents = true, MaximumSize = new Size(LogicalToDeviceUnits(240), 0), Margin = new Padding(3, 0, 3, 0) };
 		widthRow.Controls.AddRange(widths);
-		table.Controls.Add(new Label { Text = metric ? "Widths (cm):" : "Widths (in):", AutoSize = true, Margin = new Padding(3, 7, 3, 0) }, 0, 4);
+		table.Controls.Add(new Label { Text = metric ? T("dlg.columns.widthsCm", "Widths (cm):") : T("dlg.columns.widthsIn", "Widths (in):"), AutoSize = true, Margin = new Padding(3, 7, 3, 0) }, 0, 4);
 		table.Controls.Add(widthRow, 1, 4);
-		var note = new Label { Text = "Columns are printed, and Print Preview shows them. You go on editing in one column. Widths are kept in proportion, to fill the page's text width.", AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(280), 0), Margin = new Padding(3, 6, 3, 8) };
+		var note = new Label { Text = T("dlg.columns.note", "Columns are printed, and Print Preview shows them. You go on editing in one column. Widths are kept in proportion, to fill the page's text width."), AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(280), 0), Margin = new Padding(3, 6, 3, 8) };
 		table.Controls.Add(note, 0, 5);
 		table.SetColumnSpan(note, 2);
 		var ok = Dialogs.Ok(this);
@@ -11917,15 +11931,15 @@ sealed class ListLevelsDialog : Form
 	readonly NumericUpDown[] starts = new NumericUpDown[9];
 	// Iteration 38: where each level's number and text start (points from the margin; empty: automatic)
 	readonly TextBox[] numberAts = new TextBox[9], textAts = new TextBox[9];
-	readonly CheckBox forNew = new() { Text = "Also for new documents", AutoSize = true, Checked = true };
-	readonly CheckBox autoLevel = new() { Text = "Tab and Shift+Tab give an item its new level's numbering style (automatic numbering style per level)", AutoSize = true };
+	readonly CheckBox forNew = new() { Text = T("dlg.listLevels.forNew", "Also for new documents"), AutoSize = true, Checked = true };
+	readonly CheckBox autoLevel = new() { Text = T("dlg.listLevels.autoLevel", "Tab and Shift+Tab give an item its new level's numbering style (automatic numbering style per level)"), AutoSize = true };
 	public bool AutomaticPerLevel => autoLevel.Checked;
 	readonly Label error = new() { AutoSize = true, ForeColor = AppTheme.Warning };
 	readonly Label preview = new() { AutoSize = true, Font = new Font("Consolas", 9.5f), Padding = new Padding(8, 4, 8, 4), BackColor = SystemColors.Window };
-	readonly CheckBox apply = new() { Text = "Apply to the current list", AutoSize = true };
+	readonly CheckBox apply = new() { Text = T("dlg.listLevels.apply", "Apply to the current list"), AutoSize = true };
 
 	static readonly (string Name, string Label)[] Styles = {
-		("Decimal", "1, 2, 3"), ("LowerAlpha", "a, b, c"), ("UpperAlpha", "A, B, C"), ("LowerRoman", "i, ii, iii"), ("UpperRoman", "I, II, III"), ("Bullet", "• bullet")
+		("Decimal", "1, 2, 3"), ("LowerAlpha", "a, b, c"), ("UpperAlpha", "A, B, C"), ("LowerRoman", "i, ii, iii"), ("UpperRoman", "I, II, III"), ("Bullet", "• " + T("dlg.listLevels.bullet", "bullet"))
 	};
 	static readonly string[] PunctuationLabels = { "1.", "1)", "(1)", "1" };
 
@@ -11944,8 +11958,8 @@ sealed class ListLevelsDialog : Form
 	bool Validate(out string message) {
 		message = "";
 		for (int i = 0; i < 9; i++)
-			foreach (var (box, what) in new[] { (numberAts[i], "Number at"), (textAts[i], "Text at") })
-				if (box.Text.Trim() != "" && (PointsIn(box) is not float v || v < 0 || v > 1584)) { message = $"Level {i + 1}, {what}: points from the margin, 0 to 1584 (empty: automatic)."; return false; }
+			foreach (var (box, what) in new[] { (numberAts[i], T("dlg.listLevels.numberAt", "Number at")), (textAts[i], T("dlg.listLevels.textAt", "Text at")) })
+				if (box.Text.Trim() != "" && (PointsIn(box) is not float v || v < 0 || v > 1584)) { message = T("dlg.listLevels.badPoints", "Level {0}, {1}: points from the margin, 0 to 1584 (empty: automatic).", i + 1, what); return false; }
 		return true;
 	}
 
@@ -11955,11 +11969,11 @@ sealed class ListLevelsDialog : Form
 	public LegalLists.Periods LegalFormat => LegalFormats[Math.Max(0, legalFormat.SelectedIndex)].Format;
 
 	public ListLevelsDialog(List<ListLevel> levels, bool inList, LegalLists.Periods legal = LegalLists.Periods.Top, bool automaticPerLevel = true) {
-		Dialogs.Setup(this, "List levels");
+		Dialogs.Setup(this, T("dlg.listLevels.title", "List levels"));
 		autoLevel.Checked = automaticPerLevel;
 
 		var table = new TableLayoutPanel { ColumnCount = 6, AutoSize = true };
-		foreach (var heading in new[] { "Level", "Numbering", "Punctuation", "Start at", "Number at (pt)", "Text at (pt)" })
+		foreach (var heading in new[] { T("dlg.listLevels.level", "Level"), T("dlg.listLevels.numbering", "Numbering"), T("dlg.listLevels.punctuation", "Punctuation"), T("dlg.listLevels.startAt", "Start at"), T("dlg.listLevels.numberAtPt", "Number at (pt)"), T("dlg.listLevels.textAtPt", "Text at (pt)") })
 			table.Controls.Add(new Label { Text = heading, AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(3, 3, 3, 6) });
 		for (int i = 0; i < 9; i++) {
 			var level = i < levels.Count ? levels[i] : ListLevel.Defaults()[i];
@@ -11980,15 +11994,15 @@ sealed class ListLevelsDialog : Form
 			table.Controls.Add(starts[i]);
 			punctuations[i].Enabled = starts[i].Enabled = styles[i].SelectedIndex != Styles.Length - 1;
 			// (where the number and the text start; empty: automatic, the number at 18 points a level, the text after it)
-			numberAts[i] = new TextBox { Width = LogicalToDeviceUnits(70), PlaceholderText = $"auto ({18 * (i + 1)})", Text = Shown(level.NumberAt) };
-			textAts[i] = new TextBox { Width = LogicalToDeviceUnits(70), PlaceholderText = "auto", Text = Shown(level.TextAt) };
+			numberAts[i] = new TextBox { Width = LogicalToDeviceUnits(70), PlaceholderText = T("dlg.listLevels.autoAt", "auto ({0})", 18 * (i + 1)), Text = Shown(level.NumberAt) };
+			textAts[i] = new TextBox { Width = LogicalToDeviceUnits(70), PlaceholderText = T("dlg.listLevels.auto", "auto"), Text = Shown(level.TextAt) };
 			numberAts[i].TextChanged += (s, e) => UpdatePreview();
 			textAts[i].TextChanged += (s, e) => UpdatePreview();
 			table.Controls.Add(numberAts[i]);
 			table.Controls.Add(textAts[i]);
 		}
 
-		var defaults = Dialogs.Button(this, "Defaults");
+		var defaults = Dialogs.Button(this, T("dlg.listLevels.defaults", "Defaults"));
 		defaults.Click += (s, e) => {
 			var d = ListLevel.Defaults();
 			for (int i = 0; i < 9; i++) {
@@ -12003,10 +12017,10 @@ sealed class ListLevelsDialog : Form
 		var cancel = Dialogs.Cancel(this);
 		var buttons = Dialogs.Row(this, 0, defaults, ok, cancel);
 		apply.Checked = apply.Enabled = inList;
-		if (!inList) apply.Text += " (the caret is not in a list)";
+		if (!inList) apply.Text += " " + T("dlg.listLevels.notInList", "(the caret is not in a list)");
 
 		var right = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false, Margin = new Padding(16, 0, 0, 0) };
-		right.Controls.Add(new Label { Text = "Preview", AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(3, 3, 3, 6) });
+		right.Controls.Add(new Label { Text = T("dlg.listLevels.preview", "Preview"), AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(3, 3, 3, 6) });
 		right.Controls.Add(preview);
 		var top = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
 		top.Controls.Add(table);
@@ -12016,14 +12030,14 @@ sealed class ListLevelsDialog : Form
 		autoLevel.Margin = new Padding(3, 8, 3, 0);
 		layout.Controls.Add(autoLevel);
 		layout.Controls.Add(new Label { AutoSize = true, Margin = new Padding(3, 8, 3, 3), MaximumSize = new Size(LogicalToDeviceUnits(640), 0),
-			Text = "New numbered lists use level 1; with the box above ticked, Tab and Shift+Tab give items the numbering of their new level (unticked, they keep theirs). " +
+			Text = T("dlg.listLevels.note", "New numbered lists use level 1; with the box above ticked, Tab and Shift+Tab give items the numbering of their new level (unticked, they keep theirs). " +
 				"Number at and Text at are where a level's number and its text (and the lines after the first) start, in points from the margin (72 points an inch); " +
-				"empty: automatic. They are the document's, saved in it, for its lists and legal numbering; numbered styles have their own (Modify Style)." });
+				"empty: automatic. They are the document's, saved in it, for its lists and legal numbering; numbered styles have their own (Modify Style).") });
 		var legalRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 0) };
 		legalFormat.Items.AddRange(LegalFormats.Select(f => (object)f.Label).ToArray());
 		legalFormat.SelectedIndex = Math.Max(0, Array.FindIndex(LegalFormats, f => f.Format == legal));
 		legalFormat.Width = LogicalToDeviceUnits(150);
-		legalRow.Controls.Add(new Label { Text = "Legal numbering (Home > Paragraph > 1.1):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 3, 3) });
+		legalRow.Controls.Add(new Label { Text = T("dlg.listLevels.legal", "Legal numbering (Home > Paragraph > 1.1):"), AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 3, 3) });
 		legalRow.Controls.Add(legalFormat);
 		layout.Controls.Add(legalRow);
 		layout.Controls.Add(apply);
@@ -12048,7 +12062,7 @@ sealed class ListLevelsDialog : Form
 			for (int n = 0; n < (i < 3 ? 2 : 1); n++) {
 				string sample = levels[i].Sample(levels[i].Start + n);
 				int lead = (int)Math.Round(number / 6), gap = Math.Max(1, (int)Math.Round((text - number) / 6) - sample.Length);
-				sb.Append(new string(' ', Math.Min(60, lead))).Append(sample).Append(new string(' ', Math.Min(40, gap))).Append("Level ").Append(i + 1).Append('\n');
+				sb.Append(new string(' ', Math.Min(60, lead))).Append(sample).Append(new string(' ', Math.Min(40, gap))).Append(T("dlg.listLevels.previewLevel", "Level {0}", i + 1)).Append('\n');
 			}
 		}
 		preview.Text = sb.ToString().TrimEnd();
@@ -12095,9 +12109,9 @@ sealed class TablePropertiesDialog : Form
 	readonly Label total = new() { AutoSize = true };
 	readonly ComboBox borders = new() { DropDownStyle = ComboBoxStyle.DropDownList };
 	readonly ComboBox borderWidth = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 80 };
-	readonly Button borderColor = new() { Text = "Color...", AutoSize = true };
+	readonly Button borderColor = new() { Text = T("dlg.tableProps.color", "Color..."), AutoSize = true };
 	readonly ComboBox shading = new() { DropDownStyle = ComboBoxStyle.DropDownList };
-	readonly Button shadingColor = new() { Text = "Color...", AutoSize = true };
+	readonly Button shadingColor = new() { Text = T("dlg.tableProps.color", "Color..."), AutoSize = true };
 	readonly ComboBox verticalAlign = new() { DropDownStyle = ComboBoxStyle.DropDownList };
 	readonly List<RtfTables.RowFormat> rows;
 	readonly int pageWidth;
@@ -12108,13 +12122,15 @@ sealed class TablePropertiesDialog : Form
 	readonly List<int> initialWidths;
 
 	static readonly float[] BorderWidths = { 0.25f, 0.5f, 0.75f, 1f, 1.5f, 2.25f, 3f };
+	// (the Borders box's items, as TableChanges.Borders names them: the box shows them in the interface's language)
+	static readonly string[] BorderKinds = { "", "all", "outside", "inside", "none", "top", "bottom", "left", "right" };
 
 	double Unit => metric ? 1440 / 2.54 : 1440;    // twips per cm or inch
 
 	public TablePropertiesDialog(List<RtfTables.RowFormat> rows, int selectedCells, int pageWidth) {
 		this.rows = rows;
 		this.pageWidth = pageWidth;
-		Dialogs.Setup(this, "Table Properties");
+		Dialogs.Setup(this, T("dlg.tableProps.title", "Table Properties"));
 		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		var first = rows[0];
 		initialAlignment = first.Alignment;
@@ -12126,10 +12142,10 @@ sealed class TablePropertiesDialog : Form
 		Controls.Add(layout);
 
 		// the whole table
-		alignment.Items.AddRange(new object[] { "Left", "Center", "Right" });
+		alignment.Items.AddRange(new object[] { T("dlg.tableProps.left", "Left"), T("dlg.tableProps.center", "Center"), T("dlg.tableProps.right", "Right") });
 		alignment.SelectedIndex = first.Alignment;
 		padding.Value = (decimal)Math.Min(72, first.Padding / 20.0);
-		layout.Controls.Add(Group("Table", Row(Label("&Alignment on the page:"), alignment), Row(Label("Cell &padding (left and right, pt):"), padding)));
+		layout.Controls.Add(Group(T("dlg.tableProps.table", "Table"), Row(Label(T("dlg.tableProps.alignment", "&Alignment on the page:")), alignment), Row(Label(T("dlg.tableProps.padding", "Cell &padding (left and right, pt):")), padding)));
 
 		var columns = new FlowLayoutPanel { AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(520), 0), WrapContents = true };
 		for (int c = 0; c < first.Cells.Count; c++) {
@@ -12139,38 +12155,39 @@ sealed class TablePropertiesDialog : Form
 			widths.Add(box);
 			columns.Controls.Add(Row(Label($"{c + 1}:"), box));
 		}
-		var equal = new Button { Text = "&Equal widths", AutoSize = true };
+		var equal = new Button { Text = T("dlg.tableProps.equal", "&Equal widths"), AutoSize = true };
 		equal.Click += (s, e) => SetWidths(Enumerable.Repeat(widths.Sum(w => (double)w.Value) / widths.Count, widths.Count).ToList());
-		var fit = new Button { Text = "&Fit to page width", AutoSize = true };
+		var fit = new Button { Text = T("dlg.tableProps.fit", "&Fit to page width"), AutoSize = true };
 		fit.Click += (s, e) => { double sum = widths.Sum(w => (double)w.Value); SetWidths(widths.Select(w => (double)w.Value * pageWidth / Unit / sum).ToList()); };
 		bool sameCells = rows.All(r => r.Cells.Count == first.Cells.Count);
-		layout.Controls.Add(Group($"Column widths ({(metric ? "cm" : "inches")})" + (sameCells ? "" : ", for the rows with this many cells"),
+		layout.Controls.Add(Group((metric ? T("dlg.tableProps.widthsCm", "Column widths (cm)") : T("dlg.tableProps.widthsIn", "Column widths (inches)")) + (sameCells ? "" : T("dlg.tableProps.widthsTheseRows", ", for the rows with this many cells")),
 			columns, Row(equal, fit, total)));
 		ShowTotal();
 
 		// the selected cells or the whole table
-		scope.Items.AddRange(new object[] { $"The selected cell{(selectedCells == 1 ? "" : "s")} ({selectedCells})", "The whole table" });
+		scope.Items.AddRange(new object[] { TN("dlg.tableProps.selectedCells", "The selected cell ({0})", "The selected cells ({0})", selectedCells), T("dlg.tableProps.wholeTable", "The whole table") });
 		scope.SelectedIndex = selectedCells >= rows.Sum(r => r.Cells.Count) ? 1 : 0;
 		scope.Width = LogicalToDeviceUnits(200);
-		heightKind.Items.AddRange(new object[] { "Automatic", "At least", "Exactly" });
+		heightKind.Items.AddRange(new object[] { T("dlg.tableProps.automatic", "Automatic"), T("dlg.tableProps.atLeast", "At least"), T("dlg.tableProps.exactly", "Exactly") });
 		heightKind.SelectedIndex = first.Height == 0 ? 0 : first.Height > 0 ? 1 : 2;
 		height.Value = (decimal)Math.Min(1440, Math.Abs(first.Height) / 20.0);
 		height.Enabled = heightKind.SelectedIndex != 0;
 		heightKind.SelectedIndexChanged += (s, e) => { height.Enabled = heightKind.SelectedIndex != 0; if (height.Enabled && height.Value == 0) height.Value = 18; };
-		borders.Items.AddRange(new object[] { "(no change)", "All", "Outside", "Inside", "None", "Top", "Bottom", "Left", "Right" });
+		borders.Items.AddRange(new object[] { T("dlg.tableProps.noChange", "(no change)"), T("dlg.tableProps.all", "All"), T("dlg.tableProps.outside", "Outside"), T("dlg.tableProps.inside", "Inside"), T("dlg.tableProps.none", "None"),
+			T("dlg.tableProps.borderTop", "Top"), T("dlg.tableProps.borderBottom", "Bottom"), T("dlg.tableProps.borderLeft", "Left"), T("dlg.tableProps.borderRight", "Right") });
 		borders.SelectedIndex = 0;
 		foreach (float w in BorderWidths) borderWidth.Items.Add(w.ToString("0.##", CultureInfo.CurrentCulture) + " pt");
 		borderWidth.SelectedIndex = 1;
 		borderColor.Click += (s, e) => { if (Pick(lineColor ?? Color.Black) is Color c) { lineColor = c; ShowColors(); if (borders.SelectedIndex == 0) borders.SelectedIndex = 1; } };
-		shading.Items.AddRange(new object[] { "(no change)", "None", "Color" });
+		shading.Items.AddRange(new object[] { T("dlg.tableProps.noChange", "(no change)"), T("dlg.tableProps.none", "None"), T("dlg.tableProps.colorItem", "Color") });
 		shading.SelectedIndex = 0;
 		shadingColor.Click += (s, e) => { if (Pick(fillColor) is Color c) { fillColor = c; shading.SelectedIndex = 2; ShowColors(); } };
-		verticalAlign.Items.AddRange(new object[] { "(no change)", "Top", "Center", "Bottom" });
+		verticalAlign.Items.AddRange(new object[] { T("dlg.tableProps.noChange", "(no change)"), T("dlg.tableProps.top", "Top"), T("dlg.tableProps.center", "Center"), T("dlg.tableProps.bottom", "Bottom") });
 		verticalAlign.SelectedIndex = 0;
 		ShowColors();
-		layout.Controls.Add(Group("Cells", Row(Label("Apply &to:"), scope), Row(Label("Row &height:"), heightKind, height, Label("pt")),
-			Row(Label("&Borders:"), borders, borderWidth, borderColor), Row(Label("&Shading:"), shading, shadingColor),
-			Row(Label("&Vertical alignment:"), verticalAlign)));
+		layout.Controls.Add(Group(T("dlg.tableProps.cells", "Cells"), Row(Label(T("dlg.tableProps.applyTo", "Apply &to:")), scope), Row(Label(T("dlg.tableProps.rowHeight", "Row &height:")), heightKind, height, Label("pt")),
+			Row(Label(T("dlg.tableProps.borders", "&Borders:")), borders, borderWidth, borderColor), Row(Label(T("dlg.tableProps.shading", "&Shading:")), shading, shadingColor),
+			Row(Label(T("dlg.tableProps.verticalAlignment", "&Vertical alignment:")), verticalAlign)));
 
 		var ok = Dialogs.Ok(this);
 		var cancel = Dialogs.Cancel(this);
@@ -12201,7 +12218,7 @@ sealed class TablePropertiesDialog : Form
 		for (int i = 0; i < widths.Count; i++) widths[i].Value = (decimal)Math.Clamp(Math.Round(values[i], 2), (double)widths[i].Minimum, (double)widths[i].Maximum);
 	}
 
-	void ShowTotal() => total.Text = $"Total {widths.Sum(w => w.Value):0.##} of {pageWidth / Unit:0.##} {(metric ? "cm" : "in")}";
+	void ShowTotal() => total.Text = metric ? T("dlg.tableProps.totalCm", "Total {0:0.##} of {1:0.##} cm", widths.Sum(w => w.Value), pageWidth / Unit) : T("dlg.tableProps.totalIn", "Total {0:0.##} of {1:0.##} in", widths.Sum(w => w.Value), pageWidth / Unit);
 
 	void ShowColors() {
 		borderColor.BackColor = lineColor ?? SystemColors.Control;
@@ -12226,7 +12243,7 @@ sealed class TablePropertiesDialog : Form
 			var w = widths.Select(box => (int)Math.Round((double)box.Value * Unit)).ToList();
 			if (w.Where((value, i) => Math.Abs(value - initialWidths[i]) > 10).Any()) changes.Widths = w;
 			if (borders.SelectedIndex > 0) {
-				changes.Borders = borders.SelectedItem!.ToString()!.ToLowerInvariant();
+				changes.Borders = BorderKinds[borders.SelectedIndex];
 				changes.Border = new RtfTables.Border((int)Math.Round(BorderWidths[borderWidth.SelectedIndex] * 20), lineColor);
 			}
 			if (shading.SelectedIndex > 0) { changes.SetShading = true; changes.Shading = shading.SelectedIndex == 2 ? fillColor : null; }
@@ -12352,21 +12369,21 @@ sealed class HeaderFooterDialog : Form
 		public string Name => (First ? "First page " : "") + (IsHeader ? "header" : "footer");
 		public BandBox(bool isHeader, bool first) {
 			(IsHeader, First) = (isHeader, first);
-			Show.Text = (isHeader ? "Show a header" : "Show a footer") + (first ? " on the first page" : "");
-			Line.Text = isHeader ? "Line below the header" : "Line above the footer";
+			Show.Text = first ? (isHeader ? T("dlg.headerFooter.showFirstHeader", "Show a header on the first page") : T("dlg.headerFooter.showFirstFooter", "Show a footer on the first page")) : isHeader ? T("dlg.headerFooter.showHeader", "Show a header") : T("dlg.headerFooter.showFooter", "Show a footer");
+			Line.Text = isHeader ? T("dlg.headerFooter.lineBelow", "Line below the header") : T("dlg.headerFooter.lineAbove", "Line above the footer");
 		}
 	}
 
 	readonly BandBox header = new(true, false), footer = new(false, false), firstHeader = new(true, true), firstFooter = new(false, true);
 	BandBox[] Bands => new[] { header, footer, firstHeader, firstFooter };
-	readonly CheckBox makeDefault = new() { Text = "Use for new documents too", AutoSize = true, Margin = new Padding(3, 6, 3, 0) };
+	readonly CheckBox makeDefault = new() { Text = T("dlg.headerFooter.makeDefault", "Use for new documents too"), AutoSize = true, Margin = new Padding(3, 6, 3, 0) };
 	// (iteration 49) the first page's own; (iteration 55) in every way, on a tab of its own
-	readonly CheckBox differentFirst = new() { Text = "Different first page: page 1 has a header and footer of its own (or none), the other pages theirs", AutoSize = true, Margin = new Padding(3, 4, 3, 4) };
+	readonly CheckBox differentFirst = new() { Text = T("dlg.headerFooter.differentFirst", "Different first page: page 1 has a header and footer of its own (or none), the other pages theirs"), AutoSize = true, Margin = new Padding(3, 4, 3, 4) };
 	readonly TabControl tabs = new();
 	readonly TabPage otherTab = new(), firstTab = new();
 	readonly FlowLayoutPanel firstPanel = new() { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
 	// (iteration 55) from the page's edges, in inches or centimetres as the region measures
-	readonly NumericUpDown headerDistance = new() { DecimalPlaces = 2, Width = 70, AccessibleName = "Header from top" }, footerDistance = new() { DecimalPlaces = 2, Width = 70, AccessibleName = "Footer from bottom" };
+	readonly NumericUpDown headerDistance = new() { DecimalPlaces = 2, Width = 70, AccessibleName = T("dlg.headerFooter.headerFromTopName", "Header from top") }, footerDistance = new() { DecimalPlaces = 2, Width = 70, AccessibleName = T("dlg.headerFooter.footerFromBottomName", "Footer from bottom") };
 	readonly bool metric = System.Globalization.RegionInfo.CurrentRegion.IsMetric;
 	decimal ToUnits(int hundredths) => metric ? Math.Round(hundredths * 0.0254m, 2) : hundredths / 100m;
 	int FromUnits(decimal value) => (int)Math.Round(metric ? value / 0.0254m : value * 100);
@@ -12379,14 +12396,14 @@ sealed class HeaderFooterDialog : Form
 
 	// (iteration 63) a section after a break: the same header and footer as the section before's, or its own; its page
 	// numbers starting again (at what number) or going on
-	readonly CheckBox sameAsPrevious = new() { Text = "Same as the section before", AutoSize = true, Margin = new Padding(12, 6, 3, 0) };
-	readonly CheckBox restart = new() { Text = "Page numbers start again at", AutoSize = true, Margin = new Padding(16, 6, 0, 0) };
-	readonly NumericUpDown startAt = new() { Minimum = 0, Maximum = 99999, Width = 70, AccessibleName = "First page number", Margin = new Padding(3, 3, 3, 0) };
+	readonly CheckBox sameAsPrevious = new() { Text = T("dlg.headerFooter.sameAsPrevious", "Same as the section before"), AutoSize = true, Margin = new Padding(12, 6, 3, 0) };
+	readonly CheckBox restart = new() { Text = T("dlg.headerFooter.restart", "Page numbers start again at"), AutoSize = true, Margin = new Padding(16, 6, 0, 0) };
+	readonly NumericUpDown startAt = new() { Minimum = 0, Maximum = 99999, Width = 70, AccessibleName = T("dlg.headerFooter.startAtName", "First page number"), Margin = new Padding(3, 3, 3, 0) };
 	readonly SectionSettings? section;
 	// a section's own top and bottom margins (the document's until ticked)
-	readonly CheckBox ownMargins = new() { Text = "Margins of its own: top", AutoSize = true, Margin = new Padding(16, 6, 0, 0) };
-	readonly NumericUpDown sectionTop = new() { DecimalPlaces = 2, Width = 70, AccessibleName = "Section's top margin", Margin = new Padding(3, 3, 3, 0) };
-	readonly NumericUpDown sectionBottom = new() { DecimalPlaces = 2, Width = 70, AccessibleName = "Section's bottom margin", Margin = new Padding(3, 3, 3, 0) };
+	readonly CheckBox ownMargins = new() { Text = T("dlg.headerFooter.ownMargins", "Margins of its own: top"), AutoSize = true, Margin = new Padding(16, 6, 0, 0) };
+	readonly NumericUpDown sectionTop = new() { DecimalPlaces = 2, Width = 70, AccessibleName = T("dlg.headerFooter.sectionTopName", "Section's top margin"), Margin = new Padding(3, 3, 3, 0) };
+	readonly NumericUpDown sectionBottom = new() { DecimalPlaces = 2, Width = 70, AccessibleName = T("dlg.headerFooter.sectionBottomName", "Section's bottom margin"), Margin = new Padding(3, 3, 3, 0) };
 
 	/// Iteration 63: a section's settings as the dialog has them (null: the document's own header and footer, the first
 	/// section's): Same, or its own header and footer (Result), and its numbering.
@@ -12405,13 +12422,13 @@ sealed class HeaderFooterDialog : Form
 	public HeaderFooterDialog(PageBands bands, PageBands defaultBands, SectionSettings? section = null, int sectionNumber = 0, int[]? margins = null) {
 		defaults_ = defaultBands;
 		this.section = section;
-		Dialogs.Setup(this, "Header and Footer");
+		Dialogs.Setup(this, T("dlg.headerFooter.title", "Header and Footer"));
 
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, WrapContents = false };
 		if (section != null) {
-			Text = $"Header and Footer: Section {sectionNumber}";
+			Text = T("dlg.headerFooter.titleSection", "Header and Footer: Section {0}", sectionNumber);
 			var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(3, 0, 3, 6) };
-			row.Controls.Add(new Label { Text = $"Section {sectionNumber} (the caret's):", AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, 7, 3, 0) });
+			row.Controls.Add(new Label { Text = T("dlg.headerFooter.section", "Section {0} (the caret's):", sectionNumber), AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(0, 7, 3, 0) });
 			row.Controls.Add(sameAsPrevious);
 			row.Controls.Add(restart);
 			row.Controls.Add(startAt);
@@ -12421,12 +12438,12 @@ sealed class HeaderFooterDialog : Form
 			startAt.Value = Math.Clamp(section.Start, 0, 99999);
 			startAt.Enabled = restart.Checked;
 			restart.CheckedChanged += (s, e) => startAt.Enabled = restart.Checked;
-			new ToolTip().SetToolTip(sameAsPrevious, "Ticked, this section prints the header and footer of the section before (Word's Link to Previous); untick it to give it its own.");
+			new ToolTip().SetToolTip(sameAsPrevious, T("dlg.headerFooter.sameAsPreviousTip", "Ticked, this section prints the header and footer of the section before (Word's Link to Previous); untick it to give it its own."));
 			row.Controls.Add(ownMargins);
 			row.Controls.Add(sectionTop);
-			row.Controls.Add(new Label { Text = "bottom", AutoSize = true, Margin = new Padding(3, 7, 0, 0) });
+			row.Controls.Add(new Label { Text = T("dlg.headerFooter.bottom", "bottom"), AutoSize = true, Margin = new Padding(3, 7, 0, 0) });
 			row.Controls.Add(sectionBottom);
-			row.Controls.Add(new Label { Text = metric ? "cm" : "in", AutoSize = true, Margin = new Padding(3, 7, 3, 0) });
+			row.Controls.Add(new Label { Text = metric ? "cm" : T("dlg.headerFooter.in", "in"), AutoSize = true, Margin = new Padding(3, 7, 3, 0) });
 			foreach (var box in new[] { sectionTop, sectionBottom }) box.Maximum = ToUnits(1000);
 			ownMargins.Checked = section.Page?.Top != null || section.Page?.Bottom != null;
 			decimal Start(int? twips, int side) => Math.Min(sectionTop.Maximum, ToUnits(twips is int t ? (int)Math.Round(Math.Abs(t) / 14.4) : margins is { Length: 2 } ? margins[side] : 100));
@@ -12434,7 +12451,7 @@ sealed class HeaderFooterDialog : Form
 			sectionBottom.Value = Start(section.Page?.Bottom, 1);
 			sectionTop.Enabled = sectionBottom.Enabled = ownMargins.Checked;
 			ownMargins.CheckedChanged += (s, e) => sectionTop.Enabled = sectionBottom.Enabled = ownMargins.Checked;
-			new ToolTip().SetToolTip(ownMargins, "Ticked, this section's pages have these top and bottom margins; the other sections keep theirs. Page Setup sets the document's.");
+			new ToolTip().SetToolTip(ownMargins, T("dlg.headerFooter.ownMarginsTip", "Ticked, this section's pages have these top and bottom margins; the other sections keep theirs. Page Setup sets the document's."));
 		}
 		layout.Controls.Add(SelectionRow());
 		layout.Controls.Add(differentFirst);
@@ -12453,15 +12470,15 @@ sealed class HeaderFooterDialog : Form
 		layout.Controls.Add(Position());
 		layout.Controls.Add(new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(760), 0), Margin = new Padding(3, 6, 3, 6),
-			Text = "Fields: {title} document name, {file} full path, {page} page number, {pages} number of pages, {sectionpages} pages in the section, {date}, {time}.\n"
+			Text = T("dlg.headerFooter.note", "Fields: {title} document name, {file} full path, {page} page number, {pages} number of pages, {sectionpages} pages in the section, {date}, {time}.\n"
 				+ "Example: Page {page} of {pages}. Enter starts a new line in a part; a blank line at the end leaves space below a header.\n"
-				+ "They are printed, and saved with the document: Word and OpenDocument files get them as their own header and footer."
+				+ "They are printed, and saved with the document: Word and OpenDocument files get them as their own header and footer.")
 		});
 		layout.Controls.Add(makeDefault);
 
 		var ok = Dialogs.Ok(this);
 		var cancel = Dialogs.Cancel(this);
-		var defaults = Dialogs.Button(this, "Defaults");
+		var defaults = Dialogs.Button(this, T("dlg.headerFooter.defaults", "Defaults"));
 		defaults.Click += (s, e) => LoadFrom(defaults_);
 		var buttons = Dialogs.Row(this, 0, defaults, ok, cancel);
 		layout.Controls.Add(buttons);
@@ -12476,7 +12493,7 @@ sealed class HeaderFooterDialog : Form
 			void Same() { tabs.Enabled = differentFirst.Enabled = !sameAsPrevious.Checked; }
 			sameAsPrevious.CheckedChanged += (s, e) => Same();
 			Same();
-			differentFirst.Text = "Different first page: the section's first page has a header and footer of its own (or none), its other pages theirs";
+			differentFirst.Text = T("dlg.headerFooter.differentFirstSection", "Different first page: the section's first page has a header and footer of its own (or none), its other pages theirs");
 		}
 	}
 
@@ -12486,13 +12503,13 @@ sealed class HeaderFooterDialog : Form
 	// the whole header or footer
 	FlowLayoutPanel SelectionRow() {
 		var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(3, 0, 3, 4) };
-		row.Controls.Add(new Label { Text = "Selected words:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 3, 0) });
+		row.Controls.Add(new Label { Text = T("dlg.headerFooter.selectedWords", "Selected words:"), AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 7, 3, 0) });
 		// (iteration 55: buttons that stay pressed while the selection, or the caret's typing, has it)
 		styleButtons = new RichFormat.Buttons(row, Font, LogicalToDeviceUnits, Apply);
-		var font = new Button { Text = "Font...", AutoSize = true, TabStop = false, AccessibleName = "Selection font" };
+		var font = new Button { Text = T("dlg.headerFooter.font", "Font..."), AutoSize = true, TabStop = false, AccessibleName = T("dlg.headerFooter.selectionFontName", "Selection font") };
 		font.Click += (s, e) => ChooseSelectionFont();
 		row.Controls.Add(font);
-		row.Controls.Add(new Label { Text = "Select words in a part to give them a font, size, bold, italic or underline of their own; with nothing selected, these format the whole header or footer.",
+		row.Controls.Add(new Label { Text = T("dlg.headerFooter.selectionNote", "Select words in a part to give them a font, size, bold, italic or underline of their own; with nothing selected, these format the whole header or footer."),
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(520), 0), Anchor = AnchorStyles.Left, Margin = new Padding(6, 2, 0, 0) });
 		return row;
 	}
@@ -12590,28 +12607,28 @@ sealed class HeaderFooterDialog : Form
 	}
 
 	GroupBox Band(BandBox band) {
-		string title = band.IsHeader ? "Header (above the text)" : "Footer (below the text)";
+		string title = band.IsHeader ? T("dlg.headerFooter.headerBox", "Header (above the text)") : T("dlg.headerFooter.footerBox", "Footer (below the text)");
 		var box = new GroupBox { Text = title, AutoSize = true, Padding = new Padding(8), Dock = DockStyle.Fill };
 		var table = new TableLayoutPanel { ColumnCount = 3, AutoSize = true, Dock = DockStyle.Fill };
 		table.Controls.Add(band.Show, 0, 0);
 		table.SetColumnSpan(band.Show, 3);
-		string[] labels = { "Left", "Center", "Right" };
-		string name = band.First ? (band.IsHeader ? "First page header" : "First page footer") : (band.IsHeader ? "Header" : "Footer");
+		string[] labels = { T("dlg.headerFooter.left", "Left"), T("dlg.headerFooter.center", "Center"), T("dlg.headerFooter.right", "Right") };
+		string name = band.First ? (band.IsHeader ? T("dlg.headerFooter.firstHeaderName", "First page header") : T("dlg.headerFooter.firstFooterName", "First page footer")) : (band.IsHeader ? T("dlg.headerFooter.headerName", "Header") : T("dlg.headerFooter.footerName", "Footer"));
 		for (int i = 0; i < 3; i++) {
 			table.Controls.Add(new Label { Text = labels[i], AutoSize = true }, i, 1);
 			var part = band.Parts[i];
 			part.Height = 3 * Font.Height + LogicalToDeviceUnits(10);    // (three lines in view; Enter a new one)
 			part.Width = LogicalToDeviceUnits(260);
-			part.AccessibleName = name + ", " + labels[i].ToLowerInvariant();
+			part.AccessibleName = T("dlg.headerFooter.partName", "{0}, {1}", name, labels[i].ToLowerInvariant());
 			table.Controls.Add(part, i, 2);
 		}
 		// Font... for all of it (name, size, bold, italic, underline), Plain (Segoe UI 8 pt in grey, the words' own fonts
 		// dropped too), the line
-		var fontButton = new Button { Text = "Font...", AutoSize = true, AccessibleName = name + " font" };
-		var plainButton = new Button { Text = "Plain", AutoSize = true, AccessibleName = name + " font plain" };
+		var fontButton = new Button { Text = T("dlg.headerFooter.font", "Font..."), AutoSize = true, AccessibleName = T("dlg.headerFooter.fontName", "{0} font", name) };
+		var plainButton = new Button { Text = T("dlg.headerFooter.plain", "Plain"), AutoSize = true, AccessibleName = T("dlg.headerFooter.plainName", "{0} font plain", name) };
 		fontButton.Click += (s, e) => ChooseFont(band);
 		plainButton.Click += (s, e) => ChangeBand(band, null, plain: true);
-		band.Line.AccessibleName = name + " line";
+		band.Line.AccessibleName = T("dlg.headerFooter.lineName", "{0} line", name);
 		band.FontRow.Controls.AddRange(new Control[] { fontButton, plainButton, band.FontLabel, band.Line });
 		table.Controls.Add(band.FontRow, 0, 3);
 		table.SetColumnSpan(band.FontRow, 3);
@@ -12622,28 +12639,28 @@ sealed class HeaderFooterDialog : Form
 
 	// Header from top, Footer from bottom (Word's names; the same on every page)
 	GroupBox Position() {
-		var box = new GroupBox { Text = "Position (from the page's edge, on every page)", AutoSize = true, Padding = new Padding(8), Dock = DockStyle.Fill };
+		var box = new GroupBox { Text = T("dlg.headerFooter.position", "Position (from the page's edge, on every page)"), AutoSize = true, Padding = new Padding(8), Dock = DockStyle.Fill };
 		var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Dock = DockStyle.Fill };
-		string unit = metric ? "cm" : "in";
+		string unit = metric ? "cm" : T("dlg.headerFooter.in", "in");
 		foreach (var box2 in new[] { headerDistance, footerDistance }) {
 			(box2.Maximum, box2.Increment) = metric ? (12.7m, 0.1m) : (5m, 0.05m);
 			box2.Width = LogicalToDeviceUnits(70);
 		}
 		Label L(string text) => new() { Text = text, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 6, 3, 0) };
-		row.Controls.AddRange(new Control[] { L("Header from top:"), headerDistance, L(unit + "      Footer from bottom:"), footerDistance, L(unit) });
+		row.Controls.AddRange(new Control[] { L(T("dlg.headerFooter.headerFromTop", "Header from top:")), headerDistance, L(unit + "      " + T("dlg.headerFooter.footerFromBottom", "Footer from bottom:")), footerDistance, L(unit) });
 		box.Controls.Add(row);
 		return box;
 	}
 
 	void ShowFonts() {
-		foreach (var band in Bands) band.FontLabel.Text = PageBands.IsPlain(band.Font) ? "Plain: Segoe UI 8 pt, grey" : band.Font!.Describe();
+		foreach (var band in Bands) band.FontLabel.Text = PageBands.IsPlain(band.Font) ? T("dlg.headerFooter.plainFont", "Plain: Segoe UI 8 pt, grey") : band.Font!.Describe();
 	}
 
 	// Each band's parts and font row as its Show box has it; the first page's tab only with a first page of its own.
 	void EnableAll() {
 		bool first = differentFirst.Checked;
-		otherTab.Text = first ? "Other pages" : "All pages";
-		firstTab.Text = first ? "First page" : "First page (off: check Different first page)";
+		otherTab.Text = first ? T("dlg.headerFooter.otherPages", "Other pages") : T("dlg.headerFooter.allPages", "All pages");
+		firstTab.Text = first ? T("dlg.headerFooter.firstPage", "First page") : T("dlg.headerFooter.firstPageOff", "First page (off: check Different first page)");
 		firstPanel.Enabled = first;
 		foreach (var band in Bands) {
 			foreach (var part in band.Parts) part.Enabled = band.Show.Checked;
@@ -12753,8 +12770,8 @@ sealed class FootnoteDialog : Form
 
 	public FootnoteDialog(string title, string note, float noteSize) {
 		Dialogs.Setup(this, title, sizable: true);
-		Size = new Size(LogicalToDeviceUnits(520), LogicalToDeviceUnits(300));
-		MinimumSize = new Size(LogicalToDeviceUnits(360), LogicalToDeviceUnits(240));
+		Size = new Size(LogicalToDeviceUnits(520), LogicalToDeviceUnits(360));    // (iteration 81: 300 before the size note had a line of its own)
+		MinimumSize = new Size(LogicalToDeviceUnits(360), LogicalToDeviceUnits(290));
 		var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
 		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 		layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -12762,10 +12779,10 @@ sealed class FootnoteDialog : Form
 		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 		layout.Controls.Add(new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(480), 0), Margin = new Padding(3, 0, 3, 6),
-			Text = (note == "" ? "The footnote's note (printed at the foot of the page)" : "The footnote's note (empty: the footnote is taken out)") + ". Enter starts a new paragraph; Ctrl+Enter is OK."
+			Text = note == "" ? T("dlg.footnote.noteNew", "The footnote's note (printed at the foot of the page). Enter starts a new paragraph; Ctrl+Enter is OK.") : T("dlg.footnote.noteEdit", "The footnote's note (empty: the footnote is taken out). Enter starts a new paragraph; Ctrl+Enter is OK.")
 		}, 0, 0);
 		var formatRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false, Margin = new Padding(0, 0, 0, 3) };
-		foreach (var (label, flag, tip) in new[] { ("B", FontStyle.Bold, "Bold (Ctrl+B)"), ("I", FontStyle.Italic, "Italic (Ctrl+I)"), ("U", FontStyle.Underline, "Underline (Ctrl+U)") }) {
+		foreach (var (label, flag, tip) in new[] { (T("dlg.format.b", "B"), FontStyle.Bold, T("dlg.format.bold", "Bold (Ctrl+B)")), (T("dlg.format.i", "I"), FontStyle.Italic, T("dlg.format.italic", "Italic (Ctrl+I)")), (T("dlg.format.u", "U"), FontStyle.Underline, T("dlg.format.underline", "Underline (Ctrl+U)")) }) {
 			var button = new Button { Text = label, Font = new Font(Font, flag), Width = LogicalToDeviceUnits(30), Height = LogicalToDeviceUnits(26), TabStop = false, AccessibleName = tip.Split(' ')[0] };
 			button.Click += (s, e) => Toggle(flag);
 			new ToolTip().SetToolTip(button, tip);
@@ -12784,14 +12801,17 @@ sealed class FootnoteDialog : Form
 		layout.Controls.Add(text, 0, 2);
 		size.Value = (decimal)Math.Clamp(noteSize, 4, 72);
 		var sizeRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = false, Margin = new Padding(0, 6, 0, 0) };
-		sizeRow.Controls.Add(new Label { Text = "Size of all the notes (pt):", AutoSize = true, Margin = new Padding(3, 6, 6, 0) });
+		sizeRow.Controls.Add(new Label { Text = T("dlg.footnote.size", "Size of all the notes (pt):"), AutoSize = true, Margin = new Padding(3, 6, 6, 0) });
 		sizeRow.Controls.Add(size);
-		sizeRow.Controls.Add(new Label { Text = "(the Footnote Text style; Modify Style changes its font too)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(6, 6, 0, 0) });
 		layout.Controls.Add(sizeRow, 0, 3);
+		// (iteration 81: on a line of its own, wrapping: beside the size it ran off the dialog's right edge, in Spanish more)
+		layout.RowCount = 6;
+		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+		layout.Controls.Add(new Label { Text = T("dlg.footnote.sizeNote", "(the Footnote Text style; Modify Style changes its font too)"), AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(480), 0), ForeColor = SystemColors.GrayText, Margin = new Padding(3, 2, 3, 6) }, 0, 4);
 		var ok = Dialogs.Ok(this);
 		var cancel = Dialogs.Cancel(this);
 		var buttons = Dialogs.Row(this, 0, ok, cancel);
-		layout.Controls.Add(buttons, 0, 4);
+		layout.Controls.Add(buttons, 0, 5);
 		Controls.Add(layout);
 		AcceptButton = ok;
 		CancelButton = cancel;
@@ -12806,29 +12826,29 @@ sealed class FootnoteDialog : Form
 sealed class TableOfContentsDialog : Form
 {
 	readonly NumericUpDown levels = new() { Minimum = 1, Maximum = 6, Width = 50 };
-	readonly CheckBox pages = new() { Text = "Show page numbers", AutoSize = true, Checked = true };
-	readonly CheckBox right = new() { Text = "Right-align page numbers", AutoSize = true, Checked = true };
+	readonly CheckBox pages = new() { Text = T("dlg.toc.pages", "Show page numbers"), AutoSize = true, Checked = true };
+	readonly CheckBox right = new() { Text = T("dlg.toc.right", "Right-align page numbers"), AutoSize = true, Checked = true };
 	readonly ComboBox leader = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 130 };
 	readonly TextBox title = new() { Width = 220 };
-	static readonly (string Value, string Shown)[] Leaders = { ("dots", "Dots ......."), ("dashes", "Dashes -------"), ("underline", "Underline ____"), ("none", "None") };
+	static (string Value, string Shown)[] Leaders => new[] { ("dots", T("dlg.toc.dots", "Dots") + " ......."), ("dashes", T("dlg.toc.dashes", "Dashes") + " -------"), ("underline", T("dlg.toc.underline", "Underline") + " ____"), ("none", T("dlg.toc.none", "None")) };
 
 	public Toc.Options Options => new((int)levels.Value, pages.Checked, right.Checked, Leaders[Math.Max(0, leader.SelectedIndex)].Value);
 	public string TitleText => title.Text.Trim();
 
 	public TableOfContentsDialog(Toc.Options options, bool isNew) {
-		Dialogs.Setup(this, isNew ? "Table of Contents" : "Table of Contents: change this one");
+		Dialogs.Setup(this, isNew ? T("dlg.toc.title", "Table of Contents") : T("dlg.toc.titleChange", "Table of Contents: change this one"));
 		var layout = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Dock = DockStyle.Fill };
 		void Row(string label, Control control) {
 			layout.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 6, 8, 3) });
 			layout.Controls.Add(control);
 		}
 		levels.Value = Math.Clamp(options.Levels, 1, 6);
-		Row("Show levels (headings 1 to):", levels);
+		Row(T("dlg.toc.levels", "Show levels (headings 1 to):"), levels);
 		layout.Controls.Add(pages); layout.SetColumnSpan(pages, 2);
 		layout.Controls.Add(right); layout.SetColumnSpan(right, 2);
 		foreach (var (_, shown) in Leaders) leader.Items.Add(shown);
 		leader.SelectedIndex = Math.Max(0, Array.FindIndex(Leaders, l => l.Value == options.Leader));
-		Row("Tab leader:", leader);
+		Row(T("dlg.toc.leader", "Tab leader:"), leader);
 		pages.Checked = options.PageNumbers;
 		right.Checked = options.RightAlign;
 		void Enable() { right.Enabled = pages.Checked; leader.Enabled = pages.Checked && right.Checked; }
@@ -12836,10 +12856,10 @@ sealed class TableOfContentsDialog : Form
 		right.CheckedChanged += (s, e) => Enable();
 		Enable();
 		if (isNew) {
-			title.Text = "Contents";
-			Row("Title (empty: none):", title);
+			title.Text = T("dlg.toc.contents", "Contents");
+			Row(T("dlg.toc.titleBox", "Title (empty: none):"), title);
 		} else {
-			var note = new Label { Text = "The table at the caret is made again from the headings with these options.", AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(360), 0), Margin = new Padding(3, 8, 3, 3) };
+			var note = new Label { Text = T("dlg.toc.changeNote", "The table at the caret is made again from the headings with these options."), AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(360), 0), Margin = new Padding(3, 8, 3, 3) };
 			layout.Controls.Add(note); layout.SetColumnSpan(note, 2);
 		}
 		var ok = Dialogs.Ok(this);
@@ -12855,7 +12875,7 @@ sealed class TableOfContentsDialog : Form
 sealed class CrossReferenceDialog : Form
 {
 	readonly ListBox list = new() { IntegralHeight = false };
-	readonly RadioButton number = new() { Text = "Its number", AutoSize = true }, full = new() { Text = "Its full number (with the levels above it)", AutoSize = true };
+	readonly RadioButton number = new() { Text = T("dlg.crossRef.number", "Its number"), AutoSize = true }, full = new() { Text = T("dlg.crossRef.full", "Its full number (with the levels above it)"), AutoSize = true };
 	// (a line of text that only repaints itself: a Label, at each selection, laid out and repainted the whole dialog,
 	// which flickered)
 	readonly TextLine shown = new() { Dock = DockStyle.Fill };
@@ -12882,7 +12902,7 @@ sealed class CrossReferenceDialog : Form
 
 	public CrossReferenceDialog(List<CrossRefs.Target> targets, bool showFull, int selected) {
 		this.targets = targets;
-		Dialogs.Setup(this, "Cross-reference", sizable: true);
+		Dialogs.Setup(this, T("dlg.crossRef.title", "Cross-reference"), sizable: true);
 		Size = new Size(LogicalToDeviceUnits(620), LogicalToDeviceUnits(460));
 		MinimumSize = new Size(LogicalToDeviceUnits(380), LogicalToDeviceUnits(300));
 
@@ -12890,13 +12910,13 @@ sealed class CrossReferenceDialog : Form
 		layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 		layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 		for (int i = 0; i < 4; i++) layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-		layout.Controls.Add(new Label { Text = "Refer to the numbered paragraph:", AutoSize = true }, 0, 0);
+		layout.Controls.Add(new Label { Text = T("dlg.crossRef.referTo", "Refer to the numbered paragraph:"), AutoSize = true }, 0, 0);
 		list.Dock = DockStyle.Fill;
 		foreach (var t in targets) list.Items.Add(t.Full + "\t" + (t.Text.Length > 90 ? t.Text[..90] + "…" : t.Text));
 		list.UseTabStops = true;
 		layout.Controls.Add(list, 0, 1);
 		var how = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 6, 0, 0) };
-		how.Controls.Add(new Label { Text = "Show:", AutoSize = true });
+		how.Controls.Add(new Label { Text = T("dlg.crossRef.show", "Show:"), AutoSize = true });
 		how.Controls.Add(number);
 		how.Controls.Add(full);
 		layout.Controls.Add(how, 0, 2);
@@ -12905,9 +12925,9 @@ sealed class CrossReferenceDialog : Form
 		layout.Controls.Add(shown, 0, 3);
 		layout.Controls.Add(new Label {
 			AutoSize = true, MaximumSize = new Size(LogicalToDeviceUnits(560), 0), Margin = new Padding(3, 4, 3, 6),
-			Text = "The number follows the paragraph's when the paragraphs are renumbered (F9 updates them all). Ctrl+click a cross-reference to go to its paragraph."
+			Text = T("dlg.crossRef.note", "The number follows the paragraph's when the paragraphs are renumbered (F9 updates them all). Ctrl+click a cross-reference to go to its paragraph.")
 		}, 0, 4);
-		var ok = new Button { Text = "Insert", DialogResult = DialogResult.OK, AutoSize = true };
+		var ok = new Button { Text = T("dlg.crossRef.insert", "Insert"), DialogResult = DialogResult.OK, AutoSize = true };
 		var cancel = Dialogs.Cancel(this);
 		var buttons = Dialogs.Row(this, 0, ok, cancel);
 		layout.Controls.Add(buttons, 0, 5);
@@ -12925,7 +12945,7 @@ sealed class CrossReferenceDialog : Form
 
 	void ShowWhat() {
 		var target = Chosen is int i ? targets[i] : null;
-		shown.Text = target == null ? "" : "Inserts: " + CrossRefs.Shown(target, full.Checked ? "w" : "r");
+		shown.Text = target == null ? "" : T("dlg.crossRef.inserts", "Inserts: {0}", CrossRefs.Shown(target, full.Checked ? "w" : "r"));
 	}
 }
 

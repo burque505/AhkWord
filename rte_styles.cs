@@ -1389,17 +1389,17 @@ public static class StyleHtml
 sealed class StyleDialog : Form
 {
 	readonly TextBox name = new() { Width = 220 };
-	readonly ComboBox level = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };
+	readonly ComboBox level = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140 };    // (widened to its items when the dialog loads: iteration 81)
 	readonly ComboBox next = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
 	readonly ComboBox font = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 220, AutoCompleteMode = AutoCompleteMode.SuggestAppend, AutoCompleteSource = AutoCompleteSource.ListItems };
 	readonly NumericUpDown size = new() { Minimum = 1, Maximum = 400, DecimalPlaces = 1, Increment = 0.5m, Width = 70 };
-	readonly CheckBox bold = new() { Text = "Bold", AutoSize = true }, italic = new() { Text = "Italic", AutoSize = true }, underline = new() { Text = "Underline", AutoSize = true };
-	readonly CheckBox automatic = new() { Text = "Automatic colour", AutoSize = true };
-	readonly Button colorButton = new() { Text = "Colour...", AutoSize = true };
+	readonly CheckBox bold = new() { Text = T("dlg.style.bold", "Bold"), AutoSize = true }, italic = new() { Text = T("dlg.style.italic", "Italic"), AutoSize = true }, underline = new() { Text = T("dlg.style.underline", "Underline"), AutoSize = true };
+	readonly CheckBox automatic = new() { Text = T("dlg.style.automaticColor", "Automatic colour"), AutoSize = true };
+	readonly Button colorButton = new() { Text = T("dlg.style.color", "Colour..."), AutoSize = true };
 	readonly ComboBox align = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 110 };
 	readonly NumericUpDown left = Points(), right = Points(), first = Points(-1584), before = Points(), after = Points();
 	readonly ComboBox line = new() { DropDownStyle = ComboBoxStyle.DropDown, Width = 140 };
-	readonly CheckBox keep = new() { Text = "Keep with the next paragraph", AutoSize = true };
+	readonly CheckBox keep = new() { Text = T("dlg.style.keep", "Keep with the next paragraph"), AutoSize = true };
 	readonly ComboBox numbering = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
 	readonly ComboBox numberLevel = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 70 };
 	readonly TextBox subLevels = new() { Width = 220 };
@@ -1422,20 +1422,21 @@ sealed class StyleDialog : Form
 		breaks = style.Copy();
 		this.sheet = sheet;
 		this.isNew = isNew;
-		Dialogs.Setup(this, isNew ? "New Style" : "Modify Style: " + style.Name);
+		Load += (s, e) => Dialogs.FitItems(level);
+		Dialogs.Setup(this, isNew ? T("dlg.style.titleNew", "New Style") : T("dlg.style.titleModify", "Modify Style: {0}", style.Name));
 		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		AutoScaleMode = AutoScaleMode.Dpi;
 
 		bool builtIn = !isNew && ParagraphStyle.BuiltIn(style.Name);
 		name.Text = style.Name;
 		name.Enabled = !builtIn;
-		level.Items.Add("Body text");
-		for (int n = 1; n <= 6; n++) level.Items.Add("Heading level " + n);
+		level.Items.Add(T("dlg.style.bodyText", "Body text"));
+		for (int n = 1; n <= 6; n++) level.Items.Add(T("dlg.style.headingLevel", "Heading level {0}", n));
 		level.SelectedIndex = Math.Clamp(style.Level, 0, 6);
 		level.Enabled = !builtIn;
-		next.Items.Add("(the same style)");
+		next.Items.Add(T("dlg.style.sameStyle", "(the same style)"));
 		foreach (var s in sheet.Styles) next.Items.Add(s.Name);
-		next.SelectedIndex = style.Next == "" ? 0 : Math.Max(0, next.Items.IndexOf(sheet.Find(style.Next)?.Name ?? "(the same style)"));
+		next.SelectedIndex = style.Next == "" ? 0 : Math.Max(0, next.Items.IndexOf(sheet.Find(style.Next)?.Name ?? T("dlg.style.sameStyle", "(the same style)")));
 		using (var fonts = new InstalledFontCollection()) foreach (var family in fonts.Families) font.Items.Add(family.Name);
 		font.Text = style.Font;
 		size.Value = (decimal)Math.Clamp(style.Size, 1, 400);
@@ -1445,7 +1446,7 @@ sealed class StyleDialog : Form
 		colorButton.Enabled = !automatic.Checked;
 		colorButton.Click += (s, e) => { using var dlg = new ColorDialog { Color = color, FullOpen = true }; if (dlg.ShowDialog(this) == DialogResult.OK) { color = dlg.Color; preview.Invalidate(); } };
 		automatic.CheckedChanged += (s, e) => { colorButton.Enabled = !automatic.Checked; preview.Invalidate(); };
-		align.Items.AddRange(new object[] { "Left", "Centered", "Right", "Justified" });
+		align.Items.AddRange(new object[] { T("dlg.style.left", "Left"), T("dlg.style.centered", "Centered"), T("dlg.style.right", "Right"), T("dlg.style.justified", "Justified") });
 		align.SelectedIndex = Math.Max(0, Array.IndexOf(Aligns, style.Align));
 		left.Value = (decimal)Math.Clamp(style.LeftIndent, 0, 1584);
 		right.Value = (decimal)Math.Clamp(style.RightIndent, 0, 1584);
@@ -1456,8 +1457,8 @@ sealed class StyleDialog : Form
 		line.Text = style.LineSpacing;
 		keep.Checked = style.KeepWithNext;
 		// numbered styles: none, or a number format (Legal: 1., 1.1, 1.1.1 by level)
-		numbering.Items.Add("None");
-		foreach (string format in NumberFormats.All) numbering.Items.Add(format == NumberFormats.Legal ? "1.1 (legal: 1., 1.1, 1.1.1)" : format);
+		numbering.Items.Add(T("dlg.style.none", "None"));
+		foreach (string format in NumberFormats.All) numbering.Items.Add(format == NumberFormats.Legal ? T("dlg.style.legal", "1.1 (legal: 1., 1.1, 1.1.1)") : format);
 		numbering.SelectedIndex = style.Numbered ? Math.Max(0, Array.IndexOf(NumberFormats.All, style.Numbering) + 1) : 0;
 		for (int n = 1; n <= 9; n++) numberLevel.Items.Add(n.ToString());
 		numberLevel.SelectedIndex = Math.Clamp(style.NumberLevel, 1, 9) - 1;
@@ -1472,7 +1473,7 @@ sealed class StyleDialog : Form
 			subLevelSpace.Enabled = sample.Numbered && sample.Numbering != NumberFormats.Legal;
 		}
 		subLevelIndent.Value = (decimal)Math.Clamp(style.SubLevelIndent, 0, 144);
-		subLevelSpace.Items.AddRange(new object[] { "None (nor after the paragraph above them)", "After the paragraph above them only", "After each (the space after, above)" });
+		subLevelSpace.Items.AddRange(new object[] { T("dlg.style.spaceNone", "None (nor after the paragraph above them)"), T("dlg.style.spaceAfterAbove", "After the paragraph above them only"), T("dlg.style.spaceEach", "After each (the space after, above)") });
 		subLevelSpace.SelectedIndex = Math.Max(0, Array.IndexOf(ParagraphStyle.SubLevelSpaces, style.SubLevelSpace));
 		SubLevelHint();
 		numbering.SelectedIndexChanged += (s, e) => { numberLevel.Enabled = numbering.SelectedIndex > 0; SubLevelHint(); };
@@ -1493,20 +1494,20 @@ sealed class StyleDialog : Form
 			if (b != null) table.Controls.Add(b, 3, r);
 		}
 		FlowLayoutPanel Flow(params Control[] controls) { var f = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) }; f.Controls.AddRange(controls); return f; }
-		Row("Name:", name, "Heading:", level);
-		Row("After Enter:", next);
-		Row("Font:", font, "Size (pt):", size);
+		Row(T("dlg.style.name", "Name:"), name, T("dlg.style.heading", "Heading:"), level);
+		Row(T("dlg.style.next", "After Enter:"), next);
+		Row(T("dlg.style.font", "Font:"), font, T("dlg.style.size", "Size (pt):"), size);
 		Row("", Flow(bold, italic, underline), "", Flow(automatic, colorButton));
-		Row("Alignment:", align, "Line spacing:", line);
-		Row("Indent left (pt):", left, "Right (pt):", right);
-		Row("First line (pt):", first, "", new Label { Text = "(negative: hanging)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
-		Row("Space before (pt):", before, "After (pt):", after);
-		Row("Numbering:", numbering, "Level:", numberLevel);
-		Row("Sub-levels:", subLevels, "", new Label { Text = "(Tab, Shift+Tab; empty: the usual)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
-		Row("Sub-level indent (pt):", subLevelIndent, "", new Label { Text = "(each sub-level this much further in)", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
-		Row("Space between sub-levels:", subLevelSpace);
+		Row(T("dlg.style.alignment", "Alignment:"), align, T("dlg.style.lineSpacing", "Line spacing:"), line);
+		Row(T("dlg.style.indentLeft", "Indent left (pt):"), left, T("dlg.style.indentRight", "Right (pt):"), right);
+		Row(T("dlg.style.firstLine", "First line (pt):"), first, "", new Label { Text = T("dlg.style.hanging", "(negative: hanging)"), AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
+		Row(T("dlg.style.before", "Space before (pt):"), before, T("dlg.style.after", "After (pt):"), after);
+		Row(T("dlg.style.numbering", "Numbering:"), numbering, T("dlg.style.level", "Level:"), numberLevel);
+		Row(T("dlg.style.subLevels", "Sub-levels:"), subLevels, "", new Label { Text = T("dlg.style.subLevelsNote", "(Tab, Shift+Tab; empty: the usual)"), AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
+		Row(T("dlg.style.subLevelIndent", "Sub-level indent (pt):"), subLevelIndent, "", new Label { Text = T("dlg.style.subLevelIndentNote", "(each sub-level this much further in)"), AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(0, 6, 0, 0) });
+		Row(T("dlg.style.subLevelSpace", "Space between sub-levels:"), subLevelSpace);
 		table.SetColumnSpan(subLevelSpace, 3);
-		var paragraphButton = new Button { Text = "&Paragraph...", AutoSize = true };
+		var paragraphButton = new Button { Text = T("dlg.style.paragraph", "&Paragraph..."), AutoSize = true };
 		paragraphButton.Click += (s, e) => ParagraphCommand();
 		Row("", keep, "", paragraphButton);
 		int pr = table.RowCount++;
@@ -1533,7 +1534,7 @@ sealed class StyleDialog : Form
 	void ParagraphCommand() {
 		var current = Result;
 		float shownSize = (float)size.Value;
-		using var dlg = new ParagraphDialog(ParagraphFormat.Of(current), forStyle: true, current.Name == "" ? "New Style" : current.Name, current.Font, shownSize);
+		using var dlg = new ParagraphDialog(ParagraphFormat.Of(current), forStyle: true, current.Name == "" ? T("dlg.style.titleNew", "New Style") : current.Name, current.Font, shownSize);
 		if (dlg.ShowDialog(this) != DialogResult.OK) return;
 		var format = dlg.Result;
 		format.ToStyle(breaks);
@@ -1552,13 +1553,13 @@ sealed class StyleDialog : Form
 	bool Validate(out string message) {
 		message = "";
 		string n = name.Text.Trim();
-		if (n == "" || n.Contains('@') || n.Contains(';') || n.Contains('{') || n.Contains('}')) { message = "Give the style a name (without @ ; { })."; return false; }
-		if ((isNew || !string.Equals(n, original.Name, StringComparison.OrdinalIgnoreCase)) && sheet.Find(n) != null) { message = $"There is a style \"{n}\" already."; return false; }
-		if (isNew && ParagraphStyle.BuiltIn(n)) { message = $"\"{n}\" is one of the styles there always are."; return false; }
+		if (n == "" || n.Contains('@') || n.Contains(';') || n.Contains('{') || n.Contains('}')) { message = T("dlg.style.nameIt", "Give the style a name (without @ ; { })."); return false; }
+		if ((isNew || !string.Equals(n, original.Name, StringComparison.OrdinalIgnoreCase)) && sheet.Find(n) != null) { message = T("dlg.style.exists", "There is a style \"{0}\" already.", n); return false; }
+		if (isNew && ParagraphStyle.BuiltIn(n)) { message = T("dlg.style.builtIn", "\"{0}\" is one of the styles there always are.", n); return false; }
 		try { global::LineSpacing.Parse(line.Text); } catch (ArgumentException ex) { message = ex.Message; return false; }
-		if (font.Text.Trim() == "") { message = "Choose a font."; return false; }
+		if (font.Text.Trim() == "") { message = T("dlg.style.chooseFont", "Choose a font."); return false; }
 		foreach (var part in subLevels.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-			if (!NumberFormats.Valid(part) || part == NumberFormats.Legal) { message = $"\"{part}\" is not a sub-level's format: {string.Join(" ", NumberFormats.All.Where(f => f != NumberFormats.Legal))}."; return false; }
+			if (!NumberFormats.Valid(part) || part == NumberFormats.Legal) { message = T("dlg.style.badSubLevel", "\"{0}\" is not a sub-level's format: {1}.", part, string.Join(" ", NumberFormats.All.Where(f => f != NumberFormats.Legal))); return false; }
 		return true;
 	}
 
@@ -1587,7 +1588,7 @@ sealed class StyleDialog : Form
 		area.Inflate(-8, -6);
 		using var grey = new SolidBrush(Color.FromArgb(0xB0, 0xB0, 0xB0));
 		using var context = new Font("Segoe UI", 7f);
-		g.DrawString("The paragraph before, in grey.", context, grey, area.Left, area.Top);
+		g.DrawString(T("dlg.style.before.sample", "The paragraph before, in grey."), context, grey, area.Left, area.Top);
 		float y = area.Top + context.Height + (float)before.Value * scale;
 		var styleFont = FontStyle.Regular | (bold.Checked ? FontStyle.Bold : 0) | (italic.Checked ? FontStyle.Italic : 0) | (underline.Checked ? FontStyle.Underline : 0);
 		Font sample;
@@ -1596,7 +1597,7 @@ sealed class StyleDialog : Form
 		using (var ink = new SolidBrush(automatic.Checked ? AppTheme.Ink : color)) {
 			float x = area.Left + (float)left.Value * scale, width = Math.Max(40, area.Width - (float)(left.Value + right.Value) * scale);
 			var format = new StringFormat { Alignment = align.SelectedIndex switch { 1 => StringAlignment.Center, 2 => StringAlignment.Far, _ => StringAlignment.Near } };
-			string text = "A sample of the style: the quick brown fox jumps over the lazy dog, and goes on to a second line.";
+			string text = T("dlg.style.sample", "A sample of the style: the quick brown fox jumps over the lazy dog, and goes on to a second line.");
 			if (numbering.SelectedIndex > 0) {    // (its number: the first at its level)
 				var counts = Enumerable.Repeat(1, 9).ToArray();
 				text = LegalLists.Number(counts, numberLevel.SelectedIndex, NumberFormats.All[numbering.SelectedIndex - 1]) + "  " + text;
@@ -1605,7 +1606,7 @@ sealed class StyleDialog : Form
 			g.DrawString(text, sample, ink, new RectangleF(x + Math.Max(0, firstLine), y, width - Math.Max(0, firstLine), area.Bottom - y), format);
 			y += sample.Height * 2 + (float)after.Value * scale;
 		}
-		if (y < area.Bottom) g.DrawString("The paragraph after, in grey.", context, grey, area.Left, y);
+		if (y < area.Bottom) g.DrawString(T("dlg.style.after.sample", "The paragraph after, in grey."), context, grey, area.Left, y);
 	}
 }
 
@@ -1639,14 +1640,14 @@ public static class StyleImport
 	/// A style as one line, for choosing it: font, size, look, indents, spacing, numbering.
 	public static string Describe(ParagraphStyle s) {
 		var parts = new List<string> { $"{s.Font} {s.Size:0.#} pt" };
-		if (s.Bold) parts.Add("bold");
-		if (s.Italic) parts.Add("italic");
-		if (s.Underline) parts.Add("underlined");
-		if (s.Align != "left") parts.Add(s.Align);
-		if (s.LeftIndent != 0 || s.FirstLine != 0) parts.Add($"indent {s.LeftIndent:0.#} pt, first line {s.FirstLine:0.#} pt");
-		if (s.LineSpacing != "1") parts.Add("line spacing " + s.LineSpacing);
-		if (s.Before != 0 || s.After != 0) parts.Add($"space {s.Before:0.#} pt before, {s.After:0.#} pt after");
-		if (s.Numbered) parts.Add($"numbered {s.Numbering} (level {s.NumberLevel})");
+		if (s.Bold) parts.Add(T("dlg.copyStyles.bold", "bold"));
+		if (s.Italic) parts.Add(T("dlg.copyStyles.italic", "italic"));
+		if (s.Underline) parts.Add(T("dlg.copyStyles.underlined", "underlined"));
+		if (s.Align != "left") parts.Add(s.Align switch { "center" => T("dlg.copyStyles.center", "center"), "right" => T("dlg.copyStyles.right", "right"), "justify" => T("dlg.copyStyles.justify", "justify"), _ => s.Align });
+		if (s.LeftIndent != 0 || s.FirstLine != 0) parts.Add(T("dlg.copyStyles.indent", "indent {0:0.#} pt, first line {1:0.#} pt", s.LeftIndent, s.FirstLine));
+		if (s.LineSpacing != "1") parts.Add(T("dlg.copyStyles.lineSpacing", "line spacing {0}", s.LineSpacing));
+		if (s.Before != 0 || s.After != 0) parts.Add(T("dlg.copyStyles.space", "space {0:0.#} pt before, {1:0.#} pt after", s.Before, s.After));
+		if (s.Numbered) parts.Add(T("dlg.copyStyles.numbered", "numbered {0} (level {1})", s.Numbering, s.NumberLevel));
 		return string.Join(", ", parts);
 	}
 }
@@ -1657,26 +1658,26 @@ sealed class CopyStylesDialog : Form
 {
 	readonly CheckedListBox list = new() { CheckOnClick = true, Width = 520, Height = 260, IntegralHeight = false };
 	readonly Label about = new() { AutoSize = true, MaximumSize = new Size(520, 0), ForeColor = SystemColors.GrayText, Margin = new Padding(3, 6, 3, 3) };
-	readonly CheckBox forNew = new() { Text = "Also for new documents (your default styles)", AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+	readonly CheckBox forNew = new() { Text = T("dlg.copyStyles.forNew", "Also for new documents (your default styles)"), AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
 	readonly Label error = new() { AutoSize = true, ForeColor = AppTheme.Warning };
 	readonly List<ParagraphStyle> styles;
 
 	public CopyStylesDialog(string file, StyleSheet source, StyleSheet here) {
-		Dialogs.Setup(this, "Copy Styles from " + Path.GetFileName(file));
+		Dialogs.Setup(this, T("dlg.copyStyles.title", "Copy Styles from {0}", Path.GetFileName(file)));
 		Font = SystemFonts.MessageBoxFont ?? Font;    // (as before the dialog helper)
 		AutoScaleMode = AutoScaleMode.Dpi;
 		styles = source.Styles.ToList();
-		foreach (var s in styles) list.Items.Add(s.Name + (here.Find(s.Name) != null ? "   (replaces this document's)" : "   (new here)"));
+		foreach (var s in styles) list.Items.Add(s.Name + "   " + (here.Find(s.Name) != null ? T("dlg.copyStyles.replaces", "(replaces this document's)") : T("dlg.copyStyles.newHere", "(new here)")));
 		list.SelectedIndexChanged += (s, e) => about.Text = list.SelectedIndex >= 0 ? StyleImport.Describe(styles[list.SelectedIndex]) : "";
-		var all = new Button { Text = "&All", AutoSize = true };
+		var all = new Button { Text = T("dlg.copyStyles.all", "&All"), AutoSize = true };
 		all.Click += (s, e) => { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, true); };
-		var none = new Button { Text = "N&one", AutoSize = true };
+		var none = new Button { Text = T("dlg.copyStyles.none", "N&one"), AutoSize = true };
 		none.Click += (s, e) => { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, false); };
-		var ok = Dialogs.Button(this, "Copy");
-		ok.Click += (s, e) => { if (list.CheckedIndices.Count == 0) { error.Text = "Tick the styles to copy."; return; } DialogResult = DialogResult.OK; Close(); };
+		var ok = Dialogs.Button(this, T("dlg.copyStyles.copy", "Copy"));
+		ok.Click += (s, e) => { if (list.CheckedIndices.Count == 0) { error.Text = T("dlg.copyStyles.tick", "Tick the styles to copy."); return; } DialogResult = DialogResult.OK; Close(); };
 		var cancel = Dialogs.Cancel(this);
 		var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
-		layout.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(520, 0), Text = "Tick the styles to copy into this document. One that this document has already takes the copied definition, and its paragraphs the new look (formatting of their own stays)." });
+		layout.Controls.Add(new Label { AutoSize = true, MaximumSize = new Size(520, 0), Text = T("dlg.copyStyles.note", "Tick the styles to copy into this document. One that this document has already takes the copied definition, and its paragraphs the new look (formatting of their own stays).") });
 		layout.Controls.Add(list);
 		layout.Controls.Add(about);
 		var pick = new FlowLayoutPanel { AutoSize = true, WrapContents = false };

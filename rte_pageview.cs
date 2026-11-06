@@ -265,7 +265,7 @@ sealed class PagePreviewForm : Form
 	public int? ChosenStart { get; private set; }
 
 	public PagePreviewForm(string title, Control owner) {
-		Text = "Print Preview - " + title;
+		Text = T("dlg.preview.title", "Print Preview - {0}", title);
 		ShowIcon = false;
 		ShowInTaskbar = false;
 		KeyPreview = true;
@@ -284,21 +284,21 @@ sealed class PagePreviewForm : Form
 			bar.Items.Add(b);
 			return b;
 		}
-		Button("&Print...", "Print the document (Ctrl+P)", () => PrintRequested?.Invoke());
+		Button(T("dlg.preview.print", "&Print..."), T("dlg.preview.printTip", "Print the document (Ctrl+P)"), () => PrintRequested?.Invoke());
 		bar.Items.Add(new ToolStripSeparator());
-		first = Button("|<", "First page (Home)", () => Pages.CurrentPage = 0);
-		previous = Button("<", "Previous page (Left)", () => Pages.CurrentPage -= 1);
+		first = Button("|<", T("dlg.preview.first", "First page (Home)"), () => Pages.CurrentPage = 0);
+		previous = Button("<", T("dlg.preview.previous", "Previous page (Left)"), () => Pages.CurrentPage -= 1);
 		position.Width = owner.LogicalToDeviceUnits(96);
 		bar.Items.Add(position);
-		next = Button(">", "Next page (Right)", () => Pages.CurrentPage += 1);
-		last = Button(">|", "Last page (End)", () => Pages.CurrentPage = Pages.PageCount - 1);
+		next = Button(">", T("dlg.preview.next", "Next page (Right)"), () => Pages.CurrentPage += 1);
+		last = Button(">|", T("dlg.preview.last", "Last page (End)"), () => Pages.CurrentPage = Pages.PageCount - 1);
 		bar.Items.Add(new ToolStripSeparator());
-		Button("Zoom &Out", "Smaller pages, more across (Ctrl+wheel)", () => Pages.Zoom(1 / 1.25f));
-		Button("Zoom &In", "Larger pages (Ctrl+wheel)", () => Pages.Zoom(1.25f));
-		Button("&Whole Page", "A page's height fits the window", () => Pages.Zoom(0));
+		Button(T("dlg.preview.zoomOut", "Zoom &Out"), T("dlg.preview.zoomOutTip", "Smaller pages, more across (Ctrl+wheel)"), () => Pages.Zoom(1 / 1.25f));
+		Button(T("dlg.preview.zoomIn", "Zoom &In"), T("dlg.preview.zoomInTip", "Larger pages (Ctrl+wheel)"), () => Pages.Zoom(1.25f));
+		Button(T("dlg.preview.wholePage", "&Whole Page"), T("dlg.preview.wholePageTip", "A page's height fits the window"), () => Pages.Zoom(0));
 		bar.Items.Add(new ToolStripSeparator());
-		Button("&Close", "Close the preview (Esc)", Close);
-		bar.Items.Add(new ToolStripLabel("Double-click a page to edit it there") { Alignment = ToolStripItemAlignment.Right, ForeColor = SystemColors.GrayText });
+		Button(T("dlg.preview.close", "&Close"), T("dlg.preview.closeTip", "Close the preview (Esc)"), Close);
+		bar.Items.Add(new ToolStripLabel(T("dlg.preview.doubleClick", "Double-click a page to edit it there")) { Alignment = ToolStripItemAlignment.Right, ForeColor = SystemColors.GrayText });
 
 		Controls.Add(Pages);
 		Controls.Add(bar);
@@ -310,7 +310,7 @@ sealed class PagePreviewForm : Form
 
 	void ShowPosition() {
 		int count = Pages.PageCount, page = Pages.CurrentPage;
-		position.Text = count == 0 ? "No pages" : $"Page {page + 1} of {count}";
+		position.Text = count == 0 ? T("dlg.preview.noPages", "No pages") : T("dlg.preview.page", "Page {0} of {1}", page + 1, count);
 		first.Enabled = previous.Enabled = page > 0;
 		next.Enabled = last.Enabled = page < count - 1;
 	}

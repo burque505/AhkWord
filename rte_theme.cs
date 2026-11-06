@@ -126,6 +126,25 @@ static class Dialogs
 			form.AutoSizeMode = AutoSizeMode.GrowAndShrink;
 		}
 		form.Padding = new Padding(form.LogicalToDeviceUnits(Margin));
+		form.Load += (s, e) => FitDropDowns(form);    // (iteration 81: a longer translation's items are read whole in the list)
+	}
+
+	/// (iteration 81) A drop-down list wide enough for its longest item (closed, the one chosen shows whole), and its list
+	/// as wide as that too.
+	public static void FitItems(ComboBox box) {
+		if (box.Items.Count == 0) return;
+		int widest = box.Items.Cast<object>().Max(o => TextRenderer.MeasureText(o.ToString() ?? "", box.Font).Width) + SystemInformation.VerticalScrollBarWidth + box.LogicalToDeviceUnits(8);
+		if (box.Width < widest) box.Width = widest;
+		box.DropDownWidth = Math.Max(box.DropDownWidth, widest);
+	}
+
+	/// (iteration 81) Every drop-down list in form: its list as wide as its longest item (the box itself keeps its width).
+	public static void FitDropDowns(Control form) {
+		foreach (Control c in form.Controls) {
+			if (c is ComboBox { Items.Count: > 0 } box)
+				box.DropDownWidth = Math.Max(box.Width, box.Items.Cast<object>().Max(o => TextRenderer.MeasureText(o.ToString() ?? "", box.Font).Width) + SystemInformation.VerticalScrollBarWidth + box.LogicalToDeviceUnits(8));
+			FitDropDowns(c);
+		}
 	}
 
 	public static Button Button(Control scale, string text, DialogResult result = DialogResult.None) =>

@@ -123,7 +123,7 @@ sealed class TemplateFieldsDialog : Form
 		table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 		table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
 		var intro = new Label {
-			Text = "Fill in the fields. Your own details (the fields named \"Your ...\") are remembered for next time; the others start empty each time. Leave a box empty to keep the field's default, or the field itself to fill in later (Insert > Fill In Fields).",
+			Text = T("dlg.fields.note", "Fill in the fields. Your own details (the fields named \"Your ...\") are remembered for next time; the others start empty each time. Leave a box empty to keep the field's default, or the field itself to fill in later (Insert > Fill In Fields)."),
 			AutoSize = true, MaximumSize = new Size(500, 0), Margin = new Padding(0, 0, 0, 10)
 		};
 		table.Controls.Add(intro, 0, 0);
@@ -136,13 +136,13 @@ sealed class TemplateFieldsDialog : Form
 			string start = Templates.IsRemembered(name) && remembered.TryGetValue(name, out var value) && value != "" ? value : fallback;
 			if (start != fallback) fromMemory.Add((box, fallback));
 			box.Text = start.Replace("\r\n", "\n").Replace("\n", "\r\n");
-			if (box.Text == "" && fallback == "") box.PlaceholderText = date ? "Pick a day, or type the date" : "{{" + name + "}}";
+			if (box.Text == "" && fallback == "") box.PlaceholderText = date ? T("dlg.fields.pickOrType", "Pick a day, or type the date") : "{{" + name + "}}";
 			table.Controls.Add(label, 0, row);
 			if (date) {
 				// (the calendar's button inside the box, at its right, as a drop-down list has it; the text stops short of it)
-				var pick = new Button { Text = "▾", Dock = DockStyle.Right, Width = 22, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Default, TabStop = false, AccessibleName = "Pick the " + name, BackColor = SystemColors.Control };
+				var pick = new Button { Text = "▾", Dock = DockStyle.Right, Width = 22, FlatStyle = FlatStyle.Flat, Cursor = Cursors.Default, TabStop = false, AccessibleName = T("dlg.fields.pickName", "Pick the {0}", name), BackColor = SystemColors.Control };
 				pick.FlatAppearance.BorderSize = 0;
-				new ToolTip().SetToolTip(pick, "Pick a day (Alt+Down)");
+				new ToolTip().SetToolTip(pick, T("dlg.fields.pickTip", "Pick a day (Alt+Down)"));
 				pick.Click += (s, e) => ShowCalendar(box, pick);
 				box.Controls.Add(pick);
 				box.HandleCreated += (s, e) => SendMessage(box.Handle, 0xD3, (IntPtr)2, (IntPtr)(pick.Width << 16));    // EM_SETMARGINS, EC_RIGHTMARGIN
@@ -158,13 +158,13 @@ sealed class TemplateFieldsDialog : Form
 		buttons.Controls.Add(ok);
 		if (forget != null) {
 			// (on the left, apart from OK and Cancel)
-			var forgetButton = new Button { Text = "Forget remembered values", AutoSize = true, Margin = new Padding(3, 3, 60, 3), Enabled = remembered.Keys.Any(Templates.IsRemembered) };
-			new ToolTip().SetToolTip(forgetButton, "Clear your details remembered from earlier (Your name, Your address ...), here and for next time.");
+			var forgetButton = new Button { Text = T("dlg.fields.forget", "Forget remembered values"), AutoSize = true, Margin = new Padding(3, 3, 60, 3), Enabled = remembered.Keys.Any(Templates.IsRemembered) };
+			new ToolTip().SetToolTip(forgetButton, T("dlg.fields.forgetTip", "Clear your details remembered from earlier (Your name, Your address ...), here and for next time."));
 			forgetButton.Click += (s, e) => {
 				forget();
 				foreach (var (box, fallback) in fromMemory) box.Text = fallback;
 				forgetButton.Enabled = false;
-				forgetButton.Text = "Forgotten";
+				forgetButton.Text = T("dlg.fields.forgotten", "Forgotten");
 			};
 			buttons.Controls.Add(forgetButton);
 		}
@@ -230,7 +230,7 @@ sealed class TemplatePickerDialog : Form
 	readonly ListBox list = new() { IntegralHeight = false, Dock = DockStyle.Fill };
 	readonly List<TemplateInfo> templates;
 	// (iteration 63) inserting: the template as a new section of the document, with its own header and footer
-	readonly CheckBox asSection = new() { Text = "As a new section, with the template's own header and footer (page numbers from 1)", AutoSize = true, Dock = DockStyle.Bottom, Padding = new Padding(0, 6, 0, 0) };
+	readonly CheckBox asSection = new() { Text = T("dlg.templates.asSection", "As a new section, with the template's own header and footer (page numbers from 1)"), AutoSize = true, Dock = DockStyle.Bottom, Padding = new Padding(0, 6, 0, 0) };
 
 	/// Whether the template goes in as a new section (sectionOption: the check box shown, ticked as given).
 	public bool AsSection => asSection.Checked;
@@ -247,12 +247,12 @@ sealed class TemplatePickerDialog : Form
 		ClientSize = new Size(440, 360);
 		MinimumSize = new Size(320, 260);
 		foreach (var t in this.templates)
-			list.Items.Add(t.Name + "    (" + (t.Part ? "part" : "document") + (t.Own ? ", yours" : "") + ")");
+			list.Items.Add(t.Name + "    " + (t.Part ? (t.Own ? T("dlg.templates.ownPart", "(part, yours)") : T("dlg.templates.part", "(part)")) : t.Own ? T("dlg.templates.ownDocument", "(document, yours)") : T("dlg.templates.document", "(document)")));
 		if (list.Items.Count > 0) list.SelectedIndex = 0;
 		list.DoubleClick += (s, e) => { if (list.SelectedIndex >= 0) { DialogResult = DialogResult.OK; Close(); } };
 		var note = new Label {
 			Dock = DockStyle.Top, AutoSize = false, Height = 52, Padding = new Padding(0, 0, 0, 8),
-			Text = this.templates.Count == 0 ? "There are no templates yet." : "Choose a template. Your own templates go in:\n" + ownFolder + " (parts, to insert into a document, in its Parts folder)."
+			Text = this.templates.Count == 0 ? T("dlg.templates.none", "There are no templates yet.") : T("dlg.templates.note", "Choose a template. Your own templates go in:\n{0} (parts, to insert into a document, in its Parts folder).", ownFolder)
 		};
 		var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(0, 8, 0, 0) };
 		var cancel = Dialogs.Cancel(this);
@@ -271,6 +271,14 @@ sealed class TemplatePickerDialog : Form
 		Controls.Add(body);
 		AcceptButton = ok;
 		CancelButton = cancel;
+		// (iteration 81: wide enough for the folder's line and the section box, and the note as tall as its lines: both were
+		// cut off at 440 pixels, more so in Spanish)
+		Load += (s, e) => {
+			int widest = Math.Max(sectionOption != null ? asSection.PreferredSize.Width : 0, TextRenderer.MeasureText(ownFolder + " (", note.Font).Width);
+			int want = widest + body.Padding.Horizontal + LogicalToDeviceUnits(8);
+			if (ClientSize.Width < want) ClientSize = new Size(Math.Min(want, Screen.FromControl(this).WorkingArea.Width - LogicalToDeviceUnits(40)), ClientSize.Height);
+			note.Height = TextRenderer.MeasureText(note.Text, note.Font, new Size(note.ClientSize.Width, 0), TextFormatFlags.WordBreak).Height + note.Padding.Vertical + LogicalToDeviceUnits(2);
+		};
 	}
 
 	/// The template chosen (null: none).
@@ -309,33 +317,33 @@ sealed class StartPage : UserControl
 		foreach (Control c in content.Controls.Cast<Control>().ToList()) c.Dispose();
 		content.Controls.Clear();
 		int width = Math.Max(LogicalToDeviceUnits(480), ClientSize.Width - LogicalToDeviceUnits(80));
-		content.Controls.Add(new Label { Text = "Start", Font = titleFont, AutoSize = true, Margin = new Padding(0, 0, 0, LogicalToDeviceUnits(8)) });
+		content.Controls.Add(new Label { Text = T("start.title", "Start"), Font = titleFont, AutoSize = true, Margin = new Padding(0, 0, 0, LogicalToDeviceUnits(8)) });
 
-		Section("New");
+		Section(T("start.new", "New"));
 		var tiles = new FlowLayoutPanel { AutoSize = true, MaximumSize = new Size(width, 0), WrapContents = true, Margin = new Padding(0) };
-		FirstTile = Tile(tiles, "Blank document", "Start from nothing (Esc)", () => BlankChosen?.Invoke());
+		FirstTile = Tile(tiles, T("start.blank", "Blank document"), T("start.blankNote", "Start from nothing (Esc)"), () => BlankChosen?.Invoke());
 		foreach (var t in templates)
-			Tile(tiles, t.Name, (t.Own ? "Your template" : "Template") + " · " + System.IO.Path.GetExtension(t.Path).TrimStart('.').ToUpperInvariant(), () => TemplateChosen?.Invoke(t));
+			Tile(tiles, t.Name, (t.Own ? T("start.yourTemplate", "Your template") : T("start.template", "Template")) + " · " + System.IO.Path.GetExtension(t.Path).TrimStart('.').ToUpperInvariant(), () => TemplateChosen?.Invoke(t));
 		content.Controls.Add(tiles);
 		var links = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, LogicalToDeviceUnits(2), 0, 0) };
-		links.Controls.Add(Link("Open a document...", () => OpenChosen?.Invoke()));
-		links.Controls.Add(Link("Your templates folder", () => TemplatesFolderChosen?.Invoke()));
+		links.Controls.Add(Link(T("start.open", "Open a document..."), () => OpenChosen?.Invoke()));
+		links.Controls.Add(Link(T("start.templatesFolder", "Your templates folder"), () => TemplatesFolderChosen?.Invoke()));
 		content.Controls.Add(links);
 
 		if (recent.Count > 0) {
-			Section("Recent");
+			Section(T("start.recent", "Recent"));
 			foreach (var path in recent.Take(8))
 				content.Controls.Add(Link($"{System.IO.Path.GetFileName(path)}    {System.IO.Path.GetDirectoryName(path)}", () => RecentChosen?.Invoke(path)));
 		}
 
 		if (macros.Count > 0) {
-			Section("Macros");
-			content.Controls.Add(new Label { Text = "AutoHotkey scripts that work on the open document. The Macros button (Home and Tools tabs) runs them; Tools > Record Macro makes new ones.", AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(3, 0, 0, 4) });
+			Section(T("start.macros", "Macros"));
+			content.Controls.Add(new Label { Text = T("start.macrosNote", "AutoHotkey scripts that work on the open document. The Macros button (Home and Tools tabs) runs them; Tools > Record Macro makes new ones."), AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(3, 0, 0, 4) });
 			foreach (var (name, path, keys) in macros.Take(10))
 				content.Controls.Add(Link(name + (keys != null ? $"    ({keys})" : ""), () => MacroChosen?.Invoke(path)));
 		}
 
-		var show = new CheckBox { Text = "Show this page when AhkWord starts", Checked = showAtStart, AutoSize = true, Margin = new Padding(3, LogicalToDeviceUnits(18), 0, LogicalToDeviceUnits(24)) };
+		var show = new CheckBox { Text = T("start.show", "Show this page when AhkWord starts"), Checked = showAtStart, AutoSize = true, Margin = new Padding(3, LogicalToDeviceUnits(18), 0, LogicalToDeviceUnits(24)) };
 		show.CheckedChanged += (s, e) => ShowAtStartChanged?.Invoke(show.Checked);
 		content.Controls.Add(show);
 		content.ResumeLayout();

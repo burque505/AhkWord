@@ -44,8 +44,8 @@ public static class RibbonLabels
 			if (places.ContainsKey(name) || element.Name.LocalName is "Tab" or "Group" or "TabGroup" or "ApplicationMenu" or "QuickAccessToolbar") continue;
 			if (element.Ancestors(ns + "QuickAccessToolbar").Any()) continue;    // (there too: its place on a tab is the one to tell)
 			string where;
-			if (element.Name.LocalName == "HelpButton") where = "the ribbon's (?) button";
-			else if (element.Ancestors(ns + "ApplicationMenu").Any()) where = "File";
+			if (element.Name.LocalName == "HelpButton") where = T("palette.helpButton", "the ribbon's (?) button");
+			else if (element.Ancestors(ns + "ApplicationMenu").Any()) where = T("palette.file", "File");
 			else {
 				var tab = element.Ancestors(ns + "Tab").FirstOrDefault();
 				if (tab == null) continue;
@@ -57,7 +57,7 @@ public static class RibbonLabels
 		}
 		// (a command only on the quick access toolbar: Undo, Redo)
 		foreach (var element in doc.Descendants(ns + "QuickAccessToolbar").Descendants().Where(e => e.Attribute("CommandName") != null))
-			places.TryAdd((string)element.Attribute("CommandName")!, "Quick access toolbar");
+			places.TryAdd((string)element.Attribute("CommandName")!, T("palette.quickAccess", "Quick access toolbar"));
 		foreach (var (name, id) in ids)
 			labels[id] = new Label(texts[name].Text, texts[name].Tooltip, places.TryGetValue(name, out var w) ? w : "");
 		return labels;
@@ -111,8 +111,8 @@ public static class Palette
 /// run, Esc to close. Closes when it loses the focus.
 sealed class PaletteForm : Form
 {
-	readonly TextBox box = new() { BorderStyle = BorderStyle.FixedSingle, AccessibleName = "Command" };
-	readonly ListBox list = new() { DrawMode = DrawMode.OwnerDrawFixed, BorderStyle = BorderStyle.None, IntegralHeight = false, AccessibleName = "Commands" };
+	readonly TextBox box = new() { BorderStyle = BorderStyle.FixedSingle, AccessibleName = T("palette.boxName", "Command") };
+	readonly ListBox list = new() { DrawMode = DrawMode.OwnerDrawFixed, BorderStyle = BorderStyle.None, IntegralHeight = false, AccessibleName = T("palette.listName", "Commands") };
 	readonly Label hint = new() { AutoSize = false, ForeColor = SystemColors.GrayText, TextAlign = ContentAlignment.MiddleLeft };
 	readonly List<PaletteItem> items;
 	readonly IList<string> recent;
@@ -135,7 +135,7 @@ sealed class PaletteForm : Form
 		box.Font = new Font(Font.FontFamily, Font.Size * 1.25f);
 		list.ItemHeight = (int)Math.Ceiling(Font.Height * 2.3);
 		hint.Height = Font.Height + LogicalToDeviceUnits(6);
-		hint.Text = "A command, macro, style, snippet or recent file.   ↑ ↓ choose   Enter run   Esc close";
+		hint.Text = T("palette.hint", "A command, macro, style, snippet or recent file.   ↑ ↓ choose   Enter run   Esc close");
 		box.Dock = DockStyle.Top;
 		hint.Dock = DockStyle.Bottom;
 		list.Dock = DockStyle.Fill;
@@ -186,7 +186,7 @@ sealed class PaletteForm : Form
 		var bottom = new Rectangle(top.Left, e.Bounds.Top + half - LogicalToDeviceUnits(1), top.Width, half);
 		const TextFormatFlags flags = TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | TextFormatFlags.VerticalCenter;
 		int keyWidth = item.Shortcut == "" ? 0 : TextRenderer.MeasureText(item.Shortcut, Font).Width + pad;
-		TextRenderer.DrawText(e.Graphics, item.Name + (enabled ? "" : "  (not now)"), bold, new Rectangle(top.Left, top.Top, top.Width - keyWidth, top.Height), main, flags);
+		TextRenderer.DrawText(e.Graphics, item.Name + (enabled ? "" : "  " + T("palette.notNow", "(not now)")), bold, new Rectangle(top.Left, top.Top, top.Width - keyWidth, top.Height), main, flags);
 		if (keyWidth > 0) TextRenderer.DrawText(e.Graphics, item.Shortcut, Font, top, gray, flags | TextFormatFlags.Right);
 		string below = string.Join("  ·  ", new[] { item.Where, item.Description }.Where(t => t != ""));
 		TextRenderer.DrawText(e.Graphics, below, Font, bottom, gray, flags);
@@ -212,7 +212,7 @@ sealed class PaletteForm : Form
 	void RunSelected() {
 		if (list.SelectedIndex < 0 || list.SelectedIndex >= shown.Count) return;
 		var item = shown[list.SelectedIndex];
-		if (!SafeEnabled(item)) { hint.Text = $"{item.Name} can't run now (the ribbon has it greyed out)."; return; }
+		if (!SafeEnabled(item)) { hint.Text = T("palette.cantRun", "{0} can't run now (the ribbon has it greyed out).", item.Name); return; }
 		Chosen = item;
 		Close();
 	}
