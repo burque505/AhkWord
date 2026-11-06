@@ -31,6 +31,53 @@ theme:
     - search.highlight
     - content.code.copy
 
+plugins:
+  - search
+  # Spanish pages: a page.es.md beside page.md (docs_structure: suffix), under /es/. A page without its .es.md
+  # shows in English there, so the Spanish site is whole while it is being translated.
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          default: true
+          name: English
+          build: true
+        - locale: es
+          name: Español
+          build: true
+          site_description: Un procesador de textos para Windows que los scripts de AutoHotkey pueden manejar mientras usted escribe.
+          nav_translations:
+            Home: Inicio
+            Getting started: Primeros pasos
+            User guide: Guía del usuario
+            Documents and files: Documentos y archivos
+            Formatting and paragraphs: Formato y párrafos
+            Styles: Estilos
+            Lists and numbering: Listas y numeración
+            Tables: Tablas
+            Pages and printing: Páginas e impresión
+            Line numbers: Números de línea
+            Pictures: Imágenes
+            Markdown and HTML views: Vistas Markdown y HTML
+            Templates: Plantillas
+            The ribbon and keyboard: La cinta y el teclado
+            Themes: Temas
+            For legal drafting: Para la redacción jurídica
+            Automation: Automatización
+            Scripts, events and macros: Scripts, eventos y macros
+            API reference: Referencia de la API
+            Reference: Referencia
+            Requirements: Requisitos
+            Settings and folders: Configuración y carpetas
+            File formats and converters: Formatos de archivo y convertidores
+            Known limitations: Limitaciones conocidas
+            Troubleshooting: Solución de problemas
+            For developers: Para desarrolladores
+            Roadmap: Hoja de ruta
+
 extra_css:
   - assets/ahkword.css
 
