@@ -55,10 +55,11 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 - [ ] **PDF export in the background:** keep working while a long document's PDF is made (it can't be much faster: most of the time is Microsoft Print to PDF's own work)
 - [x] **Format Painter:** copy the formatting of the text at the caret and paint it onto other text, as in Word (click once for one use, double-click to keep painting)
 - [x] **Ruler:** View > Ruler shows the margins, and the indents and tab stops of the paragraph at the caret, as Word's ruler (for looking)
-- [x] **Spanish:** the interface in Spanish (the setting `Language`), its texts in `lang\es.json`; the rarer dialogs still in English
+- [x] **Spanish:** the interface in Spanish (the setting `Language`), its texts in `lang\es.json` (all of AhkWord's own dialogs since iteration 81)
 - [x] **An extension's own language file** (`<folder>\lang\<code>.json`, read over AhkWord's; `lang\check_lang.ahk` checks it too)
 - [x] **Choosing the language** in AhkWord itself: Review > Language (and the command palette, `Rte.Language`), from the next start
 - [ ] **Clicking on the ruler:** add a tab stop where the ruler is clicked; double-click to open Paragraph or Tabs
+- [ ] **AhkWord's own Page Setup:** paper, orientation and margins in a dialog of AhkWord's, in the interface's language (Windows' Page Setup follows Windows' language); perhaps with the header and footer distances and the section's settings in one place, as Word's
 
 ## Later, perhaps
 
