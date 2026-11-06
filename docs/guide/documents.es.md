@@ -7,7 +7,7 @@
 | Formato | Notas |
 |---|---|
 | **Texto RTF** (`.rtf`) | El formato propio de AhkWord: lo conserva todo, incluidos los estilos y la numeración. Word y LibreOffice también lo abren. |
-| **Word** (`.docx`, `.doc`) y **OpenDocument** (`.odt`) | Mediante un convertidor: Word, LibreOffice, el integrado o pandoc (vea [File formats and converters](../reference/formats.md), en inglés). |
+| **Word** (`.docx`, `.doc`) y **OpenDocument** (`.odt`) | Mediante un convertidor: Word, LibreOffice, el integrado o pandoc (vea [Formatos de archivo y convertidores](../reference/formats.md)). |
 | **HTML** (`.html`) | HTML legible, que conserva los estilos, las tablas y el espaciado. |
 | **Markdown** (`.md`) | La variante de GitHub, con tablas e imágenes. |
 | **Texto sin formato** (`.txt`) | Solo el texto. |
@@ -18,7 +18,7 @@ Un documento abierto desde Word conserva su aspecto: sus propios estilos, espaci
 
 ## Documentos nuevos y plantillas { #new-documents-and-templates }
 
-**Archivo > Nuevo** empieza un documento vacío con sus estilos. **Archivo > Nuevo desde plantilla** empieza uno a partir de una plantilla (Letter, Memo, Report, Court Paper, Meeting Notes o una propia) y pide sus campos, como los nombres de las partes o la fecha de una audiencia. Vea [Templates](templates.md) (en inglés).
+**Archivo > Nuevo** empieza un documento vacío con sus estilos. **Archivo > Nuevo desde plantilla** empieza uno a partir de una plantilla (Letter, Memo, Report, Court Paper, Meeting Notes o una propia) y pide sus campos, como los nombres de las partes o la fecha de una audiencia. Vea [Plantillas](templates.md).
 
 **Archivo > Página de inicio** muestra la página de inicio: un documento en blanco, las plantillas, sus documentos recientes y las macros. Puede abrirse sola al iniciar AhkWord.
 

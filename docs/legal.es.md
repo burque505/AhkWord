@@ -21,20 +21,20 @@ Un despacho o un tribunal suele tener su propio estilo de párrafo: una sangría
 
 ## Papel con números de línea { #pleading-paper-line-numbers }
 
-**Disposición > Números de línea** numera las líneas en el margen, de forma continua o reiniciando en cada página, cada línea o cada cinco, y omite los párrafos que usted elija. Los números son los de las líneas impresas, así que coinciden con el papel y con el PDF; `Rte.PrintedLineAt(position)` le indica a un script la página y la línea de un pasaje para citarlo. Vea [Line numbers](guide/line-numbers.md) (en inglés).
+**Disposición > Números de línea** numera las líneas en el margen, de forma continua o reiniciando en cada página, cada línea o cada cinco, y omite los párrafos que usted elija. Los números son los de las líneas impresas, así que coinciden con el papel y con el PDF; `Rte.PrintedLineAt(position)` le indica a un script la página y la línea de un pasaje para citarlo. Vea [Números de línea](guide/line-numbers.md).
 
 ## Escritos judiciales desde plantillas { #court-papers-from-templates }
 
-**Archivo > Nuevo desde plantilla > Court Paper** crea un escrito judicial con su encabezamiento y una constancia de notificación, y pregunta por el tribunal, el condado o distrito, las partes, el número de expediente y el título del escrito. **Insertar desde plantilla** agrega un encabezamiento (Caption), un bloque de firma (Signature Block) o una constancia de notificación (Certificate of Service) a un escrito que está redactando. Su propio nombre, dirección, teléfono y correo electrónico se recuerdan; los datos del caso se preguntan cada vez. Las plantillas que trae AhkWord están en inglés. Cree sus propias plantillas a partir de escritos que haya presentado: vea [Templates](guide/templates.md) (en inglés).
+**Archivo > Nuevo desde plantilla > Court Paper** crea un escrito judicial con su encabezamiento y una constancia de notificación, y pregunta por el tribunal, el condado o distrito, las partes, el número de expediente y el título del escrito. **Insertar desde plantilla** agrega un encabezamiento (Caption), un bloque de firma (Signature Block) o una constancia de notificación (Certificate of Service) a un escrito que está redactando. Su propio nombre, dirección, teléfono y correo electrónico se recuerdan; los datos del caso se preguntan cada vez. Las plantillas que trae AhkWord están en inglés. Cree sus propias plantillas a partir de escritos que haya presentado: vea [Plantillas](guide/templates.md).
 
 !!! warning "Adapte Court Paper a su tribunal"
-    La plantilla Court Paper que trae AhkWord es un punto de partida genérico, no el formato que exige ningún tribunal. Los tribunales difieren en sus encabezamientos, márgenes, numeración de líneas, bloques de firma y constancias de notificación: adáptela a cada tribunal ante el que presente escritos, y compruébela con las normas locales de ese tribunal. [Adapting the built-in templates](guide/templates.md#adapting-the-built-in-templates) (en inglés) muestra cómo, con una plantilla para cada tribunal.
+    La plantilla Court Paper que trae AhkWord es un punto de partida genérico, no el formato que exige ningún tribunal. Los tribunales difieren en sus encabezamientos, márgenes, numeración de líneas, bloques de firma y constancias de notificación: adáptela a cada tribunal ante el que presente escritos, y compruébela con las normas locales de ese tribunal. [Adaptar las plantillas incluidas](guide/templates.md#adapting-the-built-in-templates) muestra cómo, con una plantilla para cada tribunal.
 
 ## Trabajar con Word { #working-with-word }
 
-La parte contraria, los tribunales y los clientes usan Word. AhkWord abre y guarda archivos `.docx` con sus estilos, numeración, sangrías, espaciado, tablas, encabezados y pies de página, y números de línea, y Word numera los párrafos numerados de AhkWord como listas propias. Un escrito puede ir y venir sin que su formato se deshaga. Vea [File formats and converters](reference/formats.md) (en inglés).
+La parte contraria, los tribunales y los clientes usan Word. AhkWord abre y guarda archivos `.docx` con sus estilos, numeración, sangrías, espaciado, tablas, encabezados y pies de página, y números de línea, y Word numera los párrafos numerados de AhkWord como listas propias. Un escrito puede ir y venir sin que su formato se deshaga. Vea [Formatos de archivo y convertidores](reference/formats.md).
 
 ## Anexos y presentación { #exhibits-and-filing }
 
 - **Exportar como PDF** (pestaña Disposición) crea el PDF para presentar.
-- La macro **PDF on save** crea un PDF junto al documento cada vez que se guarda, y **Folder to PDF** crea los PDF de toda una carpeta. Vea [Automation](automation/index.md#the-example-macros) (en inglés).
+- La macro **PDF on save** crea un PDF junto al documento cada vez que se guarda, y **Folder to PDF** crea los PDF de toda una carpeta. Vea [Scripts, eventos y macros](automation/index.md#the-example-macros).

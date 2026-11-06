@@ -10,7 +10,7 @@ Mientras el cursor está en una tabla, aparece la pestaña **Herramientas de tab
 
 **Tab** pasa a la celda siguiente y **Mayús+Tab** a la anterior; Tab en la última celda agrega una fila, como en Word. Esto funciona también en tablas de Word y de otros programas.
 
-El formato de las tablas se conserva en los archivos RTF, Word, OpenDocument y HTML. Las tablas de Markdown no tienen anchos, bordes ni sombreado (vea [Markdown and HTML views](source-views.md), en inglés). Dos límites: los bordes son líneas simples (los bordes dobles y punteados de Word se muestran como líneas simples del mismo grosor y color), y las celdas no se pueden combinar ni dividir, aunque las tablas de Word con celdas combinadas se abren tal como son.
+El formato de las tablas se conserva en los archivos RTF, Word, OpenDocument y HTML. Las tablas de Markdown no tienen anchos, bordes ni sombreado (vea [Vistas Markdown y HTML](source-views.md)). Dos límites: los bordes son líneas simples (los bordes dobles y punteados de Word se muestran como líneas simples del mismo grosor y color), y las celdas no se pueden combinar ni dividir, aunque las tablas de Word con celdas combinadas se abren tal como son.
 
 !!! tip "Desde un script"
     `Rte.InsertTable(3, 4)`, `Rte.SetColumnWidths("2in, 3in")`, `Rte.SetCellBorders("outside", 1, "#C00000")`, `Rte.SetCellShading("LightYellow")`, `Rte.SetTableAlignment("center")`: vea la [referencia de la API](../automation/api.md#tables) (en inglés).

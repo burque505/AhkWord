@@ -40,7 +40,7 @@ Una descarga de versión trae AhkWord ya compilado, así que ni su primer inicio
 
 ## 3. AhkWord en español
 
-La interfaz de AhkWord (la cinta, los menús, los cuadros de diálogo y la barra de estado) está en inglés o en español. Para tenerla en español, elija **Review > Language > Español** (en español, **Revisar > Idioma**): AhkWord está en español desde el siguiente inicio. Vea [Language](reference/settings.md#language) para otras formas de elegirlo.
+La interfaz de AhkWord (la cinta, los menús, los cuadros de diálogo y la barra de estado) está en inglés o en español. Para tenerla en español, elija **Review > Language > Español** (en español, **Revisar > Idioma**): AhkWord está en español desde el siguiente inicio. Vea [Idioma](reference/settings.md#language) para otras formas de elegirlo.
 
 Luego pruebe los documentos de ejemplo de la carpeta `examples`:
 
@@ -54,7 +54,7 @@ Luego pruebe los documentos de ejemplo de la carpeta `examples`:
 
 AhkWord guarda su configuración, sus propias plantillas y sus copias de recuperación en `%APPDATA%\AhkWord` (escríbalo en la barra de direcciones del Explorador para ir allí), y los archivos de trabajo de los convertidores en `%LOCALAPPDATA%\AhkWord`. No se escribe nada junto al programa, así que puede actualizar AhkWord reemplazando su carpeta.
 
-**Modo portátil:** ponga un archivo vacío llamado `portable` (o `portable.txt`) junto a `AhkWord.exe` o `AhkWord.ahk`, y AhkWord guarda todo eso en una carpeta `data` junto a sí mismo, de modo que puede llevar la carpeta a otro equipo, en una memoria USB por ejemplo. Sus macros, fragmentos y macros de eventos van con ella, y las macros de eventos funcionan en cualquier equipo, con o sin AutoHotkey; solo el programa que edita una macro es el de cada equipo (vea [Qué programa abre una macro](#which-program-opens-a-macro-to-edit-it)). [Settings and folders](reference/settings.md) tiene los detalles, y otras formas de elegir las carpetas.
+**Modo portátil:** ponga un archivo vacío llamado `portable` (o `portable.txt`) junto a `AhkWord.exe` o `AhkWord.ahk`, y AhkWord guarda todo eso en una carpeta `data` junto a sí mismo, de modo que puede llevar la carpeta a otro equipo, en una memoria USB por ejemplo. Sus macros, fragmentos y macros de eventos van con ella, y las macros de eventos funcionan en cualquier equipo, con o sin AutoHotkey; solo el programa que edita una macro es el de cada equipo (vea [Qué programa abre una macro](#which-program-opens-a-macro-to-edit-it)). [Configuración y carpetas](reference/settings.md) tiene los detalles, y otras formas de elegir las carpetas.
 
 ## ¿Es nuevo en AutoHotkey?
 
@@ -66,7 +66,7 @@ Lo que AutoHotkey añade es que AhkWord se puede automatizar, si usted lo desea:
 - **Fragmentos** (Insertar > Fragmentos): escriba una abreviatura como `;sig` y se convierte en su bloque de firma.
 - **Teclas de macro** y **macros de eventos** (Herramientas > Macros de eventos): una macro en una tecla, o que se ejecuta sola cuando se abre o se guarda un documento.
 
-Las macros son archivos de texto plano que terminan en `.ahk`, en la carpeta `rte_macros` junto a AhkWord. [Automation](automation/index.md) tiene los detalles.
+Las macros son archivos de texto plano que terminan en `.ahk`, en la carpeta `rte_macros` junto a AhkWord. [Scripts, eventos y macros](automation/index.md) tiene los detalles.
 
 ### Qué programa abre una macro para editarla { #which-program-opens-a-macro-to-edit-it }
 
@@ -89,6 +89,6 @@ Una macro es un programa, y puede hacer en su equipo todo lo que puede hacer un 
 
 ## Después
 
-- La [Guía del usuario](guide/documents.md), empezando por abrir y guardar documentos (en inglés por ahora).
+- La [Guía del usuario](guide/documents.md), empezando por abrir y guardar documentos.
 - [Para la redacción jurídica](legal.md), si redacta escritos, demandas o contratos.
 - [Solución de problemas](reference/troubleshooting.md), si el primer inicio no va como se describe.

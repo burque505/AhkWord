@@ -66,4 +66,4 @@ Otras impresoras PDF, como CutePDF, PDF24 o PDFCreator, aparecen en **Archivo > 
 
 La impresión sigue las reglas de saltos de línea y de página de los párrafos (conservar con el siguiente, conservar líneas juntas, control de líneas viudas y huérfanas, salto de página anterior), como hace Word. Conservar con el siguiente funciona también con las tablas: un título se queda con la tabla que le sigue, y las filas marcadas para conservar con el siguiente se quedan en una página, así que seleccionar todas las filas de una tabla menos la última la mantiene entera, y lo mismo en un bloque de firma evita que quede solo en una página.
 
-Vea también [Line numbers](line-numbers.md) (en inglés), que también se imprimen.
+Vea también [Números de línea](line-numbers.md), que también se imprimen.
