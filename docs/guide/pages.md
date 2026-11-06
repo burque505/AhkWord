@@ -1,9 +1,24 @@
 # Pages and printing
 
-## Page breaks, page setup
+## Page breaks
 
-- **Insert > Page Break** (Ctrl+Enter) starts a new page. In the editor it shows as a dashed line.
-- **Layout > Page Setup** sets the paper size, orientation and margins.
+**Insert > Page Break** (Ctrl+Enter) starts a new page. In the editor it shows as a dashed line.
+
+## Page Setup
+
+**Layout > Page Setup** (also in File > Print, and a double-click on the ruler's grey margins) sets, as Word's Page Setup does:
+
+- the **margins**: top, bottom, left and right;
+- the **orientation**: portrait or landscape;
+- the **paper**: Letter, Legal, Executive, Tabloid, A3, A4, A5 or B5 (JIS), or a custom width and height;
+- the header's distance from the top and the footer's from the bottom, and **Different first page** (see [Headers and footers](#headers-and-footers)).
+
+A picture of the page shows the result as you change them. Sizes are in inches, or in centimetres where Windows measures in them.
+
+**OK** sets them for this document only: they are saved with it (in .rtf and Word files, and in recovery copies), and the paper is the one AhkWord lays the pages out on, and asks the printer for. A document without a paper of its own (one from before, or from elsewhere without one) uses the default printer's, as before. Check **Make these the default for new documents** to have new documents start with them too. Sections with margins of their own keep them.
+
+!!! tip "From a script"
+    `Rte.SetPageSetup(...)` (recorded by the macro recorder), and `LeftMargin`, `RightMargin`, `TopMargin`, `BottomMargin`, `Landscape`, `PaperWidth`, `PaperHeight`: see the [API reference](../automation/api.md).
 
 ## Headers and footers
 

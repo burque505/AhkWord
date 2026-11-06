@@ -43,6 +43,9 @@ Then try the example documents in the `examples` folder:
 - **Showcase.rtf**, the document in the picture on the [home page](index.md), made entirely with AhkWord's own commands;
 - **Styles Tutorial.rtf**, a short tutorial on styles, style sets and paragraph settings, which uses them itself.
 
+!!! tip "En español"
+    AhkWord's interface is in English or Spanish: choose **Review > Language > Español**, and it is in Spanish from the next start. See [Language](reference/settings.md#language).
+
 !!! tip "Pin it to the taskbar"
     Right-click AhkWord's taskbar button and choose **Pin to taskbar**: the pinned button starts AhkWord, with its own icon, apart from any other AutoHotkey scripts you run.
 
