@@ -698,7 +698,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 83;    // (the About box; make_version.ps1)
+	public const int Iteration = 84;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -898,6 +898,8 @@ class WriterForm : Form
 		ruler.VisibleChanged += (s, e) => FollowRuler(true);
 		ruler.TextClicked += RulerTab;    // (iteration 83)
 		ruler.PartDoubleClicked += RulerDoubleClicked;
+		ruler.Dragged += RulerDragged;    // (iteration 84)
+		ruler.Dragging += RulerDragging;
 		outlineSplit.Panel2.Controls.Add(sourceSplit);
 		sourceBox.TextChanged += (s, e) => SourceTextChanged();
 		sourceBox.SelectionChanged += (s, e) => UpdateUi();
@@ -4458,8 +4460,51 @@ class WriterForm : Form
 		api.AddTab(tab);
 		Record(M("AddTab", tab));
 		FollowRuler(true);
-		string at = ruler.Metric ? (points / 72 * 2.54).ToString("0.##", CultureInfo.CurrentCulture) + " cm" : (points / 72).ToString("0.###", CultureInfo.CurrentCulture) + "\"";
-		SetStatus(T("status.rulerTab", "Left tab stop at {0} (double-click it for Tabs).", at));
+		SetStatus(T("status.rulerTab", "Left tab stop at {0} (double-click it for Tabs).", RulerMeasure(points)));
+	}
+
+	// A measure on the ruler as its scale shows it: inches, or centimetres.
+	string RulerMeasure(float points) => ruler.Metric ? (points / 72 * 2.54).ToString("0.##", CultureInfo.CurrentCulture) + " cm" : (points / 72).ToString("0.###", CultureInfo.CurrentCulture) + "\"";
+
+	// (iteration 84) A marker dragged on the ruler and let go: a tab stop moved or cleared, or an indent (the shown
+	// paragraph's values, given to every selected paragraph, as the Paragraph dialog does); one undo step, recorded.
+	void RulerDragged(RulerView.Handle handle, float from, float? to) {
+		if (ruler.ShownParagraph is not { } p) return;
+		static string P(float v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+		if (handle == RulerView.Handle.Tab) {
+			api.MoveTab(P(from), to is float t ? P(t) : "");
+			Record(M("MoveTab", P(from), to is float t2 ? P(t2) : ""));
+			FollowRuler(true);
+			SetStatus(to is float at ? T("status.rulerTabMoved", "Tab stop moved to {0}.", RulerMeasure(at)) : T("status.rulerTabCleared", "Tab stop cleared."));
+			return;
+		}
+		if (to is not float x) return;
+		string settings = handle switch {
+			RulerView.Handle.FirstLine => "FirstLine=" + P(x - p.Left),
+			RulerView.Handle.Hanging => "LeftIndent=" + P(x) + "; FirstLine=" + P(p.Left + p.First - x),
+			RulerView.Handle.LeftIndent => "LeftIndent=" + P(x),
+			RulerView.Handle.RightIndent => "RightIndent=" + P(ruler.TextWidth - x),
+			_ => "",
+		};
+		if (settings == "") return;
+		api.SetParagraphFormat(settings);
+		Record(M("SetParagraphFormat", settings));
+		FollowRuler(true);
+	}
+
+	// While a marker is dragged: where it would go, on the status bar.
+	void RulerDragging(RulerView.Handle handle, float? at) {
+		if (handle == RulerView.Handle.None) return;
+		if (at is not float x) { SetStatus(T("status.rulerDragOff", "Let go to clear the tab stop.")); return; }
+		var p = ruler.ShownParagraph;
+		string text = handle switch {
+			RulerView.Handle.FirstLine when p != null => T("status.rulerFirstLine", "First line indent: {0}", RulerMeasure(x - p.Left)),
+			RulerView.Handle.Hanging => T("status.rulerHanging", "Hanging indent: {0}", RulerMeasure(x)),
+			RulerView.Handle.LeftIndent => T("status.rulerLeftIndent", "Left indent: {0}", RulerMeasure(x)),
+			RulerView.Handle.RightIndent => T("status.rulerRightIndent", "Right indent: {0}", RulerMeasure(ruler.TextWidth - x)),
+			_ => T("status.rulerTabAt", "Tab stop: {0}", RulerMeasure(x)),
+		};
+		SetStatus(text);
 	}
 
 	// A double-click on the ruler: Tabs on a tab stop or the white strip (not in a table), Paragraph on an indent marker,
@@ -7254,6 +7299,35 @@ public class EditorApi
 		}
 		form.LineGutter.DocumentChanged();
 	}
+
+	/// Moves the selected paragraphs' tab stop at from ("2in", 144) to to, keeping its alignment and leader ("": clears
+	/// it); paragraphs without one there are left as they are. One undo step. (Dragging a tab stop on the ruler.)
+	public void MoveTab(string from, string to = "") {
+		float old = ParagraphTab.Parse(from).Position;
+		float? at = to == "" ? null : ParagraphTab.Parse(to).Position;
+		using var _ = form.FirstParagraphAsIs(changes: true);
+		var doc = ed.TextDocument;
+		var selection = doc.Selection2;
+		doc.BeginEditCollection();
+		try {
+			foreach (var (start, _) in StyleEngine.Paragraphs(doc, selection.Start, selection.End)) {
+				var para = doc.Range2(start, start).Para;
+				for (int i = 0; i < para.TabCount; i++) {
+					para.GetTab(i, out float position, out int alignment, out int leader);
+					if (Math.Abs(position - old) > 0.5f) continue;
+					para.DeleteTab(position);
+					if (at is float x) global::LineSpacing.AddTab(para, x, alignment, leader);
+					break;
+				}
+			}
+		} finally {
+			doc.EndEditCollection();
+		}
+		form.LineGutter.DocumentChanged();
+	}
+
+	/// Clears the selected paragraphs' tab stop at ("2in", 144), keeping their others. One undo step.
+	public void ClearTab(string at) => MoveTab(at, "");
 
 	/// The spacing of the document's default tab stops (where Tab goes past the paragraph's own), in points.
 	public float DefaultTabStop {

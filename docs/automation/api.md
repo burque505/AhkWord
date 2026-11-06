@@ -628,6 +628,16 @@ Rte.AddTab(tab)
 
 Adds a tab stop to each selected paragraph, keeping its others (one at the same place gives way): "2in", "144/right/dots" (as SetTabs takes them). One undo step. (A click on the ruler adds a left one.)
 
+### ClearTab
+
+```autohotkey
+Rte.ClearTab(at)
+```
+
+*at*: text
+
+Clears the selected paragraphs' tab stop at ("2in", 144), keeping their others. One undo step.
+
 ### DefaultTabStop
 
 ```autohotkey
@@ -638,6 +648,16 @@ Rte.DefaultTabStop := value
 number
 
 The spacing of the document's default tab stops (where Tab goes past the paragraph's own), in points.
+
+### MoveTab
+
+```autohotkey
+Rte.MoveTab(from, to = "")
+```
+
+*from*: text · *to*: text
+
+Moves the selected paragraphs' tab stop at from ("2in", 144) to to, keeping its alignment and leader ("": clears it); paragraphs without one there are left as they are. One undo step. (Dragging a tab stop on the ruler.)
 
 ### ParagraphFormat
 
