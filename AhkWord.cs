@@ -698,7 +698,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 82;    // (the About box; make_version.ps1)
+	public const int Iteration = 83;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -896,6 +896,8 @@ class WriterForm : Form
 		pagePanel.SizeChanged += (s, e) => FollowRuler();
 		Editor.SizeChanged += (s, e) => FollowRuler();
 		ruler.VisibleChanged += (s, e) => FollowRuler(true);
+		ruler.TextClicked += RulerTab;    // (iteration 83)
+		ruler.PartDoubleClicked += RulerDoubleClicked;
 		outlineSplit.Panel2.Controls.Add(sourceSplit);
 		sourceBox.TextChanged += (s, e) => SourceTextChanged();
 		sourceBox.SelectionChanged += (s, e) => UpdateUi();
@@ -4450,6 +4452,44 @@ class WriterForm : Form
 		} catch (Exception) { return null; }
 	}
 
+	// (iteration 83) A click on the ruler's white strip: a left tab stop there for the selected paragraphs.
+	void RulerTab(float points) {
+		string tab = points.ToString("0.##", CultureInfo.InvariantCulture);
+		api.AddTab(tab);
+		Record(M("AddTab", tab));
+		FollowRuler(true);
+		string at = ruler.Metric ? (points / 72 * 2.54).ToString("0.##", CultureInfo.CurrentCulture) + " cm" : (points / 72).ToString("0.###", CultureInfo.CurrentCulture) + "\"";
+		SetStatus(T("status.rulerTab", "Left tab stop at {0} (double-click it for Tabs).", at));
+	}
+
+	// A double-click on the ruler: Tabs on a tab stop or the white strip (not in a table), Paragraph on an indent marker,
+	// Page Setup on the margins (as Word's).
+	void RulerDoubleClicked(RulerView.Part part) {
+		switch (part) {
+			case RulerView.Part.Tab or RulerView.Part.Text when ruler.ShownParagraph != null: TabsCommand(); break;
+			case RulerView.Part.Indent: ParagraphCommand(); break;
+			case RulerView.Part.Margin: PageSetupCommand(); break;
+		}
+		FollowRuler(true);
+	}
+
+	// The Tabs dialog by itself (the Paragraph dialog's, for the selected paragraphs).
+	void TabsCommand() {
+		var doc = Editor.TextDocument;
+		var selection = doc.Selection2;
+		global::ParagraphFormat format;
+		using (FirstParagraphAsIs(changes: false)) format = global::ParagraphFormat.Read(doc, Styles, selection.Start, selection.End);
+		using var dlg = new TabsDialog(format.Tabs, doc.DefaultTabStop);
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		doc.BeginEditCollection();    // (one undo step)
+		try {
+			if (dlg.TabsChanged) { string tabs = string.Join(",", dlg.Tabs); api.SetTabs(tabs); Record(M("SetTabs", tabs)); }
+			if (dlg.DefaultTabStop is float spacing && Math.Abs(spacing - doc.DefaultTabStop) > 0.01f) { api.DefaultTabStop = spacing; Record(M("DefaultTabStop", spacing)); }
+		} finally {
+			doc.EndEditCollection();
+		}
+	}
+
 	internal List<(int Level, int Start, string Text)> CurrentOutline() {
 		RefreshOutline();
 		return outline;
@@ -7196,6 +7236,24 @@ public class EditorApi
 
 	/// Gives the selected paragraphs these tab stops (and no others): "72/right/dots,3in/decimal" ("" clears them).
 	public void SetTabs(string tabs) => SetParagraphFormat("Tabs=" + tabs);
+
+	/// Adds a tab stop to each selected paragraph, keeping its others (one at the same place gives way): "2in",
+	/// "144/right/dots" (as SetTabs takes them). One undo step. (A click on the ruler adds a left one.)
+	public void AddTab(string tab) {
+		var t = ParagraphTab.Parse(tab);
+		using var _ = form.FirstParagraphAsIs(changes: true);
+		if (t.Alignment != "left" || t.Leader != "none") (ed as WriterEditBox)?.AdvancedLayout(true);
+		var doc = ed.TextDocument;
+		var selection = doc.Selection2;
+		doc.BeginEditCollection();
+		try {
+			foreach (var (start, _) in StyleEngine.Paragraphs(doc, selection.Start, selection.End))
+				global::LineSpacing.AddTab(doc.Range2(start, start).Para, t.Position, Array.IndexOf(ParagraphTab.Alignments, t.Alignment), Math.Max(0, Array.IndexOf(ParagraphTab.Leaders, t.Leader)));
+		} finally {
+			doc.EndEditCollection();
+		}
+		form.LineGutter.DocumentChanged();
+	}
 
 	/// The spacing of the document's default tab stops (where Tab goes past the paragraph's own), in points.
 	public float DefaultTabStop {

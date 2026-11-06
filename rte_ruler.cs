@@ -5,6 +5,8 @@
 // triangle at the bottom) and left indent (the box under it), right indent (the triangle at the right), its own tab
 // stops (left, centre, right, decimal and bar marks) and the default tab stops after them (small grey ticks). In a
 // table it shows the scale only. It sits above the page and doesn't scroll down with it; sideways it follows the page.
+// Iteration 83: a click on the white strip adds a left tab stop there (on Word's grid) to the selected paragraphs; a
+// double-click opens Tabs on a tab stop, Paragraph on an indent marker, Page Setup on the grey margins.
 
 using System;
 using System.Drawing;
@@ -57,6 +59,56 @@ sealed class RulerView : Control
 
 	/// The ruler's x for a position in points from the text's left edge.
 	public float X(float points) => frame.TextLeft + points * frame.PixelsPerPoint;
+
+	// ---- iteration 83: clicking on the ruler, as on Word's
+
+	/// What a point of the ruler is on: nothing (outside the paper), the white text strip, the grey margins, a tab stop
+	/// of the paragraph's or one of its indent markers.
+	public enum Part { None, Text, Margin, Tab, Indent }
+
+	/// A click on the white strip, off the markers (not in a table): where, in points from the text's left edge, on
+	/// Word's grid (1/16 inch, or 0.25 cm).
+	public event Action<float>? TextClicked;
+	/// A double-click: what it was on.
+	public event Action<Part>? PartDoubleClicked;
+
+	/// Word's grid for a click: 1/16 inch, or a quarter of a centimetre (points).
+	public float Snap => metric ? 72f / 2.54f / 4 : 4.5f;
+
+	/// Where a click at x lands, in points from the text's left edge, on the grid and within the text.
+	public float PointsAt(float x) {
+		if (frame.PixelsPerPoint <= 0) return 0;
+		float width = (frame.TextRight - frame.TextLeft) / frame.PixelsPerPoint;
+		float points = (float)Math.Round((x - frame.TextLeft) / frame.PixelsPerPoint / Snap) * Snap;
+		return Math.Clamp(points, 0, Math.Max(0, width));
+	}
+
+	/// What the point at is on (markers win over the strip; tab stops in the strip's lower half, the first line's
+	/// triangle at its top, the others at its bottom).
+	public Part HitTest(Point at) {
+		if (frame.PixelsPerPoint <= 0 || at.X < frame.PaperLeft || at.X > frame.PaperRight) return Part.None;
+		int top = LogicalToDeviceUnits(3), bottom = Height - LogicalToDeviceUnits(5), size = LogicalToDeviceUnits(4), grab = size + 1;
+		int middle = (top + bottom) / 2;
+		bool Near(float x) => Math.Abs(at.X - x) <= grab;
+		if (paragraph is { } p) {
+			if (at.Y <= top + size + 2 && Near(X(p.Left + p.First))) return Part.Indent;
+			if (at.Y >= bottom - size - 2 && (Near(X(p.Left)) || Near(frame.TextRight - p.Right * frame.PixelsPerPoint))) return Part.Indent;
+			if (at.Y >= middle && p.Tabs.Any(t => Near(X(t.Position)))) return Part.Tab;
+		}
+		return at.X >= frame.TextLeft && at.X <= frame.TextRight ? Part.Text : Part.Margin;
+	}
+
+	protected override void OnMouseClick(MouseEventArgs e) {
+		base.OnMouseClick(e);
+		if (e.Button == MouseButtons.Left && paragraph != null && HitTest(e.Location) == Part.Text) TextClicked?.Invoke(PointsAt(e.X));
+	}
+
+	protected override void OnMouseDoubleClick(MouseEventArgs e) {
+		base.OnMouseDoubleClick(e);
+		if (e.Button != MouseButtons.Left) return;
+		var part = HitTest(e.Location);
+		if (part != Part.None) PartDoubleClicked?.Invoke(part);
+	}
 
 	protected override void OnPaint(PaintEventArgs e) {
 		var g = e.Graphics;

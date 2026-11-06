@@ -90,16 +90,6 @@ Rte.AddSnippet(abbreviation, part, instant = 0, keepEnding = 0, caseSensitive = 
 
 Gives a part (by name: Rte.Templates(true) lists them; an RTF template) an abbreviation: typed in the document, then Space, Enter, Tab or punctuation (instant = 1: at once), it becomes the part. keepEnding = 1: the ending character stays after it; caseSensitive = 1: the abbreviation fires only typed with its case. An abbreviation it had already is changed.
 
-### ApplyMyStyles
-
-```autohotkey
-Rte.ApplyMyStyles()
-```
-
-returns: number
-
-Apply My Styles: the document gets your styles, the ones new documents get (saved with SaveStylesAsDefault, else your style set's): each of its styles that you have takes your definition, and its paragraphs your look (formatting of their own stays); styles of the document's own that you haven't got stay. One undo step. Returns how many paragraphs were restyled.
-
 ### ClearFormatting
 
 ```autohotkey
@@ -107,50 +97,6 @@ Rte.ClearFormatting()
 ```
 
 Clear Formatting (Ctrl+Space): the selected text back to its paragraphs' style (all formatting of its own goes); with no selection, the caret's whole paragraph, its paragraph formatting (spacing, indents ...) too. One undo step.
-
-### CopyFormatting
-
-```autohotkey
-Rte.CopyFormatting()
-```
-
-Copy Formatting (Home > Format Painter), as Word's: with no selection, the caret's paragraph formatting (its style, numbering, indents, spacing, alignment, tabs) and the character formatting at the caret (of the character before it; at a paragraph's start, of the first one); with a selection, the formatting most of the selected text has (a paragraph with a bold lead-in: its plain text's), and its paragraph formatting too only if the selection takes in a paragraph mark (or runs to the document's end). Kept for PasteFormatting.
-
-### PasteFormatting
-
-```autohotkey
-Rte.PasteFormatting()
-```
-
-Paste Formatting, as Word's: a click (no selection) gives the caret's paragraph the copied paragraph formatting (style, numbering, indents ...; its text keeps its bold, italic ...), and the word clicked in the copied character formatting; a selection takes the character formatting, and its paragraphs the paragraph formatting. Paragraph formatting goes on only if CopyFormatting took it (no selection, or one with a paragraph mark). One undo step.
-
-### Close
-
-```autohotkey
-Rte.Close()
-```
-
-Closes the document and starts an empty one, as File &gt; Close does (unsaved changes are discarded, as by New; the window stays open).
-
-### CopyStyles
-
-```autohotkey
-Rte.CopyStyles(path, names = "", forNewDocuments = 0)
-```
-
-*path*: text · *names*: text · *forNewDocuments*: 1/0 · returns: number
-
-Copy Styles from Document: the styles named (by commas or lines; empty: all of them) come from another document into this one. A style this document has takes the copied definition and its paragraphs the new look (formatting of their own stays); others are added. With forNewDocuments they go into your default styles too (the ones new documents get), the others of those staying as they are. Returns how many styles were copied.
-
-### DeleteStyle
-
-```autohotkey
-Rte.DeleteStyle(name)
-```
-
-*name*: text
-
-Deletes one of your own styles; its paragraphs become Normal (one undo step).
 
 ### ExportSnippets
 
@@ -161,26 +107,6 @@ Rte.ExportSnippets(path)
 *path*: text · returns: text
 
 Writes the snippets as an AutoHotkey v2 script of plain-text hotstrings, to use them in any program (their fields as their defaults or [their names]). Returns its full path.
-
-### FileConverter
-
-```autohotkey
-value := Rte.FileConverter
-```
-
-text · read-only
-
-The converter(s) chosen for the current Word or OpenDocument file when it was opened or saved ("" = automatic); Save uses them.
-
-### FileName
-
-```autohotkey
-value := Rte.FileName
-```
-
-text · read-only
-
-The full path of the current file ("" for a new document).
 
 ### FillFields
 
@@ -201,27 +127,6 @@ Rte.FireSnippet(abbreviation, ending = "")
 *abbreviation*: text · *ending*: text
 
 For AhkWord.ahk: a snippet's hotstring fired, with the ending character typed after it ("" for one that fires at once). Returns at once; the snippet goes in once the editor has what was typed.
-
-### GetHtml
-
-```autohotkey
-Rte.GetHtml()
-```
-
-returns: text
-
-The document as HTML, with list numbering that RichEditorNET's HTML leaves out (start numbers, restarts, punctuation such as "a)"; the punctuation needs the &lt;style&gt; element at the start).
-
-### Html
-
-```autohotkey
-value := Rte.Html
-Rte.Html := value
-```
-
-text
-
-The document as HTML (get), or replaced by HTML (set); see GetHtml and SetHtml.
 
 ### InsertSnippet
 
@@ -263,26 +168,6 @@ Rte.NewStyle(name, settings = "")
 
 A new style, from the paragraph at the caret (with settings, as ModifyStyle takes them, on top), given to the paragraphs the selection is in.
 
-### NewWindow
-
-```autohotkey
-Rte.NewWindow(path = "")
-```
-
-*path*: text
-
-Opens another AhkWord window (File &gt; New Window), with a new document or the file given. The new window is a separate editor: scripts reach it once it is the AhkWord used last (or with its RTE_WRITER_HWND).
-
-### Open
-
-```autohotkey
-Rte.Open(path, via = "")
-```
-
-*path*: text · *via*: text
-
-Opens an .html/.htm, .md/.markdown, .rtf, .docx/.doc, .odt or .txt file (unsaved changes are discarded). Word and OpenDocument files are converted by Word, openxml, LibreOffice or pandoc (see Converters and LastConverter); via names the converter(s) to use, e.g. "openxml" (Save then uses them too).
-
 ### RemoveSnippet
 
 ```autohotkey
@@ -293,26 +178,6 @@ Rte.RemoveSnippet(abbreviation)
 
 Takes a snippet's abbreviation away (its part stays). Returns whether there was one.
 
-### Save
-
-```autohotkey
-Rte.Save()
-```
-
-returns: text
-
-Saves to the current file and returns its path.
-
-### SaveAs
-
-```autohotkey
-Rte.SaveAs(path, via = "")
-```
-
-*path*: text · *via*: text · returns: text
-
-Saves as HTML, Markdown, RTF, Word, OpenDocument or text, chosen by the extension (.html, .md, .rtf, .docx, .odt, .txt), and returns the full path. .docx and .odt are converted (see Converters and LastConverter); via names the converter(s) to use, e.g. "openxml". HTML and Markdown pictures are saved as files in a &lt;name&gt;_images folder; via = "inside" keeps an HTML file's pictures inside it (as data: URIs), as one file.
-
 ### SaveSelectionAsSnippet
 
 ```autohotkey
@@ -322,24 +187,6 @@ Rte.SaveSelectionAsSnippet(part, abbreviation, instant = 0, keepEnding = 0, case
 *part*: text · *abbreviation*: text · *instant*: 1/0 · *keepEnding*: 1/0 · *caseSensitive*: 1/0
 
 Saves the selection, formatting and all, as a new part (in your own templates' Parts folder, as part.rtf), and gives it an abbreviation (as AddSnippet).
-
-### SaveStylesAsDefault
-
-```autohotkey
-Rte.SaveStylesAsDefault()
-```
-
-New documents get this document's styles (your changes included).
-
-### SetHtml
-
-```autohotkey
-Rte.SetHtml(html)
-```
-
-*html*: text
-
-Replaces the document with HTML (a whole page or a part of one), including the list numbering and tables GetHtml writes.
 
 ### SetStyle
 
@@ -411,6 +258,181 @@ returns: text
 
 The document's styles' names, one a line (the Style box's list).
 
+### TemplatesFolder
+
+```autohotkey
+value := Rte.TemplatesFolder
+```
+
+text · read-only
+
+Your own templates' folder (beside the settings); the shipped ones are in the templates folder beside AhkWord.
+
+### UpdateStyleToMatch
+
+```autohotkey
+Rte.UpdateStyleToMatch()
+```
+
+returns: text
+
+The caret paragraph's style made to look like the paragraph; its other paragraphs change too. Returns its name.
+
+## Format Painter
+
+### ApplyMyStyles
+
+```autohotkey
+Rte.ApplyMyStyles()
+```
+
+returns: number
+
+Apply My Styles: the document gets your styles, the ones new documents get (saved with SaveStylesAsDefault, else your style set's): each of its styles that you have takes your definition, and its paragraphs your look (formatting of their own stays); styles of the document's own that you haven't got stay. One undo step. Returns how many paragraphs were restyled.
+
+### Close
+
+```autohotkey
+Rte.Close()
+```
+
+Closes the document and starts an empty one, as File &gt; Close does (unsaved changes are discarded, as by New; the window stays open).
+
+### CopyFormatting
+
+```autohotkey
+Rte.CopyFormatting()
+```
+
+Copy Formatting (Home &gt; Format Painter), as Word's: with no selection, the caret's paragraph formatting (its style, numbering, indents, spacing, alignment, tabs) and the character formatting at the caret (of the character before it; at a paragraph's start, of the first one); with a selection, the formatting most of the selected text has (a paragraph with a bold lead-in: its plain text's), and its paragraph formatting too only if the selection takes in a paragraph mark (or runs to the document's end). Kept for PasteFormatting.
+
+### CopyStyles
+
+```autohotkey
+Rte.CopyStyles(path, names = "", forNewDocuments = 0)
+```
+
+*path*: text · *names*: text · *forNewDocuments*: 1/0 · returns: number
+
+Copy Styles from Document: the styles named (by commas or lines; empty: all of them) come from another document into this one. A style this document has takes the copied definition and its paragraphs the new look (formatting of their own stays); others are added. With forNewDocuments they go into your default styles too (the ones new documents get), the others of those staying as they are. Returns how many styles were copied.
+
+### DeleteStyle
+
+```autohotkey
+Rte.DeleteStyle(name)
+```
+
+*name*: text
+
+Deletes one of your own styles; its paragraphs become Normal (one undo step).
+
+### FileConverter
+
+```autohotkey
+value := Rte.FileConverter
+```
+
+text · read-only
+
+The converter(s) chosen for the current Word or OpenDocument file when it was opened or saved ("" = automatic); Save uses them.
+
+### FileName
+
+```autohotkey
+value := Rte.FileName
+```
+
+text · read-only
+
+The full path of the current file ("" for a new document).
+
+### GetHtml
+
+```autohotkey
+Rte.GetHtml()
+```
+
+returns: text
+
+The document as HTML, with list numbering that RichEditorNET's HTML leaves out (start numbers, restarts, punctuation such as "a)"; the punctuation needs the &lt;style&gt; element at the start).
+
+### Html
+
+```autohotkey
+value := Rte.Html
+Rte.Html := value
+```
+
+text
+
+The document as HTML (get), or replaced by HTML (set); see GetHtml and SetHtml.
+
+### NewWindow
+
+```autohotkey
+Rte.NewWindow(path = "")
+```
+
+*path*: text
+
+Opens another AhkWord window (File &gt; New Window), with a new document or the file given. The new window is a separate editor: scripts reach it once it is the AhkWord used last (or with its RTE_WRITER_HWND).
+
+### Open
+
+```autohotkey
+Rte.Open(path, via = "")
+```
+
+*path*: text · *via*: text
+
+Opens an .html/.htm, .md/.markdown, .rtf, .docx/.doc, .odt or .txt file (unsaved changes are discarded). Word and OpenDocument files are converted by Word, openxml, LibreOffice or pandoc (see Converters and LastConverter); via names the converter(s) to use, e.g. "openxml" (Save then uses them too).
+
+### PasteFormatting
+
+```autohotkey
+Rte.PasteFormatting()
+```
+
+Paste Formatting, as Word's: a click (no selection) gives the caret's paragraph the copied paragraph formatting (style, numbering, indents ...; its text keeps its bold, italic ...), and the word clicked in the copied character formatting; a selection takes the character formatting, and its paragraphs the paragraph formatting. Paragraph formatting goes on only if CopyFormatting took it (no selection, or one with a paragraph mark). One undo step.
+
+### Save
+
+```autohotkey
+Rte.Save()
+```
+
+returns: text
+
+Saves to the current file and returns its path.
+
+### SaveAs
+
+```autohotkey
+Rte.SaveAs(path, via = "")
+```
+
+*path*: text · *via*: text · returns: text
+
+Saves as HTML, Markdown, RTF, Word, OpenDocument or text, chosen by the extension (.html, .md, .rtf, .docx, .odt, .txt), and returns the full path. .docx and .odt are converted (see Converters and LastConverter); via names the converter(s) to use, e.g. "openxml". HTML and Markdown pictures are saved as files in a &lt;name&gt;_images folder; via = "inside" keeps an HTML file's pictures inside it (as data: URIs), as one file.
+
+### SaveStylesAsDefault
+
+```autohotkey
+Rte.SaveStylesAsDefault()
+```
+
+New documents get this document's styles (your changes included).
+
+### SetHtml
+
+```autohotkey
+Rte.SetHtml(html)
+```
+
+*html*: text
+
+Replaces the document with HTML (a whole page or a part of one), including the list numbering and tables GetHtml writes.
+
 ### StyleSet
 
 ```autohotkey
@@ -431,26 +453,6 @@ Rte.StylesIn(path)
 *path*: text · returns: text
 
 Iteration 40: the paragraph styles a document has (AhkWord's own RTF and HTML, a Word .docx, other RTF), one name a line, without opening it.
-
-### TemplatesFolder
-
-```autohotkey
-value := Rte.TemplatesFolder
-```
-
-text · read-only
-
-Your own templates' folder (beside the settings); the shipped ones are in the templates folder beside AhkWord.
-
-### UpdateStyleToMatch
-
-```autohotkey
-Rte.UpdateStyleToMatch()
-```
-
-returns: text
-
-The caret paragraph's style made to look like the paragraph; its other paragraphs change too. Returns its name.
 
 ## Rich Text Format, Word and OpenDocument
 
@@ -550,6 +552,17 @@ Rte.PrintLayout := value
 
 Print Layout (1): lines break where they will on the printed page, the page shown on grey; 0: lines wrap at the window's width (WordWrap). Remembered.
 
+### Theme
+
+```autohotkey
+value := Rte.Theme
+Rte.Theme := value
+```
+
+text
+
+Print Layout's zoom: "PageWidth" (the page's width fills the window), "OnePage" (a page's height fits) or "Manual" (ZoomFactor, as Zoom In / Out / 100% and Ctrl+wheel set it). Remembered. &lt;summary&gt;The window's theme: "Light", "Dark", "Teal", "Navy", "Forest", "Plum", "Burgundy" or "Bronze". The document page stays white in all of them.&lt;/summary&gt;
+
 ### ZoomMode
 
 ```autohotkey
@@ -558,8 +571,6 @@ Rte.ZoomMode := value
 ```
 
 text
-
-Print Layout's zoom: "PageWidth" (the page's width fills the window), "OnePage" (a page's height fits) or "Manual" (ZoomFactor, as Zoom In / Out / 100% and Ctrl+wheel set it). Remembered.
 
 ## Line spacing
 
@@ -606,6 +617,16 @@ number
 The space before the selected paragraphs, in points (-1 if they differ); setting it sets it for them (one undo step).
 
 ## The Paragraph dialog's formats
+
+### AddTab
+
+```autohotkey
+Rte.AddTab(tab)
+```
+
+*tab*: text
+
+Adds a tab stop to each selected paragraph, keeping its others (one at the same place gives way): "2in", "144/right/dots" (as SetTabs takes them). One undo step. (A click on the ruler adds a left one.)
 
 ### DefaultTabStop
 
@@ -1847,6 +1868,17 @@ Rte.GoToHeading(number)
 
 Goes to the n-th heading (1 = the first) and scrolls it to the top.
 
+### Language
+
+```autohotkey
+value := Rte.Language
+Rte.Language := value
+```
+
+text
+
+&lt;summary&gt;The interface's language, as the setting Language has it: "en" (English) or a language AhkWord has a file for in its lang folder ("es": Spanish). Set, it is saved, and shows the next time AhkWord starts (Review &gt; Language).&lt;/summary&gt;
+
 ### Outline
 
 ```autohotkey
@@ -1877,18 +1909,7 @@ Rte.RulerVisible := value
 
 1/0
 
-Whether the ruler (View > Show > Ruler) is shown. Remembered.
-
-### Language
-
-```autohotkey
-value := Rte.Language
-Rte.Language := value
-```
-
-text
-
-The interface's language, as the setting Language has it: "en" (English) or a language AhkWord has a file for in its lang folder ("es": Spanish). Set, it is saved, and shows the next time AhkWord starts (Review > Language).
+Whether the ruler (View &gt; Show &gt; Ruler) is shown. Remembered.
 
 ### SetHeadingLevel
 
@@ -1901,6 +1922,14 @@ Rte.SetHeadingLevel(position, level)
 Changes the heading level (1-6, or 0 for normal text) of the paragraph at a position.
 
 ## The document's header and footer
+
+### BottomMargin
+
+```autohotkey
+value := Rte.BottomMargin
+```
+
+number · read-only
 
 ### DifferentFirstPage
 
@@ -2058,6 +2087,26 @@ Rte.InsertHorizontalLine()
 
 Iteration 55: a horizontal line across the text, in a paragraph of its own (Insert &gt; Horizontal Line): a picture of a line, as Word's, so that it is printed and kept in every format; Markdown gets a rule (---) and HTML an &lt;hr&gt;.
 
+### Landscape
+
+```autohotkey
+value := Rte.Landscape
+```
+
+1/0 · read-only
+
+Whether the document's pages are landscape.
+
+### LeftMargin
+
+```autohotkey
+value := Rte.LeftMargin
+```
+
+number · read-only
+
+Iteration 82: the document's margins, in inches.
+
 ### MakeHeaderFooterDefault
 
 ```autohotkey
@@ -2065,6 +2114,32 @@ Rte.MakeHeaderFooterDefault()
 ```
 
 Makes the document's header and footer the default for new documents (and documents without their own).
+
+### PaperHeight
+
+```autohotkey
+value := Rte.PaperHeight
+```
+
+number · read-only
+
+### PaperWidth
+
+```autohotkey
+value := Rte.PaperWidth
+```
+
+number · read-only
+
+The document's paper, in inches, upright (Letter: 8.5 by 11).
+
+### RightMargin
+
+```autohotkey
+value := Rte.RightMargin
+```
+
+number · read-only
 
 ### SetFirstFooter
 
@@ -2146,6 +2221,16 @@ Rte.SetHeaderFont(name = "", size = 10, bold = 0, italic = 0, underline = 0)
 
 Iteration 55: the header's font: its name, size in points, bold, italic and underline (all of its parts, the first page's too); printed, on Show Pages' sheets, and in Word and OpenDocument files. An empty name: Segoe UI 8 pt in grey, as before fonts could be chosen.
 
+### SetPageSetup
+
+```autohotkey
+Rte.SetPageSetup(left, right, top, bottom, landscape = 0, paperWidth = 0, paperHeight = 0)
+```
+
+*left*: number · *right*: number · *top*: number · *bottom*: number · *landscape*: 1/0 · *paperWidth*: number · *paperHeight*: number
+
+Iteration 82: the document's page setup, in inches: margins, orientation and paper (its width and height upright; 0: as it is), as Page Setup sets it. Saved with the document.
+
 ### ShowFirstFooter
 
 ```autohotkey
@@ -2189,6 +2274,14 @@ Rte.ShowHeader := value
 1/0
 
 Whether the document has a header (printed, and in its files).
+
+### TopMargin
+
+```autohotkey
+value := Rte.TopMargin
+```
+
+number · read-only
 
 ## Cross-references to numbered paragraphs
 

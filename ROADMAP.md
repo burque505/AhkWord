@@ -58,7 +58,8 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 - [x] **Spanish:** the interface in Spanish (the setting `Language`), its texts in `lang\es.json` (all of AhkWord's own dialogs since iteration 81)
 - [x] **An extension's own language file** (`<folder>\lang\<code>.json`, read over AhkWord's; `lang\check_lang.ahk` checks it too)
 - [x] **Choosing the language** in AhkWord itself: Review > Language (and the command palette, `Rte.Language`), from the next start
-- [ ] **Clicking on the ruler:** add a tab stop where the ruler is clicked; double-click to open Paragraph or Tabs
+- [x] **Clicking on the ruler:** a click adds a left tab stop there to the selected paragraphs; a double-click opens Tabs, Paragraph or Page Setup for what it's on (iteration 83)
+- [ ] **Dragging on the ruler:** move the indent markers and tab stops; drag a tab stop off to remove it
 - [x] **AhkWord's own Page Setup:** margins, orientation and paper, the header's and footer's distances and the different first page in one dialog of AhkWord's, with a picture of the page; the paper saved with the document (RTF, Word); "Make these the default" for new documents (iteration 82)
 
 ## Later, perhaps

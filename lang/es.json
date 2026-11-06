@@ -1227,6 +1227,7 @@
   // (iteration 82) Page Setup
   "status.pageSetupNew": "Configuración de página establecida para este documento y los nuevos.",
   "status.pageSetup": "Configuración de página establecida para este documento (se guarda con él).",
+  "status.rulerTab": "Tabulación izquierda en {0} (haga doble clic en ella para Tabulaciones).",
   "paper.letter": "Carta",
   "paper.legal": "Legal",
   "paper.executive": "Ejecutivo",

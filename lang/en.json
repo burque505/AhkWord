@@ -1366,6 +1366,7 @@
   "status.replacements.one": "{0} replacement made.",
   "status.replacements.other": "{0} replacements made.",
   "status.richTextOnly": "{0} works in the Rich Text view (View > Rich Text).",
+  "status.rulerTab": "Left tab stop at {0} (double-click it for Tabs).",
   "status.running": "Running {0}",
   "status.saved": "Saved {0}",
   "status.savedMacro": "Saved macro \"{0}\". It is in Tools > Macros.",
