@@ -549,6 +549,35 @@ public static class Sections
 		return (new[] { Hundredths(left, 125), Hundredths(right, 125), Hundredths(top, 100), Hundredths(bottom, 100) }, landscape);
 	}
 
+	/// (iteration 82) A document's paper as its RTF gives it (the first section's, else the document's): width and height
+	/// upright, in 1/100 inch; null when it gives none.
+	public static int[]? PaperFromRtf(string rtf) {
+		int sect = SectsIn(rtf) is { Count: > 0 } s ? s[0].Start : rtf.Length;
+		string firstSection = rtf[..sect];
+		int? Twips(string section, string document) {
+			var m = Regex.Match(firstSection, @"\\" + section + @"(\d+)");
+			if (!m.Success) m = Regex.Match(firstSection, @"\\" + document + @"(\d+)");
+			return m.Success ? int.Parse(m.Groups[1].Value) : null;
+		}
+		return Papers.Upright(Twips("pgwsxn", "paperw"), Twips("pghsxn", "paperh"));
+	}
+
+	/// (iteration 82) A .docx's paper (its first section's w:pgSz), as PaperFromRtf.
+	public static int[]? PaperFromDocx(string path) {
+		try {
+			using var zip = System.IO.Compression.ZipFile.OpenRead(path);
+			if (zip.GetEntry("word/document.xml") is not { } entry) return null;
+			System.Xml.Linq.XDocument document;
+			using (var stream = entry.Open()) document = System.Xml.Linq.XDocument.Load(stream);
+			System.Xml.Linq.XNamespace w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+			if (document.Descendants(w + "sectPr").FirstOrDefault()?.Element(w + "pgSz") is not { } size) return null;
+			int? Twips(string name) => int.TryParse((string?)size.Attribute(w + name), out int twips) ? twips : null;
+			return Papers.Upright(Twips("w"), Twips("h"));
+		} catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException) {
+			return null;
+		}
+	}
+
 	/// A .docx's page setup (its first section's: the first paragraph's w:sectPr, else the body's), as PageSetupFromRtf;
 	/// null when it gives no margins or can't be read.
 	public static (int[] Margins, bool Landscape)? PageSetupFromDocx(string path) {

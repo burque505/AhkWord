@@ -59,7 +59,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 - [x] **An extension's own language file** (`<folder>\lang\<code>.json`, read over AhkWord's; `lang\check_lang.ahk` checks it too)
 - [x] **Choosing the language** in AhkWord itself: Review > Language (and the command palette, `Rte.Language`), from the next start
 - [ ] **Clicking on the ruler:** add a tab stop where the ruler is clicked; double-click to open Paragraph or Tabs
-- [ ] **AhkWord's own Page Setup:** paper, orientation and margins in a dialog of AhkWord's, in the interface's language (Windows' Page Setup follows Windows' language); perhaps with the header and footer distances and the section's settings in one place, as Word's
+- [x] **AhkWord's own Page Setup:** margins, orientation and paper, the header's and footer's distances and the different first page in one dialog of AhkWord's, with a picture of the page; the paper saved with the document (RTF, Word); "Make these the default" for new documents (iteration 82)
 
 ## Later, perhaps
 
