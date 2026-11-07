@@ -622,13 +622,20 @@ public static class DocxLineSpacing
 			for (int i = 0; i < starts.Count; i++) {
 				var f = formats[i];
 				var at = doc.Range2(starts[i], starts[i]);
-				var para = at.Para.Duplicate;    // (set on a copy and put on at once: each change to the paragraph itself formats it again)
-				para.SpaceBefore = f.Before / 20f;
-				para.SpaceAfter = f.After / 20f;
-				if (f.Line is int line) {
-					if (f.Rule == "auto") para.SetLineSpacing(Math.Abs(line - 240) <= 1 ? LineSpacing.Single : LineSpacing.Multiple, Math.Abs(line - 240) <= 1 ? 1 : line / 240f);
-					else para.SetLineSpacing(f.Rule == "atLeast" ? LineSpacing.AtLeast : LineSpacing.Exactly, line / 20f);
-				}
+				float before = f.Before / 20f, after = f.After / 20f;
+				(int Rule, float Value)? spacing = f.Line is not int line ? null
+					: f.Rule == "auto" ? (Math.Abs(line - 240) <= 1 ? (LineSpacing.Single, 1f) : (LineSpacing.Multiple, line / 240f))
+					: (f.Rule == "atLeast" ? LineSpacing.AtLeast : LineSpacing.Exactly, line / 20f);
+				// (only the paragraphs whose spacing differs: most are as the converter made them already, and each paragraph
+				// changed is laid out again, seconds in a long document)
+				var current = at.Para;
+				if (Same(current.SpaceBefore, before) && Same(current.SpaceAfter, after)
+					&& (spacing is not { } s || current.LineSpacingRule == s.Rule && (s.Rule == LineSpacing.Single || Same(current.LineSpacing, s.Value))))
+					continue;
+				var para = current.Duplicate;    // (set on a copy and put on at once: each change to the paragraph itself formats it again)
+				para.SpaceBefore = before;
+				para.SpaceAfter = after;
+				if (spacing is { } set) para.SetLineSpacing(set.Rule, set.Value);
 				at.Para = para;
 			}
 		} finally {
@@ -636,6 +643,9 @@ public static class DocxLineSpacing
 		}
 		return true;
 	}
+
+	// (points as RichEdit keeps them, in twips)
+	static bool Same(float a, float b) => Math.Abs(a - b) < 0.026f;
 
 	// Where the editor's paragraphs start, in order as a .docx has them: split at paragraph marks and cell ends, without
 	// the marks that start and end table rows; empty ones at the end are left out while there are more than count.
