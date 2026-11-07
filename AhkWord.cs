@@ -5,6 +5,7 @@
 #load "rte_htmllists2.cs"
 #load "rte_tables2.cs"
 #load "rte_office7.cs"
+#load "rte_docxodus.cs"
 #load "rte_legal.cs"
 #load "rte_pagebreaks.cs"
 #load "rte_headerfooter.cs"
@@ -697,7 +698,7 @@ static class PrettyHtml
 
 class WriterForm : Form
 {
-	public const string AppName = "AhkWord";
+	public const string AppName = "AhkWord Docxodus trial";
 	public const int Iteration = 85;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
@@ -2710,7 +2711,7 @@ class WriterForm : Form
 		new("Documents", "*.html;*.htm;*.md;*.markdown;*.rtf;*.docx;*.doc;*.odt;*.txt"),
 		new("HTML", "*.html;*.htm"), new("Markdown", "*.md;*.markdown"), new("Rich Text Format", "*.rtf"),
 		new("Word", "*.docx;*.doc"),
-		new("Word, built-in converter", "*.docx", OfficeConverters.OpenXml), new("Word, converted by Word", "*.docx;*.doc", OfficeConverters.Word),
+		new("Word, Docxodus (trial)", "*.docx", OfficeConverters.Docxodus), new("Word, built-in converter", "*.docx", OfficeConverters.OpenXml), new("Word, converted by Word", "*.docx;*.doc", OfficeConverters.Word),
 		new("Word, converted by LibreOffice", "*.docx;*.doc", OfficeConverters.LibreOffice), new("Word, converted by pandoc", "*.docx", OfficeConverters.Pandoc),
 		new("OpenDocument text", "*.odt"),
 		new("OpenDocument, converted by LibreOffice", "*.odt", OfficeConverters.LibreOffice), new("OpenDocument, converted by Word", "*.odt", OfficeConverters.Word),
@@ -4141,6 +4142,21 @@ class WriterForm : Form
 	// Ctrl+click on a link opens it: web and mail addresses at once, anything else (a file or a program could be
 	// behind it) after asking.
 	void OpenLinkCommand(string url) {
+		// (Docxodus trial) a link to a place in the document ("#name", Word's bookmarks): the caret goes to its target there
+		if (url.StartsWith('#') && url.Length > 1) {
+			var doc = Editor.TextDocument;
+			string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+			int at = story.IndexOf("[[xref:" + url[1..] + "]]", StringComparison.Ordinal);
+			if (at < 0) at = story.IndexOf("[[toc:" + url[1..] + "]]", StringComparison.Ordinal);
+			if (at < 0) { SetStatus("⚠ " + T("status.noLinkTarget", "This link's place ({0}) is not in the document.", url[1..])); return; }
+			// (past the target's hidden markers: the caret at its first character that shows)
+			while (story.IndexOf("]]", at, StringComparison.Ordinal) is int close and >= 0 && (story.AsSpan(at).StartsWith("[[xref:") || story.AsSpan(at).StartsWith("[[toc:")))
+				at = close + 2;
+			Editor.Select(at, 0);
+			Editor.ScrollToCaret();
+			SetStatus(T("status.wentToLinkTarget", "Went to {0}.", url[1..]));
+			return;
+		}
 		bool web = Regex.IsMatch(url, @"^(https?|mailto):", RegexOptions.IgnoreCase);
 		if (!web && MessageBox.Show(this, T("msg.openLink", "Open this link?\n\n{0}", url), AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 		try {
@@ -6673,16 +6689,17 @@ public class EditorApi
 				}
 				else {
 					SetHtml(content);
-					if (extension == ".docx" && converter == OfficeConverters.OpenXml) Sections.FromDocxMarkers(ed, HeaderFooter.SectionsFromDocx(full));
+					OfficeConverters.HiddenFromMarkers(ed);    // (Docxodus trial: hidden text, which HTML can't carry into the editor)
+					if (extension == ".docx" && converter is OfficeConverters.OpenXml or OfficeConverters.Docxodus) Sections.FromDocxMarkers(ed, HeaderFooter.SectionsFromDocx(full));
 					// (the built-in reader's: the .docx's styles, DocxStyles; its text has its own look already, every run's
 					// font as the file has it, which a style's look mustn't take over)
 					fileStyles = StyleHtml.FromMeta(content);
 				}
 				LegalLists.ConvertTypedLists(ed, 0, ed.TextDocument.Range2(0, 0).StoryLength, requireTab: true,
-					converter == OfficeConverters.OpenXml || kind == "html" ? OfficeConverters.TypedIndents : null);    // numbers a converter left as text
+					converter is OfficeConverters.OpenXml or OfficeConverters.Docxodus || kind == "html" ? OfficeConverters.TypedIndents : null);    // numbers a converter left as text
 				LastConverter = converter;
 				// tables' borders, shading, padding ... from the file itself, where the converter went through HTML
-				if (extension == ".docx" && converter is OfficeConverters.OpenXml or OfficeConverters.Pandoc) RtfTables.TablesFromDocx(ed, full);
+				if (extension == ".docx" && converter is OfficeConverters.OpenXml or OfficeConverters.Pandoc or OfficeConverters.Docxodus) RtfTables.TablesFromDocx(ed, full);
 				// paragraphs spaced as Word spaces them (RTF from Word or LibreOffice: RichEdit can't leave out the space
 				// between paragraphs of the same style, nor give cells their table style's spacing)
 				if (extension == ".docx" && kind == "rtf" && !DocxLineSpacing.IntoEditor(ed, full))
@@ -6725,6 +6742,7 @@ public class EditorApi
 		// (iteration 51) the notes' size the file had (Word's, LibreOffice's): the document's Footnote Text style
 		if (Footnotes.LoadedSize is float loaded && loaded >= 4 && form.Styles.Find(Footnotes.StyleName) == null && Footnotes.Any(Story())) form.SetNoteStyle(loaded);
 		Footnotes.LoadedSize = null;
+		OfficeConverters.RestartsFromMarkers(ed);    // (Docxodus trial: lists right after lists, numbered from their own start)
 		}
 		ed.ClearUndo();
 		ed.Select(0, 0);
@@ -6847,15 +6865,21 @@ public class EditorApi
 		string rtf = ((RichTextBox)hidden).Rtf;
 		((RichTextBox)ed).Rtf = global::LineSpacing.MarkersToRtf(rtf);
 		global::LineSpacing.FromMarkers(ed);    // (any that didn't come through in one piece, split by a format)
+		var lostNumbers = new List<(int Start, int Length)>();
 		if (listed.Count + breaks.Count > 0) EachParagraph(ed, (index, paragraph) => {
 			var para = paragraph.Para;
 			if (breaks.TryGetValue(index, out var kept)) global::LineSpacing.SetBreaks(para, kept);
 			if (!listed.TryGetValue(index, out var list)) return;
+			// (Docxodus trial) a list paragraph whose list RichEdit's RTF lost on the way (after legal items: its \pn group),
+			// which kept its number as text instead ("(A)<tab>"): the text goes, the list comes back below
+			if ((para.ListType & 0xFFFF) == tomConstants.tomListNone && LostListNumber.Match(paragraph.Text ?? "") is { Success: true } typed)
+				lostNumbers.Add((paragraph.Start, typed.Length));    // (taken out after the loop, which reads the story's end once)
 			if (para.ListType != list.Type) para.ListType = list.Type;
 			if (para.ListStart != list.Start) para.ListStart = list.Start;
 			if (para.ListLevelIndex != list.Level) para.ListLevelIndex = list.Level;
 			if (Math.Abs(para.ListTab - list.Tab) > 0.01f) para.ListTab = list.Tab;
 		});
+		foreach (var (start, length) in Enumerable.Reverse(lostNumbers)) ed.TextDocument.Range2(start, start + length).Text = "";
 		if (styled.Count > 0) EachParagraph(ed, (index, paragraph) => { if (styled.TryGetValue(index, out int style)) {
 			// (a built-in style puts its own spacing on the paragraph: the paragraph's stay)
 			var para = paragraph.Para;
@@ -6868,6 +6892,8 @@ public class EditorApi
 			para.SetLineSpacing(rule, line);
 		} });
 	}
+
+	static readonly Regex LostListNumber = new(@"^(?:\(?(?:\d{1,4}|[a-zA-Z]{1,6})(?:\.\d{1,4})*[.)]?|[•▪o·])	");
 
 	static void EachParagraph(RichEditBox editor, Action<int, ITextRange2> each) {
 		var doc = editor.TextDocument;
@@ -8020,7 +8046,7 @@ public class EditorApi
 		if (first.Legal) {
 			if (!LegalLists.IsLegal(para.ListType) || para.ListLevelIndex != first.Level) LegalLists.SetLegal(para, first.Level, first.ListStart);
 		} else if (LegalLists.IsLegal(para.ListType)) {
-			para.ListType = first.ListType;
+			para.ListType = LegalLists.WithoutRestart(first.ListType);
 			para.SetIndents(0, 0, para.RightIndent);
 			var now = ParagraphAt(first.Start);
 			if (now != null && LegalLists.Prefix.Match(now.Text) is { Success: true } m && !first.Text.StartsWith(m.Value))
@@ -9891,7 +9917,7 @@ sealed class EventHub
 // windows by themselves, and start AhkWord when its pinned button is clicked.
 public static class TaskbarIdentity
 {
-	public const string AppId = "AhkWord";
+	public const string AppId = "AhkWord.DocxodusTrial";    // (Docxodus trial: its own taskbar button, not grouped with AhkWord's)
 
 	[DllImport("shell32.dll", CharSet = CharSet.Unicode)]
 	static extern int SetCurrentProcessExplicitAppUserModelID(string appId);

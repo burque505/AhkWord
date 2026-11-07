@@ -4,7 +4,7 @@
 #:package AngleSharp@1.5.0
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
-#:package SkiaSharp@4.152.0
+#:package SkiaSharp@4.154.0
 // Word and OpenDocument conversions for AhkWord (AhkWord.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
@@ -56,8 +56,8 @@ using Codeuctivity.OpenXmlPowerTools.OpenXMLWordprocessingMLToHtmlConverter;
 using W = DocumentFormat.OpenXml.Wordprocessing;
 
 public static class OfficeConverters {
-	public const string Word = "word", LibreOffice = "libreoffice", OpenXml = "openxml", Pandoc = "pandoc";
-	static readonly string[] All = { Word, LibreOffice, OpenXml, Pandoc };
+	public const string Word = "word", LibreOffice = "libreoffice", OpenXml = "openxml", Pandoc = "pandoc", Docxodus = "docxodus";
+	static readonly string[] All = { Word, LibreOffice, OpenXml, Pandoc, Docxodus };
 
 	// ---- what is installed
 
@@ -139,7 +139,7 @@ public static class OfficeConverters {
 	public static (string Kind, string Content, string Converter) Import(string input, string? via = null) {
 		string format = Path.GetExtension(input).ToLowerInvariant().TrimStart('.');
 		// (.odt: LibreOffice first, as for writing: Word's RTF of an .odt leaves its text's font to whichever paragraph set one last)
-		var order = Order(format == "docx" ? new[] { Word, OpenXml, LibreOffice, Pandoc } : format == "odt" ? new[] { LibreOffice, Word, Pandoc } : new[] { Word, LibreOffice, Pandoc }, via);
+		var order = Order(format == "docx" ? new[] { Docxodus, OpenXml, Word, LibreOffice, Pandoc } : format == "odt" ? new[] { LibreOffice, Word, Pandoc } : new[] { Word, LibreOffice, Pandoc }, via);
 		if (format == "doc") order.Remove(Pandoc);    // pandoc can't read the old binary format
 		string temp = TempFolder();
 		var errors = new List<string>();
@@ -153,6 +153,7 @@ public static class OfficeConverters {
 						Word => ("rtf", File.ReadAllText(WordConvert(copy, Path.Combine(temp, "word.rtf"), 6), System.Text.Encoding.Latin1), converter),    // wdFormatRTF
 						LibreOffice => LibreOfficeImport(copy, temp, format),
 						OpenXml => format == "docx" ? ("html", OpenXmlRead(copy), converter) : throw new InvalidOperationException("reads only .docx"),
+						Docxodus => format == "docx" ? ("html", DocxodusRead(copy), converter) : throw new InvalidOperationException("reads only .docx"),
 						_ => ("html", File.ReadAllText(PandocConvert(copy, Path.Combine(temp, "pandoc.html"), format, "html", temp, "--embed-resources", "--standalone")), converter),
 					};
 				}
@@ -654,6 +655,110 @@ public static class OfficeConverters {
 		"bullet" => W.NumberFormatValues.Bullet, _ => W.NumberFormatValues.Decimal
 	};
 
+	// (Docxodus trial) the built-in reader's steps on Docxodus's HTML instead of the Codeuctivity PowerTools' (rte_docxodus.cs)
+	static string DocxodusRead(string input) {
+		TypedIndents = null;
+		LoadSkia();
+		string folder = TempFolder();
+		XElement html;
+		try { html = DocxodusReader.Html(CrossRefs.MarkedDocx(input, folder), folder, Path.GetFileNameWithoutExtension(input), "span { white-space: pre-wrap; }"); }
+		finally { TryDelete(folder); }
+		DocxLineSpacing.IntoHtml(input, html);
+		NoNamesAsAltTexts(html);
+		ListsFromMarkers(html);
+		TabsFromMargins(html);
+		TypedIndents = TypedNumberIndents(html);
+		PlainLinks(html);
+		HighlightsAndHidden(html);
+		return html.ToString(SaveOptions.DisableFormatting);
+	}
+
+	// (Docxodus trial) A link's text without an underline or colour of its own (Word's Hyperlink style, written out by the
+	// converters): the editor shows links its own way, and with an underline of their own it went on underlining the text
+	// after the link, to the end of the paragraph.
+	// (Docxodus trial) Highlights as background-color (the editor's HTML import doesn't read the background shorthand), and
+	// hidden text (display: none, which it doesn't read either) between two markers, made hidden once loaded
+	// (HiddenFromMarkers).
+	public const char HiddenStart = '\uE7A2', HiddenEnd = '\uE7A3';
+	static void HighlightsAndHidden(XElement html) {
+		XNamespace x = html.Name.Namespace;
+		foreach (var e in html.Descendants(x + "span").Where(e => e.Attribute("style") != null).ToList()) {
+			string style = (string)e.Attribute("style")!;
+			string fixedStyle = Regex.Replace(style, @"(^|;)\s*background\s*:\s*([^;]+)", m => m.Groups[2].Value.Trim().Contains(' ') ? m.Value : $"{m.Groups[1].Value}background-color: {m.Groups[2].Value.Trim()}");
+			if (Regex.IsMatch(fixedStyle, @"(^|;)\s*display\s*:\s*none")) {
+				fixedStyle = Regex.Replace(fixedStyle, @"(^|;)\s*display\s*:\s*none\s*", "$1");
+				if (e.Value != "") { e.AddFirst(new XText(HiddenStart.ToString())); e.Add(new XText(HiddenEnd.ToString())); }
+			}
+			if (fixedStyle != style) { if (fixedStyle.Trim().Trim(';') == "") e.Attribute("style")!.Remove(); else e.SetAttributeValue("style", fixedStyle); }
+		}
+	}
+
+	/// (Docxodus trial) Where a list item marked with RestartMark is numbered from its list's start, not on from the list
+	/// before it: RichEdit's "new number" (PFNS_NEWNUMBER), which TOM can't set; the markers taken out. Last of all on
+	/// loading: TOM can't set a list type that has it either (LegalLists.WithoutRestart).
+	public const char RestartMark = '\uE7A4';
+	public static void RestartsFromMarkers(EllipticBit.RichEditorNET.RichEditBox editor) {
+		var doc = editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		var marks = new List<int>();
+		for (int at = story.IndexOf(RestartMark); at >= 0; at = story.IndexOf(RestartMark, at + 1)) marks.Add(at);
+		if (marks.Count == 0) return;
+		var selection = doc.Selection2;
+		int selStart = selection.Start, selEnd = selection.End;
+		foreach (int at in Enumerable.Reverse(marks)) {
+			doc.Range2(at, at + 1).Text = "";
+			var para = doc.Range2(at, at).Para;
+			int type = para.ListType & 0xFFFF;
+			if (type == EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListNone || type == EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListBullet) continue;
+			selection.SetRange(at, at);
+			var pf = new ParaFormat2 { cbSize = Marshal.SizeOf<ParaFormat2>(), rgxTabs = new int[32] };
+			SendParaFormat(editor.Handle, 0x43D, IntPtr.Zero, ref pf);    // EM_GETPARAFORMAT
+			pf.dwMask = 0x2000 | 0x8000;    // PFM_NUMBERINGSTYLE | PFM_NUMBERINGSTART
+			pf.wNumberingStyle = (ushort)(pf.wNumberingStyle | 0x8000);    // PFNS_NEWNUMBER
+			pf.wNumberingStart = (ushort)Math.Max(1, para.ListStart);
+			SendParaFormat(editor.Handle, 0x447, IntPtr.Zero, ref pf);    // EM_SETPARAFORMAT
+		}
+		selection.SetRange(Math.Min(selStart, doc.Range2(0, 0).StoryLength), Math.Min(selEnd, doc.Range2(0, 0).StoryLength));
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	struct ParaFormat2
+	{
+		public int cbSize; public uint dwMask; public ushort wNumbering, wEffects; public int dxStartIndent, dxRightIndent, dxOffset;
+		public ushort wAlignment; public short cTabCount;
+		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public int[] rgxTabs;
+		public int dySpaceBefore, dySpaceAfter, dyLineSpacing; public short sStyle; public byte bLineSpacingRule, bOutlineLevel;
+		public ushort wShadingWeight, wShadingStyle, wNumberingStart, wNumberingStyle, wNumberingTab, wBorderSpace, wBorderWidth, wBorders;
+	}
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendParaFormat(IntPtr hWnd, int msg, IntPtr wParam, ref ParaFormat2 lParam);
+
+	/// (Docxodus trial) The text between HiddenStart and HiddenEnd made hidden, the markers taken out.
+	public static void HiddenFromMarkers(EllipticBit.RichEditorNET.RichEditBox editor) {
+		var doc = editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		if (story.IndexOf(HiddenStart) < 0) return;
+		var spans = new List<(int Start, int End)>();
+		for (int at = story.IndexOf(HiddenStart); at >= 0; at = story.IndexOf(HiddenStart, at + 1)) {
+			int end = story.IndexOf(HiddenEnd, at + 1);
+			if (end < 0) break;
+			spans.Add((at, end));
+		}
+		foreach (var (start, end) in Enumerable.Reverse(spans)) {
+			doc.Range2(end, end + 1).Text = "";
+			doc.Range2(start + 1, end).Font.Hidden = EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomTrue;
+			doc.Range2(start, start + 1).Text = "";
+		}
+	}
+
+	static void PlainLinks(XElement html) {
+		XNamespace x = html.Name.Namespace;
+		foreach (var link in html.Descendants(x + "a").Where(a => a.Attribute("href") != null))
+			foreach (var e in link.DescendantsAndSelf().Where(e => e.Attribute("style") != null)) {
+				string style = Regex.Replace((string)e.Attribute("style")!, @"(?:^|;)\s*(?:text-decoration(?:-line)?|color)\s*:[^;]*", "").Trim().TrimStart(';').Trim();
+				if (style == "") e.Attribute("style")!.Remove(); else e.SetAttributeValue("style", style);
+			}
+	}
+
 	static string OpenXmlRead(string input) {
 		TypedIndents = null;
 		LoadSkia();
@@ -672,6 +777,8 @@ public static class OfficeConverters {
 		ListsFromMarkers(html);
 		TabsFromMargins(html);
 		TypedIndents = TypedNumberIndents(html);
+		PlainLinks(html);
+		HighlightsAndHidden(html);
 		return html.ToString(SaveOptions.DisableFormatting);
 	}
 
@@ -1515,7 +1622,7 @@ public static class OfficeConverters {
 		return named.Distinct().ToList();
 	}
 
-	static string Name(string converter) => converter switch { Word => "Word", LibreOffice => "LibreOffice", OpenXml => "Open XML", _ => "pandoc" };
+	static string Name(string converter) => converter switch { Word => "Word", LibreOffice => "LibreOffice", OpenXml => "Open XML", Docxodus => "Docxodus", _ => "pandoc" };
 	static string Message(Exception ex) => (ex is TargetInvocationException { InnerException: { } inner } ? inner : ex).Message.Trim();
 
 	static string TempFolder() {

@@ -510,7 +510,9 @@ public static class DocxLineSpacing
 
 	/// Each paragraph's format in a .docx, in document order (w:p in the body, its tables included; text boxes left
 	/// out), with contextualSpacing applied.
-	public static List<Format> Paragraphs(string path) {
+	// (html: as converters to HTML write them, which leave out the cells a cell above is merged down into, and so their
+	// paragraphs; RichEdit's tables from RTF keep those cells)
+	public static List<Format> Paragraphs(string path, bool html = false) {
 		using var zip = ZipFile.OpenRead(path);
 		XDocument Load(string name) { using var s = zip.GetEntry(name)!.Open(); return XDocument.Load(s); }
 		var document = Load("word/document.xml");
@@ -532,7 +534,7 @@ public static class DocxLineSpacing
 		}
 		var list = new List<Format>();
 		foreach (var p in document.Root!.Element(W + "body")!.Descendants(W + "p")) {
-			if (p.Ancestors(W + "txbxContent").Any()) continue;
+			if (p.Ancestors(W + "txbxContent").Any() || html && InMergedCell(p)) continue;
 			var pPr = p.Element(W + "pPr");
 			string style = (string?)pPr?.Element(W + "pStyle")?.Attribute(W + "val") ?? defaultStyle ?? "";
 			var table = p.Ancestors(W + "tbl").FirstOrDefault();
@@ -586,7 +588,7 @@ public static class DocxLineSpacing
 		XNamespace x = html.Name.Namespace;
 		var blocks = html.Descendants().Where(e => e.Name.Namespace == x && Regex.IsMatch(e.Name.LocalName, "^(p|h[1-6])$")).ToList();
 		List<Format>? formats = null;
-		try { formats = Paragraphs(path); } catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or NullReferenceException) { }
+		try { formats = Paragraphs(path, html: true); } catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or NullReferenceException) { }
 		bool paired = formats != null && formats.Count == blocks.Count;
 		for (int i = 0; i < blocks.Count; i++) {
 			var block = blocks[i];
@@ -610,6 +612,10 @@ public static class DocxLineSpacing
 	/// indents and tab stops are right in the RTF). Paired up in order: the editor's paragraphs (cells included, the
 	/// marks that end table rows left out) with the .docx's; nothing is changed if they don't pair up. Returns whether
 	/// they did.
+	/// A paragraph in a table cell that the cell above it is merged down into (w:vMerge without "restart").
+	public static bool InMergedCell(XElement p) =>
+		p.Ancestors(W + "tc").FirstOrDefault()?.Element(W + "tcPr")?.Element(W + "vMerge") is { } merge && (string?)merge.Attribute(W + "val") is null or "continue";
+
 	public static bool IntoEditor(RichEditBox editor, string path) {
 		List<Format> formats;
 		try { formats = Paragraphs(path); } catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or NullReferenceException) { return false; }

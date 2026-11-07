@@ -142,7 +142,9 @@ public static class LineNumberFormats
 		try {
 			using var package = WordprocessingDocument.Open(path, false);
 			var body = package.MainDocumentPart?.Document.Body;
-			var element = body?.Descendants<W.SectionProperties>().Select(s => s.GetFirstChild<W.LineNumberType>()).FirstOrDefault(n => n != null);
+			// (Docxodus trial: the first section's, which AhkWord gives the whole document; another section's numbering spread
+			// over every page)
+			var element = body?.Descendants<W.SectionProperties>().FirstOrDefault()?.GetFirstChild<W.LineNumberType>();
 			if (element?.CountBy?.Value is not short countBy || countBy < 1) return null;
 			return new LineNumbering {
 				Mode = element.Restart == null || element.Restart.Value == W.LineNumberRestartValues.NewPage ? LineNumbering.Modes.EachPage : LineNumbering.Modes.Continuous,

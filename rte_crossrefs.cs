@@ -291,9 +291,11 @@ public static class CrossRefs
 			string shown = field[(result + 9)..resultEnd];
 			if (shown.StartsWith(' ')) shown = shown[1..];    // (the space ending "\fldrslt" isn't text)
 			string name = reference.Groups[1].Value;
+			sb.Append(rtf, at, i - at);
+			// (Docxodus trial) a REF field without \r, \n or \w shows the bookmark's text: kept as the text it shows
+			if (!NumberReference(reference.Groups[2].Value)) { sb.Append('{').Append(shown).Append('}'); at = end + 1; continue; }
 			names.Add(name);
 			string how = Regex.IsMatch(reference.Groups[2].Value, @"\\w\b") ? "w" : "r";
-			sb.Append(rtf, at, i - at);
 			sb.Append(@"{\v [[xref=").Append(name).Append('|').Append(how).Append(@"]]}{").Append(shown).Append(@"}{\v [[/xref]]}");
 			at = end + 1;
 		}
@@ -320,6 +322,9 @@ public static class CrossRefs
 
 	/// A .docx with markers (as text) for its REF fields and the bookmarks they refer to, for a reader that drops both:
 	/// the path of a marked copy in folder, or the file itself if it has no REF fields.
+	// (Docxodus trial) A REF field's switches ask for the paragraph number (\r, \n, \w): otherwise it shows the bookmark's text.
+	static bool NumberReference(string switches) => Regex.IsMatch(switches, @"\\[rnw]\b");
+
 	public static string MarkedDocx(string path, string folder) {
 		string copy = Path.Combine(folder, "xrefs-" + Path.GetFileName(path));
 		File.Copy(path, copy, true);
@@ -334,9 +339,14 @@ public static class CrossRefs
 			foreach (var simple in body.Descendants<W.SimpleField>().ToList()) {
 				var m = Regex.Match(simple.Instruction?.Value ?? "", @"^\s*REF\s+(" + Id + @")(.*)$");
 				if (!m.Success) continue;
+				var parent = simple.Parent!;
+				if (!NumberReference(m.Groups[2].Value)) {    // (Docxodus trial: the bookmark's text, as it shows)
+					foreach (var child in simple.ChildElements.ToList()) { child.Remove(); parent.InsertBefore(child, simple); }
+					simple.Remove();
+					continue;
+				}
 				names.Add(m.Groups[1].Value);
 				string how = Regex.IsMatch(m.Groups[2].Value, @"\\w\b") ? "w" : "r";
-				var parent = simple.Parent!;
 				parent.InsertBefore(Marker($"[[xref={m.Groups[1].Value}|{how}]]"), simple);
 				foreach (var child in simple.ChildElements.ToList()) { child.Remove(); parent.InsertBefore(child, simple); }
 				parent.InsertBefore(Marker("[[/xref]]"), simple);
@@ -359,6 +369,12 @@ public static class CrossRefs
 					if (end < 0) break;
 					var m = Regex.Match(instruction.ToString(), @"^\s*REF\s+(" + Id + @")(.*)$");
 					if (!m.Success) { i = end; continue; }
+					if (!NumberReference(m.Groups[2].Value)) {    // (Docxodus trial: the bookmark's text, as it shows: the field's result alone)
+						for (int k = i; k <= (separate < 0 ? end : separate); k++) runs[k].Remove();
+						runs[end].Remove();
+						i = end;
+						continue;
+					}
 					names.Add(m.Groups[1].Value);
 					string how = Regex.IsMatch(m.Groups[2].Value, @"\\w\b") ? "w" : "r";
 					// the begin run becomes the reference's start, the end run its end; the instruction goes

@@ -938,6 +938,14 @@ public static class HeaderFooter
 					if (!footer) (bands.ShowFooter, bands.Footer, bands.FooterLine) = (current.ShowFooter, current.Footer, current.FooterLine);
 					current = bands;
 					own = true;
+				} else if (current.DifferentFirst != TitlePage(section)) {
+					// (Docxodus trial) "different first page" is each section's own in Word (w:titlePg), never taken over from
+					// the section before: a section without headers and footers of its own keeps the earlier ones, but its
+					// first page only gets the first-page ones if it asks for them itself
+					var bands = Sections.CopyBands(current);
+					bands.DifferentFirst = TitlePage(section);
+					current = bands;
+					own = true;
 				}
 				bool continuous = section.GetFirstChild<W.SectionType>()?.Val?.Value == W.SectionMarkValues.Continuous;
 				uint? start = section.GetFirstChild<W.PageNumberType>()?.Start?.Value is int number ? (uint)number : null;
@@ -947,6 +955,9 @@ public static class HeaderFooter
 		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) { result.Clear(); }
 		return result;
 	}
+
+	// (Docxodus trial) w:titlePg on (no w:val, or a true one)
+	static bool TitlePage(W.SectionProperties section) => section.GetFirstChild<W.TitlePage>() is { } titlePage && (titlePage.Val == null || titlePage.Val.Value);
 
 	// a section's header and footer in a .docx (exact: AhkWord's own copy of them, if any)
 	static PageBands? OfSection(MainDocumentPart main, PageBands? exact, W.SectionProperties? section) {

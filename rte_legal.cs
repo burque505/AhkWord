@@ -43,6 +43,10 @@ public static class LegalLists
 	static readonly Regex Typed = new(@"^(\d+(?:\.\d+)*)\.?(?:\t| +)");
 
 	// (a range over paragraphs with different list types has tomUndefined, which is negative)
+	/// (Docxodus trial) A list type TOM can set: without RichEdit's "new number" flag (PFNS_NEWNUMBER, 0x800000 in TOM's
+	/// ListType), which it reads but won't take.
+	public static int WithoutRestart(int listType) => listType & ~0x800000;
+
 	public static bool IsLegal(int listType) => listType > 0 && (listType & NoNumber) != 0 && (listType & 0xFFFF) != tomConstants.tomListNone;
 	public static bool IsLegal(ITextPara para) => IsLegal(para.ListType);
 
@@ -181,14 +185,14 @@ public static class LegalLists
 			}
 			int want = arabicListNext ? tomConstants.tomListNumberAsLCLetter : tomConstants.tomListNumberAsArabic;
 			if ((p.ListType & 0xFFFF) == want) continue;
-			doc.Range2(p.Start, p.Start).Para.ListType = (p.ListType & ~0xFFFF) | want;
+			doc.Range2(p.Start, p.Start).Para.ListType = WithoutRestart((p.ListType & ~0xFFFF) | want);
 			if (next >= 0) recount.Add(next);
 			changed = true;
 		}
 		// (RichEdit counts a list's numbers again only when a paragraph's list format is set: its first item's, as it is)
 		foreach (int start in recount) {
 			var para = doc.Range2(start, start).Para;
-			para.ListType = para.ListType;
+			para.ListType = WithoutRestart(para.ListType);
 		}
 		return changed;
 	}

@@ -471,7 +471,29 @@ public static class RtfTables
 				if (cells[r][c] is not string content) continue;
 				loadCell(scratch, content);
 				if (header && r == 0) scratch.TextDocument.Range2(0, scratch.TextLength).Font.Bold = tomConstants.tomTrue;
+				// (Docxodus trial) the last paragraph's format: SetCellRtf leaves out its paragraph mark, which carries it in RTF,
+				// so it took the cell's own (left aligned, no list)
+				var sd = scratch.TextDocument;
+				int storyEnd = sd.Range2(0, 0).StoryLength;
+				var last = sd.Range2(Math.Max(0, storyEnd - 1), Math.Max(0, storyEnd - 1)).Para;
+				var format = (last.Alignment, last.FirstLineIndent, last.LeftIndent, last.RightIndent, last.SpaceBefore, last.SpaceAfter, last.LineSpacingRule, last.LineSpacing,
+					last.ListType, last.ListStart, last.ListLevelIndex, last.ListTab);
 				SetCellRtf(editor, tableStart, r, c, ((RichTextBox)scratch).Rtf ?? "");
+				var cell = Find(editor.TextDocument).First(t => t.Start == tableStart).Rows[r].Cells[c];
+				int at = cell.End;    // (its U+0007, the last paragraph's mark)
+				var para = editor.TextDocument.Range2(at, at).Para;
+				if (para.Alignment != format.Alignment) para.Alignment = format.Alignment;
+				if (Math.Abs(para.FirstLineIndent - format.FirstLineIndent) > 0.01f || Math.Abs(para.LeftIndent - format.LeftIndent) > 0.01f || Math.Abs(para.RightIndent - format.RightIndent) > 0.01f)
+					para.SetIndents(format.FirstLineIndent, format.LeftIndent, format.RightIndent);
+				if (Math.Abs(para.SpaceBefore - format.SpaceBefore) > 0.01f) para.SpaceBefore = format.SpaceBefore;
+				if (Math.Abs(para.SpaceAfter - format.SpaceAfter) > 0.01f) para.SpaceAfter = format.SpaceAfter;
+				if (para.LineSpacingRule != format.LineSpacingRule || Math.Abs(para.LineSpacing - format.LineSpacing) > 0.01f) para.SetLineSpacing(format.LineSpacingRule, format.LineSpacing);
+				if ((format.ListType & 0xFFFF) != tomConstants.tomListNone && para.ListType != format.ListType) {
+					para.ListType = format.ListType;
+					para.ListStart = format.ListStart;
+					para.ListLevelIndex = format.ListLevelIndex;
+					para.ListTab = format.ListTab;
+				}
 			}
 	}
 
