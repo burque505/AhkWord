@@ -20,15 +20,15 @@ Una plantilla es un documento corriente con espacios en blanco.
     |---|---|
     | `{{Demandante}}` | un cuadro con la etiqueta "Demandante" (el nombre es la etiqueta) |
     | `{{Your role\|Demandante}}` | el cuadro, con "Demandante" si se deja vacío |
-    | `{{Your address}}` | un cuadro de varias líneas (cualquier nombre que contenga "address"); cada línea pasa a ser un párrafo |
-    | `{{Hearing date}}`, `{{Date}}` | el cuadro con un calendario al lado (cualquier nombre que contenga "date"): elija un día, o escriba la fecha como debe leerse ("el 3 de junio o hacia esa fecha") |
+    | `{{Your address}}` | un cuadro de varias líneas (cualquier nombre que contenga "address", "dirección" o "domicilio"); cada línea pasa a ser un párrafo |
+    | `{{Hearing date}}`, `{{Date}}` | el cuadro con un calendario al lado (cualquier nombre que contenga la palabra "date" o "fecha"): elija un día, o escriba la fecha como debe leerse ("el 3 de junio o hacia esa fecha") |
 
     - El mismo nombre usado varias veces se pide una sola vez.
-    - Los campos cuyos nombres empiezan por "Your" se recuerdan: su nombre, dirección, teléfono y correo electrónico se rellenan solos la próxima vez (*Olvidar los valores recordados*, en el cuadro de diálogo, los borra). Los demás (las partes, el caso) se piden de nuevo cada vez.
+    - Los campos cuyos nombres empiezan por "Your", "Su" o "Mi" (`{{Su nombre}}`, `{{Mi dirección}}`) se recuerdan: su nombre, dirección, teléfono y correo electrónico se rellenan solos la próxima vez (*Olvidar los valores recordados*, en el cuadro de diálogo, los borra). Los demás (las partes, el caso) se piden de nuevo cada vez.
     - El texto rellenado toma el formato del primer carácter del campo: dé a todo el `{{...}}` el aspecto que debe tener el texto.
     - Use corchetes para el texto que se escribirá a mano, como `[El primer punto.]`.
 
-    Las palabras "Your", "address" y "date" son las que AhkWord reconoce en los nombres de los campos, también con la interfaz en español.
+    AhkWord reconoce en los nombres de los campos tanto las palabras inglesas ("Your", "address", "date") como las españolas ("Su", "Mi", "dirección", "domicilio", "fecha"), con la interfaz en cualquier idioma.
 
 3. **Guárdela como Texto RTF en su carpeta de plantillas** (`%APPDATA%\AhkWord\Templates`; *Su carpeta de plantillas*, en la página de inicio, la abre), con el nombre que debe tener la plantilla. Una pieza para insertar en otros documentos, como un encabezamiento o un bloque de firma, va en cambio en la carpeta `Parts` que hay dentro.
 4. **Úsela** con Archivo > Nuevo desde plantilla, o con Insertar > Insertar desde plantilla para una parte. Para cambiarla más tarde, abra el propio archivo con Archivo > Abrir, edítelo y guárdelo.

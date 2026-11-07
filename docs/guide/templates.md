@@ -24,7 +24,7 @@ A template is an ordinary document with blanks.
     | `{{Hearing date}}`, `{{Date}}` | the box with a calendar beside it (any name with "date" in it): pick a day, or type the date as it should read ("on or about June 3") |
 
     - The same name used several times is asked for once.
-    - Fields whose names begin with "Your" are remembered: your name, address, phone and e-mail fill themselves in next time (the dialog's *Forget remembered values* clears them). Others (the parties, the case) are asked for fresh each time.
+    - Fields whose names begin with "Your" are remembered: your name, address, phone and e-mail fill themselves in next time (the dialog's *Forget remembered values* clears them). Others (the parties, the case) are asked for fresh each time. Spanish field names work the same way: "Su" or "Mi" first (`{{Su nombre}}`), "dirección" or "domicilio", "fecha".
     - The filled-in text takes the formatting of the field's first character: format the whole `{{...}}` as the text should look.
     - Use square brackets for text to write by hand, such as `[The first point.]`.
 

@@ -32,6 +32,13 @@ sealed record AppTheme(string Name, bool Dark, Color Background, Color Highlight
 		Hue("Bronze", 0x6B4A1A, 0xA07328, 0xC8A262),
 	};
 
+	/// The theme's name as the language has it (View > Theme); scripts and settings.json use Name.
+	public string Label => Name switch {
+		"Light" => T("theme.light", "Light"), "Dark" => T("theme.dark", "Dark"), "Teal" => T("theme.teal", "Teal"), "Navy" => T("theme.navy", "Navy"),
+		"Forest" => T("theme.forest", "Forest"), "Plum" => T("theme.plum", "Plum"), "Burgundy" => T("theme.burgundy", "Burgundy"), "Bronze" => T("theme.bronze", "Bronze"),
+		_ => Name
+	};
+
 	public static AppTheme? Find(string? name) {
 		if (string.Equals(name, "Color", StringComparison.OrdinalIgnoreCase)) name = "Teal";    // (its first name)
 		return All.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));

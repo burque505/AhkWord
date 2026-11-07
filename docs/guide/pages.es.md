@@ -53,7 +53,7 @@ Las hojas siguen a la escritura con un segundo de retraso: se calculan de nuevo 
 - **Vista > Zoom > Varias páginas** muestra las páginas impresas una al lado de otra. Son de solo lectura: haga doble clic en una página para editarla allí.
 - **Archivo > Imprimir > Vista previa de impresión** muestra las páginas como se imprimirán, ajustadas a la pantalla, con botones de página y zoom.
 - **Archivo > Imprimir** imprime; **Disposición > Exportar como PDF** crea un PDF con *Microsoft Print to PDF*. Como el de Word, el PDF tiene un marcador para cada título, bajo el del nivel superior, y cada uno abre su página en el título; se abre con sus marcadores a la vista, y las entradas de una tabla de contenido son vínculos a las páginas de sus títulos. (Scripts: `ExportPdf(path)`, o `ExportPdf(path, 0)` solo para las páginas.)
-- Mientras se crea un PDF o se imprime un documento, la barra de estado muestra la página en que va (*Exporting as PDF: page 12 of 100*, por ahora en inglés), y **Esc** lo detiene; una exportación detenida no deja ningún archivo. Un documento largo tarda un rato, unos 0,4 segundos por página, la mayor parte trabajo del propio Microsoft Print to PDF.
+- Mientras se crea un PDF o se imprime un documento, la barra de estado muestra la página en que va (*Exportando como PDF: página 12 de 100*), y **Esc** lo detiene; una exportación detenida no deja ningún archivo. Un documento largo tarda un rato, unos 0,4 segundos por página, la mayor parte trabajo del propio Microsoft Print to PDF.
 
 ### Exportar como PDF, o imprimir en una impresora PDF { #export-as-pdf-or-print-to-a-pdf-printer }
 

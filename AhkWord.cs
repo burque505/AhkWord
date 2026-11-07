@@ -1494,7 +1494,7 @@ class WriterForm : Form
 		items.Clear();
 		foreach (var theme in AppTheme.All)
 			using (var swatch = theme.Swatch(LogicalToDeviceUnits(16)))
-				items.Add(new GalleryItemPropertySet { Label = theme.Name, CategoryID = Constants.UI_Collection_InvalidIndex, ItemImage = ribbon.ConvertToUIImage(swatch) });
+				items.Add(new GalleryItemPropertySet { Label = theme.Label, CategoryID = Constants.UI_Collection_InvalidIndex, ItemImage = ribbon.ConvertToUIImage(swatch) });
 		ShowThemeChosen();
 	}
 
@@ -2429,7 +2429,11 @@ class WriterForm : Form
 		if (Styles.Set == "") return T("ui.stylesDocument", "Styles: The document's");    // (its own, from the file: Apply My Styles gives it yours)
 		var set = StyleSets.Get(Styles.Set);
 		bool changed = set.Styles.Any(s => Styles.Find(s.Name) is not { } mine || System.Text.Json.JsonSerializer.Serialize(mine) != System.Text.Json.JsonSerializer.Serialize(s));
-		return changed ? T("ui.stylesSetChanged", "Styles: {0} (changed)", set.Set) : T("ui.stylesSet", "Styles: {0}", set.Set);
+		// (the set's name in the language: "Clásico" in Spanish)
+		string name = set.Set switch {
+			"Classic" => T("styleSet.classic", "Classic"), "Plain" => T("styleSet.plain", "Plain"), "Modern" => T("styleSet.modern", "Modern"), var other => other
+		};
+		return changed ? T("ui.stylesSetChanged", "Styles: {0} (changed)", name) : T("ui.stylesSet", "Styles: {0}", name);
 	}
 
 	// (only when the styles may have changed: StylesChanged, a document loaded, a set chosen)
@@ -3438,8 +3442,8 @@ class WriterForm : Form
 
 	/// The header and footer new documents get (File > Header and Footer can make a document's the default).
 	internal PageBands DefaultBands() => new() {
-		ShowHeader = Settings.ShowHeader, Header = Settings.Parts(Settings.Header), ShowFooter = Settings.ShowFooter, Footer = Settings.Parts(Settings.Footer),
-		DifferentFirst = Settings.DifferentFirst, FirstHeader = Settings.Parts(Settings.FirstHeader), FirstFooter = Settings.Parts(Settings.FirstFooter),
+		ShowHeader = Settings.ShowHeader, Header = Settings.Parts(Settings.Header), ShowFooter = Settings.ShowFooter, Footer = Settings.Shown(Settings.Parts(Settings.Footer)),
+		DifferentFirst = Settings.DifferentFirst, FirstHeader = Settings.Parts(Settings.FirstHeader), FirstFooter = Settings.Shown(Settings.Parts(Settings.FirstFooter)),
 		HeaderFont = Settings.HeaderFont, FooterFont = Settings.FooterFont, HeaderDistance = Settings.HeaderDistance, FooterDistance = Settings.FooterDistance,
 		HeaderLine = Settings.HeaderLine, FooterLine = Settings.FooterLine,
 		ShowFirstHeader = Settings.DifferentFirst ? Settings.ShowFirstHeader : null, ShowFirstFooter = Settings.DifferentFirst ? Settings.ShowFirstFooter : null,
@@ -3448,8 +3452,8 @@ class WriterForm : Form
 	};
 
 	internal void MakeDefault(PageBands bands) {
-		(Settings.ShowHeader, Settings.Header, Settings.ShowFooter, Settings.Footer) = (bands.ShowHeader, Settings.Parts(bands.Header), bands.ShowFooter, Settings.Parts(bands.Footer));
-		(Settings.DifferentFirst, Settings.FirstHeader, Settings.FirstFooter) = (bands.DifferentFirst, Settings.Parts(bands.FirstHeader), Settings.Parts(bands.FirstFooter));
+		(Settings.ShowHeader, Settings.Header, Settings.ShowFooter, Settings.Footer) = (bands.ShowHeader, Settings.Parts(bands.Header), bands.ShowFooter, Settings.Neutral(Settings.Parts(bands.Footer)));
+		(Settings.DifferentFirst, Settings.FirstHeader, Settings.FirstFooter) = (bands.DifferentFirst, Settings.Parts(bands.FirstHeader), Settings.Neutral(Settings.Parts(bands.FirstFooter)));
 		(Settings.HeaderFont, Settings.FooterFont, Settings.HeaderDistance, Settings.FooterDistance) = (bands.HeaderFont, bands.FooterFont, bands.HeaderDistance, bands.FooterDistance);
 		(Settings.HeaderLine, Settings.FooterLine) = (bands.HeaderLine, bands.FooterLine);
 		(Settings.ShowFirstHeader, Settings.ShowFirstFooter, Settings.FirstHeaderFont, Settings.FirstFooterFont, Settings.FirstHeaderLine, Settings.FirstFooterLine)
@@ -4106,7 +4110,7 @@ class WriterForm : Form
 		UpdateReferences();
 		using var printer = CreatePrinter(dialog: true);
 		// (iteration 58) page by page in the status bar; Esc stops it
-		printer.Progress = (page, pages) => ShowProgress(page < pages ? $"Printing: page {page} of {pages}. Esc stops it." : "Printing: handing the pages to the printer…");
+		printer.Progress = (page, pages) => ShowProgress(page < pages ? T("status.printingPage", "Printing: page {0} of {1}. Esc stops it.", page, pages) : T("status.printingHanding", "Printing: handing the pages to the printer…"));
 		printer.CancelRequested = PrintStop;
 		using var dlg = new PrintDialog { Document = printer.Document, UseEXDialog = true };
 		if (dlg.ShowDialog(owner) != DialogResult.OK) return;
@@ -8610,8 +8614,8 @@ public class EditorApi
 			// (iteration 58) page by page in the status bar; Esc stops it
 			form.EscPressed();    // (an Esc from before: not this one's)
 			// (after the last page, the printer puts the file together, which takes a while for a long document: said)
-			printer.Progress = (page, pages) => form.ShowProgress(page < pages ? $"Exporting as PDF: page {page} of {pages}. Esc stops it."
-				: $"Exporting as PDF: Windows is finishing the file ({pages} page{(pages == 1 ? "" : "s")})…");
+			printer.Progress = (page, pages) => form.ShowProgress(page < pages ? T("status.pdfPage", "Exporting as PDF: page {0} of {1}. Esc stops it.", page, pages)
+				: TN("status.pdfFinishing", "Exporting as PDF: Windows is finishing the file ({0} page)…", "Exporting as PDF: Windows is finishing the file ({0} pages)…", pages));
 			printer.CancelRequested = form.PrintStop;
 			document.Print();
 			if (printer.Cancelled) {
@@ -8623,7 +8627,7 @@ public class EditorApi
 					} else if (wait.ElapsedMilliseconds > 2000) break;
 					Thread.Sleep(100);
 				}
-				throw new OperationCanceledException("The PDF export was stopped (Esc): no file was made.");
+				throw new OperationCanceledException(T("status.pdfStopped", "The PDF export was stopped (Esc): no file was made."));
 			}
 		}
 		// The printer writes the file in the background; wait until it is complete.
@@ -8638,9 +8642,9 @@ public class EditorApi
 			} catch (IOException) { }
 			if (!done) Thread.Sleep(100);
 		}
-		if (!done) throw new TimeoutException("The PDF printer did not finish the file within 20 s.");
+		if (!done) throw new TimeoutException(T("status.pdfTimeout", "The PDF printer did not finish the file within 20 s."));
 		if (places.Bookmarks.Count + places.Links.Count > 0) {
-			form.ShowProgress("Exporting as PDF: adding the bookmarks and links…");
+			form.ShowProgress(T("status.pdfMarks", "Exporting as PDF: adding the bookmarks and links…"));
 			try { PdfMarks.Add(full, places.Bookmarks, places.Links); }
 			catch (Exception ex) { form.SetStatus("⚠ " + T("status.pdfNoBookmarks", "The PDF was made, but its bookmarks couldn't be put in: {0}", ex.Message)); }
 		}
@@ -10038,7 +10042,14 @@ public sealed class Settings
 	public bool? FirstHeaderLine { get; set; }
 	public bool? FirstFooterLine { get; set; }
 	public static string[] DefaultHeader => new[] { "{title}", "", "{date}" };
-	public static string[] DefaultFooter => new[] { "", "Page {page} of {pages}", "" };
+	public static string[] DefaultFooter => new[] { "", PageOf, "" };
+	const string PageOf = "Page {page} of {pages}";
+
+	// The default footer's "Page {page} of {pages}" in the language for new documents ("Página {page} de {pages}"),
+	// kept in English in settings.json (made default again: back to English), so that it follows a change of language.
+	static string PageOfShown => T("band.pageOf", "Page {page} of {pages}");    // (PageOf: a literal for check_lang)
+	public static string[] Shown(string[] parts) => parts.Select(p => p == PageOf ? PageOfShown : p).ToArray();
+	public static string[] Neutral(string[] parts) => parts.Select(p => p == PageOfShown ? PageOf : p).ToArray();
 
 	// Always three parts, whatever the file contained.
 	public static string[] Parts(string[]? parts) => Enumerable.Range(0, 3).Select(i => parts != null && i < parts.Length ? parts[i] ?? "" : "").ToArray();

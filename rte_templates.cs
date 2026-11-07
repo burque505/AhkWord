@@ -44,15 +44,22 @@ public static class Templates
 	// {{Name}} or {{Name|default}}
 	static readonly Regex Field = new(@"\{\{\s*([^{}|]+?)\s*(?:\|\s*([^{}]*?)\s*)?\}\}");
 
-	// "date" (or "dates") as a word of a field's name: Date, Hearing date, execution_date, Date of service; not Candidate
-	static readonly Regex DateWord = new(@"(?<![\p{L}\p{N}])dates?(?![\p{L}\p{N}])", RegexOptions.IgnoreCase);
+	// "date" (or "dates") as a word of a field's name: Date, Hearing date, execution_date, Date of service; not Candidate.
+	// Also Spanish "fecha" (fechas): Fecha de la audiencia.
+	static readonly Regex DateWord = new(@"(?<![\p{L}\p{N}])(dates?|fechas?)(?![\p{L}\p{N}])", RegexOptions.IgnoreCase);
 
 	/// Whether a field is a date (its name has the word "date" in it): the dialog gives it a calendar, and its value isn't
 	/// remembered.
 	public static bool IsDate(string name) => DateWord.IsMatch(name.Replace('_', ' '));
 
-	// "Your" as a field name's first word: Your name, Your address, Your phone ...
-	static readonly Regex YourWord = new(@"^\s*your(?![\p{L}\p{N}])", RegexOptions.IgnoreCase);
+	// "Your" as a field name's first word: Your name, Your address, Your phone ... Also Spanish "Su" and "Mi": Su nombre,
+	// Mi dirección.
+	static readonly Regex YourWord = new(@"^\s*(your|su|mi)(?![\p{L}\p{N}])", RegexOptions.IgnoreCase);
+
+	// A field about an address: "address" in its name (Your address, Mailing address), or Spanish "dirección",
+	// "direccion", "domicilio": the dialog gives it a box of several lines.
+	static readonly Regex AddressWord = new(@"address|direcci[oó]n|domicilio", RegexOptions.IgnoreCase);
+	public static bool IsAddress(string name) => AddressWord.IsMatch(name);
 
 	/// Whether a field's value is remembered for the next time: fields about the user, named "Your ..." (Your name, Your
 	/// address ...), which rarely change. Not the others (a paper's parties, its case number, a letter's recipient), so
@@ -130,7 +137,7 @@ sealed class TemplateFieldsDialog : Form
 		table.SetColumnSpan(intro, 2);
 		int row = 1;
 		foreach (var (name, fallback) in fields) {
-			bool lines = name.Contains("address", StringComparison.OrdinalIgnoreCase), date = Templates.IsDate(name);
+			bool lines = Templates.IsAddress(name), date = Templates.IsDate(name);
 			var label = new Label { Text = name + ":", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Top, Margin = new Padding(0, 6, 8, 0) };
 			var box = new TextBox { Width = 340, Multiline = lines, AcceptsReturn = lines, Height = lines ? 64 : 0, ScrollBars = lines ? ScrollBars.Vertical : ScrollBars.None, AccessibleName = name };
 			string start = Templates.IsRemembered(name) && remembered.TryGetValue(name, out var value) && value != "" ? value : fallback;
