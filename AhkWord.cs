@@ -698,7 +698,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 85;    // (the About box; make_version.ps1)
+	public const int Iteration = 86;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -860,7 +860,7 @@ class WriterForm : Form
 		};
 		Editor.TextChanged += (s, e) => overhangStale = true;
 		Editor.VScroll += (s, e) => overhangStale = true;
-		Editor.HandleCreated += (s, e) => BeginInvoke(() => ApplyPrintLayout());    // (wider numbers: the text stays where it was, as far as it can)
+		Editor.HandleCreated += (s, e) => { if (!Editor.Renewing) BeginInvoke(() => ApplyPrintLayout()); };    // (wider numbers: the text stays where it was, as far as it can; FreshEditor applies it itself)
 		headerStrip.Click += (s, e) => Run(HeaderFooterCommand);
 		footerStrip.Click += (s, e) => Run(HeaderFooterCommand);
 		Editor.TextChanged += (s, e) => {
@@ -995,7 +995,7 @@ class WriterForm : Form
 
 		// Drag and drop: on the text, our drop target sits in front of RichEdit's (which would embed a dropped file as an
 		// icon); elsewhere in the window, the form handles the drop.
-		Editor.HandleCreated += (s, e) => Editor.BeginInvoke(RegisterDropTarget);
+		Editor.HandleCreated += (s, e) => { if (!Editor.Renewing) Editor.BeginInvoke(RegisterDropTarget); };
 		AllowDrop = true;
 		DragEnter += (s, e) => e.Effect = e.Data?.GetData(DataFormats.FileDrop) is string[] files && CanDrop(files) ? DragDropEffects.Copy : DragDropEffects.None;
 		DragDrop += (s, e) => { if (e.Data?.GetData(DataFormats.FileDrop) is string[] files) DropFiles(files, null); };
@@ -5466,6 +5466,19 @@ class WriterForm : Form
 		Restart(wordCountTimer);
 	}
 
+	/// Before New or Open puts its document in: the editor emptied into a new RichEdit window (WriterEditBox.Renew: the
+	/// ranges UI Automation clients left in the old one slowed every edit), what was kept of the old one let go of first.
+	internal void FreshEditor() {
+		if (!Editor.IsHandleCreated || StartingUp) return;
+		pageGaps.Forget();    // (their ranges: the old window's; the document goes anyway)
+		pageRanges.Clear();
+		bandStarts = null;
+		Editor.PageStarts = null;
+		Editor.Renew();
+		RegisterDropTarget();
+		ApplyPrintLayout();
+	}
+
 	/// After New or Open: the source the document came from (a .md or .html file's text), if any.
 	internal void DocumentLoaded(SourceKind kind, string? text) {
 		ClearRecovery();    // (the document before it went, as the user wanted)
@@ -5522,7 +5535,9 @@ class WriterForm : Form
 			try { if (Toc.UpdatePages(doc, pageOf) > 0) { bandPagesStale = true; measuredPages = null; } }    // (the numbers' new widths may move the pages)
 			finally { doc.Undo(-9999994); Editor.Modified = modified; }
 		}
-		if (Styles.Styles.Count != styles) BeginInvoke(StylesChanged);
+		// (the TOC's styles a file without them was given: part of the loading too, so the document isn't changed by them;
+		// a .md file asked to be saved, unchanged, before 2026-11-08)
+		if (Styles.Styles.Count != styles) BeginInvoke(() => { bool before = Editor.Modified; StylesChanged(); Editor.Modified = before; });
 	}
 
 	/// The text to save a .md / .html file with, if the document came from such source text (the file's own, or typed in
@@ -6015,6 +6030,7 @@ public class EditorApi
 		form.Styles = form.DefaultStyles();
 		form.Levels = form.DefaultLevels();
 		form.UseNormalFont();
+		FreshEditor();
 		ed.Html = "";
 		(ed as WriterEditBox)?.AdvancedLayout(false);
 		StyleEngine.Apply(ed.TextDocument, form.Styles, form.Styles.Normal, 0, 0);
@@ -6599,6 +6615,7 @@ public class EditorApi
 		// (iteration 68: not painted until its sheets are in, so it shows once, where it stays)
 		using (form.HoldOpening(Path.GetFileName(full))) {
 			Load(full, via);
+			ReleaseTom();
 			form.SheetsNow();
 			form.OutlineNow();
 		}
@@ -6628,11 +6645,12 @@ public class EditorApi
 				string markdown = sourceText = File.ReadAllText(full);
 				bands = HeaderFooter.FromMarkdown(markdown);
 				numbering = LineNumberFormats.FromMarkdown(markdown);
+				FreshEditor();
 				LoadMarkdown(markdown, Path.GetDirectoryName(full));
 				takeLook = true;    // (Markdown has no look of its own: its styles')
 				break;
 			}
-			case ".txt": ed.Text = File.ReadAllText(full).Replace("\r\n", "\n"); takeLook = true; break;
+			case ".txt": { string text = File.ReadAllText(full).Replace("\r\n", "\n"); FreshEditor(); ed.Text = text; takeLook = true; break; }
 			case ".rtf": {
 				string rtf = File.ReadAllText(full, Encoding.Latin1);
 				bands = HeaderFooter.FromRtf(rtf);
@@ -6640,6 +6658,7 @@ public class EditorApi
 				pageSetup = PageSetupOf(rtf);
 				fileColumns = Sections.FirstColumnsFromRtf(rtf);
 				rtf = Sections.ImportRtf(rtf);    // (iteration 63: Word's sections as AhkWord's section breaks)
+				FreshEditor();
 				Rtf = rtf;
 				fileStyles = StylesFromRtf(rtf);
 				LegalLists.AdoptTypedNumbers(ed);
@@ -6653,6 +6672,7 @@ public class EditorApi
 				// (iteration 63) the file's page setup, and its sections
 				pageSetup = kind == "rtf" ? PageSetupOf(content) : extension == ".docx" ? PageSetupOfDocx(full) : (null, null, null);
 				fileColumns = kind == "rtf" ? Sections.FirstColumnsFromRtf(content) : extension == ".docx" ? HeaderFooter.FirstColumnsFromDocx(full) : null;
+				FreshEditor();
 				if (kind == "rtf") {
 					content = Sections.ImportRtf(content);
 					Rtf = content;
@@ -6702,6 +6722,7 @@ public class EditorApi
 				if (extension is ".html" or ".htm") sourceText = html;
 				bands = HeaderFooter.FromHtml(html);
 				numbering = LineNumberFormats.FromHtml(html);
+				FreshEditor();
 				SetHtml(html);
 				if (StyleHtml.LevelsIn(html) is { Count: 9 } levels) {    // (AhkWord's HTML: where its lists put their numbers and text)
 					form.Levels = levels;
@@ -6712,10 +6733,12 @@ public class EditorApi
 				break;
 			}
 		}
+		ReleaseTom();    // (the document is in: what reading it made)
 		form.Bands = bands ?? (canHaveBands ? new PageBands() : form.DefaultBands());
 		form.SetLineNumbering(numbering ?? new LineNumbering(), changesDocument: false);
 		form.SetDocumentPageSetup(pageSetup.Margins, pageSetup.Landscape, fileColumns, pageSetup.Paper);
 		form.StylesAfterLoad(fileStyles, takeLook, styledLook);
+		ReleaseTom();    // (a range and a paragraph format, and more, for every paragraph)
 		PageBreaks.Normalize(ed);    // (form feeds in plain text, for one)
 		MarksFollowText();
 		if (LegalLists.AnyLegal(ed.TextDocument)) LegalLists.Renumber(ed);    // (legal items' indents fitted to their numbers' size)
@@ -6741,18 +6764,44 @@ public class EditorApi
 	// update the window (the word count, the outline, the line numbers ...) after each of the many changes a file's
 	// formats are put in with; one notification for the whole once it is loaded.
 	IDisposable Quietly() {
-		var doc = ed.TextDocument;
-		doc.Undo(-9999995);    // tomSuspend
+		quiet = true;
+		ed.TextDocument.Undo(-9999995);    // tomSuspend
 		IntPtr mask = SendQuiet(ed.Handle, EM_SETEVENTMASK, IntPtr.Zero, IntPtr.Zero);
 		return new Restore(() => {
+			quiet = false;
 			SendQuiet(ed.Handle, EM_SETEVENTMASK, IntPtr.Zero, mask);
-			doc.Undo(-9999994);    // tomResume
+			ed.TextDocument.Undo(-9999994);    // tomResume (the editor's RichEdit now: FreshEditor may have made a new one)
 			typeof(Control).GetMethod("OnTextChanged", BindingFlags.NonPublic | BindingFlags.Instance)?.Invoke(ed, new object[] { EventArgs.Empty });
 		});
 	}
 
 	sealed class Restore(Action restore) : IDisposable { public void Dispose() => restore(); }
+
+	// (2026-11-08) The TOM objects (ranges, fonts, paragraph formats) that opening a document made, let go of now. .NET
+	// releases them only when it collects, and until then each range is one RichEdit moves on every change to the text:
+	// a long document's loading made tens of thousands, and the steps after it slowed (the first .md open of the 105-page
+	// dissertation 8-9 s, against 2.6 s after); when a collection then came, releasing them all at once took seconds more
+	// (sampled: CTxtRange::~CTxtRange, CTxtRange::OnPostReplaceRange). Let go of at a few points while they are few,
+	// they cost 10-100 ms (a .NET collection of a small heap).
+	static void ReleaseTom() {
+		GC.Collect();
+		GC.WaitForPendingFinalizers();
+		Marshal.CleanupUnusedObjectsInCurrentContext();    // (the editor's thread's, released here)
+	}
 	const int EM_SETEVENTMASK = 0x0445;
+	bool quiet;
+
+	// (2026-11-08) The window's editor emptied into a new RichEdit (WriterForm.FreshEditor), just before Load or New puts
+	// the document in: after the file has been read and converted, so a file that can't be leaves the document as it was.
+	// Inside Quietly the new one is quiet too.
+	void FreshEditor() {
+		if (ed != form.Editor) return;
+		form.FreshEditor();
+		(ed as WriterEditBox)?.AdvancedLayout(false);    // (the document's RTF turns it on if it needs it)
+		if (!quiet) return;
+		ed.TextDocument.Undo(-9999995);    // tomSuspend
+		SendQuiet(ed.Handle, EM_SETEVENTMASK, IntPtr.Zero, IntPtr.Zero);
+	}
 	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendQuiet(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
 	/// Saves to the current file and returns its path.
@@ -6845,7 +6894,7 @@ public class EditorApi
 			if ((para.ListType & 0xFFFF) != tomConstants.tomListNone) listed[index] = (para.ListType, para.ListStart, para.ListLevelIndex, para.ListTab);
 		});
 		string rtf = ((RichTextBox)hidden).Rtf;
-		((RichTextBox)ed).Rtf = global::LineSpacing.MarkersToRtf(rtf);
+		StreamRtf(global::LineSpacing.MarkersToRtf(rtf));
 		global::LineSpacing.FromMarkers(ed);    // (any that didn't come through in one piece, split by a format)
 		if (listed.Count + breaks.Count > 0) EachParagraph(ed, (index, paragraph) => {
 			var para = paragraph.Para;
@@ -6867,6 +6916,18 @@ public class EditorApi
 			(para.SpaceBefore, para.SpaceAfter, para.KeepWithNext, para.KeepTogether, para.WidowControl) = (before, after, next, together, widow);
 			para.SetLineSpacing(rule, line);
 		} });
+	}
+
+	// RichEdit's own RTF into the window's editor, as the whole document. (2026-11-08) A one-paragraph document goes in
+	// first: once the editor's display had been woken up (a document opened through Word, the second time in a session),
+	// it followed the RTF reader's every insertion, laying out its lines again each time (msftedit's
+	// CDisplayML::OnPreReplaceRange; for the printer, in Print Layout): 1.4-1.6 s of a 105-page document's RTF against
+	// 0.1 s. Streamed in just before, the small document leaves the display as a fresh editor's, which lays the lines
+	// out once, afterwards (measured: 0.1 s again, for 10-20 ms). Neither TOM's Freeze nor emptying the text helped.
+	void StreamRtf(string rtf) {
+		var box = (RichTextBox)ed;
+		box.Rtf = @"{\rtf1\par}";
+		box.Rtf = rtf;
 	}
 
 	static void EachParagraph(RichEditBox editor, Action<int, ITextRange2> each) {
@@ -7037,7 +7098,7 @@ public class EditorApi
 			value = CrossRefs.FromWordRtf(value);                 // (iteration 50: Word's REF fields and bookmarks, which RichEdit drops)
 			value = Footnotes.FromWordRtf(value);                 // (iteration 51: Word's footnotes, which RichEdit shows in the text)
 			value = RtfTables.WordShading(value);                 // (Word's cell backgrounds, which RichEdit ignores)
-			((RichTextBox)ed).Rtf = OfficeConverters.WithoutAltTexts(value);    // (RichEdit would put their accents into the text)
+			StreamRtf(OfficeConverters.WithoutAltTexts(value));    // (RichEdit would put their accents into the text)
 			OfficeConverters.ContinueWordLists(ed.TextDocument, wordStarts);    // (the numbers after them, as Word has them)
 			PageBreaks.Normalize(ed);    // (Word's \page can be in the middle of a paragraph)
 			RestorePictures(value);       // (with the alt texts, from the RTF as it was)
@@ -11367,6 +11428,27 @@ sealed class WriterEditBox : RichEditBox
 		SetDefaultSize();
 		ApplyTextMargins();
 	}
+
+	/// Empties the editor and gives it a new RichEdit window, as fresh as at the start (the zoom kept). (2026-11-08) In
+	/// the focused editor a UI Automation client (the touch keyboard's TextInputHost, Copilot, text services) takes text
+	/// ranges as the text changes and never lets them go; RichEdit moves every live range on every insertion, so each
+	/// edit cost more as the session went on: a document opened a third time took seconds longer, typing slowed too.
+	/// Neither emptying the text nor UiaDisconnectAllProviders gave the time back; a new window does (the old one's
+	/// ranges die with it). TOM ranges kept from before are dead afterwards: their holders drop them first.
+	public void Renew() {
+		if (!IsHandleCreated) return;
+		int numerator = 0, denominator = 0;
+		SendZoom(Handle, EM_GETZOOM, ref numerator, ref denominator);
+		Text = "";    // (what WinForms carries over into the new window, as RTF: nothing)
+		Renewing = true;
+		try { RecreateHandle(); }
+		finally { Renewing = false; }
+		if (numerator > 0 && denominator > 0) SendZoom(Handle, EM_SETZOOM, (IntPtr)numerator, (IntPtr)denominator);
+		pageBreaks = null;
+		sectionMarks = null;
+	}
+	/// Renew is making the new window (HandleCreated handlers that its caller does itself can skip theirs).
+	public bool Renewing { get; private set; }
 
 	/// RichEdit's advanced layout, on or off. RichEdit takes it itself on reading RTF that has right or centre tabs or
 	/// leaders; without it such tabs act as left ones and leaders aren't drawn. Only for documents that have them: typing
