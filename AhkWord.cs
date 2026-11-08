@@ -36,6 +36,7 @@
 #load "rte_strings.cs"
 #load "rte_ruler.cs"
 #load "rte_pagesetup.cs"
+#load "rte_paraframes.cs"    // (Docxodus trial: paragraph borders and shading)
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
 // Run it with AhkWord.ahk. Iteration 66 adds to iteration 65:
 //   - Print Layout: a document whose first paragraphs are hidden (Word puts floating shapes' anchors there) no longer has
@@ -964,7 +965,8 @@ class WriterForm : Form
 		// (iteration 51) footnotes: the note in a tooltip over its number; Ctrl+click it to change it; each sheet's notes
 		// at its foot (from the footnotes, read again once the text changed, and the pages as last worked out)
 		Editor.NoteAt = position => DocumentFootnotes().FirstOrDefault(f => position >= f.Start && position <= f.End)?.Text is { } note ? Footnotes.Plain(note) : null;
-		Editor.TextChanged += (s, e) => { footnotesRead = null; leadersRead = null; };
+		Editor.TextChanged += (s, e) => { footnotesRead = null; leadersRead = null; framesRead = null; };
+		Editor.Frames = () => framesRead ??= ParagraphFrames.All(Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "");    // (Docxodus trial)
 		// (iteration 52) the tables of contents' leaders, which RichEdit doesn't draw
 		Editor.Leaders = () => leadersRead ??= Toc.Leaders(Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "");
 		Editor.NotesOn = page => page >= 1 && page <= sheetNotes.Count && sheetNotes[page - 1].Count > 0 ? (sheetNotes[page - 1], sheetNoteFont.Name, sheetNoteFont.Size) : null;
@@ -3651,6 +3653,7 @@ class WriterForm : Form
 
 	List<Footnotes.Footnote>? footnotesRead;    // (the document's footnotes until its text changes)
 	List<Toc.Leader>? leadersRead;    // (iteration 52: its tables of contents' leaders, likewise)
+	List<ParagraphFrames.Framed>? framesRead;    // (Docxodus trial: its paragraphs' borders and shading, likewise)
 
 	/// The document's Footnote Text style's font ("": the text's) and size (null: it has none: NoteSize).
 	internal (string Font, float Size)? NoteStyle => Styles.Find(Footnotes.StyleName) is { Size: > 0 } style ? (style.Font, style.Size) : null;
@@ -6736,6 +6739,7 @@ public class EditorApi
 					if (LegalLists.Paragraphs(ed.TextDocument).Any(p => p.Legal && !p.Styled)) LegalLists.Renumber(ed);
 				}
 				if (kind != "rtf") OfficeConverters.ListMarksFromText(ed);    // (Docxodus trial: list numbers in their text's font)
+				if (extension == ".docx") ParagraphFrames.FromDocx(ed, full);    // (Docxodus trial: paragraph borders and shading)
 				break;
 			}
 			default: {
@@ -7054,7 +7058,7 @@ public class EditorApi
 	// (iteration 63: its section breaks as Word's sections)
 	string WithBands(string rtf, string path) {
 		var layout = form.PageLayout();
-		rtf = HeaderFooter.AddToRtf(Footnotes.ToWordRtf(CrossRefs.ToWordRtf(rtf), ed.Font.Name, ed.Font.SizeInPoints, form.NoteStyle?.Size ?? 0), form.Bands, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints);
+		rtf = HeaderFooter.AddToRtf(Footnotes.ToWordRtf(CrossRefs.ToWordRtf(ParagraphFrames.ToWordRtf(rtf)), ed.Font.Name, ed.Font.SizeInPoints, form.NoteStyle?.Size ?? 0), form.Bands, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints);
 		rtf = Sections.ExportRtf(rtf, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints, form.Numbering);
 		return LineNumberFormats.AddToRtf(rtf, form.Numbering);
 	}
@@ -10340,11 +10344,13 @@ sealed class DocumentPrinter : IDisposable
 			Document.DefaultPageSettings.Margins = new Margins(m[0], m[1], top, bottom);
 			baseMargins = m.ToArray();
 		}
-		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; pageStarts = null; pageNotes = null; pageNumbers = null; sectionSettings = null; pageSizes = null; };
+		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; pageStarts = null; pageNotes = null; pageNumbers = null; sectionSettings = null; pageSizes = null; framesAll = null; };
 		// (Docxodus trial) each page on its section's paper, in its orientation, with its left and right margins
+		// (always, a section's page or the document's: a page's settings are the page before's until changed, and a page
+		// after a landscape section is upright again)
 		Document.QueryPageSettings += (s, e) => {
+			if (sections == null) return;
 			var own = SettingsAt(nextChar);
-			if (ReferenceEquals(own, Document.DefaultPageSettings)) return;
 			e.PageSettings.PaperSize = own.PaperSize;
 			e.PageSettings.Landscape = own.Landscape;
 			e.PageSettings.Margins = own.Margins;
@@ -10486,7 +10492,20 @@ sealed class DocumentPrinter : IDisposable
 			// (the page ends where the paragraphs' rules have it: page break before, keep together, widow control, keep with next)
 			range.chrg.cpMax = pageStarts != null && page < pageStarts.Count ? pageStarts[page] : -1;
 			layout = pageLayout != null && page <= pageLayout.Count ? pageLayout[page - 1] : null;
-			if (Document.PrintController?.IsPreview == true) nextChar = PreviewPage(range, e.PageBounds, out preview, layout, e.PageSettings);
+			// (Docxodus trial) the page's paragraph borders and shading (not on pages in columns): the shading under the text
+			framesOnPage = layout == null ? FramesOnPage(range, nextChar, range.chrg.cpMax < 0 ? end + 1 : range.chrg.cpMax) : null;
+			if (Document.PrintController?.IsPreview == true) nextChar = PreviewPage(range, e.PageBounds, out preview, layout, e.PageSettings, framesOnPage);
+			else if (framesOnPage is { Count: > 0 }) {
+				// (the shading, then the text over it without the white RichEdit fills its area with first, the lines over it)
+				g.ReleaseHdc(hdc);
+				foreach (var place in framesOnPage) ParagraphFrames.Draw(g, Scaled(place, 1 / 14.4f), 100 / 72f, 0.5f, lines: false);
+				var (recorded, drawn) = RecordPage(range, e.PageBounds, layout, e.PageSettings, framesOnPage);
+				// (the page's corner and size in the printer's pixels, from its printable area's corner)
+				float dpiX = g.DpiX / 100f, dpiY = g.DpiY / 100f;
+				using (recorded) PlayWithoutFill(g, recorded, Rectangle.Round(new RectangleF(-hardX * dpiX, -hardY * dpiY, e.PageBounds.Width * dpiX, e.PageBounds.Height * dpiY)));
+				nextChar = drawn;
+				hdc = g.GetHdc();
+			}
 			else nextChar = DrawText(range, layout);
 			nextChar = PageBreaks.AfterBreak(editor.TextDocument, nextChar);    // (a page break's paragraph mark stays with it)
 		} finally {
@@ -10559,6 +10578,45 @@ sealed class DocumentPrinter : IDisposable
 		if (e.HasMorePages && CancelRequested?.Invoke() == true) { Cancelled = true; e.Cancel = true; e.HasMorePages = false; }
 	}
 
+	// (Docxodus trial) The paragraphs with borders or shading on a page (its text from start to end), laid out as range
+	// lays them out: where their text is, in twips as range's rc (its lines' top and bottom, without the space before
+	// and after; from the left indent, the first line's if it is further left, to the right indent).
+	List<ParagraphFrames.Place> FramesOnPage(FORMATRANGE range, int start, int end) {
+		var places = new List<ParagraphFrames.Place>();
+		var doc = editor.TextDocument;
+		framesAll ??= ParagraphFrames.All(doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "");
+		var on = framesAll.Where(f => f.End >= start && f.Start < end).ToList();
+		if (on.Count == 0) return places;
+		int Below(int position) {
+			if (position <= start) return range.rc.Top;
+			var measure = range;
+			measure.chrg = new CHARRANGE { cpMin = start, cpMax = position };
+			SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref measure);
+			return measure.rc.Bottom;
+		}
+		var texts = new List<RectangleF>();
+		foreach (var f in on) {
+			var para = doc.Range2(f.Start, f.Start).Para;
+			float top = f.Start >= start ? Below(f.Start) + para.SpaceBefore * 20 : range.rc.Top;
+			float bottom = f.End < end ? Below(Math.Min(end, f.End + 1)) - para.SpaceAfter * 20 : Below(end);
+			float left = range.rc.Left + (para.LeftIndent + Math.Min(0, para.FirstLineIndent)) * 20, right = range.rc.Right - para.RightIndent * 20;
+			texts.Add(RectangleF.FromLTRB(left, top, Math.Max(left + 20, right), Math.Max(top + 20, bottom)));
+		}
+		SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // (frees RichEdit's cache)
+		for (int i = 0; i < on.Count; i++) {
+			bool above = i > 0 && ParagraphFrames.Joined(on[i - 1], on[i]), below = i + 1 < on.Count && ParagraphFrames.Joined(on[i], on[i + 1]);
+			var text = texts[i];
+			if (below) text = RectangleF.FromLTRB(text.Left, text.Top, text.Right, Math.Max(text.Bottom, texts[i + 1].Top));    // (one box: the space between shaded too)
+			places.Add(new ParagraphFrames.Place(on[i], text, above, below));
+		}
+		return places;
+	}
+	List<ParagraphFrames.Framed>? framesAll;
+	List<ParagraphFrames.Place>? framesOnPage;
+
+	static ParagraphFrames.Place Scaled(ParagraphFrames.Place place, float scale, float dx = 0, float dy = 0) =>
+		place with { Text = new RectangleF((place.Text.X - dx) * scale, (place.Text.Y - dy) * scale, place.Text.Width * scale, place.Text.Height * scale) };
+
 	/// Iteration 58: told after each page is printed (the page, the pages in all); asked after each whether to stop
 	/// (Cancelled then true).
 	public Action<int, int>? Progress;
@@ -10573,8 +10631,32 @@ sealed class DocumentPrinter : IDisposable
 	// screen's resolution. The text is first recorded in a metafile made for the printer, so that each letter is where it
 	// will print (drawn straight at the screen's resolution, letters are a little wider, and the end of a line could be
 	// cut off), laid out for the printer as before (so the pages break in the same places).
-	int PreviewPage(FORMATRANGE range, Rectangle page, out Bitmap? picture, List<PageBand>? layout, PageSettings pageSettings) {
+	int PreviewPage(FORMATRANGE range, Rectangle page, out Bitmap? picture, List<PageBand>? layout, PageSettings pageSettings, List<ParagraphFrames.Place>? frames = null) {
 		int width = (int)Math.Ceiling(page.Width * 0.96 * PreviewScale), height = (int)Math.Ceiling(page.Height * 0.96 * PreviewScale);
+		var (recorded, next) = RecordPage(range, page, layout, pageSettings, frames);
+		using (recorded) {
+			var bitmap = new Bitmap(width, height);
+			picture = bitmap;
+			using var g = Graphics.FromImage(bitmap);
+			g.Clear(Color.White);
+			g.SmoothingMode = SmoothingMode.HighQuality;
+			g.DrawImage(recorded, new Rectangle(0, 0, width, height));
+			// (Docxodus trial) the paragraphs' shading under the text: the picture multiplied by its colour there (white
+			// becomes the colour, the text stays as dark); played without RichEdit's white fill instead, as on a printer, the
+			// picture's letters were drawn unsmoothed
+			if (frames is { Count: > 0 }) {
+				g.Flush();
+				float perInch = width / (page.Width / 100f);
+				foreach (var place in frames)
+					ParagraphFrames.Draw(g, Scaled(place, perInch / 1440f, range.rcPage.Left, range.rcPage.Top), perInch / 72f, 1, (rect, color) => ParagraphFrames.Multiply(bitmap, Rectangle.Round(rect), color), lines: false);
+			}
+		}
+		return next;
+	}
+
+	// A page's text recorded in a metafile made for the printer (so that each letter is where it will print), laid out
+	// for the printer; (Docxodus trial) the paragraphs' border lines over it. Where the text goes on.
+	(System.Drawing.Imaging.Metafile Recorded, int Next) RecordPage(FORMATRANGE range, Rectangle page, List<PageBand>? layout, PageSettings pageSettings, List<ParagraphFrames.Place>? frames) {
 		int next;
 		using var measuring = Document.PrinterSettings.CreateMeasurementGraphics(pageSettings);    // (Docxodus trial: the page's own)
 		IntPtr reference = measuring.GetHdc();
@@ -10582,10 +10664,10 @@ sealed class DocumentPrinter : IDisposable
 		try {
 			recorded = new System.Drawing.Imaging.Metafile(reference, new RectangleF(0, 0, page.Width / 100f, page.Height / 100f), System.Drawing.Imaging.MetafileFrameUnit.Inch, System.Drawing.Imaging.EmfType.EmfOnly);
 			using var record = Graphics.FromImage(recorded);
+			int dx = range.rcPage.Left, dy = range.rcPage.Top;
 			IntPtr hdc = record.GetHdc();
 			try {
 				// the same areas, relative to the page's corner (the picture's) rather than the printable area's
-				int dx = range.rcPage.Left, dy = range.rcPage.Top;
 				range.hdc = hdc;
 				range.hdcTarget = reference;
 				range.rc = new RECT { Left = range.rc.Left - dx, Top = range.rc.Top - dy, Right = range.rc.Right - dx, Bottom = range.rc.Bottom - dy };
@@ -10594,18 +10676,46 @@ sealed class DocumentPrinter : IDisposable
 			} finally {
 				record.ReleaseHdc(hdc);
 			}
+			record.PageUnit = GraphicsUnit.Inch;    // (inches from the page's corner)
+			foreach (var place in frames ?? new()) ParagraphFrames.Draw(record, Scaled(place, 1 / 1440f, dx, dy), 1 / 72f, 0.005f, fill: false);
 		} finally {
 			measuring.ReleaseHdc(reference);
 		}
-		using (recorded) {
-			picture = new Bitmap(width, height);
-			using var g = Graphics.FromImage(picture);
-			g.Clear(Color.White);
-			g.SmoothingMode = SmoothingMode.HighQuality;
-			g.DrawImage(recorded, new Rectangle(0, 0, width, height));
-		}
-		return next;
+		return (recorded, next);
 	}
+
+	// (Docxodus trial) A recorded page played onto g without the white RichEdit fills its text area with before the text
+	// (a PATCOPY with a white brush, which would hide the paragraphs' shading drawn first); its other fills (table cells'
+	// shading) stay.
+	// (Windows' own playback, record by record, onto g's device context: the place in its device's pixels)
+	static void PlayWithoutFill(Graphics g, System.Drawing.Imaging.Metafile recorded, Rectangle place) {
+		IntPtr emf = recorded.GetHenhmetafile();    // (the Metafile is done with after this)
+		IntPtr hdc = g.GetHdc();
+		try {
+			var bounds = new RECT { Left = place.Left, Top = place.Top, Right = place.Right, Bottom = place.Bottom };
+			EnhMetaFileProc play = (dc, table, record, objects, data) => {
+				const int EMR_BITBLT = 76, PATCOPY = 0x00F00021, OBJ_BRUSH = 2;
+				if (Marshal.ReadInt32(record) == EMR_BITBLT && Marshal.ReadInt32(record, 40) == PATCOPY) {    // (type, size, bounds 16, x y cx cy 16, then the raster operation)
+					var brush = new LOGBRUSH();
+					if (GetObject(GetCurrentObject(dc, OBJ_BRUSH), Marshal.SizeOf<LOGBRUSH>(), ref brush) > 0 && brush.lbStyle == 0 && (brush.lbColor & 0xFFFFFF) == 0xFFFFFF) return 1;    // white: left out
+				}
+				PlayEnhMetaFileRecord(dc, table, record, (uint)objects);
+				return 1;
+			};
+			EnumEnhMetaFile(hdc, emf, play, IntPtr.Zero, ref bounds);
+			GC.KeepAlive(play);
+		} finally {
+			g.ReleaseHdc(hdc);
+			DeleteEnhMetaFile(emf);
+		}
+	}
+	delegate int EnhMetaFileProc(IntPtr hdc, IntPtr table, IntPtr record, int objects, IntPtr data);
+	[StructLayout(LayoutKind.Sequential)] struct LOGBRUSH { public uint lbStyle; public uint lbColor; public IntPtr lbHatch; }
+	[DllImport("gdi32.dll")] static extern bool EnumEnhMetaFile(IntPtr hdc, IntPtr emf, EnhMetaFileProc proc, IntPtr data, ref RECT bounds);
+	[DllImport("gdi32.dll")] static extern bool PlayEnhMetaFileRecord(IntPtr hdc, IntPtr table, IntPtr record, uint objects);
+	[DllImport("gdi32.dll")] static extern bool DeleteEnhMetaFile(IntPtr emf);
+	[DllImport("gdi32.dll")] static extern IntPtr GetCurrentObject(IntPtr hdc, uint type);
+	[DllImport("gdi32.dll", EntryPoint = "GetObjectW")] static extern int GetObject(IntPtr obj, int size, ref LOGBRUSH buffer);
 
 	/// The number of pages the document prints on now (laid out for the printer, without printing).
 	public int PageCount() => PageStarts().Count;
@@ -11646,6 +11756,12 @@ sealed class WriterEditBox : RichEditBox
 				int y = GetPositionFromCharIndex(at).Y;
 				if (y >= client.Top - 12 && y <= client.Bottom + 12) Invalidate(new Rectangle(0, y - 12, client.Width, 24), false);
 			}
+			// (Docxodus trial) the framed paragraphs in view
+			foreach (var place in FramePlaces()) {
+				var shaded = Rectangle.Round(ParagraphFrames.ShadeArea(place, PixelsPerPoint));
+				shaded.Inflate(6, 6);
+				Invalidate(shaded, false);
+			}
 		});
 	}
 
@@ -11938,8 +12054,21 @@ sealed class WriterEditBox : RichEditBox
 			SetViewportOrgEx(memory, -area.Left, -area.Top, IntPtr.Zero);
 			SendPaint(Handle, WM_PRINTCLIENT, memory, (IntPtr)(PRF_CLIENT | PRF_ERASEBKGND));
 			SetViewportOrgEx(memory, 0, 0, IntPtr.Zero);
+			// (Docxodus trial) the paragraphs' shading under the text: what RichEdit painted darkened to the colour (white
+			// becomes the colour, the text stays dark), and their lines over it
+			var frames = FramePlaces();
+			float ppp = PixelsPerPoint;
+			foreach (var place in frames)
+				ParagraphFrames.Draw(null!, place, ppp, 1, (rect, color) => {
+					var r = Rectangle.Round(rect);
+					IntPtr brush = CreateSolidBrush(color.R | color.G << 8 | color.B << 16), before = SelectObject(memory, brush);
+					PatBlt(memory, r.Left - area.Left, r.Top - area.Top, r.Width, r.Height, 0x00A000C9);    // PATAND
+					SelectObject(memory, before);
+					DeleteObject(brush);
+				}, lines: false);
 			using (var g = Graphics.FromHdc(memory)) {
 				g.TranslateTransform(-area.Left, -area.Top);
+				foreach (var place in frames) ParagraphFrames.Draw(g, place, ppp, 1, fill: false);
 				DrawDrawings(g);
 			}
 			done(memory);
@@ -11979,6 +12108,41 @@ sealed class WriterEditBox : RichEditBox
 		else DrawPageBreaks(g);
 		DrawSectionMarks(g);
 		DrawPageBoundaries(g);
+	}
+
+	/// (Docxodus trial) The paragraphs with borders or shading (ParagraphFrames), drawn here and on the printed pages.
+	public Func<IReadOnlyList<ParagraphFrames.Framed>>? Frames;
+
+	/// (Docxodus trial) Where the framed paragraphs in view are (their lines' top and bottom, from the left indent, the
+	/// first line's if further left, to the right indent), in the window.
+	public List<ParagraphFrames.Place> FramePlaces() {
+		var places = new List<ParagraphFrames.Place>();
+		if (!IsHandleCreated || Frames?.Invoke() is not { Count: > 0 } frames) return places;
+		const int Top = 0x20 | 0 | 0x100 | 0x200, Bottom = 0x20 | 8 | 0x100 | 0x200;    // tomStart | TA_TOP or TA_BOTTOM | tomClientCoord | tomAllowOffClient
+		float ppp = PixelsPerPoint;
+		var text = TextArea;
+		int height = ClientSize.Height;
+		var found = new List<(int Index, RectangleF Text)>();
+		for (int i = 0; i < frames.Count; i++) {
+			var f = frames[i];
+			try {
+				TextDocument.Range2(f.Start, f.Start).GetPoint(Top, out _, out int top);
+				TextDocument.Range2(f.End, f.End).GetPoint(Bottom, out _, out int bottom);
+				if (bottom < -50 || top > height + 50) continue;
+				var para = TextDocument.Range2(f.Start, f.Start).Para;
+				float left = text.Left + (para.LeftIndent + Math.Min(0, para.FirstLineIndent)) * ppp, right = text.Right - para.RightIndent * ppp;
+				float last = bottom - para.SpaceAfter * ppp;    // (the last line's bottom holds the space after the paragraph)
+				found.Add((i, RectangleF.FromLTRB(left, top, Math.Max(left + 1, right), Math.Max(top + 1, last))));
+			} catch (Exception ex) when (ex is COMException or ArgumentException) { }
+		}
+		for (int k = 0; k < found.Count; k++) {
+			var (i, rect) = found[k];
+			bool above = k > 0 && found[k - 1].Index == i - 1 && ParagraphFrames.Joined(frames[i - 1], frames[i]);
+			bool below = k + 1 < found.Count && found[k + 1].Index == i + 1 && ParagraphFrames.Joined(frames[i], frames[i + 1]);
+			if (below) rect = RectangleF.FromLTRB(rect.Left, rect.Top, rect.Right, Math.Max(rect.Bottom, found[k + 1].Text.Top));
+			places.Add(new ParagraphFrames.Place(frames[i], rect, above, below));
+		}
+		return places;
 	}
 
 	/// Iteration 52: the tables of contents' leaders, drawn here: RichEdit draws a tab's leader in its advanced layout
@@ -12073,6 +12237,8 @@ sealed class WriterEditBox : RichEditBox
 	[DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr hdc);
 	[DllImport("gdi32.dll")] static extern bool SetViewportOrgEx(IntPtr hdc, int x, int y, IntPtr previous);
 	[DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr dest, int x, int y, int width, int height, IntPtr source, int sourceX, int sourceY, int rop);
+	[DllImport("gdi32.dll")] static extern bool PatBlt(IntPtr hdc, int x, int y, int width, int height, int rop);
+	[DllImport("gdi32.dll")] static extern IntPtr CreateSolidBrush(int color);
 
 	// Replacing the text (WM_SETTEXT, as New and Open do through RichEditorNET; EM_STREAMIN, EM_SETTEXTEX) resets
 	// RichEdit's zoom to 100%: it is put back, so a zoom (the user's, or Page Width's) outlives a new document.
@@ -12097,7 +12263,7 @@ sealed class WriterEditBox : RichEditBox
 		if (m.Msg == WM_PAINT) {
 			// (held: not painted now, and the window's need of a paint kept, for the paint after: QuietGaps)
 			if (HoldPaint && IsHandleCreated) return;
-			if (((pageBreaks == null || pageBreaks.Count > 0) || SectionMarksStale || sectionMarks!.Count > 0 || PageStarts is { Count: > 1 } || Gaps is { Applied: true } || Leaders?.Invoke() is { Count: > 0 }) && IsHandleCreated && Buffered)
+			if (((pageBreaks == null || pageBreaks.Count > 0) || SectionMarksStale || sectionMarks!.Count > 0 || PageStarts is { Count: > 1 } || Gaps is { Applied: true } || Leaders?.Invoke() is { Count: > 0 } || Frames?.Invoke() is { Count: > 0 }) && IsHandleCreated && Buffered)
 				PaintBuffered();
 			else base.WndProc(ref m);
 			Painted?.Invoke();

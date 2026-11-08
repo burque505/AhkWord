@@ -462,6 +462,10 @@ public static class DocxLineSpacing
 		public string Style = "";
 		public XElement? Container;            // the body or the table cell the paragraph is in
 		public bool InTable;
+		/// (Docxodus trial) The paragraph's border lines by side (w:pBdr's children, the style's under its own), and its
+		/// shading (w:shd): ParagraphFrames.
+		public Dictionary<string, XElement> Borders = new();
+		public XElement? Shading;
 	}
 
 	// One layer of formatting (a style's pPr or a paragraph's own) over what the layers below gave.
@@ -491,6 +495,8 @@ public static class DocxLineSpacing
 			}
 		}
 		if (pPr.Element(W + "numPr") != null) format.List = true;
+		if (pPr.Element(W + "pBdr") is { } borders) foreach (var side in borders.Elements()) format.Borders[side.Name.LocalName] = side;
+		if (pPr.Element(W + "shd") is { } shd) format.Shading = shd;
 		if (pPr.Element(W + "keepNext") is { } keepNext) format.KeepNext = On(keepNext);
 		if (pPr.Element(W + "keepLines") is { } keepLines) format.KeepLines = On(keepLines);
 		if (pPr.Element(W + "pageBreakBefore") is { } breakBefore) format.PageBreakBefore = On(breakBefore);
@@ -642,6 +648,9 @@ public static class DocxLineSpacing
 		}
 		return true;
 	}
+
+	/// (Docxodus trial) Where the editor's paragraphs start, in order as a .docx has them (Pieces).
+	public static List<int> Starts(ITextDocument2 doc, int count) => Pieces(doc, count);
 
 	// Where the editor's paragraphs start, in order as a .docx has them: split at paragraph marks and cell ends, without
 	// the marks that start and end table rows; empty ones at the end are left out while there are more than count.
