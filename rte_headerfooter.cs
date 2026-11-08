@@ -932,6 +932,7 @@ public static class HeaderFooter
 					size?.Orient?.Value == W.PageOrientationValues.Landscape, (int?)margin?.Header?.Value, (int?)margin?.Footer?.Value);
 			}
 			var firstPage = PageOf(sections[0]);
+			var firstNumbers = LineNumberFormats.OfDocxSection(sections[0]);    // (Docxodus trial: the document's line numbering)
 			foreach (var section in sections.Skip(1)) {
 				bool header = Has<W.HeaderReference>(section), footer = Has<W.FooterReference>(section);
 				if (header || footer) {
@@ -951,7 +952,8 @@ public static class HeaderFooter
 				}
 				bool continuous = section.GetFirstChild<W.SectionType>()?.Val?.Value == W.SectionMarkValues.Continuous;
 				uint? start = section.GetFirstChild<W.PageNumberType>()?.Start?.Value is int number ? (uint)number : null;
-				result.Add(new SectionSettings { Same = !own, Bands = own ? Sections.CopyBands(current) : null, Restart = start != null, Start = (int)(start ?? 1), Page = PageOf(section).Against(firstPage), Columns = ColumnsOf(section), Continuous = continuous });
+				result.Add(new SectionSettings { Same = !own, Bands = own ? Sections.CopyBands(current) : null, Restart = start != null, Start = (int)(start ?? 1), Page = PageOf(section).Against(firstPage), Columns = ColumnsOf(section), Continuous = continuous,
+					LineNumbers = SectionSettings.OwnLineNumbers(LineNumberFormats.OfDocxSection(section), firstNumbers) });
 				own = false;
 			}
 		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) { result.Clear(); }

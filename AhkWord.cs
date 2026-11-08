@@ -849,6 +849,8 @@ class WriterForm : Form
 		lineGutter.BandColor = PrintLayoutPage.Surround;
 		lineGutter.Bands = () => PanelBands().Select(b => new Rectangle(b.X - lineGutter.Left, b.Y - lineGutter.Top, b.Width, b.Height));
 		lineGutter.SizeChanged += (s, e) => FitPagePadding();
+		// (Docxodus trial) the sections' own line numbering
+		lineGutter.SectionNumbering = () => Sections.Resolve(Editor.TextDocument, Bands, DocumentColumns).Select(s => (s.Start, s.LineNumbers)).ToList();
 		// Print Layout: the page follows the window, the zoom (Ctrl+wheel too) and a new editor window
 		pageHost.Resize += (s, e) => FitPagePadding();
 		Editor.Painted += () => {
@@ -2970,7 +2972,7 @@ class WriterForm : Form
 			int middle = Editor.GetCharIndexFromPosition(new Point(Editor.ClientSize.Width / 2, Editor.ClientSize.Height / 2));
 			viewPage = Math.Max(1, starts.FindLastIndex(s => s <= middle) + 1);
 		}
-		if (Numbering.Mode == LineNumbering.Modes.EachPage && pageStartsStale && (DateTime.Now - lastEdit).TotalMilliseconds > 1000) {
+		if (lineGutter.Visible && lineGutter.NeedsPageStarts && pageStartsStale && (DateTime.Now - lastEdit).TotalMilliseconds > 1000) {
 			pageStartsStale = false;
 			try { using var printer = CreatePrinter(); pageStarts = printer.PageStarts(); }
 			catch (Exception) { pageStarts = null; }
@@ -3828,7 +3830,7 @@ class WriterForm : Form
 		Numbering = value;
 		lineGutter.Numbering = value;
 		pageStartsStale = true;
-		if (value.Mode != LineNumbering.Modes.EachPage) lineGutter.PageStarts = null;
+		if (!lineGutter.NeedsPageStarts) lineGutter.PageStarts = null;
 		FitPagePadding();
 		UpdateUi();
 	}
@@ -3847,7 +3849,7 @@ class WriterForm : Form
 				host.BackColor = AppTheme.Paper;
 				pagePanel.Dock = DockStyle.Fill;
 				int left = LogicalToDeviceUnits(28);
-				if (Numbering.On) left = Math.Max(LogicalToDeviceUnits(4), left - Math.Max(lineGutter.Width, LogicalToDeviceUnits(30)));
+				if (lineGutter.On) left = Math.Max(LogicalToDeviceUnits(4), left - Math.Max(lineGutter.Width, LogicalToDeviceUnits(30)));
 				pagePanel.Padding = new Padding(left, LogicalToDeviceUnits(14), LogicalToDeviceUnits(16), 0);
 				Editor.TextMargins = headerStrip.Inset = footerStrip.Inset = (0, 0);
 				lineGutter.MaxWidth = int.MaxValue;
@@ -3859,7 +3861,7 @@ class WriterForm : Form
 			lineGutter.MaxWidth = Math.Max(LogicalToDeviceUnits(20), marginLeft - LogicalToDeviceUnits(4));    // (the numbers within the left margin)
 			// (the lines are broken with the printer's measurements but drawn with the screen's, whose hinted letters are a
 			// little wider: 3% more, and more if a line drawn still reaches the edge, PageOverhang)
-			int gutter = Numbering.On ? lineGutter.Width : 0, bar = SystemInformation.VerticalScrollBarWidth;
+			int gutter = lineGutter.On ? lineGutter.Width : 0, bar = SystemInformation.VerticalScrollBarWidth;
 			int slack = LogicalToDeviceUnits(6) + (int)Math.Ceiling(text * 0.03) + pageOverhang;
 			int padLeft = Math.Max(LogicalToDeviceUnits(4), marginLeft - gutter), padRight = Math.Max(LogicalToDeviceUnits(4), marginRight - bar - slack);
 			int width = padLeft + gutter + text + bar + slack + padRight;
@@ -3867,7 +3869,7 @@ class WriterForm : Form
 			// (the margins are the editor's own, inside it (TextMargins), so that Show Pages' bands in them scroll with the
 			// text in the same move; the left one beside the line numbers is the panel's, left of them; the scroll bar at
 			// the page's right edge)
-			int panelLeft = Numbering.On ? padLeft : 0;
+			int panelLeft = lineGutter.On ? padLeft : 0;
 			pagePanel.Padding = new Padding(panelLeft, LogicalToDeviceUnits(14), 0, 0);
 			Editor.TextMargins = headerStrip.Inset = footerStrip.Inset = (padLeft - panelLeft, padRight);
 			host.BackColor = PrintLayoutPage.Surround;
@@ -6733,6 +6735,7 @@ public class EditorApi
 					OfficeConverters.FitListIndents(ed.TextDocument);
 					if (LegalLists.Paragraphs(ed.TextDocument).Any(p => p.Legal && !p.Styled)) LegalLists.Renumber(ed);
 				}
+				if (kind != "rtf") OfficeConverters.ListMarksFromText(ed);    // (Docxodus trial: list numbers in their text's font)
 				break;
 			}
 			default: {
@@ -7052,7 +7055,7 @@ public class EditorApi
 	string WithBands(string rtf, string path) {
 		var layout = form.PageLayout();
 		rtf = HeaderFooter.AddToRtf(Footnotes.ToWordRtf(CrossRefs.ToWordRtf(rtf), ed.Font.Name, ed.Font.SizeInPoints, form.NoteStyle?.Size ?? 0), form.Bands, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints);
-		rtf = Sections.ExportRtf(rtf, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints);
+		rtf = Sections.ExportRtf(rtf, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints, form.Numbering);
 		return LineNumberFormats.AddToRtf(rtf, form.Numbering);
 	}
 
@@ -7224,7 +7227,7 @@ public class EditorApi
 			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase)) HeaderFooter.AddToDocx(full, form.Bands, form.PageLayout(), Path.GetFileName(full), full, parts: true);
 			else HeaderFooter.AddToOdt(full, form.Bands, Path.GetFileName(full), full);
 			// the line numbering, the same whichever converter made the file (pandoc's and the built-in one's have none)
-			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase)) LineNumberFormats.AddToDocx(full, form.Numbering);
+			if (full.EndsWith(".docx", StringComparison.OrdinalIgnoreCase)) LineNumberFormats.AddToDocx(full, form.Numbering, Sections.Breaks(ed.TextDocument).Select(b => b.Settings.LineNumbers).ToList());    // (Docxodus trial: sections' own)
 			else LineNumberFormats.AddToOdt(full, form.Numbering);
 			OfficeConverters.AltTextsToFile(full, AltTexts());    // (pictures' alt texts that the converter left out)
 			// tables' borders, shading, padding ... in Word's own terms, where the converter went through HTML
@@ -7734,7 +7737,7 @@ public class EditorApi
 	internal string OpenNotice() {
 		var breaks = Sections.Breaks(ed.TextDocument);
 		string notice = Sections.KeptOnly(breaks) is { Count: > 0 } kept
-			? $". Section{(kept.Count == 1 ? "" : "s")} {string.Join(", ", kept)}: paper, orientation or left and right margins of {(kept.Count == 1 ? "its" : "their")} own are kept in the file, but not shown or printed"
+			? $". Section{(kept.Count == 1 ? "" : "s")} {string.Join(", ", kept)}: paper, orientation or left and right margins of {(kept.Count == 1 ? "its" : "their")} own are printed, and Print Preview shows them; here {(kept.Count == 1 ? "it is" : "they are")} edited at the first section's width"
 			: "";
 		if (form.DocumentColumns != null || breaks.Any(b => b.Settings.Columns != null)) notice += ". It has columns: they are printed, and Print Preview shows them; here it is edited in one column";
 		if (form.OpenTime.TotalSeconds >= 2) notice += $" ({form.OpenTime.TotalSeconds:0.0} seconds)";
@@ -10337,7 +10340,15 @@ sealed class DocumentPrinter : IDisposable
 			Document.DefaultPageSettings.Margins = new Margins(m[0], m[1], top, bottom);
 			baseMargins = m.ToArray();
 		}
-		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; pageStarts = null; pageNotes = null; pageNumbers = null; };
+		Document.BeginPrint += (s, e) => { nextChar = 0; page = 0; pageCount = 0; numberMarks = null; pageStarts = null; pageNotes = null; pageNumbers = null; sectionSettings = null; pageSizes = null; };
+		// (Docxodus trial) each page on its section's paper, in its orientation, with its left and right margins
+		Document.QueryPageSettings += (s, e) => {
+			var own = SettingsAt(nextChar);
+			if (ReferenceEquals(own, Document.DefaultPageSettings)) return;
+			e.PageSettings.PaperSize = own.PaperSize;
+			e.PageSettings.Landscape = own.Landscape;
+			e.PageSettings.Margins = own.Margins;
+		};
 		Document.PrintPage += PrintPage;
 		Document.EndPrint += (s, e) => SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, IntPtr.Zero);    // frees RichEdit's cache
 	}
@@ -10350,14 +10361,58 @@ sealed class DocumentPrinter : IDisposable
 		var all = AllSections;
 		var section = all[Sections.IndexAt(all, position)];
 		int on = position <= section.Start ? 1 : 2;    // (a page starting where its section does: the section's first)
-		pageHeight ??= Document.DefaultPageSettings.Bounds.Height;
-		var (top, bottom) = Sections.MarginsOn(section, on, m[2], m[3], pageHeight.Value);
+		var (top, bottom) = Sections.MarginsOn(section, on, m[2], m[3], PageSize(position).Height);
 		return (top - Document.DefaultPageSettings.Margins.Top, bottom - Document.DefaultPageSettings.Margins.Bottom);
 	}
-	int? pageHeight;
+
+	// (Docxodus trial) The page settings of a page starting at position: the document's, with its section's own
+	// orientation, paper and left and right margins (top and bottom: Shift). One copy for each section, made once.
+	PageSettings SettingsAt(int position) {
+		var all = AllSections;
+		int index = Sections.IndexAt(all, position);
+		if (all[index].Page is not { } own || !own.KeptOnly) return Document.DefaultPageSettings;
+		sectionSettings ??= new();
+		if (sectionSettings.TryGetValue(index, out var made)) return made;
+		var settings = (PageSettings)Document.DefaultPageSettings.Clone();
+		if (Papers.Upright(own.Width, own.Height) is { } paper) {
+			var current = settings.PaperSize;
+			if (Papers.Upright(current.Width, current.Height, twips: false) is not { } now || Math.Abs(now[0] - paper[0]) > 4 || Math.Abs(now[1] - paper[1]) > 4)
+				settings.PaperSize = Papers.ForPrinter(Document.PrinterSettings, paper[0], paper[1]);
+		}
+		// (Word gives a landscape page as wider than high, its orientation too)
+		if (own.Landscape is bool landscape) settings.Landscape = landscape;
+		else if (own.Width is int w && own.Height is int h && w != h) settings.Landscape = w > h;
+		if (own.Left != null || own.Right != null) {
+			var m = settings.Margins;
+			settings.Margins = new Margins(own.Left is int left ? (int)Math.Round(left / 14.4) : m.Left, own.Right is int right ? (int)Math.Round(right / 14.4) : m.Right, m.Top, m.Bottom);
+		}
+		return sectionSettings[index] = settings;
+	}
+	Dictionary<int, PageSettings>? sectionSettings;
+
+	// (the page's size, 1/100 inch, as its orientation has it; the printer is asked once for each section's)
+	Size PageSize(int position) {
+		var settings = SettingsAt(position);
+		pageSizes ??= new();
+		if (!pageSizes.TryGetValue(settings, out var size)) pageSizes[settings] = size = settings.Bounds.Size;
+		return size;
+	}
+	Dictionary<PageSettings, Size>? pageSizes;
+
+	// A page's text area (twips, from the document's first page's printable corner), from the document's: its section's
+	// top and bottom (Shift), and (Docxodus trial) its section's page and left and right margins.
 	RECT AreaAt(RECT r, int position) {
 		var (top, bottom) = Shift(position);
-		return new() { Left = r.Left, Right = r.Right, Top = r.Top + (int)Math.Round(top * 14.4), Bottom = r.Bottom - (int)Math.Round(bottom * 14.4) };
+		var own = SettingsAt(position);
+		if (ReferenceEquals(own, Document.DefaultPageSettings))
+			return new() { Left = r.Left, Right = r.Right, Top = r.Top + (int)Math.Round(top * 14.4), Bottom = r.Bottom - (int)Math.Round(bottom * 14.4) };
+		var size = PageSize(position);
+		var first = Document.DefaultPageSettings;
+		var firstSize = PageSize(0);
+		int left = r.Left + (int)Math.Round((own.Margins.Left - first.Margins.Left) * 14.4);
+		int width = (int)Math.Round((size.Width - own.Margins.Left - own.Margins.Right) * 14.4);
+		int height = r.Bottom - r.Top + (int)Math.Round((size.Height - firstSize.Height) * 14.4);
+		return new() { Left = left, Right = left + Math.Max(1440, width), Top = r.Top + (int)Math.Round(top * 14.4), Bottom = r.Top + height - (int)Math.Round(bottom * 14.4) };
 	}
 
 	// The columns a page starting at position has in a text area this wide (null: one).
@@ -10431,7 +10486,7 @@ sealed class DocumentPrinter : IDisposable
 			// (the page ends where the paragraphs' rules have it: page break before, keep together, widow control, keep with next)
 			range.chrg.cpMax = pageStarts != null && page < pageStarts.Count ? pageStarts[page] : -1;
 			layout = pageLayout != null && page <= pageLayout.Count ? pageLayout[page - 1] : null;
-			if (Document.PrintController?.IsPreview == true) nextChar = PreviewPage(range, e.PageBounds, out preview, layout);
+			if (Document.PrintController?.IsPreview == true) nextChar = PreviewPage(range, e.PageBounds, out preview, layout, e.PageSettings);
 			else nextChar = DrawText(range, layout);
 			nextChar = PageBreaks.AfterBreak(editor.TextDocument, nextChar);    // (a page break's paragraph mark stays with it)
 		} finally {
@@ -10468,7 +10523,7 @@ sealed class DocumentPrinter : IDisposable
 				Toc.DrawLeader(g, kind, margins.Left - hardX + x1 * 100 / 72f, margins.Left - hardX + x2 * 100 / 72f, margins.Top - hardY + baseline * 100 / 72f, size * 100 / 72f, Color.Black);
 		// The line numbers left of the text; the header just above the text area and the footer just below it, in the margins.
 		if (numberMarks != null && page <= numberMarks.Count)
-			PrintedLineNumbers.Draw(g, numberMarks[page - 1], numbering, editor.Font, margins.Left - hardX);
+			PrintedLineNumbers.Draw(g, numberMarks[page - 1], NumberingAt(start), editor.Font, margins.Left - hardX);
 		// (iteration 55) the header that far from the page's top edge, the footer's last line that far from its bottom edge
 		// (in the band's font: black, as Word prints it; grey without a font of its own, as before; words in their own)
 		// (iteration 63) the page's section's header and footer; its place in the section (1: the section's first page)
@@ -10518,10 +10573,10 @@ sealed class DocumentPrinter : IDisposable
 	// screen's resolution. The text is first recorded in a metafile made for the printer, so that each letter is where it
 	// will print (drawn straight at the screen's resolution, letters are a little wider, and the end of a line could be
 	// cut off), laid out for the printer as before (so the pages break in the same places).
-	int PreviewPage(FORMATRANGE range, Rectangle page, out Bitmap? picture, List<PageBand>? layout) {
+	int PreviewPage(FORMATRANGE range, Rectangle page, out Bitmap? picture, List<PageBand>? layout, PageSettings pageSettings) {
 		int width = (int)Math.Ceiling(page.Width * 0.96 * PreviewScale), height = (int)Math.Ceiling(page.Height * 0.96 * PreviewScale);
 		int next;
-		using var measuring = Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings);
+		using var measuring = Document.PrinterSettings.CreateMeasurementGraphics(pageSettings);    // (Docxodus trial: the page's own)
 		IntPtr reference = measuring.GetHdc();
 		System.Drawing.Imaging.Metafile recorded;
 		try {
@@ -10594,7 +10649,7 @@ sealed class DocumentPrinter : IDisposable
 	public (int Page, int Line) PrintedLineAt(int position) {
 		var starts = PageStarts();
 		int page = Math.Max(0, starts.FindLastIndex(start => start <= position));
-		if (!numbering.On) return (page + 1, 0);
+		if (!NumberingAt(position).On) return (page + 1, 0);
 		List<List<PrintedLineNumbers.Mark>>? marks = null;
 		Measuring(range => marks = Marks(starts, range, Document.DefaultPageSettings, everyLine: true));
 		var mark = marks?[page].FirstOrDefault(m => position >= m.Start && position < m.End);
@@ -10708,15 +10763,29 @@ sealed class DocumentPrinter : IDisposable
 		return (bookmarks, links);
 	}
 
+	// (Docxodus trial) The line numbering at a position: its section's own, else the document's; and whether any section
+	// has line numbers.
+	LineNumbering NumberingAt(int position) {
+		var all = AllSections;
+		return all[Sections.IndexAt(all, position)].LineNumbers ?? numbering;
+	}
+	bool AnyNumbering => numbering.On || AllSections.Any(s => s.LineNumbers?.On == true);
+
 	// Each page's line numbers (null: off), for the text area and page of range, with the printer's information context
 	// (it outlives the layout; a page's own device context may be a preview's metafile).
+	// (Docxodus trial: each page's section's own numbering, at its page's width; the top as page 1's, the pages' own
+	// lower or higher tops added when printed)
 	List<List<PrintedLineNumbers.Mark>>? Marks(List<int> starts, FORMATRANGE range, PageSettings settings, bool everyLine = false) {
-		if (!numbering.On) return null;
+		if (!AnyNumbering) return null;
 		using var g = Document.PrinterSettings.CreateMeasurementGraphics(settings);
 		IntPtr ic = g.GetHdc();
 		try {
 			static Rectangle Rect(RECT r) => Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
-			return PrintedLineNumbers.Compute(editor, numbering, ic, Rect(range.rc), Rect(range.rcPage), starts, everyLine);
+			Rectangle TextOf(int page) {
+				var own = AreaAt(range.rc, starts[page]);
+				return Rectangle.FromLTRB(own.Left, range.rc.Top, own.Right, range.rc.Bottom);
+			}
+			return PrintedLineNumbers.Compute(editor, page => NumberingAt(starts[page]), ic, TextOf, Rect(range.rcPage), starts, everyLine);
 		} finally {
 			g.ReleaseHdc(ic);
 		}
@@ -10728,11 +10797,6 @@ sealed class DocumentPrinter : IDisposable
 		int count = 0, position = 0;
 		var doc = editor.TextDocument;
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
-		PrintedLines? lines = null;
-		IReadOnlyList<int>? Lines(int from, int to) {
-			lines ??= new PrintedLines(editor, Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings), range.rc.Right - range.rc.Left);
-			return lines.Starts(from, to);
-		}
 		// (iteration 67) the printed lines of a column of that width, and the columns of a page (text laid out for each in
 		// turn, the page ending early at a page break)
 		var columnLines = new Dictionary<int, PrintedLines>();
@@ -10786,7 +10850,7 @@ sealed class DocumentPrinter : IDisposable
 					range.chrg.cpMax = limit == int.MaxValue ? -1 : limit;
 					int laidOut = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
 					int height = range.rc.Bottom - top;
-					next = PageBreaks.AfterBreak(doc, laidOut >= limit ? laidOut : PageKeeping.Adjust(doc, story, at, laidOut, Lines));
+					next = PageBreaks.AfterBreak(doc, laidOut >= limit ? laidOut : PageKeeping.Adjust(doc, story, at, laidOut, (a, b) => LinesIn(width, a, b)));
 					if (next <= at) break;
 					if (next < laidOut) {
 						range.rc = room;
@@ -10830,14 +10894,14 @@ sealed class DocumentPrinter : IDisposable
 		Font? noteFont = null;
 		var (noteName, noteSize) = NoteFontUsed = Footnotes.NoteFontOf(doc, footnotes, editor.Font.Name, editor.Font.SizeInPoints, NoteStyle);
 		float widthUnits = (otherArea.Right - otherArea.Left) / 14.4f;    // (1/100 inch: the measuring graphics' unit)
-		var linesOf = new Dictionary<int, List<Footnotes.NoteLine>>();    // each footnote's lines, by its place
+		var linesOf = new Dictionary<(int, float), List<Footnotes.NoteLine>>();    // each footnote's lines, by its place (and the page's width)
 		List<Footnotes.NoteLine> LinesOf(List<Footnotes.Footnote> on) {
 			var lines = new List<Footnotes.NoteLine>();
 			if (on.Count == 0) return lines;
 			measure ??= Document.PrinterSettings.CreateMeasurementGraphics(Document.DefaultPageSettings);
 			noteFont ??= Footnotes.NoteFont(noteName, noteSize);
 			foreach (var f in on) {
-				if (!linesOf.TryGetValue(f.Start, out var own)) linesOf[f.Start] = own = Footnotes.Lines(measure, new() { f }, widthUnits, noteFont);
+				if (!linesOf.TryGetValue((f.Start, widthUnits), out var own)) linesOf[(f.Start, widthUnits)] = own = Footnotes.Lines(measure, new() { f }, widthUnits, noteFont);
 				lines.AddRange(own);
 			}
 			return lines;
@@ -10854,6 +10918,7 @@ sealed class DocumentPrinter : IDisposable
 			while (true) {
 				count++;
 				var area = AreaAt(otherArea, position);    // (iteration 55: page 1's own; 63: the page's section's)
+				widthUnits = (area.Right - area.Left) / 14.4f;    // (Docxodus trial: its notes as wide as its text)
 				starts?.Add(position);
 				// (iteration 67) a page in columns, or with text that goes on in columns: the notes across its foot, the bands above them
 				int across = area.Right - area.Left;
@@ -10891,7 +10956,7 @@ sealed class DocumentPrinter : IDisposable
 				range.chrg.cpMax = -1;
 				int laidOut = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
 				int used = range.rc.Bottom - area.Top;
-				int next = PageBreaks.AfterBreak(doc, PageKeeping.Adjust(doc, story, position, laidOut, Lines));
+				int next = PageBreaks.AfterBreak(doc, PageKeeping.Adjust(doc, story, position, laidOut, (a, b) => LinesIn(area.Right - area.Left, a, b)));
 				// the page's notes (the ones going on from the page before, then its own): the page ends at the last of its
 				// lines (as laid out) for which the text, the notes going on and its own notes up to the last one's first line
 				// fit; the notes' lines that fit below the text are shown, the others go on at the next page's foot (Word's way)
@@ -10914,7 +10979,7 @@ sealed class DocumentPrinter : IDisposable
 						return Twips(noteLines.Take(Math.Max(1, lastFirst)).ToList());
 					}
 					bool Fits(int to, bool whole) => TextHeight(to) + (whole ? Twips(NotesTo(to)) : Needed(NotesTo(to), On(position, to).Count)) <= area.Bottom - area.Top;
-					var ends = (Lines(position, next) ?? Array.Empty<int>()).Where(at => at > position).Append(next).Distinct().OrderBy(at => at).ToList();
+					var ends = (LinesIn(area.Right - area.Left, position, next) ?? Array.Empty<int>()).Where(at => at > position).Append(next).Distinct().OrderBy(at => at).ToList();
 					int Furthest(bool whole) {
 						int best = -1, lo = 0, hi = ends.Count - 1;
 						while (lo <= hi) {
@@ -10931,7 +10996,7 @@ sealed class DocumentPrinter : IDisposable
 					// (not even one line with its note: the page's first line, its notes as they come)
 					int chosen = best >= 0 ? ends[best] : ends[0];
 					if (chosen < next) {
-						int kept = PageBreaks.AfterBreak(doc, PageKeeping.Adjust(doc, story, position, chosen, Lines));
+						int kept = PageBreaks.AfterBreak(doc, PageKeeping.Adjust(doc, story, position, chosen, (a, b) => LinesIn(area.Right - area.Left, a, b)));
 						next = kept > position ? kept : chosen;
 					}
 					used = TextHeight(next);
@@ -10956,7 +11021,6 @@ sealed class DocumentPrinter : IDisposable
 				position = next;
 			}
 		} finally {
-			lines?.Dispose();
 			foreach (var own in columnLines.Values) own.Dispose();
 			measure?.Dispose();
 			noteFont?.Dispose();

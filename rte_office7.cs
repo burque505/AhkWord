@@ -734,6 +734,32 @@ public static class OfficeConverters {
 	}
 	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendParaFormat(IntPtr hWnd, int msg, IntPtr wParam, ref ParaFormat2 lParam);
 
+	/// (Docxodus trial) A list paragraph's mark in the font (name and size) of its text: the editor, as Word, draws a list
+	/// number in its paragraph mark's font, and HTML leaves the marks in the editor's default font (Segoe UI numbers
+	/// beside Calibri text). Word's own RTF gives the marks their fonts.
+	public static void ListMarksFromText(EllipticBit.RichEditorNET.RichEditBox editor) {
+		var doc = editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		const int tomTrue = EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomTrue;
+		for (int start = 0; start < story.Length; ) {
+			int end = story.IndexOf('\r', start);
+			if (end < 0) break;
+			if (end > start && (doc.Range2(start, start).Para.ListType & 0xFFFF) != EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListNone) {
+				// (the first character shown: cross-reference and heading markers are hidden text)
+				int at = start;
+				while (at < end && (story[at] is '\t' or ' ' || doc.Range2(at, at + 1).Font.Hidden == tomTrue)) at++;
+				if (at < end) {
+					var text = doc.Range2(at, at + 1).Font;
+					var mark = doc.Range2(end, end + 1).Font;
+					string name = text.Name; float size = text.Size;
+					if (!string.IsNullOrEmpty(name) && mark.Name != name) mark.Name = name;
+					if (size > 0 && mark.Size != size) mark.Size = size;
+				}
+			}
+			start = end + 1;
+		}
+	}
+
 	/// (Docxodus trial) The text between HiddenStart and HiddenEnd made hidden, the markers taken out.
 	public static void HiddenFromMarkers(EllipticBit.RichEditorNET.RichEditBox editor) {
 		var doc = editor.TextDocument;
