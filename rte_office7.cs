@@ -56,8 +56,8 @@ using Codeuctivity.OpenXmlPowerTools.OpenXMLWordprocessingMLToHtmlConverter;
 using W = DocumentFormat.OpenXml.Wordprocessing;
 
 public static class OfficeConverters {
-	public const string Word = "word", LibreOffice = "libreoffice", OpenXml = "openxml", Pandoc = "pandoc", Docxodus = "docxodus";
-	static readonly string[] All = { Word, LibreOffice, OpenXml, Pandoc, Docxodus };
+	public const string Word = "word", LibreOffice = "libreoffice", OpenXml = "openxml", Pandoc = "pandoc", Docxodus = "docxodus", Direct = "direct";
+	static readonly string[] All = { Word, LibreOffice, OpenXml, Pandoc, Docxodus, Direct };
 
 	// ---- what is installed
 
@@ -99,7 +99,7 @@ public static class OfficeConverters {
 	// One line per converter, for the About box and Rte.Converters().
 	public static string Describe() {
 		string word = !WordInstalled ? "not installed" : WordRunning ? "installed, but running (not used while it is open)" : "installed";
-		return $"Word: {word}\nLibreOffice: {LibreOfficePath ?? "not found"}\nOpen XML (built in, .docx only): {(OpenXmlAvailable ? "available" : "packages missing")}\npandoc: {PandocPath ?? "not found"}";
+		return $"Word: {word}\nLibreOffice: {LibreOfficePath ?? "not found"}\nOpen XML (built in, .docx only): {(OpenXmlAvailable ? "available" : "packages missing")}\nDirect .docx writer (built in): available\npandoc: {PandocPath ?? "not found"}";
 	}
 
 	// ---- conversions
@@ -110,7 +110,8 @@ public static class OfficeConverters {
 		finish ??= r => r;
 		string format = Path.GetExtension(output).ToLowerInvariant().TrimStart('.');
 		if (format != "docx" && format != "odt") throw new ArgumentException("Export writes .docx or .odt, not " + Path.GetFileName(output));
-		var order = Order(format == "docx" ? new[] { Word, OpenXml, LibreOffice, Pandoc } : new[] { LibreOffice, Word, Pandoc }, via);
+		// (Docxodus trial: the direct writer first for .docx, rte_rtfdocx.cs; Word only if it fails)
+		var order = Order(format == "docx" ? new[] { Direct, Word, OpenXml, LibreOffice, Pandoc } : new[] { LibreOffice, Word, Pandoc }, via);
 		rtf = PngPictures(rtf);    // (RichEdit keeps pictures as WMF, which LibreOffice kept as it was)
 		string temp = TempFolder();
 		var errors = new List<string>();
@@ -121,6 +122,7 @@ public static class OfficeConverters {
 					string result = converter switch {
 						Word => WordConvert(WriteRtf(temp, "document-word.rtf", finish(legalRtf ??= WithNormalStyle(LegalRtf(rtf)))), Path.Combine(temp, "word." + format), format == "docx" ? 16 : 23),    // wdFormatDocumentDefault, wdFormatOpenDocumentText
 						LibreOffice => LibreOfficeConvert(WriteRtf(temp, "document-lo.rtf", finish(ModernNumbers(ModernBullets(legalRtf ??= WithNormalStyle(LegalRtf(rtf)))))), temp, format == "docx" ? "docx:MS Word 2007 XML" : "odt", format),
+						Direct => format == "docx" ? RtfDocx.Write(finish(legalRtf ??= WithNormalStyle(LegalRtf(rtf))), Path.Combine(temp, "direct.docx")) : throw new InvalidOperationException("writes only .docx"),
 						OpenXml => format == "docx" ? OpenXmlWrite(html(), Path.Combine(temp, "openxml.docx")) : throw new InvalidOperationException("writes only .docx"),
 						_ => PandocConvert(WriteHtml(temp, html()), Path.Combine(temp, "pandoc." + format), "html", format, temp),
 					};
@@ -1622,7 +1624,7 @@ public static class OfficeConverters {
 		return named.Distinct().ToList();
 	}
 
-	static string Name(string converter) => converter switch { Word => "Word", LibreOffice => "LibreOffice", OpenXml => "Open XML", Docxodus => "Docxodus", _ => "pandoc" };
+	static string Name(string converter) => converter switch { Word => "Word", LibreOffice => "LibreOffice", OpenXml => "Open XML", Docxodus => "Docxodus", Direct => "built-in (direct)", _ => "pandoc" };
 	static string Message(Exception ex) => (ex is TargetInvocationException { InnerException: { } inner } ? inner : ex).Message.Trim();
 
 	static string TempFolder() {

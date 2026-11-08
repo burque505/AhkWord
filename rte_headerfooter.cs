@@ -796,8 +796,10 @@ public static class HeaderFooter
 			var size = new W.PageSize { Width = (uint)layout.Width, Height = (uint)layout.Height };
 			if (layout.Landscape) size.Orient = W.PageOrientationValues.Landscape;
 			var margin = new W.PageMargin { Left = (uint)layout.Left, Right = (uint)layout.Right, Top = layout.Top, Bottom = layout.Bottom, Header = (uint)layout.HeaderY, Footer = (uint)layout.FooterY, Gutter = 0 };
-			if (last == null) { section.PrependChild(margin); section.PrependChild(size); }
-			else { section.InsertAfter(margin, last); section.InsertAfter(size, last); }
+			// (after the section's type and note properties if it has them: the direct writer's sections do; the schema puts them first)
+			var before = section.ChildElements.LastOrDefault(e => e is W.SectionType or W.FootnoteProperties or W.EndnoteProperties) ?? last;
+			if (before == null) { section.PrependChild(margin); section.PrependChild(size); }
+			else { section.InsertAfter(margin, before); section.InsertAfter(size, before); }
 			section.RemoveAllChildren<W.Columns>();
 			if (layout.Columns is { } columns) {
 				var written = new W.Columns { ColumnCount = (short)columns.Count, Space = columns.Gap.ToString(System.Globalization.CultureInfo.InvariantCulture), EqualWidth = columns.Widths == null, Separator = columns.Line ? true : null };

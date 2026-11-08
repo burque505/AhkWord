@@ -89,12 +89,7 @@ public sealed class PageGaps
 	public bool Applied => Gaps.Count > 0;
 
 	const char RowStart = '￹', RowEnd = '￻', CellEnd = '\u0007';
-	static bool InTable(string story, int at) {
-		if (at < 0 || at >= story.Length) return false;
-		if (story[at] is RowStart or RowEnd or CellEnd) return true;
-		int open = story.LastIndexOf(RowStart, Math.Max(0, at - 1)), close = at > 0 ? story.LastIndexOf(RowEnd, at - 1) : -1;
-		return open >= 0 && open > close;
-	}
+	static bool InTable(string story, int at) => RtfTables.InTable(story, at);    // (Docxodus trial: nested tables reckoned with)
 
 	// A line in a table or touching one: its row's marks (raising a row's end mark raises the whole row).
 	static bool TouchesTable(string story, int start, int end) {
@@ -144,8 +139,8 @@ public sealed class PageGaps
 			string story = doc.Range2(0, storyEnd).Text ?? "";
 			int after = start;
 			while (after < story.Length && story[after] == '\uFFF9') {
-				int end = story.IndexOf('\uFFFB', after);
-				if (end < 0) break;
+				int end = RtfTables.OuterRows(story).Where(r => r.Start == after).Select(r => r.End).DefaultIfEmpty(-1).First();    // (Docxodus trial: not a nested row's end)
+				if (end < 0 || end >= story.Length) break;
 				after = end + 2;
 			}
 			if (after > start && after < storyEnd) starts.Add(after);

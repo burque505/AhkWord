@@ -30,26 +30,80 @@ public static class RtfTables
 
 	static string Story(ITextDocument2 doc) => doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 
-	/// The document's tables (rows that follow each other make one table).
+	/// The document's tables (rows that follow each other make one table). (Docxodus trial) Only the outermost: a table
+	/// nested in a cell is part of that cell's text, and its rows' and cells' marks are not the outer row's.
 	public static List<Table> Find(ITextDocument2 doc) {
 		string s = Story(doc);
 		var tables = new List<Table>();
 		var rows = new List<Row>();
-		for (int i = 0; i < s.Length; i++) {
-			if (s[i] != RowStart) continue;
-			int end = s.IndexOf(RowEnd, i);
-			if (end < 0) break;
+		foreach (var (start, end) in OuterRows(s)) {
+			if (end >= s.Length) break;    // (a row without its end mark)
 			var cells = new List<Cell>();
-			int cell = i + 2;    // after U+FFF9 and its paragraph mark
-			for (int j = cell; j < end; j++)
-				if (s[j] == CellEnd) { cells.Add(new Cell(cell, j)); cell = j + 1; }
+			int cell = start + 2;    // after U+FFF9 and its paragraph mark
+			int depth = 0;
+			for (int j = cell; j < end; j++) {
+				if (s[j] == RowStart) depth++;
+				else if (s[j] == RowEnd) depth--;
+				else if (s[j] == CellEnd && depth == 0) { cells.Add(new Cell(cell, j)); cell = j + 1; }
+			}
 			int rowEnd = Math.Min(s.Length, end + 2);
-			if (rows.Count > 0 && rows[^1].End != i) { tables.Add(new Table(rows[0].Start, rows[^1].End, rows)); rows = new List<Row>(); }
-			rows.Add(new Row(i, rowEnd, cells));
-			i = end;
+			if (rows.Count > 0 && rows[^1].End != start) { tables.Add(new Table(rows[0].Start, rows[^1].End, rows)); rows = new List<Row>(); }
+			rows.Add(new Row(start, rowEnd, cells));
 		}
 		if (rows.Count > 0) tables.Add(new Table(rows[0].Start, rows[^1].End, rows));
 		return tables;
+	}
+
+	/// (Docxodus trial) RTF with the row definitions of nested tables ({\*\nesttableprops ...} groups) blanked out (as
+	/// spaces: the same length, so positions found in it are the RTF's), leaving the outer rows' definitions.
+	static string MaskNested(string rtf) {
+		int at = rtf.IndexOf(@"{\*\nesttableprops", StringComparison.Ordinal);
+		if (at < 0) return rtf;
+		var chars = rtf.ToCharArray();
+		while (at >= 0) {
+			int depth = 0, i = at;
+			for (; i < chars.Length; i++) {
+				if (chars[i] == '\\') { i++; continue; }    // (\{ \} \\ and the first letter of a control word)
+				if (chars[i] == '{') depth++;
+				else if (chars[i] == '}' && --depth == 0) break;
+			}
+			int end = Math.Min(i, chars.Length - 1);
+			for (int k = at; k <= end; k++) chars[k] = ' ';
+			at = rtf.IndexOf(@"{\*\nesttableprops", end + 1, StringComparison.Ordinal);
+		}
+		return new string(chars);
+	}
+
+	static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, List<(int Start, int End)>> outerRows = new();
+
+	/// (Docxodus trial) The outermost rows of a story: each row's U+FFF9 and its U+FFFB (story.Length when it has none);
+	/// rows of tables nested in their cells are inside them. Worked out once per story string.
+	public static List<(int Start, int End)> OuterRows(string story) => outerRows.GetValue(story, s => {
+		var rows = new List<(int, int)>();
+		int depth = 0, start = -1;
+		for (int i = s.IndexOfAny(Marks); i >= 0; i = s.IndexOfAny(Marks, i + 1)) {
+			if (s[i] == RowStart) { if (depth++ == 0) start = i; }
+			else if (depth > 0 && --depth == 0) rows.Add((start, i));
+		}
+		if (depth > 0) rows.Add((start, s.Length));
+		return rows;
+	});
+	static readonly char[] Marks = { RowStart, RowEnd };
+
+	/// (Docxodus trial) Whether a position is in a table's row (its marks included), nested tables reckoned with.
+	public static bool InTable(string story, int at) {
+		if (at < 0 || at >= story.Length) return false;
+		if (story[at] is RowStart or RowEnd or CellEnd) return true;
+		var rows = OuterRows(story);
+		int lo = 0, hi = rows.Count - 1, found = -1;
+		while (lo <= hi) { int mid = (lo + hi) / 2; if (rows[mid].Start < at) { found = mid; lo = mid + 1; } else hi = mid - 1; }
+		return found >= 0 && rows[found].End >= at;
+	}
+
+	/// (Docxodus trial) The outermost row whose end mark (U+FFFB) is at rowEnd: its start (U+FFF9), or -1.
+	public static int RowStartOf(string story, int rowEnd) {
+		foreach (var (start, end) in OuterRows(story)) if (end == rowEnd) return start;
+		return story.LastIndexOf(RowStart, Math.Max(0, rowEnd));
 	}
 
 	/// The table, row and cell at a position, or null outside tables.
@@ -73,17 +127,21 @@ public static class RtfTables
 	public static string BuildRtf(int rows, IList<int> widths, bool header, Func<int, int, string?>? cells = null, List<RowFormat>? formats = null) {
 		var colors = new List<Color?> { null };
 		var body = new StringBuilder();
+		// (Docxodus trial) cells as wide as their formats say when every cell says so: rows may then have cells of their own
+		// widths and number (cells spanning columns); otherwise one cell per column
+		bool own = formats != null && formats.Count > 0 && formats.All(f => f.Cells.Count > 0 && f.Cells.All(c => c.Width > 0));
 		for (int r = 0; r < rows; r++) {
 			var format = formats != null && r < formats.Count ? formats[r] : null;
 			body.Append(@"\trowd\trleft0").Append(format != null ? RowWords(format) : @"\trgaph108");
 			int x = 0;
-			for (int c = 0; c < widths.Count; c++) {
+			int count = own ? format!.Cells.Count : widths.Count;
+			for (int c = 0; c < count; c++) {
 				var cell = format != null && c < format.Cells.Count ? format.Cells[c] : null;
-				x += cell != null && cell.Width > 0 && formats!.All(f => f.Cells.Count == widths.Count) ? cell.Width : widths[c];
+				x += own ? cell!.Width : cell != null && cell.Width > 0 && formats!.All(f => f.Cells.Count == widths.Count) ? cell.Width : widths[c];
 				body.Append(cell != null ? CellWords(cell, color => ColorIndex(colors, color)) + " " : ThinBorders).Append(@"\cellx").Append(x);
 			}
 			body.Append(@"\pard\intbl ");
-			for (int c = 0; c < widths.Count; c++) {
+			for (int c = 0; c < count; c++) {
 				string text = Escape(cells?.Invoke(r, c) ?? "");
 				// a header cell's mark is bold too, so that text typed into the empty cell is bold
 				body.Append(header && r == 0 ? @"\b " + text + @"\cell\b0 " : text + @"\cell ");
@@ -161,10 +219,11 @@ public static class RtfTables
 
 		public static RowRtf Parse(string rtf) {
 			var row = new RowRtf();
-			int trowd = rtf.IndexOf(@"\trowd", StringComparison.Ordinal);
-			int rowEnd = rtf.LastIndexOf(@"\row", StringComparison.Ordinal);
-			var definitions = Regex.Matches(rtf[trowd..rowEnd], @"\\cellx-?\d+").Cast<Match>().ToList();
-			int defsStart = trowd + Math.Max(0, Regex.Match(rtf[trowd..rowEnd], @"\\cl[a-z]|\\cellx").Index);
+			string masked = MaskNested(rtf);    // (Docxodus trial: a nested table's row definitions are not this row's)
+			int trowd = masked.IndexOf(@"\trowd", StringComparison.Ordinal);
+			int rowEnd = masked.LastIndexOf(@"\row", StringComparison.Ordinal);
+			var definitions = Regex.Matches(masked[trowd..rowEnd], @"\\cellx-?\d+").Cast<Match>().ToList();
+			int defsStart = trowd + Math.Max(0, Regex.Match(masked[trowd..rowEnd], @"\\cl[a-z]|\\cellx").Index);
 			int defsEnd = trowd + definitions[^1].Index + definitions[^1].Length;
 			row.Head = rtf[..defsStart];
 			int from = defsStart;
@@ -445,23 +504,29 @@ public static class RtfTables
 			string marker = Marker(t);
 			var range = doc.Range2(0, 0);
 			if (range.FindText(marker, tomConstants.tomForward, 0) == 0) continue;
-			var rows = ParseTable(tables[t], out bool header, out var widths, out var formats);
+			var rows = ParseTable(tables[t], out bool header, out var widths, out var formats, out var grids);
 			if (rows.Count == 0) continue;
-			int columns = rows.Max(r => r.Count);
+			int columns = grids.Max();    // (Docxodus trial: grid columns, a cell spanning several counting for each)
 			if (widths == null || widths.Count != columns) widths = EqualWidths(columns, widthTwips);
-			foreach (var f in formats) while (f.Cells.Count < columns) f.Cells.Add(new CellFormat { Borders = Enumerable.Repeat(new Border(DefaultBorder, null), 4).ToArray() });
+			// rows short of the grid get empty cells to fill it (not rows whose cells span columns: they already fill it)
+			for (int r = 0; r < formats.Count; r++)
+				for (int g = grids[r]; g < columns; g++) {
+					formats[r].Cells.Add(new CellFormat { Width = widths[g], Borders = Enumerable.Repeat(new Border(DefaultBorder, null), 4).ToArray() });
+					rows[r].Add(new HtmlCell(""));
+				}
 			editor.Select(range.Start, range.End - range.Start);
 			editor.SelectedText = "";
 			string? Plain(int r, int c) => c < rows[r].Count && IsPlain(rows[r][c].Html) ? WebUtility.HtmlDecode(rows[r][c].Html).Trim() : null;
 			int tableStart = InsertRtf(editor, BuildRtf(rows.Count, widths, header, Plain, formats));
-			FillCells(editor, tableStart, rows.Select(r => r.Select(c => IsPlain(c.Html) ? null : c.Html).ToList()).ToList(), header, loadCell);
+			int CellWidth(int r, int c) => c < formats[r].Cells.Count && formats[r].Cells[c].Width > 0 ? formats[r].Cells[c].Width : c < widths.Count ? widths[c] : 2880;
+			FillCells(editor, tableStart, rows.Select(r => r.Select(c => IsPlain(c.Html) ? null : c.Html).ToList()).ToList(), header, loadCell, CellWidth);
 		}
 		editor.ClearUndo();
 		editor.Select(0, 0);
 	}
 
 	/// Fills the cells that have content (null: leave as it is) by loading each into a second editor and copying its RTF.
-	public static void FillCells(RichEditBox editor, int tableStart, List<List<string?>> cells, bool header, Action<RichEditBox, string> loadCell) {
+	public static void FillCells(RichEditBox editor, int tableStart, List<List<string?>> cells, bool header, Action<RichEditBox, string> loadCell, Func<int, int, int>? cellWidth = null) {
 		if (cells.All(row => row.All(c => c == null))) return;
 		using var scratch = AppTheme.OnPaper(new RichEditBox { Font = editor.Font, EnableHtmlFontSizing = editor.EnableHtmlFontSizing });
 		_ = scratch.Handle;
@@ -469,7 +534,11 @@ public static class RtfTables
 		for (int r = 0; r < cells.Count; r++)
 			for (int c = 0; c < cells[r].Count; c++) {
 				if (cells[r][c] is not string content) continue;
-				loadCell(scratch, content);
+				// (Docxodus trial) a cell holding a table: loaded with its table, which the cell's RTF then nests in the cell
+				if (Regex.IsMatch(content, @"<table\b", RegexOptions.IgnoreCase))
+					LoadHtml(scratch, content, loadCell, loadCell, Math.Max(720, (cellWidth?.Invoke(r, c) ?? 2880) - 216));
+				else
+					loadCell(scratch, content);
 				if (header && r == 0) scratch.TextDocument.Range2(0, scratch.TextLength).Font.Bold = tomConstants.tomTrue;
 				// (Docxodus trial) the last paragraph's format: SetCellRtf leaves out its paragraph mark, which carries it in RTF,
 				// so it took the cell's own (left aligned, no list)
@@ -525,16 +594,46 @@ public static class RtfTables
 
 	sealed record HtmlCell(string Html);
 
-	static List<List<HtmlCell>> ParseTable(string table, out bool header, out List<int>? widths, out List<RowFormat> formats) {
+	// (Docxodus trial) A row's own cells: tag (td/th), attributes and inner HTML. A cell may hold a table of its own, whose
+	// cells are part of its inner HTML (a plain <td>...</td> match ended the cell at the nested table's first </td>).
+	static IEnumerable<(string Tag, string Attributes, string Inner)> TopCells(string tr) {
+		int tables = 0, open = -1, innerStart = 0;
+		string tag = "", attributes = "";
+		foreach (Match m in Regex.Matches(tr, @"<(/?)(td|th|table)\b([^>]*)>", RegexOptions.IgnoreCase)) {
+			bool opening = m.Groups[1].Value == "";
+			string name = m.Groups[2].Value.ToLowerInvariant();
+			if (name == "table") { tables += opening ? 1 : -1; continue; }
+			if (tables > 0) continue;
+			if (opening) { open = m.Index; innerStart = m.Index + m.Length; tag = m.Groups[2].Value; attributes = m.Groups[3].Value; }
+			else if (open >= 0) { yield return (tag, attributes, tr[innerStart..m.Index]); open = -1; }
+		}
+	}
+
+	// (Docxodus trial) grids: each row's number of grid columns (a cell spanning columns counts for each). Cells spanning
+	// columns (colspan) are one cell as wide as those columns; cells spanning rows (rowspan) are merged down: the rows
+	// below get a cell merged into it (\clvmrg) where HTML leaves the column out.
+	static List<List<HtmlCell>> ParseTable(string table, out bool header, out List<int>? widths, out List<RowFormat> formats, out List<int> grids) {
 		var rows = new List<List<HtmlCell>>();
 		header = false;
 		widths = null;
 		formats = new List<RowFormat>();
+		grids = new List<int>();
 		// the table's own border: border="0" or a style without one leaves its cells without lines; otherwise thin lines
 		string tableAttributes = Regex.Match(table, @"^<table\b([^>]*)>", RegexOptions.IgnoreCase).Groups[1].Value;
 		var tableStyle = Style(tableAttributes);
 		Border tableBorder = Attribute(tableAttributes, "border") is "0" || (tableStyle.TryGetValue("border", out var tb) && CssBorder(tb) is { Width: 0 })
 			? new Border(0, null) : new Border(DefaultBorder, null);
+		static int? Twips(string attributes) {
+			var w = Regex.Match(attributes, @"width\s*[:=]\s*""?([\d.]+)\s*(pt|px)?", RegexOptions.IgnoreCase);
+			return w.Success && float.TryParse(w.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out float n)
+				? (int)(w.Groups[2].Value.Equals("pt", StringComparison.OrdinalIgnoreCase) ? n * 20 : n * 15) : null;
+		}
+		static int Span(string attributes, string name) => int.TryParse(Attribute(attributes, name), out int n) && n > 1 ? Math.Min(n, 63) : 1;
+		// the grid's columns from <colgroup> (before the first row), when it gives them all
+		int firstRow = Regex.Match(table, @"<tr\b", RegexOptions.IgnoreCase) is { Success: true } fr ? fr.Index : table.Length;
+		var cols = Regex.Matches(table[..firstRow], @"<col\b([^>]*)>", RegexOptions.IgnoreCase).Select(m => Twips(m.Groups[1].Value)).ToList();
+		if (cols.Count > 0 && cols.All(c => c is > 0)) widths = cols.Select(c => c!.Value).ToList();
+		var carry = new List<(int Rows, int Span, CellFormat Format)>();    // per grid column: rows still covered by a cell above
 		foreach (var (start, end) in Elements(table, "tr")) {
 			string tr = table[start..end];
 			string rowAttributes = Regex.Match(tr, @"^<tr\b([^>]*)>", RegexOptions.IgnoreCase).Groups[1].Value;
@@ -542,25 +641,49 @@ public static class RtfTables
 			var cellFormats = new List<CellFormat>();
 			var rowWidths = new List<int>();
 			int? padding = null;
-			foreach (Match cell in Regex.Matches(tr, @"<(td|th)\b([^>]*)>(.*?)</\1>", RegexOptions.IgnoreCase | RegexOptions.Singleline)) {
-				cellFormats.Add(CssCell(cell.Groups[2].Value, tableBorder));
-				if (padding == null && Style(cell.Groups[2].Value).TryGetValue("padding", out var pad)) {
+			int column = 0;
+			bool spans = false;
+			void Covered() {    // the cells merged into one above, at this column
+				while (column < carry.Count && carry[column].Rows > 0) {
+					var (left, span, above) = carry[column];
+					var merged = above.Copy();
+					merged.VerticalMerge = 2;
+					cellFormats.Add(merged);
+					cells.Add(new HtmlCell(""));
+					carry[column] = (left - 1, span, above);
+					column += span;
+					spans = true;
+				}
+			}
+			foreach (var (tag, attributes, inner) in TopCells(tr)) {
+				Covered();
+				int across = Span(attributes, "colspan"), down = Span(attributes, "rowspan");
+				var format = CssCell(attributes, tableBorder);
+				if (down > 1) {
+					format.VerticalMerge = 1;
+					while (carry.Count < column + across) carry.Add((0, 1, new CellFormat()));
+					carry[column] = (down - 1, across, format);
+				}
+				if (across > 1) spans = true;
+				cellFormats.Add(format);
+				if (padding == null && Style(attributes).TryGetValue("padding", out var pad)) {
 					var parts = pad.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 					padding = CssLength(parts.Length > 1 ? parts[1] : parts[0]);
 				}
-				if (rows.Count == 0 && cell.Groups[1].Value.Equals("th", StringComparison.OrdinalIgnoreCase)) header = true;
-				cells.Add(new HtmlCell(cell.Groups[3].Value.Trim()));
-				var w = Regex.Match(cell.Groups[2].Value, @"width\s*[:=]\s*""?([\d.]+)\s*(pt|px)?", RegexOptions.IgnoreCase);
-				if (w.Success && float.TryParse(w.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float n))
-					rowWidths.Add((int)(w.Groups[2].Value.Equals("pt", StringComparison.OrdinalIgnoreCase) ? n * 20 : n * 15));
+				if (rows.Count == 0 && tag.Equals("th", StringComparison.OrdinalIgnoreCase)) header = true;
+				cells.Add(new HtmlCell(inner.Trim()));
+				if (Twips(attributes) is int w) rowWidths.Add(w);
+				column += across;
 			}
-			if (rows.Count == 0 && rowWidths.Count == cells.Count && cells.Count > 0) widths = rowWidths;
+			Covered();
+			if (rows.Count == 0 && widths == null && !spans && rowWidths.Count == cells.Count && cells.Count > 0) widths = rowWidths;
 			if (rows.Count == 0 && Regex.IsMatch(table[..start], @"<thead\b", RegexOptions.IgnoreCase)) header = true;
 			if (cells.Count > 0) {
 				rows.Add(cells);
 				var format = CssRow(tableAttributes, rowAttributes, cellFormats);
 				if (padding is int p) format.Padding = p;
 				formats.Add(format);
+				grids.Add(column);
 			}
 		}
 		return rows;
@@ -580,6 +703,8 @@ public static class RtfTables
 		public Border[] Borders = new Border[4];
 		public Color? Shading;
 		public int VerticalAlign;
+		public int VerticalMerge;    // (Docxodus trial) 0 none, 1 the first of cells merged down (\clvmgf), 2 one merged into it (\clvmrg)
+		public CellFormat Copy() => new() { Width = Width, Borders = (Border[])Borders.Clone(), Shading = Shading, VerticalAlign = VerticalAlign, VerticalMerge = VerticalMerge };
 	}
 
 	/// A row's alignment on the page (0 left, 1 center, 2 right), height (twips: 0 automatic, > 0 at least, < 0 exactly),
@@ -611,7 +736,7 @@ public static class RtfTables
 	public static List<RowFormat> RowFormats(string rtf) {
 		var colors = ColorTable(rtf);
 		var rows = new List<RowFormat>();
-		foreach (Match row in Regex.Matches(rtf, @"\\trowd(.*?)\\row(?![a-z])", RegexOptions.Singleline)) {
+		foreach (Match row in Regex.Matches(MaskNested(rtf), @"\\trowd(.*?)\\row(?![a-z])", RegexOptions.Singleline)) {
 			string definitions = row.Groups[1].Value;
 			var end = Regex.Match(definitions, @"\\(pard|intbl)(?![a-z])|\\cell(?![a-z])");
 			rows.Add(ParseRow(end.Success ? definitions[..end.Index] : definitions, colors));
@@ -636,6 +761,8 @@ public static class RtfTables
 				case "trrh": row.Height = value == int.MinValue ? 0 : value; break;
 				case "trgaph": row.Padding = Math.Max(0, value); gapSet = true; break;
 				case "trpaddl": if (!gapSet) row.Padding = Math.Max(0, value); break;
+				case "clvmgf": cell.VerticalMerge = 1; break;
+				case "clvmrg": cell.VerticalMerge = 2; break;
 				case "clvertalt": cell.VerticalAlign = 0; break;
 				case "clvertalc": cell.VerticalAlign = 1; break;
 				case "clvertalb": cell.VerticalAlign = 2; break;
@@ -695,6 +822,7 @@ public static class RtfTables
 	// A cell's vertical alignment, shading and borders as RTF (index gives a color's place in the color table).
 	static string CellWords(CellFormat cell, Func<Color?, int> index) {
 		var sb = new StringBuilder();
+		if (cell.VerticalMerge == 1) sb.Append(@"\clvmgf"); else if (cell.VerticalMerge == 2) sb.Append(@"\clvmrg");
 		if (cell.VerticalAlign == 1) sb.Append(@"\clvertalc"); else if (cell.VerticalAlign == 2) sb.Append(@"\clvertalb");
 		if (cell.Shading is Color shade) sb.Append(@"\clcfpat").Append(index(shade)).Append(@"\clshdng10000");
 		string[] names = { "clbrdrt", "clbrdrl", "clbrdrb", "clbrdrr" };
@@ -735,7 +863,7 @@ public static class RtfTables
 			var cell = format.Cells[i];
 			string kept = Regex.Replace(parsed.Definitions[i], @"\\cellx-?\d+$", "");
 			kept = Regex.Replace(kept, @"\\clbrdr[tlbr] ?(\\brdr[a-z]+-?\d* ?|\\brsp\d+ ?)*", "");
-			kept = Regex.Replace(kept, @"\\(clvertal[tcb]|clcbpat\d+|clcfpat\d+|clshdng\d+) ?", "");
+			kept = Regex.Replace(kept, @"\\(clvertal[tcb]|clcbpat\d+|clcfpat\d+|clshdng\d+|clvmgf|clvmrg) ?", "");    // (Docxodus trial: the merge words too, which CellWords writes)
 			x += cell.Width;
 			definitions.Add(kept.TrimEnd() + CellWords(cell, color => ColorIndex(colors, color)) + @"\cellx" + x);
 		}
@@ -767,16 +895,47 @@ public static class RtfTables
 	public static void Format(RichEditBox editor, int tableStart, Action<List<RowFormat>> change) {
 		var table = Find(editor.TextDocument).First(t => t.Start == tableStart);
 		var formats = Formats(editor, table);
+		// (Docxodus trial) rows with cells merged into the row above are rewritten with it: RichEdit links rows merged down
+		// (selecting one selects them all), so they are rewritten together
+		var mergedUp = formats.Select(f => f.Cells.Any(c => c.VerticalMerge == 2)).ToList();
 		change(formats);
 		var selection = editor.TextDocument.Selection2;
 		int start = selection.Start, end = selection.End;
-		for (int r = table.Rows.Count - 1; r >= 0; r--) {
-			var row = Find(editor.TextDocument).First(t => t.Start == tableStart).Rows[r];
-			var parsed = RowRtf.Parse(GetRtf(editor, row.Start, row.End));
-			ApplyRow(parsed, formats[r]);
-			SetRtf(editor, row.Start, row.End, parsed.Build());
+		for (int r = table.Rows.Count - 1; r >= 0;) {
+			int first = r;
+			while (first > 0 && first < mergedUp.Count && mergedUp[first]) first--;
+			var rows = Find(editor.TextDocument).First(t => t.Start == tableStart).Rows;
+			if (first == r) {
+				var parsed = RowRtf.Parse(GetRtf(editor, rows[r].Start, rows[r].End));
+				ApplyRow(parsed, formats[r]);
+				SetRtf(editor, rows[r].Start, rows[r].End, parsed.Build());
+			} else
+				SetRtf(editor, rows[first].Start, rows[r].End, ApplyRows(GetRtf(editor, rows[first].Start, rows[r].End), formats.GetRange(first, r - first + 1)));
+			r = first - 1;
 		}
 		editor.TextDocument.Selection2.SetRange(start, end);
+	}
+
+	// (Docxodus trial) Several rows' RTF (one document) with formats applied, row by row (each row's colors added to the
+	// one color table). Unchanged when the rows can't be told apart as expected.
+	static string ApplyRows(string rtf, List<RowFormat> formats) {
+		string masked = MaskNested(rtf);
+		int firstRow = masked.IndexOf(@"\trowd", StringComparison.Ordinal);
+		var ends = Regex.Matches(masked, @"\\row(?![a-z])").Select(m => m.Index + m.Length).ToList();
+		if (firstRow < 0 || ends.Count != formats.Count) return rtf;
+		string header = rtf[..firstRow];
+		var bodies = new StringBuilder();
+		int from = firstRow;
+		for (int i = 0; i < ends.Count; i++) {
+			var parsed = RowRtf.Parse(header + rtf[from..ends[i]] + " }");
+			from = ends[i];
+			ApplyRow(parsed, formats[i]);
+			string built = parsed.Build();
+			int body = MaskNested(built).IndexOf(@"\trowd", StringComparison.Ordinal);
+			header = built[..body];
+			bodies.Append(built[body..built.LastIndexOf('}')]);
+		}
+		return header + bodies + rtf[from..].TrimStart();    // (no space after the last \row's own: as text, RichEdit lost the last row)
 	}
 
 	/// The cells (row, column) of a table that the selection touches, or the caret's cell.

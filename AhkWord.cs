@@ -6,6 +6,7 @@
 #load "rte_tables2.cs"
 #load "rte_office7.cs"
 #load "rte_docxodus.cs"
+#load "rte_rtfdocx.cs"
 #load "rte_legal.cs"
 #load "rte_pagebreaks.cs"
 #load "rte_headerfooter.cs"
