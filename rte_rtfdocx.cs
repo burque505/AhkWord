@@ -154,6 +154,7 @@ public static class RtfDocx {
 		public int Style, Left, Right, First, Before, After, Sl, Ls, Ilvl, Outline = -1, Shading = -1;
 		public int Suffix;    // (iteration 87: AhkWord's \rtesuffix, what follows the list number: 1 a space, 2 nothing)
 		public bool SlMult, Keep, KeepNext, PageBefore, Widow, Contextual, InTable;
+		public int Itap;    // (the table level: 1 a table, 2 a table nested in its cell, ...; 0 with \intbl means 1)
 		public char Align = 'l';
 		public List<TabStop> Tabs = new();
 		public char TabKind = 'l', TabLeader = 'n';
@@ -218,9 +219,15 @@ public static class RtfDocx {
 		public readonly List<OpenXmlElement> Blocks = new();
 		public readonly List<Inline> Line = new();
 		public string? PnText;
+		// the tables being written: [0] the table in the text, [1] a table nested in its cell, ...
+		public readonly List<TableLevel> Levels = new() { new TableLevel() };
+	}
+
+	sealed class TableLevel {
 		public readonly List<(RowDef Def, List<List<OpenXmlElement>> Cells)> Rows = new();
 		public List<List<OpenXmlElement>> Cells = new();
 		public List<OpenXmlElement> Cell = new();
+		public bool Open => Rows.Count > 0 || Cells.Count > 0 || Cell.Count > 0;
 	}
 
 	// ================================================================ the writer
@@ -319,6 +326,15 @@ public static class RtfDocx {
 					HeaderFooter(g, dest); return;
 				case "bkmkstart": BookmarkStart(PlainText(g).Trim()); return;
 				case "bkmkend": BookmarkEnd(PlainText(g).Trim()); return;
+				case "nesttableprops": {
+					// a nested table's row: its \trowd...\cellx and \nestrow, kept apart from the outer row's definition
+					var saved = (row, cell);
+					row = new RowDef(); cell = new CellDef();
+					try { WalkKids(g); }
+					finally { (row, cell) = saved; }
+					return;
+				}
+				case "nonesttables": return;    // (the text for readers without nested tables)
 				case "info": case "listtext": case "nonshppict": case "fldinst": case "ftnsep": case "ftnsepc": case "aftnsep": case "aftnsepc":
 				case "revtbl": case "rsidtbl": case "filetbl": case "xmlnstbl": case "object": case "colorschememapping": case "themedata":
 				case "latentstyles": case "datastore": case "pgdsctbl": case "generator": case "mmathPr": case "userprops": case "docvar":
@@ -416,8 +432,10 @@ public static class RtfDocx {
 			switch (w) {
 				case "par": EndParagraph(); return;
 				case "sect": EndParagraph(section: true); return;
-				case "cell": case "nestcell": EndParagraph(cellEnd: true); return;
-				case "row": case "nestrow": EndRow(); return;
+				case "cell": EndParagraph(cellEnd: true, level: 1); return;
+				case "nestcell": EndParagraph(cellEnd: true, level: Math.Max(2, p.Itap)); return;
+				case "row": EndRow(1); return;
+				case "nestrow": EndRow(Math.Max(2, story.Levels.Count)); return;
 				case "pard": p = new ParaFmt(); story.PnText = null; return;
 				case "plain": c = new CharFmt(); return;
 				case "sectd": sect = docSect.Clone(); return;
@@ -533,7 +551,7 @@ public static class RtfDocx {
 				case "nowidctlpar": f.Widow = false; return true;
 				case "contextualspace": f.Contextual = true; return true;
 				case "intbl": f.InTable = true; return true;
-				case "itap": f.InTable = (n ?? 1) > 0; return true;
+				case "itap": f.Itap = n ?? 1; f.InTable = f.Itap > 0; return true;
 				case "ls": f.Ls = n ?? 0; return true;
 				case "ilvl": f.Ilvl = n ?? 0; return true;
 				case "rtesuffix": f.Suffix = n ?? 0; return true;
@@ -1131,39 +1149,59 @@ public static class RtfDocx {
 
 		// ---- paragraphs, rows, tables
 
-		void EndParagraph(bool section = false, bool cellEnd = false) {
+		// level: the table level the paragraph is in (0 the text, 1 a table, 2 a table nested in a cell, ...)
+		void EndParagraph(bool section = false, bool cellEnd = false, int level = -1) {
 			var st = story;
-			bool inTable = (p.InTable || cellEnd) && !section;
+			if (level < 0) level = section ? 0 : p.Itap > 0 ? p.Itap : p.InTable ? 1 : 0;
 			var para = BuildParagraph(st, p, c, section ? SectPr(sect) : null);
 			st.Line.Clear();
 			st.PnText = null;
-			if (inTable) {
-				st.Cell.Add(para);
-				if (cellEnd) { st.Cells.Add(st.Cell); st.Cell = new(); }
+			ToLevel(st, level);
+			if (level > 0) {
+				var lv = st.Levels[level - 1];
+				lv.Cell.Add(para);
+				if (cellEnd) { lv.Cells.Add(lv.Cell); lv.Cell = new(); }
 			} else {
-				CloseTable(st);
 				st.Blocks.Add(para);
 			}
 			if (section) sect = sect.Clone();
 		}
 
-		void EndRow() {
+		// the tables deeper than the level end (each one goes into the cell it is nested in), and levels up to it open
+		void ToLevel(Story st, int level) {
+			while (st.Levels.Count > Math.Max(1, level)) {
+				var inner = st.Levels[^1];
+				st.Levels.RemoveAt(st.Levels.Count - 1);
+				if (inner.Cell.Count > 0 || inner.Cells.Count > 0) EndRowOf(inner, new RowDef());
+				if (BuildTable(inner) is { } nested) st.Levels[^1].Cell.Add(nested);
+			}
+			if (level == 0) { if (BuildTable(st.Levels[0]) is { } table) st.Blocks.Add(table); }
+			while (st.Levels.Count < level) st.Levels.Add(new TableLevel());
+		}
+
+		void EndRow(int level) {
 			var st = story;
-			if (st.Cell.Count > 0) { st.Cells.Add(st.Cell); st.Cell = new(); }
-			st.Rows.Add((row.Snapshot(), st.Cells));
-			st.Cells = new();
+			ToLevel(st, level);
+			EndRowOf(st.Levels[level - 1], row.Snapshot());
+		}
+
+		static void EndRowOf(TableLevel lv, RowDef def) {
+			if (lv.Cell.Count > 0) { lv.Cells.Add(lv.Cell); lv.Cell = new(); }
+			lv.Rows.Add((def, lv.Cells));
+			lv.Cells = new();
 		}
 
 		void FinishStory(Story st) {
 			if (st.Line.Count > 0) EndParagraph();
-			if (st.Cell.Count > 0 || st.Cells.Count > 0) EndRow();
-			CloseTable(st);
+			ToLevel(st, 1);
+			if (st.Levels[0].Cell.Count > 0 || st.Levels[0].Cells.Count > 0) EndRowOf(st.Levels[0], row.Snapshot());
+			ToLevel(st, 0);
 		}
 
-		void CloseTable(Story st) {
-			if (st.Rows.Count == 0) return;
-			var rows = st.Rows.ToList();
-			st.Rows.Clear();
+		W.Table? BuildTable(TableLevel lv) {
+			if (lv.Rows.Count == 0) return null;
+			var rows = lv.Rows.ToList();
+			lv.Rows.Clear();
 			// every row's cells with their left and right edges; a row with more cells than definitions gets more
 			var laid = new List<(RowDef Def, List<(int Left, int Right, CellDef Def, List<OpenXmlElement> Blocks)> Cells)>();
 			foreach (var (def, cells) in rows) {
@@ -1176,10 +1214,10 @@ public static class RtfDocx {
 					list.Add((left, right, defs[k], k < cells.Count ? cells[k] : new List<OpenXmlElement>()));
 					left = right;
 				}
-				laid.Add((def, list));
+				if (list.Count > 0) laid.Add((def, list));
 			}
 			var edges = laid.SelectMany(r => r.Cells.SelectMany(x => new[] { x.Left, x.Right })).Distinct().OrderBy(x => x).ToList();
-			if (edges.Count < 2) return;
+			if (edges.Count < 2) return null;
 			int tableLeft = edges[0], tableWidth = edges[^1] - edges[0];
 			var first = laid[0].Def;
 			var table = new W.Table();
@@ -1243,7 +1281,7 @@ public static class RtfDocx {
 				}
 				table.Append(tr);
 			}
-			st.Blocks.Add(table);
+			return table;
 		}
 
 		static string Blend(string back, string fore, double amount) {
