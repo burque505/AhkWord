@@ -243,6 +243,7 @@ public static class StyleEngine
 		if (Differ(para.FirstLineIndent, first) || Differ(para.LeftIndent, left) || Differ(para.RightIndent, right)) para.SetIndents(first, left, right);
 		if (Differ(para.SpaceBefore, before)) para.SpaceBefore = before;
 		if (Differ(para.SpaceAfter, after)) para.SpaceAfter = after;
+		if (rule >= 0) line = global::LineSpacing.Held(rule, line);    // (iteration 87: 1.08 as RichEdit holds it)
 		if (rule >= 0 && (para.LineSpacingRule != rule || Differ(para.LineSpacing, line))) para.SetLineSpacing(rule, line);
 		if (para.KeepWithNext != keepWith) para.KeepWithNext = keepWith;
 		if (para.KeepTogether != keepTogether) para.KeepTogether = keepTogether;
@@ -631,7 +632,7 @@ public static class StyleEngine
 
 	static void SetLine(ITextPara para, string spacing) {
 		var (rule, value) = global::LineSpacing.Parse(spacing.Trim() == "" ? "1" : spacing);
-		para.SetLineSpacing(rule, rule == global::LineSpacing.Single ? 1 : value);
+		para.SetLineSpacing(rule, rule == global::LineSpacing.Single ? 1 : global::LineSpacing.Held(rule, value));
 	}
 
 	static void SetParagraph(ITextPara para, ParagraphStyle style, bool keepIndents = false) {

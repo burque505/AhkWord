@@ -58,8 +58,20 @@ public static class LineSpacing
 		return Math.Abs(value - 1) < 0.001 ? (Single, 0) : (Multiple, value);
 	}
 
+	// (iteration 87) Word's default 1.08 lines (\sl259\slmult1). RichEdit keeps lines in twentieths: its RTF reader makes
+	// 1.08 1.05 and TOM makes it 1.10. So 1.08 is held as 1.05 everywhere (Word's files, the Paragraph dialog, styles),
+	// and the files AhkWord writes (.rtf, and .docx/.odt through RTF) have 1.08 again where RichEdit has 1.05: the
+	// editor shows 1.05, Word gets the 1.08 it wrote.
+	public const float WordDefault = 1.08f, WordDefaultHeld = 1.05f;
+
+	/// The value RichEdit holds for a line spacing (1.08 lines as 1.05).
+	public static float Held(int rule, float value) => rule == Multiple && Math.Abs(value - WordDefault) < 0.006f ? WordDefaultHeld : value;
+
+	/// RichEdit's RTF with 1.05 lines written as Word's 1.08.
+	public static string WordLines(string rtf) => Regex.Replace(rtf, @"\\sl252\\slmult1(?![0-9])", @"\sl259\slmult1");
+
 	/// Sets the line spacing of the paragraphs a range touches (one undo step).
-	public static void Apply(ITextRange2 range, int rule, float spacing) => range.Para.SetLineSpacing(rule, rule == Single ? 1 : spacing);
+	public static void Apply(ITextRange2 range, int rule, float spacing) => range.Para.SetLineSpacing(rule, rule == Single ? 1 : Held(rule, spacing));
 
 	/// The line spacing of the paragraphs a range touches ("mixed" if they differ).
 	public static string Of(ITextRange2 range) {
@@ -650,12 +662,12 @@ public static class DocxLineSpacing
 				// changed is laid out again, seconds in a long document)
 				var current = at.Para;
 				if (Same(current.SpaceBefore, before) && Same(current.SpaceAfter, after)
-					&& (spacing is not { } s || current.LineSpacingRule == s.Rule && (s.Rule == LineSpacing.Single || Same(current.LineSpacing, s.Value))))
+					&& (spacing is not { } s || current.LineSpacingRule == s.Rule && (s.Rule == LineSpacing.Single || Same(current.LineSpacing, LineSpacing.Held(s.Rule, s.Value)))))
 					continue;
 				var para = current.Duplicate;    // (set on a copy and put on at once: each change to the paragraph itself formats it again)
 				para.SpaceBefore = before;
 				para.SpaceAfter = after;
-				if (spacing is { } set) para.SetLineSpacing(set.Rule, set.Value);
+				if (spacing is { } set) para.SetLineSpacing(set.Rule, LineSpacing.Held(set.Rule, set.Value));
 				at.Para = para;
 			}
 		} finally {

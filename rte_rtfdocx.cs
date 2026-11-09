@@ -300,10 +300,15 @@ public static class RtfDocx {
 		}
 
 		// a group's content in a state of its own (footnotes, headers: their handler is the caller)
+		// (Its last paragraph, without a \par of its own, ends here with the group's formats, not after them with the
+		// text's: a footnote's last paragraph took the body paragraph's spacing and its superscript)
 		void WalkInside(Grp g) {
 			var (savedC, savedP) = (c, p);
 			c = c.Clone(); p = p.Clone();
-			try { WalkKids(g); }
+			try {
+				WalkKids(g);
+				if (story.Line.Count > 0) EndParagraph();
+			}
 			finally { (c, p) = (savedC, savedP); }
 		}
 

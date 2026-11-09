@@ -6398,7 +6398,7 @@ public class EditorApi
 			p.SetIndents(First, Left, Right);
 			p.SpaceBefore = Before;
 			p.SpaceAfter = After;
-			p.SetLineSpacing(Rule, Line);
+			p.SetLineSpacing(Rule, global::LineSpacing.Held(Rule, Line));    // (iteration 87: 1.08 held as 1.05, saved as 1.08)
 			p.KeepWithNext = KeepWithNext;
 			p.KeepTogether = KeepTogether;
 			p.WidowControl = WidowControl;
@@ -6883,7 +6883,7 @@ public class EditorApi
 		// (ordinary lists with hanging indents that fit their numbers: RichEdit's own RTF indents them so that Word and
 		// LibreOffice put the numbers too far in)
 		else if (extension == ".rtf")    // (and pictures as PNG, and the header and footer)
-			File.WriteAllText(full, WithBands(OfficeConverters.PngPictures(OfficeConverters.WithAltTexts(StyledRtf(OfficeConverters.ListIndentsRtf(RawRtf)), AltTexts())), full), Encoding.Latin1);    // (list indents before the styles: RecoveryRtf)
+			File.WriteAllText(full, global::LineSpacing.WordLines(WithBands(OfficeConverters.PngPictures(OfficeConverters.WithAltTexts(StyledRtf(OfficeConverters.ListIndentsRtf(RawRtf)), AltTexts())), full)), Encoding.Latin1);    // (list indents before the styles: RecoveryRtf; iteration 87: Word's 1.08 lines again)
 		else {
 			string content = extension switch {
 				".md" or ".markdown" => form.WithoutGaps(() => Footnotes.ToMarkdown(CrossRefs.ToMarkdown(MarkdownConverter.ToMarkdown(ed, ImageFiles(full))))) + (OwnBands ? HeaderFooter.MarkdownLine(form.Bands) + "\n" : "") + LineNumberFormats.MarkdownLine(form.Numbering),
@@ -12216,6 +12216,41 @@ sealed class WriterEditBox : RichEditBox
 		return true;
 	}
 
+	// Iteration 87: RichEdit animates the wheel (smooth scrolling: its timer moves the view on step by step after the
+	// notch), and each step here is painted at once with the pages, their gaps, frames and footnotes. A fast spin made
+	// a long train of steps: the view went on scrolling after the wheel stopped, and where the paint is slow (page 8 of
+	// the fidelity document) the window stopped responding. So the wheel (without Ctrl or Shift, which zoom and scroll
+	// sideways in RichEdit) scrolls here, at once as in Word: the notches waiting in the queue (with the same keys
+	// held) taken with it, by the lines per notch Windows is set to (a page for "one screen"), one paint.
+	void WheelScroll(int delta) {
+		int lines = SystemInformation.MouseWheelScrollLines;
+		double lineHeight = Font.GetHeight(DeviceDpi) * Math.Max(0.1f, ZoomFactor);
+		int by = lines < 0 ? (int)((long)delta * (ClientSize.Height * 9 / 10) / 120)
+			: (int)Math.Round(delta / 120.0 * lines * lineHeight);
+		if (by == 0) return;
+		var position = ScrollPosition();
+		position.Y = Math.Max(0, position.Y - by);
+		SendScroll(Handle, EM_SETSCROLLPOS, IntPtr.Zero, ref position);
+		OnVScroll(EventArgs.Empty);    // (as RichEdit's own scrolling tells: the page overhang is measured again)
+		Update();
+	}
+
+	// (the notches waiting in the queue, with the same keys held, the same way: one scroll)
+	[StructLayout(LayoutKind.Sequential)] struct QueuedMessage { public IntPtr Hwnd; public int Msg; public IntPtr WParam, LParam; public int Time; public Point Point; public int Private; }
+	[DllImport("user32.dll", EntryPoint = "PeekMessageW")] static extern bool PeekMessage(out QueuedMessage message, IntPtr hWnd, int first, int last, int remove);
+	void CoalesceWheel(ref Message m) {
+		const int PM_NOREMOVE = 0, PM_REMOVE = 1;
+		long keys = m.WParam.ToInt64() & 0xFFFF;
+		int delta = (short)((m.WParam.ToInt64() >> 16) & 0xFFFF);
+		while (PeekMessage(out var next, Handle, WM_MOUSEWHEEL, WM_MOUSEWHEEL, PM_NOREMOVE)) {
+			int more = (short)((next.WParam.ToInt64() >> 16) & 0xFFFF);
+			if ((next.WParam.ToInt64() & 0xFFFF) != keys || Math.Sign(more) != Math.Sign(delta) || Math.Abs(delta + more) > short.MaxValue) break;
+			PeekMessage(out _, Handle, WM_MOUSEWHEEL, WM_MOUSEWHEEL, PM_REMOVE);
+			delta += more;
+		}
+		m.WParam = (IntPtr)(((long)(ushort)(short)delta << 16) | keys);
+	}
+
 	// Whether the view is at RichEdit's own end of scrolling, or past it.
 	bool AtScrollEnd() {
 		var info = new ScrollInfo { Size = Marshal.SizeOf<ScrollInfo>(), Mask = 0x17 };    // SIF_ALL
@@ -12290,6 +12325,12 @@ sealed class WriterEditBox : RichEditBox
 		// painted at once, and with it what follows the editor's paint (the margins' bands, the line numbers). RichEdit
 		// moves the text's pixels itself at once, but Windows paints only once no input is waiting: while the wheel
 		// turned, the rest lagged behind the text by as long as it turned.
+		if (m.Msg == WM_MOUSEWHEEL && (ModifierKeys & (Keys.Control | Keys.Shift)) == 0 && IsHandleCreated) {
+			CoalesceWheel(ref m);
+			if (!ScrollPastEnd(m)) WheelScroll((short)((m.WParam.ToInt64() >> 16) & 0xFFFF));
+			m.Result = IntPtr.Zero;
+			return;
+		}
 		if (m.Msg is WM_MOUSEWHEEL or WM_VSCROLL or WM_KEYDOWN or WM_TIMER && IsHandleCreated) {
 			if (ScrollPastEnd(m)) return;
 			var before = ScrollPosition();

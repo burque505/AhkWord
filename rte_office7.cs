@@ -112,7 +112,7 @@ public static class OfficeConverters {
 		if (format != "docx" && format != "odt") throw new ArgumentException("Export writes .docx or .odt, not " + Path.GetFileName(output));
 		// (iteration 87: the direct writer first for .docx, rte_rtfdocx.cs; Word only if it fails)
 		var order = Order(format == "docx" ? new[] { Direct, Word, OpenXml, LibreOffice, Pandoc } : new[] { LibreOffice, Word, Pandoc }, via);
-		rtf = PngPictures(rtf);    // (RichEdit keeps pictures as WMF, which LibreOffice kept as it was)
+		rtf = PngPictures(global::LineSpacing.WordLines(rtf));    // (RichEdit keeps pictures as WMF, which LibreOffice kept as it was; iteration 87: Word's 1.08 lines again)
 		string temp = TempFolder();
 		var errors = new List<string>();
 		try {
@@ -120,9 +120,9 @@ public static class OfficeConverters {
 			foreach (var converter in order) {
 				try {
 					string result = converter switch {
-						Word => WordConvert(WriteRtf(temp, "document-word.rtf", finish(legalRtf ??= WithNormalStyle(LegalRtf(rtf)))), Path.Combine(temp, "word." + format), format == "docx" ? 16 : 23),    // wdFormatDocumentDefault, wdFormatOpenDocumentText
-						LibreOffice => LibreOfficeConvert(WriteRtf(temp, "document-lo.rtf", finish(ModernNumbers(ModernBullets(legalRtf ??= WithNormalStyle(LegalRtf(rtf)))))), temp, format == "docx" ? "docx:MS Word 2007 XML" : "odt", format),
-						Direct => format == "docx" ? RtfDocx.Write(finish(legalRtf ??= WithNormalStyle(LegalRtf(rtf))), Path.Combine(temp, "direct.docx")) : throw new InvalidOperationException("writes only .docx"),
+						Word => WordConvert(WriteRtf(temp, "document-word.rtf", finish(legalRtf ??= global::LineSpacing.WordLines(WithNormalStyle(LegalRtf(rtf))))), Path.Combine(temp, "word." + format), format == "docx" ? 16 : 23),    // wdFormatDocumentDefault, wdFormatOpenDocumentText
+						LibreOffice => LibreOfficeConvert(WriteRtf(temp, "document-lo.rtf", finish(ModernNumbers(ModernBullets(legalRtf ??= global::LineSpacing.WordLines(WithNormalStyle(LegalRtf(rtf))))))), temp, format == "docx" ? "docx:MS Word 2007 XML" : "odt", format),
+						Direct => format == "docx" ? RtfDocx.Write(finish(legalRtf ??= global::LineSpacing.WordLines(WithNormalStyle(LegalRtf(rtf)))), Path.Combine(temp, "direct.docx")) : throw new InvalidOperationException("writes only .docx"),
 						OpenXml => format == "docx" ? OpenXmlWrite(html(), Path.Combine(temp, "openxml.docx")) : throw new InvalidOperationException("writes only .docx"),
 						_ => PandocConvert(WriteHtml(temp, html()), Path.Combine(temp, "pandoc." + format), "html", format, temp),
 					};
