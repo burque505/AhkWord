@@ -1984,11 +1984,17 @@ class WriterForm : Form
 
 	// The recovery copy: written while there are unsaved changes (if they changed since), removed once there are none.
 	internal void Autosave() {
+		// (iteration 87: not while the editor's window is made again, New and Open's since iteration 86: its text can't be
+		// read then; the next tick writes the copy)
+		if (Editor.Renewing || !Editor.IsHandleCreated) return;
 		if (!Editor.Modified) { ClearRecovery(); return; }
 		try {
 			recovery.Write(api.RecoveryRtf(), FileName, DocumentName);
 			autosaveFailed = false;
-		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+		} catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+			// (iteration 87) the text not readable for the moment: RichTextBox's "Text is not saved", RichEditorNET's "The
+			// control handle has not been created", TOM's errors; on the timer, they ended in the crash dialog
+			or InvalidOperationException or COMException) {
 			if (!autosaveFailed) SetStatus("⚠ " + T("status.recoveryNotWritten", "The recovery copy could not be written: {0}", ex.Message));
 			autosaveFailed = true;
 		}

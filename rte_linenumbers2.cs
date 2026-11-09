@@ -332,7 +332,7 @@ sealed class LineNumberGutter : Control
 		if (regimes != null) return regimes;
 		// (while the editor has no window, as when it is made again for a new document, the document's numbering alone,
 		// not kept: the sections can't be read then, and asking threw in the middle of a paint)
-		if (SectionNumbering == null || !editor.IsHandleCreated) return new() { (0, numbering) };
+		if (SectionNumbering == null || !editor.IsHandleCreated || !HasDocument()) return new() { (0, numbering) };
 		List<(int Start, LineNumbering Numbering)> list;
 		try { list = SectionNumbering().Select(s => (s.Start, s.Own ?? numbering)).ToList(); }
 		catch (Exception ex) when (ex is InvalidOperationException or COMException) { return new() { (0, numbering) }; }
@@ -513,13 +513,23 @@ sealed class LineNumberGutter : Control
 	protected override void OnPaint(PaintEventArgs e) {
 		base.OnPaint(e);
 		LastPainted = DateTime.Now;
-		if (!On || !editor.IsHandleCreated) return;
+		if (!editor.IsHandleCreated || !HasDocument() || !On) return;
 		if (Bands?.Invoke() is { } bands) {
 			using var band = new SolidBrush(BandColor);
 			foreach (var area in bands) e.Graphics.FillRectangle(band, area);
 		}
 		try { Draw(e.Graphics); }
-		catch (COMException) { }    // the document can be briefly unavailable while it is being replaced
+		catch (Exception ex) when (Unavailable(ex)) { }    // the document can be briefly unavailable while it is being replaced
+	}
+
+	// (iteration 87) The editor's document missing for a moment: being replaced (COM), or (since iteration 86, which gives
+	// the editor a new window for each document) the window made again: RichEditorNET has a handle before it has
+	// fetched its TextDocument, and lets the document go before the handle, and says "The control handle has not been
+	// created" in between: a paint of the numbers then threw, and WinForms drew a red cross in their place.
+	bool Unavailable(Exception ex) => ex is COMException || ex is InvalidOperationException && !HasDocument();
+	bool HasDocument() {
+		try { _ = editor.TextDocument; return true; }
+		catch (InvalidOperationException) { return false; }
 	}
 
 	void Draw(Graphics g) {
@@ -545,10 +555,10 @@ sealed class LineNumberGutter : Control
 
 	/// The numbers in view, where they are drawn (Rte.PageViewReport shows them too).
 	public List<ShownNumber> ShownNumbers() {
-		if (!On || !editor.IsHandleCreated || !IsHandleCreated) return new();
+		if (!editor.IsHandleCreated || !IsHandleCreated || !HasDocument() || !On) return new();
 		using var font = NumberFont();
 		try { return Shown(font).ToList(); }
-		catch (COMException) { return new(); }
+		catch (Exception ex) when (Unavailable(ex)) { return new(); }
 	}
 
 	IEnumerable<ShownNumber> Shown(Font font) {
