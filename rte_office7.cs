@@ -4,7 +4,7 @@
 #:package AngleSharp@1.5.0
 #:package Microsoft.Extensions.Logging.Abstractions@6.0.0
 #:package Codeuctivity.OpenXmlPowerTools@10.0.621
-#:package SkiaSharp@4.152.0
+#:package SkiaSharp@4.154.0
 // Word and OpenDocument conversions for AhkWord (AhkWord.cs, through #load).
 // Version 7: the built-in reader's paragraphs get the .docx's own line spacing, space before and after, indents and tab
 // stops, as Word works them out (DocxLineSpacing.IntoHtml, in rte_linespacing2.cs): the PowerTools read a paragraph
@@ -56,8 +56,8 @@ using Codeuctivity.OpenXmlPowerTools.OpenXMLWordprocessingMLToHtmlConverter;
 using W = DocumentFormat.OpenXml.Wordprocessing;
 
 public static class OfficeConverters {
-	public const string Word = "word", LibreOffice = "libreoffice", OpenXml = "openxml", Pandoc = "pandoc";
-	static readonly string[] All = { Word, LibreOffice, OpenXml, Pandoc };
+	public const string Word = "word", LibreOffice = "libreoffice", OpenXml = "openxml", Pandoc = "pandoc", Docxodus = "docxodus", Direct = "direct";
+	static readonly string[] All = { Word, LibreOffice, OpenXml, Pandoc, Docxodus, Direct };
 
 	// ---- what is installed
 
@@ -99,7 +99,7 @@ public static class OfficeConverters {
 	// One line per converter, for the About box and Rte.Converters().
 	public static string Describe() {
 		string word = !WordInstalled ? "not installed" : WordRunning ? "installed, but running (not used while it is open)" : "installed";
-		return $"Word: {word}\nLibreOffice: {LibreOfficePath ?? "not found"}\nOpen XML (built in, .docx only): {(OpenXmlAvailable ? "available" : "packages missing")}\npandoc: {PandocPath ?? "not found"}";
+		return $"Word: {word}\nLibreOffice: {LibreOfficePath ?? "not found"}\nOpen XML (built in, .docx only): {(OpenXmlAvailable ? "available" : "packages missing")}\nDirect .docx writer (built in): available\npandoc: {PandocPath ?? "not found"}";
 	}
 
 	// ---- conversions
@@ -110,7 +110,8 @@ public static class OfficeConverters {
 		finish ??= r => r;
 		string format = Path.GetExtension(output).ToLowerInvariant().TrimStart('.');
 		if (format != "docx" && format != "odt") throw new ArgumentException("Export writes .docx or .odt, not " + Path.GetFileName(output));
-		var order = Order(format == "docx" ? new[] { Word, OpenXml, LibreOffice, Pandoc } : new[] { LibreOffice, Word, Pandoc }, via);
+		// (iteration 87: the direct writer first for .docx, rte_rtfdocx.cs; Word only if it fails)
+		var order = Order(format == "docx" ? new[] { Direct, Word, OpenXml, LibreOffice, Pandoc } : new[] { LibreOffice, Word, Pandoc }, via);
 		rtf = PngPictures(rtf);    // (RichEdit keeps pictures as WMF, which LibreOffice kept as it was)
 		string temp = TempFolder();
 		var errors = new List<string>();
@@ -121,6 +122,7 @@ public static class OfficeConverters {
 					string result = converter switch {
 						Word => WordConvert(WriteRtf(temp, "document-word.rtf", finish(legalRtf ??= WithNormalStyle(LegalRtf(rtf)))), Path.Combine(temp, "word." + format), format == "docx" ? 16 : 23),    // wdFormatDocumentDefault, wdFormatOpenDocumentText
 						LibreOffice => LibreOfficeConvert(WriteRtf(temp, "document-lo.rtf", finish(ModernNumbers(ModernBullets(legalRtf ??= WithNormalStyle(LegalRtf(rtf)))))), temp, format == "docx" ? "docx:MS Word 2007 XML" : "odt", format),
+						Direct => format == "docx" ? RtfDocx.Write(finish(legalRtf ??= WithNormalStyle(LegalRtf(rtf))), Path.Combine(temp, "direct.docx")) : throw new InvalidOperationException("writes only .docx"),
 						OpenXml => format == "docx" ? OpenXmlWrite(html(), Path.Combine(temp, "openxml.docx")) : throw new InvalidOperationException("writes only .docx"),
 						_ => PandocConvert(WriteHtml(temp, html()), Path.Combine(temp, "pandoc." + format), "html", format, temp),
 					};
@@ -139,7 +141,7 @@ public static class OfficeConverters {
 	public static (string Kind, string Content, string Converter) Import(string input, string? via = null) {
 		string format = Path.GetExtension(input).ToLowerInvariant().TrimStart('.');
 		// (.odt: LibreOffice first, as for writing: Word's RTF of an .odt leaves its text's font to whichever paragraph set one last)
-		var order = Order(format == "docx" ? new[] { Word, OpenXml, LibreOffice, Pandoc } : format == "odt" ? new[] { LibreOffice, Word, Pandoc } : new[] { Word, LibreOffice, Pandoc }, via);
+		var order = Order(format == "docx" ? new[] { Docxodus, OpenXml, Word, LibreOffice, Pandoc } : format == "odt" ? new[] { LibreOffice, Word, Pandoc } : new[] { Word, LibreOffice, Pandoc }, via);
 		if (format == "doc") order.Remove(Pandoc);    // pandoc can't read the old binary format
 		string temp = TempFolder();
 		var errors = new List<string>();
@@ -153,6 +155,7 @@ public static class OfficeConverters {
 						Word => ("rtf", File.ReadAllText(WordConvert(copy, Path.Combine(temp, "word.rtf"), 6), System.Text.Encoding.Latin1), converter),    // wdFormatRTF
 						LibreOffice => LibreOfficeImport(copy, temp, format),
 						OpenXml => format == "docx" ? ("html", OpenXmlRead(copy), converter) : throw new InvalidOperationException("reads only .docx"),
+						Docxodus => format == "docx" ? ("html", DocxodusRead(copy), converter) : throw new InvalidOperationException("reads only .docx"),
 						_ => ("html", File.ReadAllText(PandocConvert(copy, Path.Combine(temp, "pandoc.html"), format, "html", temp, "--embed-resources", "--standalone")), converter),
 					};
 				}
@@ -654,6 +657,232 @@ public static class OfficeConverters {
 		"bullet" => W.NumberFormatValues.Bullet, _ => W.NumberFormatValues.Decimal
 	};
 
+	// (iteration 87) the built-in reader's steps on Docxodus's HTML instead of the Codeuctivity PowerTools' (rte_docxodus.cs)
+	static string DocxodusRead(string input) {
+		TypedIndents = null;
+		LoadSkia();
+		string folder = TempFolder();
+		XElement html;
+		try { html = DocxodusReader.Html(CrossRefs.MarkedDocx(input, folder), folder, Path.GetFileNameWithoutExtension(input), "span { white-space: pre-wrap; }"); }
+		finally { TryDelete(folder); }
+		DocxLineSpacing.IntoHtml(input, html);
+		NoNamesAsAltTexts(html);
+		ListsFromMarkers(html);
+		TabsFromMargins(html);
+		TypedIndents = TypedNumberIndents(html);
+		PlainLinks(html);
+		HighlightsAndHidden(html);
+		return html.ToString(SaveOptions.DisableFormatting);
+	}
+
+	// (iteration 87) A link's text without an underline or colour of its own (Word's Hyperlink style, written out by the
+	// converters): the editor shows links its own way, and with an underline of their own it went on underlining the text
+	// after the link, to the end of the paragraph.
+	// (iteration 87) Highlights as background-color (the editor's HTML import doesn't read the background shorthand), and
+	// hidden text (display: none, which it doesn't read either) between two markers, made hidden once loaded
+	// (HiddenFromMarkers).
+	public const char HiddenStart = '\uE7A2', HiddenEnd = '\uE7A3';
+	static void HighlightsAndHidden(XElement html) {
+		XNamespace x = html.Name.Namespace;
+		foreach (var e in html.Descendants(x + "span").Where(e => e.Attribute("style") != null).ToList()) {
+			string style = (string)e.Attribute("style")!;
+			string fixedStyle = Regex.Replace(style, @"(^|;)\s*background\s*:\s*([^;]+)", m => m.Groups[2].Value.Trim().Contains(' ') ? m.Value : $"{m.Groups[1].Value}background-color: {m.Groups[2].Value.Trim()}");
+			if (Regex.IsMatch(fixedStyle, @"(^|;)\s*display\s*:\s*none")) {
+				fixedStyle = Regex.Replace(fixedStyle, @"(^|;)\s*display\s*:\s*none\s*", "$1");
+				if (e.Value != "") { e.AddFirst(new XText(HiddenStart.ToString())); e.Add(new XText(HiddenEnd.ToString())); }
+			}
+			if (fixedStyle != style) { if (fixedStyle.Trim().Trim(';') == "") e.Attribute("style")!.Remove(); else e.SetAttributeValue("style", fixedStyle); }
+		}
+	}
+
+	/// (iteration 87) Where a list item marked with RestartMark is numbered from its list's start, not on from the list
+	/// before it: RichEdit's "new number" (PFNS_NEWNUMBER), which TOM can't set; the markers taken out. Last of all on
+	/// loading: TOM can't set a list type that has it either (LegalLists.WithoutRestart).
+	public const char RestartMark = '\uE7A4';
+	public static void RestartsFromMarkers(EllipticBit.RichEditorNET.RichEditBox editor) {
+		var doc = editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		var marks = new List<int>();
+		for (int at = story.IndexOf(RestartMark); at >= 0; at = story.IndexOf(RestartMark, at + 1)) marks.Add(at);
+		if (marks.Count == 0) return;
+		var selection = doc.Selection2;
+		int selStart = selection.Start, selEnd = selection.End;
+		foreach (int at in Enumerable.Reverse(marks)) {
+			doc.Range2(at, at + 1).Text = "";
+			var para = doc.Range2(at, at).Para;
+			int type = para.ListType & 0xFFFF;
+			if (type == EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListNone || type == EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListBullet) continue;
+			selection.SetRange(at, at);
+			var pf = new ParaFormat2 { cbSize = Marshal.SizeOf<ParaFormat2>(), rgxTabs = new int[32] };
+			SendParaFormat(editor.Handle, 0x43D, IntPtr.Zero, ref pf);    // EM_GETPARAFORMAT
+			pf.dwMask = 0x2000 | 0x8000;    // PFM_NUMBERINGSTYLE | PFM_NUMBERINGSTART
+			pf.wNumberingStyle = (ushort)(pf.wNumberingStyle | 0x8000);    // PFNS_NEWNUMBER
+			pf.wNumberingStart = (ushort)Math.Max(1, para.ListStart);
+			SendParaFormat(editor.Handle, 0x447, IntPtr.Zero, ref pf);    // EM_SETPARAFORMAT
+		}
+		selection.SetRange(Math.Min(selStart, doc.Range2(0, 0).StoryLength), Math.Min(selEnd, doc.Range2(0, 0).StoryLength));
+	}
+
+	/// (iteration 87) Of the paragraphs starting at starts, those numbered from their list's start (RichEdit's "new
+	/// number"), with that start; NewNumbersBack sets them again (after changes that lose them).
+	public static List<(int At, int Start)> NewNumbers(EllipticBit.RichEditorNET.RichEditBox editor, IEnumerable<int> starts) {
+		var found = new List<(int, int)>();
+		var doc = editor.TextDocument;
+		var selection = doc.Selection2;
+		int selStart = selection.Start, selEnd = selection.End;
+		foreach (int at in starts) {
+			selection.SetRange(at, at);
+			var pf = new ParaFormat2 { cbSize = Marshal.SizeOf<ParaFormat2>(), rgxTabs = new int[32] };
+			SendParaFormat(editor.Handle, 0x43D, IntPtr.Zero, ref pf);    // EM_GETPARAFORMAT
+			if ((pf.wNumberingStyle & 0x8000) != 0 && pf.wNumbering != 0) found.Add((at, pf.wNumberingStart));
+		}
+		selection.SetRange(selStart, selEnd);
+		return found;
+	}
+
+	public static void NewNumbersBack(EllipticBit.RichEditorNET.RichEditBox editor, IEnumerable<(int At, int Start)> restarts) {
+		var doc = editor.TextDocument;
+		var selection = doc.Selection2;
+		int selStart = selection.Start, selEnd = selection.End;
+		foreach (var (at, start) in restarts) {
+			selection.SetRange(at, at);
+			var pf = new ParaFormat2 { cbSize = Marshal.SizeOf<ParaFormat2>(), rgxTabs = new int[32] };
+			SendParaFormat(editor.Handle, 0x43D, IntPtr.Zero, ref pf);    // EM_GETPARAFORMAT
+			if ((pf.wNumberingStyle & 0x8000) != 0 && pf.wNumberingStart == start) continue;
+			pf.dwMask = 0x2000 | 0x8000;    // PFM_NUMBERINGSTYLE | PFM_NUMBERINGSTART
+			pf.wNumberingStyle = (ushort)(pf.wNumberingStyle | 0x8000);    // PFNS_NEWNUMBER
+			pf.wNumberingStart = (ushort)start;
+			SendParaFormat(editor.Handle, 0x447, IntPtr.Zero, ref pf);    // EM_SETPARAFORMAT
+		}
+		int length = doc.Range2(0, 0).StoryLength;
+		selection.SetRange(Math.Min(selStart, length), Math.Min(selEnd, length));
+	}
+
+	// (iteration 87) RichEdit's RTF doesn't keep where a list starts again from its first number (a list right after a
+	// list reads back as one list, numbered on): AhkWord's RTF keeps it in {\*\rtenewnumbers index:start,...}
+	// (paragraph indices, in order), which NewNumbersInto gives back.
+	static readonly Regex NewNumbersRx = new(@"\{\\\*\\rtenewnumbers ([0-9,:]*)\}");
+
+	// Each paragraph's start, in order, and its TOM list type.
+	static List<(int Start, int ListType)> ParagraphStarts(EllipticBit.RichEditorNET.TextObjectModel2.ITextDocument2 doc) {
+		var list = new List<(int, int)>();
+		int storyEnd = doc.Range2(0, 0).StoryLength;
+		var range = doc.Range2(0, 0);
+		range.Expand(EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomParagraph);
+		while (true) {
+			list.Add((range.Start, range.Para.ListType));
+			if (range.End >= storyEnd || range.End <= range.Start) break;
+			range.SetRange(range.End, range.End);
+			range.Expand(EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomParagraph);
+		}
+		return list;
+	}
+
+	/// The group with the paragraphs that start their list again ("": none).
+	public static string NewNumbersGroup(EllipticBit.RichEditorNET.TextObjectModel2.ITextDocument2 doc) {
+		var items = new List<string>();
+		var paragraphs = ParagraphStarts(doc);
+		for (int i = 0; i < paragraphs.Count; i++) {
+			int type = paragraphs[i].ListType;
+			if (type <= 0 || (type & 0x800000) == 0 || (type & 0xFFFF) is EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListNone or EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListBullet) continue;
+			items.Add($"{i}:{Math.Max(1, doc.Range2(paragraphs[i].Start, paragraphs[i].Start).Para.ListStart)}");
+		}
+		return items.Count == 0 ? "" : @"{\*\rtenewnumbers " + string.Join(",", items) + "}";
+	}
+
+	/// The RTF with the group (inserted before its last brace, if it hasn't one).
+	public static string WithNewNumbers(string rtf, EllipticBit.RichEditorNET.TextObjectModel2.ITextDocument2 doc) {
+		if (NewNumbersRx.IsMatch(rtf)) return rtf;
+		string group = NewNumbersGroup(doc);
+		int end = rtf.LastIndexOf('}');
+		return group == "" || end < 0 ? rtf : rtf.Insert(end, group);
+	}
+
+	/// The kept paragraphs (index, start) of an RTF (null: none).
+	public static List<(int Index, int Start)>? NewNumbersFrom(string rtf) {
+		var m = NewNumbersRx.Match(rtf);
+		if (!m.Success) return null;
+		var list = new List<(int, int)>();
+		foreach (string item in m.Groups[1].Value.Split(',', StringSplitOptions.RemoveEmptyEntries)) {
+			var parts = item.Split(':');
+			if (parts.Length == 2 && int.TryParse(parts[0], out int index) && int.TryParse(parts[1], out int start)) list.Add((index, start));
+		}
+		return list;
+	}
+
+	/// The kept paragraphs started again (where they are still list items).
+	public static void NewNumbersInto(EllipticBit.RichEditorNET.RichEditBox editor, List<(int Index, int Start)>? items) {
+		if (items == null || items.Count == 0) return;
+		var paragraphs = ParagraphStarts(editor.TextDocument);
+		NewNumbersBack(editor, items.Where(x => x.Index >= 0 && x.Index < paragraphs.Count && paragraphs[x.Index].ListType > 0
+			&& (paragraphs[x.Index].ListType & 0xFFFF) is not (EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListNone or EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListBullet))
+			.Select(x => (paragraphs[x.Index].Start, x.Start)).ToList());
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	struct ParaFormat2
+	{
+		public int cbSize; public uint dwMask; public ushort wNumbering, wEffects; public int dxStartIndent, dxRightIndent, dxOffset;
+		public ushort wAlignment; public short cTabCount;
+		[MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public int[] rgxTabs;
+		public int dySpaceBefore, dySpaceAfter, dyLineSpacing; public short sStyle; public byte bLineSpacingRule, bOutlineLevel;
+		public ushort wShadingWeight, wShadingStyle, wNumberingStart, wNumberingStyle, wNumberingTab, wBorderSpace, wBorderWidth, wBorders;
+	}
+	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendParaFormat(IntPtr hWnd, int msg, IntPtr wParam, ref ParaFormat2 lParam);
+
+	/// (iteration 87) A list paragraph's mark in the font (name and size) of its text: the editor, as Word, draws a list
+	/// number in its paragraph mark's font, and HTML leaves the marks in the editor's default font (Segoe UI numbers
+	/// beside Calibri text). Word's own RTF gives the marks their fonts.
+	public static void ListMarksFromText(EllipticBit.RichEditorNET.RichEditBox editor) {
+		var doc = editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		const int tomTrue = EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomTrue;
+		for (int start = 0; start < story.Length; ) {
+			int end = story.IndexOf('\r', start);
+			if (end < 0) break;
+			if (end > start && (doc.Range2(start, start).Para.ListType & 0xFFFF) != EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListNone) {
+				// (the first character shown: cross-reference and heading markers are hidden text)
+				int at = start;
+				while (at < end && (story[at] is '\t' or ' ' || doc.Range2(at, at + 1).Font.Hidden == tomTrue)) at++;
+				if (at < end) {
+					var text = doc.Range2(at, at + 1).Font;
+					var mark = doc.Range2(end, end + 1).Font;
+					string name = text.Name; float size = text.Size;
+					if (!string.IsNullOrEmpty(name) && mark.Name != name) mark.Name = name;
+					if (size > 0 && mark.Size != size) mark.Size = size;
+				}
+			}
+			start = end + 1;
+		}
+	}
+
+	/// (iteration 87) The text between HiddenStart and HiddenEnd made hidden, the markers taken out.
+	public static void HiddenFromMarkers(EllipticBit.RichEditorNET.RichEditBox editor) {
+		var doc = editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		if (story.IndexOf(HiddenStart) < 0) return;
+		var spans = new List<(int Start, int End)>();
+		for (int at = story.IndexOf(HiddenStart); at >= 0; at = story.IndexOf(HiddenStart, at + 1)) {
+			int end = story.IndexOf(HiddenEnd, at + 1);
+			if (end < 0) break;
+			spans.Add((at, end));
+		}
+		foreach (var (start, end) in Enumerable.Reverse(spans)) {
+			doc.Range2(end, end + 1).Text = "";
+			doc.Range2(start + 1, end).Font.Hidden = EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomTrue;
+			doc.Range2(start, start + 1).Text = "";
+		}
+	}
+
+	static void PlainLinks(XElement html) {
+		XNamespace x = html.Name.Namespace;
+		foreach (var link in html.Descendants(x + "a").Where(a => a.Attribute("href") != null))
+			foreach (var e in link.DescendantsAndSelf().Where(e => e.Attribute("style") != null)) {
+				string style = Regex.Replace((string)e.Attribute("style")!, @"(?:^|;)\s*(?:text-decoration(?:-line)?|color)\s*:[^;]*", "").Trim().TrimStart(';').Trim();
+				if (style == "") e.Attribute("style")!.Remove(); else e.SetAttributeValue("style", style);
+			}
+	}
+
 	static string OpenXmlRead(string input) {
 		TypedIndents = null;
 		LoadSkia();
@@ -672,6 +901,8 @@ public static class OfficeConverters {
 		ListsFromMarkers(html);
 		TabsFromMargins(html);
 		TypedIndents = TypedNumberIndents(html);
+		PlainLinks(html);
+		HighlightsAndHidden(html);
 		return html.ToString(SaveOptions.DisableFormatting);
 	}
 
@@ -901,6 +1132,7 @@ public static class OfficeConverters {
 		using var scratch = new EllipticBit.RichEditorNET.RichEditBox();
 		_ = scratch.Handle;
 		((System.Windows.Forms.RichTextBox)scratch).Rtf = rtf;
+		NewNumbersInto(scratch, NewNumbersFrom(rtf));    // (iteration 87: lists started again, which RichEdit's RTF loses)
 		var doc = scratch.TextDocument;
 		// (LevelsFromNumbers gives the items legal numbering's indents, noting the ones they had: the editor's own, kept
 		// here for a numbered style's items; the editor's notes, for a document being opened, stay as they were)
@@ -1430,6 +1662,7 @@ public static class OfficeConverters {
 		using var scratch = new EllipticBit.RichEditorNET.RichEditBox();
 		_ = scratch.Handle;
 		((System.Windows.Forms.RichTextBox)scratch).Rtf = rtf;
+		NewNumbersInto(scratch, NewNumbersFrom(rtf));    // (iteration 87: lists started again, which RichEdit's RTF loses)
 		return FitListIndents(scratch.TextDocument) ? ((System.Windows.Forms.RichTextBox)scratch).Rtf ?? rtf : rtf;
 	}
 
@@ -1515,7 +1748,7 @@ public static class OfficeConverters {
 		return named.Distinct().ToList();
 	}
 
-	static string Name(string converter) => converter switch { Word => "Word", LibreOffice => "LibreOffice", OpenXml => "Open XML", _ => "pandoc" };
+	static string Name(string converter) => converter switch { Word => "Word", LibreOffice => "LibreOffice", OpenXml => "Open XML", Docxodus => "Docxodus", Direct => "built-in (direct)", _ => "pandoc" };
 	static string Message(Exception ex) => (ex is TargetInvocationException { InnerException: { } inner } ? inner : ex).Message.Trim();
 
 	static string TempFolder() {

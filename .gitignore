@@ -37,3 +37,7 @@ rte_macros/*.ini
 
 # The documentation as built (make_docs.py build); the pages themselves are in docs/
 site/
+
+# A copy of the program run portable from this folder: its switch and its settings folder (personal)
+portable
+data/

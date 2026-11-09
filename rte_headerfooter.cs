@@ -796,8 +796,10 @@ public static class HeaderFooter
 			var size = new W.PageSize { Width = (uint)layout.Width, Height = (uint)layout.Height };
 			if (layout.Landscape) size.Orient = W.PageOrientationValues.Landscape;
 			var margin = new W.PageMargin { Left = (uint)layout.Left, Right = (uint)layout.Right, Top = layout.Top, Bottom = layout.Bottom, Header = (uint)layout.HeaderY, Footer = (uint)layout.FooterY, Gutter = 0 };
-			if (last == null) { section.PrependChild(margin); section.PrependChild(size); }
-			else { section.InsertAfter(margin, last); section.InsertAfter(size, last); }
+			// (after the section's type and note properties if it has them: the direct writer's sections do; the schema puts them first)
+			var before = section.ChildElements.LastOrDefault(e => e is W.SectionType or W.FootnoteProperties or W.EndnoteProperties) ?? last;
+			if (before == null) { section.PrependChild(margin); section.PrependChild(size); }
+			else { section.InsertAfter(margin, before); section.InsertAfter(size, before); }
 			section.RemoveAllChildren<W.Columns>();
 			if (layout.Columns is { } columns) {
 				var written = new W.Columns { ColumnCount = (short)columns.Count, Space = columns.Gap.ToString(System.Globalization.CultureInfo.InvariantCulture), EqualWidth = columns.Widths == null, Separator = columns.Line ? true : null };
@@ -930,6 +932,7 @@ public static class HeaderFooter
 					size?.Orient?.Value == W.PageOrientationValues.Landscape, (int?)margin?.Header?.Value, (int?)margin?.Footer?.Value);
 			}
 			var firstPage = PageOf(sections[0]);
+			var firstNumbers = LineNumberFormats.OfDocxSection(sections[0]);    // (iteration 87: the document's line numbering)
 			foreach (var section in sections.Skip(1)) {
 				bool header = Has<W.HeaderReference>(section), footer = Has<W.FooterReference>(section);
 				if (header || footer) {
@@ -938,15 +941,27 @@ public static class HeaderFooter
 					if (!footer) (bands.ShowFooter, bands.Footer, bands.FooterLine) = (current.ShowFooter, current.Footer, current.FooterLine);
 					current = bands;
 					own = true;
+				} else if (current.DifferentFirst != TitlePage(section)) {
+					// (iteration 87) "different first page" is each section's own in Word (w:titlePg), never taken over from
+					// the section before: a section without headers and footers of its own keeps the earlier ones, but its
+					// first page only gets the first-page ones if it asks for them itself
+					var bands = Sections.CopyBands(current);
+					bands.DifferentFirst = TitlePage(section);
+					current = bands;
+					own = true;
 				}
 				bool continuous = section.GetFirstChild<W.SectionType>()?.Val?.Value == W.SectionMarkValues.Continuous;
 				uint? start = section.GetFirstChild<W.PageNumberType>()?.Start?.Value is int number ? (uint)number : null;
-				result.Add(new SectionSettings { Same = !own, Bands = own ? Sections.CopyBands(current) : null, Restart = start != null, Start = (int)(start ?? 1), Page = PageOf(section).Against(firstPage), Columns = ColumnsOf(section), Continuous = continuous });
+				result.Add(new SectionSettings { Same = !own, Bands = own ? Sections.CopyBands(current) : null, Restart = start != null, Start = (int)(start ?? 1), Page = PageOf(section).Against(firstPage), Columns = ColumnsOf(section), Continuous = continuous,
+					LineNumbers = SectionSettings.OwnLineNumbers(LineNumberFormats.OfDocxSection(section), firstNumbers) });
 				own = false;
 			}
 		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) { result.Clear(); }
 		return result;
 	}
+
+	// (iteration 87) w:titlePg on (no w:val, or a true one)
+	static bool TitlePage(W.SectionProperties section) => section.GetFirstChild<W.TitlePage>() is { } titlePage && (titlePage.Val == null || titlePage.Val.Value);
 
 	// a section's header and footer in a .docx (exact: AhkWord's own copy of them, if any)
 	static PageBands? OfSection(MainDocumentPart main, PageBands? exact, W.SectionProperties? section) {

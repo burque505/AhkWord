@@ -292,6 +292,11 @@ public static class LineSpacing
 	}
 
 	static readonly Regex RtfUnits = new(@"\\\\|\\pard(?![a-zA-Z])(?<words>(?:\\[a-zA-Z]+-?\d* ?)*)|\\(?:par|cell)(?![a-zA-Z]) ?|" + Marker + "|" + ParaMarker);
+	// The paragraph's words of those after a \pard (RichEdit puts the characters' after them: fonts, sizes, colours).
+	static readonly Regex ParagraphWord = new(@"^\\(?:li|ri|fi|sb|sa|sl|slmult|q[lrcjd]|keep|keepn|widctlpar|nowidctlpar|t[xb]|tq(?:r|c|dec)|tl(?:dot|hyph|ul|th|eq|mdot)|intbl|itap|s|ls|ilvl|pagebb|outlinelevel|contextualspace|noline|ltrpar|rtlpar|sbauto|saauto|hyphpar|nooverflow|aspalpha|aspnum|faauto|adjustright|adjustleft|sbys|lin|rin|lisa|lisb)(?:-?\d+)?$");
+	static string ParagraphWordsOnly(string words) =>
+		string.Concat(Regex.Matches(words, @"\\[a-zA-Z]+-?\d*").Select(m => m.Value).Where(w => ParagraphWord.IsMatch(w)));
+
 	/// The line and page breaks a paragraph's marker gives (as Breaks has them; null: none).
 	public static string? BreaksIn(string paragraph) {
 		foreach (Match m in ParaMarker.Matches(paragraph))
@@ -356,7 +361,10 @@ public static class LineSpacing
 		}
 		// after a paragraph with a marker: what it changed as it was
 		string Back() {
-			if (changed.Contains("tabs")) return @"\pard" + paragraph.TrimEnd() + " ";    // (only \pard takes tab stops off; not in lists, which have no markers for them)
+			// (only \pard takes tab stops off; not in lists, which have no markers for them) (2026-11-09: with the paragraph's
+			// own words alone: RichEdit writes the characters' after them, such as a title's \f0\fs56, which then went on
+			// to every paragraph after it whose text didn't set its font and size again: contents' entries at 28 points)
+			if (changed.Contains("tabs")) return @"\pard" + ParagraphWordsOnly(paragraph) + " ";
 			var words = new StringBuilder();
 			foreach (var word in changed)
 				if (word == "nowidctlpar") words.Append(@"\widctlpar");
@@ -462,6 +470,10 @@ public static class DocxLineSpacing
 		public string Style = "";
 		public XElement? Container;            // the body or the table cell the paragraph is in
 		public bool InTable;
+		/// (iteration 87) The paragraph's border lines by side (w:pBdr's children, the style's under its own), and its
+		/// shading (w:shd): ParagraphFrames.
+		public Dictionary<string, XElement> Borders = new();
+		public XElement? Shading;
 	}
 
 	// One layer of formatting (a style's pPr or a paragraph's own) over what the layers below gave.
@@ -491,6 +503,8 @@ public static class DocxLineSpacing
 			}
 		}
 		if (pPr.Element(W + "numPr") != null) format.List = true;
+		if (pPr.Element(W + "pBdr") is { } borders) foreach (var side in borders.Elements()) format.Borders[side.Name.LocalName] = side;
+		if (pPr.Element(W + "shd") is { } shd) format.Shading = shd;
 		if (pPr.Element(W + "keepNext") is { } keepNext) format.KeepNext = On(keepNext);
 		if (pPr.Element(W + "keepLines") is { } keepLines) format.KeepLines = On(keepLines);
 		if (pPr.Element(W + "pageBreakBefore") is { } breakBefore) format.PageBreakBefore = On(breakBefore);
@@ -510,7 +524,9 @@ public static class DocxLineSpacing
 
 	/// Each paragraph's format in a .docx, in document order (w:p in the body, its tables included; text boxes left
 	/// out), with contextualSpacing applied.
-	public static List<Format> Paragraphs(string path) {
+	// (html: as converters to HTML write them, which leave out the cells a cell above is merged down into, and so their
+	// paragraphs; RichEdit's tables from RTF keep those cells)
+	public static List<Format> Paragraphs(string path, bool html = false) {
 		using var zip = ZipFile.OpenRead(path);
 		XDocument Load(string name) { using var s = zip.GetEntry(name)!.Open(); return XDocument.Load(s); }
 		var document = Load("word/document.xml");
@@ -532,7 +548,7 @@ public static class DocxLineSpacing
 		}
 		var list = new List<Format>();
 		foreach (var p in document.Root!.Element(W + "body")!.Descendants(W + "p")) {
-			if (p.Ancestors(W + "txbxContent").Any()) continue;
+			if (p.Ancestors(W + "txbxContent").Any() || html && InMergedCell(p)) continue;
 			var pPr = p.Element(W + "pPr");
 			string style = (string?)pPr?.Element(W + "pStyle")?.Attribute(W + "val") ?? defaultStyle ?? "";
 			var table = p.Ancestors(W + "tbl").FirstOrDefault();
@@ -586,7 +602,7 @@ public static class DocxLineSpacing
 		XNamespace x = html.Name.Namespace;
 		var blocks = html.Descendants().Where(e => e.Name.Namespace == x && Regex.IsMatch(e.Name.LocalName, "^(p|h[1-6])$")).ToList();
 		List<Format>? formats = null;
-		try { formats = Paragraphs(path); } catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or NullReferenceException) { }
+		try { formats = Paragraphs(path, html: true); } catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or NullReferenceException) { }
 		bool paired = formats != null && formats.Count == blocks.Count;
 		for (int i = 0; i < blocks.Count; i++) {
 			var block = blocks[i];
@@ -610,6 +626,10 @@ public static class DocxLineSpacing
 	/// indents and tab stops are right in the RTF). Paired up in order: the editor's paragraphs (cells included, the
 	/// marks that end table rows left out) with the .docx's; nothing is changed if they don't pair up. Returns whether
 	/// they did.
+	/// A paragraph in a table cell that the cell above it is merged down into (w:vMerge without "restart").
+	public static bool InMergedCell(XElement p) =>
+		p.Ancestors(W + "tc").FirstOrDefault()?.Element(W + "tcPr")?.Element(W + "vMerge") is { } merge && (string?)merge.Attribute(W + "val") is null or "continue";
+
 	public static bool IntoEditor(RichEditBox editor, string path) {
 		List<Format> formats;
 		try { formats = Paragraphs(path); } catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or NullReferenceException) { return false; }
@@ -646,6 +666,9 @@ public static class DocxLineSpacing
 
 	// (points as RichEdit keeps them, in twips)
 	static bool Same(float a, float b) => Math.Abs(a - b) < 0.026f;
+
+	/// (iteration 87) Where the editor's paragraphs start, in order as a .docx has them (Pieces).
+	public static List<int> Starts(ITextDocument2 doc, int count) => Pieces(doc, count);
 
 	// Where the editor's paragraphs start, in order as a .docx has them: split at paragraph marks and cell ends, without
 	// the marks that start and end table rows; empty ones at the end are left out while there are more than count.

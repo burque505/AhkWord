@@ -79,20 +79,53 @@ public static class LineNumberFormats
 	// ================================================================ RTF
 
 	/// RTF with the line numbering in its sections, all of them: it is the whole document's (after HeaderFooter.AddToRtf,
-	/// which starts one with \sectd, and Sections.ExportRtf).
-	public static string AddToRtf(string rtf, LineNumbering numbering) {
+	/// which starts one with \sectd, and Sections.ExportRtf). (iteration 87: not those whose words have line numbering
+	/// already, \linemod or \linex: Sections.ExportRtf's, a section's own or none.)
+	public static string AddToRtf(string rtf, LineNumbering numbering) => WithLineNumberStyle(Numbered(rtf, numbering));
+
+	// (2026-11-09) Word's "line number" character style, where any section is line-numbered: Word adds it while laying out
+	// such a document, which then counts as changed (Word asked to save one that was only opened).
+	static string WithLineNumberStyle(string rtf) {
+		if (!Regex.IsMatch(rtf, @"\\linemod[1-9]")) return rtf;
+		int sheet = rtf.IndexOf(@"{\stylesheet", StringComparison.Ordinal);
+		if (sheet < 0) return rtf;
+		int depth = 0, end = -1;
+		for (int i = sheet; i < rtf.Length; i++) {
+			if (rtf[i] == '\\') { i++; continue; }
+			if (rtf[i] == '{') depth++;
+			else if (rtf[i] == '}' && --depth == 0) { end = i; break; }
+		}
+		if (end < 0) return rtf;
+		string table = rtf[sheet..end];
+		if (table.Contains("line number;", StringComparison.OrdinalIgnoreCase)) return rtf;
+		int number = Regex.Matches(table, @"\\(?:s|cs|ds|ts)(\d+)").Select(m => int.Parse(m.Groups[1].Value)).DefaultIfEmpty(0).Max() + 1;
+		return rtf.Insert(end, $@"{{\*\cs{number}\additive\ssemihidden line number;}}");
+	}
+
+	static string Numbered(string rtf, LineNumbering numbering) {
 		if (!numbering.On) return rtf;
-		string words = $@"\linemod{numbering.CountBy}" + (numbering.Start != 1 ? $@"\linestarts{numbering.Start}" : "")
-			+ (numbering.Distance > 0 ? $@"\linex{numbering.Distance}" : "") + (numbering.Mode == LineNumbering.Modes.EachPage ? @"\lineppage" : @"\linecont");
+		string words = RtfWords(numbering);
 		var sections = Regex.Matches(rtf, @"\\sectd(?![a-z])");
-		if (sections.Count > 0) return Regex.Replace(rtf, @"\\sectd(?![a-z])", m => m.Value + words);
+		if (sections.Count > 0)
+			return Regex.Replace(rtf, @"\\sectd(?![a-z])((?:\\[a-z]+-?\d* ?)*)", m => Regex.IsMatch(m.Groups[1].Value, @"\\line(mod|x)\d") ? m.Value : @"\sectd" + words + m.Groups[1].Value);
 		var paragraph = Regex.Match(rtf, @"\\pard(?![a-z])");
 		return paragraph.Success ? rtf.Insert(paragraph.Index, @"\sectd" + words + " ") : rtf;
 	}
 
-	/// The line numbering of RTF (null: none). Without \linecont or \linerestart it restarts on each page (Word and
-	/// LibreOffice write nothing for that); restarting each section is continuous here (one section).
+	/// (iteration 87) A line numbering's RTF section words ("": off).
+	public static string RtfWords(LineNumbering numbering) => !numbering.On ? "" : $@"\linemod{numbering.CountBy}" + (numbering.Start != 1 ? $@"\linestarts{numbering.Start}" : "")
+		+ (numbering.Distance > 0 ? $@"\linex{numbering.Distance}" : "") + (numbering.Mode == LineNumbering.Modes.EachPage ? @"\lineppage" : @"\linecont");
+
+	/// The line numbering of RTF (null: none): (iteration 87) its first section's, the document's; a later section's
+	/// own is its section break's (Sections.ImportRtf). Without \linecont or \linerestart it restarts on each page (Word
+	/// and LibreOffice write nothing for that); restarting each section is continuous here.
 	public static LineNumbering? FromRtf(string rtf) {
+		if (Regex.Match(rtf, @"\\sect(?![a-zA-Z])") is { Success: true } sect) rtf = rtf[..sect.Index];
+		return FromRtfSection(rtf);
+	}
+
+	/// (iteration 87) The line numbering in one section's RTF words (null: none).
+	public static LineNumbering? FromRtfSection(string rtf) {
 		var countBy = Regex.Match(rtf, @"\\linemod(\d+)");
 		if (!countBy.Success || int.Parse(countBy.Groups[1].Value) < 1) return null;
 		int Number(string word, int otherwise) => Regex.Match(rtf, @"\\" + word + @"(\d+)") is { Success: true } m ? int.Parse(m.Groups[1].Value) : otherwise;
@@ -111,29 +144,42 @@ public static class LineNumberFormats
 		typeof(W.PrinterSettingsReference), typeof(W.SectionPropertiesChange)
 	};
 
-	/// Sets a .docx's line numbering, in all its sections: it is the whole document's for AhkWord. Word's w:start is the
-	/// first number less one.
-	public static void AddToDocx(string path, LineNumbering numbering) {
+	/// Sets a .docx's line numbering, in all its sections: the whole document's, or (iteration 87) a section's own
+	/// (sections: each section break's own, null: the document's; used when the file has a section for each). Word's
+	/// w:start is the first number less one.
+	public static void AddToDocx(string path, LineNumbering numbering, IReadOnlyList<LineNumbering?>? sections = null) {
 		using var package = WordprocessingDocument.Open(path, true);
 		var body = package.MainDocumentPart!.Document.Body!;
-		var sections = body.Descendants<W.SectionProperties>().ToList();
-		if (sections.Count == 0) {
+		var all = body.Descendants<W.SectionProperties>().ToList();
+		if (all.Count == 0) {
 			if (!numbering.On) return;
-			sections.Add(body.AppendChild(new W.SectionProperties()));
+			all.Add(body.AppendChild(new W.SectionProperties()));
 		}
-		foreach (var section in sections) {
+		bool each = sections != null && sections.Count == all.Count - 1;
+		for (int i = 0; i < all.Count; i++) {
+			var section = all[i];
+			var own = each && i > 0 ? sections![i - 1] ?? numbering : numbering;
 			section.RemoveAllChildren<W.LineNumberType>();
-			if (!numbering.On) continue;
+			if (!own.On) continue;
 			var element = new W.LineNumberType {
-				CountBy = (short)numbering.CountBy,
-				Restart = numbering.Mode == LineNumbering.Modes.EachPage ? W.LineNumberRestartValues.NewPage : W.LineNumberRestartValues.Continuous
+				CountBy = (short)own.CountBy,
+				Restart = own.Mode == LineNumbering.Modes.EachPage ? W.LineNumberRestartValues.NewPage : W.LineNumberRestartValues.Continuous
 			};
-			if (numbering.Start != 1) element.Start = (short)(numbering.Start - 1);
-			if (numbering.Distance > 0) element.Distance = numbering.Distance.ToString(CultureInfo.InvariantCulture);
+			if (own.Start != 1) element.Start = (short)(own.Start - 1);
+			if (own.Distance > 0) element.Distance = own.Distance.ToString(CultureInfo.InvariantCulture);
 			var next = section.ChildElements.FirstOrDefault(e => AfterLineNumbers.Contains(e.GetType()));
 			if (next != null) section.InsertBefore(element, next); else section.AppendChild(element);
 		}
 		package.MainDocumentPart.Document.Save();
+		// (2026-11-09) Word's "line number" character style (WithLineNumberStyle), whichever converter made the file
+		if (all.Any(s => s.Elements<W.LineNumberType>().Any()) && package.MainDocumentPart.StyleDefinitionsPart?.Styles is { } styles
+			&& !styles.Elements<W.Style>().Any(s => s.StyleId == "LineNumber")) {
+			var style = new W.Style(new W.StyleName { Val = "line number" }) { Type = W.StyleValues.Character, StyleId = "LineNumber" };
+			if (styles.Elements<W.Style>().Any(s => s.StyleId == "DefaultParagraphFont")) style.Append(new W.BasedOn { Val = "DefaultParagraphFont" });
+			style.Append(new W.UIPriority { Val = 99 }, new W.SemiHidden(), new W.UnhideWhenUsed());
+			styles.Append(style);
+			styles.Save();
+		}
 	}
 
 	/// The line numbering of a .docx (null: none): the first section that has any, for the whole document. Without
@@ -142,16 +188,24 @@ public static class LineNumberFormats
 		try {
 			using var package = WordprocessingDocument.Open(path, false);
 			var body = package.MainDocumentPart?.Document.Body;
-			var element = body?.Descendants<W.SectionProperties>().Select(s => s.GetFirstChild<W.LineNumberType>()).FirstOrDefault(n => n != null);
-			if (element?.CountBy?.Value is not short countBy || countBy < 1) return null;
-			return new LineNumbering {
-				Mode = element.Restart == null || element.Restart.Value == W.LineNumberRestartValues.NewPage ? LineNumbering.Modes.EachPage : LineNumbering.Modes.Continuous,
-				CountBy = countBy, Start = (element.Start?.Value ?? 0) + 1,
-				Distance = int.TryParse(element.Distance?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int d) ? d : 0
-			}.Normalized();
+			// (iteration 87: the first section's, which AhkWord gives the whole document; another section's numbering spread
+			// over every page)
+			// (a later section's own: Sections' break markers, HeaderFooter.SectionsFromDocx)
+			return OfDocxSection(body?.Descendants<W.SectionProperties>().FirstOrDefault()) is { On: true } numbering ? numbering : null;
 		} catch (Exception ex) when (ex is IOException or InvalidDataException or OpenXmlPackageException) {
 			return null;
 		}
+	}
+
+	/// (iteration 87) A .docx section's line numbering (Mode None: it has none).
+	public static LineNumbering OfDocxSection(W.SectionProperties? section) {
+		var element = section?.GetFirstChild<W.LineNumberType>();
+		if (element?.CountBy?.Value is not short countBy || countBy < 1) return new LineNumbering();
+		return new LineNumbering {
+			Mode = element.Restart == null || element.Restart.Value == W.LineNumberRestartValues.NewPage ? LineNumbering.Modes.EachPage : LineNumbering.Modes.Continuous,
+			CountBy = countBy, Start = (element.Start?.Value ?? 0) + 1,
+			Distance = int.TryParse(element.Distance?.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int d) ? d : 0
+		}.Normalized();
 	}
 
 	// ================================================================ .odt
@@ -267,7 +321,35 @@ sealed class LineNumberGutter : Control
 
 	public LineNumbering Numbering {
 		get => numbering;
-		set { numbering = value.Copy(); Visible = numbering.On; FitWidth(); Invalidate(); }
+		set { numbering = value.Copy(); regimes = null; Visible = On; FitWidth(); Invalidate(); }
+	}
+
+	/// (iteration 87) The sections' line numbering: each section's first character and its own numbering (null: the
+	/// document's, Numbering), the first section's at 0 (null: one section). Asked again after the text changes.
+	public Func<List<(int Start, LineNumbering? Own)>>? SectionNumbering;
+	List<(int Start, LineNumbering Numbering)>? regimes;
+	List<(int Start, LineNumbering Numbering)> Regimes() {
+		if (regimes != null) return regimes;
+		// (while the editor has no window, as when it is made again for a new document, the document's numbering alone,
+		// not kept: the sections can't be read then, and asking threw in the middle of a paint)
+		if (SectionNumbering == null || !editor.IsHandleCreated || !HasDocument()) return new() { (0, numbering) };
+		List<(int Start, LineNumbering Numbering)> list;
+		try { list = SectionNumbering().Select(s => (s.Start, s.Own ?? numbering)).ToList(); }
+		catch (Exception ex) when (ex is InvalidOperationException or COMException) { return new() { (0, numbering) }; }
+		return regimes = list.Count > 0 ? list : new() { (0, numbering) };
+	}
+
+	/// Whether there are numbers to show: the document's, or (iteration 87) a section's own.
+	public bool On => numbering.On || Regimes().Any(r => r.Numbering.On);
+	/// (iteration 87) Whether any section's numbering restarts on each page (PageStarts needed).
+	public bool NeedsPageStarts => Regimes().Any(r => r.Numbering.Mode == LineNumbering.Modes.EachPage);
+
+	// (each section's numbering from its first line; a line's: the one it is in)
+	List<(int Line, LineNumbering Numbering)> RegimeLines() => Regimes().Select(r => (r.Start <= 0 ? 0 : Send(EM_EXLINEFROMCHAR, 0, r.Start), r.Numbering)).ToList();
+	static LineNumbering NumberingOf(int line, List<(int Line, LineNumbering Numbering)> lines) {
+		var found = lines[0].Numbering;
+		foreach (var (from, n) in lines) if (from <= line) found = n;
+		return found;
 	}
 
 	/// Where printed pages start (character positions), for numbering that restarts on each page.
@@ -279,6 +361,7 @@ sealed class LineNumberGutter : Control
 	/// The text, or paragraphs' suppression, changed: which lines count is worked out again.
 	public void DocumentChanged() {
 		skipped = null;
+		regimes = null;
 		if (Visible) Invalidate();
 	}
 
@@ -343,30 +426,49 @@ sealed class LineNumberGutter : Control
 
 	// The editor's lines that have no number, as sorted, merged line ranges (they depend on the wrapping, so they are
 	// worked out from the character ranges each time).
-	List<(int First, int Last)> SkippedLines() => ToLines(Skipped(), at => Send(EM_EXLINEFROMCHAR, 0, at));
+	// (iteration 87: and the sections without line numbers)
+	List<(int First, int Last)> SkippedLines() {
+		var ranges = Skipped();
+		var all = Regimes();
+		if (all.Any(r => !r.Numbering.On)) {
+			int length = editor.TextDocument.Range2(0, 0).StoryLength;
+			ranges = ranges.Concat(all.Select((r, i) => (r, i)).Where(x => !x.r.Numbering.On)
+				.Select(x => (x.r.Start, Math.Max(x.r.Start, (x.i + 1 < all.Count ? all[x.i + 1].Start : length) - 1)))).OrderBy(r => r).ToList();
+		}
+		return ToLines(ranges, at => Send(EM_EXLINEFROMCHAR, 0, at));
+	}
 
-	List<int> RestartLines() => numbering.Mode == LineNumbering.Modes.EachPage && pageStarts != null
-		? pageStarts.Where(p => p > 0).Select(p => Send(EM_EXLINEFROMCHAR, 0, p)).Distinct().OrderBy(l => l).ToList() : new List<int>();
+	// The lines where the numbers start again: (iteration 87) where a section's own numbering starts, and the printed
+	// pages' first lines in a section numbered again on each page.
+	List<int> RestartLines(List<(int Line, LineNumbering Numbering)> lines) {
+		var restarts = new List<int>();
+		for (int i = 1; i < lines.Count; i++) if (!ReferenceEquals(lines[i].Numbering, lines[i - 1].Numbering)) restarts.Add(lines[i].Line);
+		if (pageStarts != null && lines.Any(l => l.Numbering.Mode == LineNumbering.Modes.EachPage))
+			foreach (int line in pageStarts.Where(p => p > 0).Select(p => Send(EM_EXLINEFROMCHAR, 0, p)))
+				if (NumberingOf(line, lines).Mode == LineNumbering.Modes.EachPage) restarts.Add(line);
+		return restarts.Distinct().OrderBy(l => l).ToList();
+	}
 
 	/// The number of the editor's line (from 0), or 0 if it has none (off, or a line that doesn't count).
 	public int NumberOf(int line) {
-		if (!numbering.On) return 0;
+		if (!On) return 0;
 		var skippedLines = SkippedLines();
 		if (skippedLines.Any(s => line >= s.First && line <= s.Last)) return 0;
-		return Counted(line, RestartLines(), skippedLines);
+		var lines = RegimeLines();
+		return Counted(line, RestartLines(lines), skippedLines, lines);
 	}
 
 	// A counted line's number: the lines that count from the last restart (the start, or a page's first line) up to it.
-	int Counted(int line, List<int> restarts, List<(int First, int Last)> skippedLines) {
+	int Counted(int line, List<int> restarts, List<(int First, int Last)> skippedLines, List<(int Line, LineNumbering Numbering)> lines) {
 		int from = restarts.Where(l => l <= line).DefaultIfEmpty(0).Max();
 		int notCounted = skippedLines.Sum(s => Math.Max(0, Math.Min(s.Last, line - 1) - Math.Max(s.First, from) + 1));
-		return numbering.Start + (line - from) - notCounted;
+		return NumberingOf(line, lines).Start + (line - from) - notCounted;
 	}
 
 	/// The number shown in front of a line (0: none shown: it has none, or isn't a multiple of CountBy).
 	public int ShownNumberOf(int line) {
 		int number = NumberOf(line);
-		return number > 0 && number % numbering.CountBy == 0 ? number : 0;
+		return number > 0 && number % NumberingOf(line, RegimeLines()).CountBy == 0 ? number : 0;
 	}
 
 	/// The line (from 0) with the character at a position.
@@ -383,7 +485,7 @@ sealed class LineNumberGutter : Control
 	// Wide enough for the largest number the document can have, and at least two digits, and the distance from the text.
 	void FitWidth() {
 		if (!IsHandleCreated || !editor.IsHandleCreated) return;
-		int largest = numbering.Start + Send(EM_GETLINECOUNT);
+		int largest = Regimes().Max(r => r.Numbering.Start) + Send(EM_GETLINECOUNT);
 		using var font = NumberFont();
 		int digits = TextRenderer.MeasureText(new string('8', Math.Max(2, largest.ToString(CultureInfo.InvariantCulture).Length)), font).Width + LogicalToDeviceUnits(4);
 		// (no wider than the room it has, the page's left margin: as much of the distance as fits there)
@@ -411,13 +513,23 @@ sealed class LineNumberGutter : Control
 	protected override void OnPaint(PaintEventArgs e) {
 		base.OnPaint(e);
 		LastPainted = DateTime.Now;
-		if (!numbering.On || !editor.IsHandleCreated) return;
+		if (!editor.IsHandleCreated || !HasDocument() || !On) return;
 		if (Bands?.Invoke() is { } bands) {
 			using var band = new SolidBrush(BandColor);
 			foreach (var area in bands) e.Graphics.FillRectangle(band, area);
 		}
 		try { Draw(e.Graphics); }
-		catch (COMException) { }    // the document can be briefly unavailable while it is being replaced
+		catch (Exception ex) when (Unavailable(ex)) { }    // the document can be briefly unavailable while it is being replaced
+	}
+
+	// (iteration 87) The editor's document missing for a moment: being replaced (COM), or (since iteration 86, which gives
+	// the editor a new window for each document) the window made again: RichEditorNET has a handle before it has
+	// fetched its TextDocument, and lets the document go before the handle, and says "The control handle has not been
+	// created" in between: a paint of the numbers then threw, and WinForms drew a red cross in their place.
+	bool Unavailable(Exception ex) => ex is COMException || ex is InvalidOperationException && !HasDocument();
+	bool HasDocument() {
+		try { _ = editor.TextDocument; return true; }
+		catch (InvalidOperationException) { return false; }
 	}
 
 	void Draw(Graphics g) {
@@ -443,28 +555,29 @@ sealed class LineNumberGutter : Control
 
 	/// The numbers in view, where they are drawn (Rte.PageViewReport shows them too).
 	public List<ShownNumber> ShownNumbers() {
-		if (!numbering.On || !editor.IsHandleCreated || !IsHandleCreated) return new();
+		if (!editor.IsHandleCreated || !IsHandleCreated || !HasDocument() || !On) return new();
 		using var font = NumberFont();
 		try { return Shown(font).ToList(); }
-		catch (COMException) { return new(); }
+		catch (Exception ex) when (Unavailable(ex)) { return new(); }
 	}
 
 	IEnumerable<ShownNumber> Shown(Font font) {
 		var doc = editor.TextDocument;
 		int count = Send(EM_GETLINECOUNT), first = Send(EM_GETFIRSTVISIBLELINE);
 		var skippedLines = SkippedLines();
-		var restarts = RestartLines();
+		var lines = RegimeLines();
+		var restarts = RestartLines(lines);
 		// the numbers' tops are their baselines less the font's ascent (TextRenderer draws from the top of the cell)
 		float ascent = font.SizeInPoints * DeviceDpi / 72f * font.FontFamily.GetCellAscent(font.Style) / font.FontFamily.GetEmHeight(font.Style);
 		int bottom = PointToScreen(new Point(0, ClientSize.Height)).Y;
-		int number = Counted(first, restarts, skippedLines);
+		int number = Counted(first, restarts, skippedLines, lines);
 		int nextSkip = skippedLines.FindIndex(s => s.Last >= first);
 		for (int line = first; line < count; line++) {
-			if (restarts.Contains(line) && line > first) number = numbering.Start;
+			if (restarts.Contains(line) && line > first) number = NumberingOf(line, lines).Start;
 			if (nextSkip >= 0 && nextSkip < skippedLines.Count && line >= skippedLines[nextSkip].First) {
 				// a run of lines without numbers: on after it (a restart in it applies to the line after it)
 				int last = skippedLines[nextSkip].Last;
-				if (restarts.Any(l => l > line && l <= last + 1)) number = numbering.Start;
+				if (restarts.LastOrDefault(l => l > line && l <= last + 1) is int again and > 0) number = NumberingOf(again, lines).Start;
 				line = last;
 				nextSkip++;
 				continue;
@@ -480,7 +593,7 @@ sealed class LineNumberGutter : Control
 			SendPosition(editor.Handle, EM_POSFROMCHAR, ref lineTop, (IntPtr)at);
 			int baseline = editor.PointToScreen(new Point(0, lineTop.Y + baselineOfLine - topOfLine)).Y;
 			if (baseline - ascent > bottom) break;
-			if (number % numbering.CountBy == 0) {
+			if (number % NumberingOf(line, lines).CountBy == 0) {
 				int y = PointToClient(new Point(0, baseline)).Y;
 				yield return new ShownNumber(line, at, number, y, y - (int)Math.Round(ascent));
 			}
@@ -511,26 +624,38 @@ static class PrintedLineNumbers
 	/// The numbered lines of each page. hdc: the printer's (or its information context); text, page: the text area and
 	/// the page in twips, as EM_FORMATRANGE takes them; pageStarts: where the printer's pages start. everyLine: also
 	/// the lines whose numbers count-by doesn't show. None if the hidden copy's text differs from the editor's.
-	public static List<List<Mark>> Compute(RichEditBox editor, LineNumbering numbering, IntPtr hdc, Rectangle text, Rectangle page, List<int> pageStarts, bool everyLine = false) {
+	public static List<List<Mark>> Compute(RichEditBox editor, LineNumbering numbering, IntPtr hdc, Rectangle text, Rectangle page, List<int> pageStarts, bool everyLine = false) =>
+		Compute(editor, _ => numbering, hdc, _ => text, page, pageStarts, everyLine);
+
+	/// (iteration 87) Each page with its own numbering (its section's; a page whose numbering is another than the page
+	/// before's starts again at its first number; off: none) and its own text area (its section's page: the lines laid
+	/// out at its width), by the page's index.
+	public static List<List<Mark>> Compute(RichEditBox editor, Func<int, LineNumbering> numberingOf, IntPtr hdc, Func<int, Rectangle> textOf, Rectangle page, List<int> pageStarts, bool everyLine = false) {
 		var marks = pageStarts.Select(_ => new List<Mark>()).ToList();
-		if (!numbering.On || pageStarts.Count == 0) return marks;
+		if (pageStarts.Count == 0 || !Enumerable.Range(0, pageStarts.Count).Any(p => numberingOf(p).On)) return marks;
 		using var hidden = AppTheme.OnPaper(new RichEditBox { WordWrap = true, Width = 600, Height = 400 });
 		IntPtr h = hidden.Handle;
 		((RichTextBox)hidden).Rtf = ((RichTextBox)editor).Rtf;
 		var doc = hidden.TextDocument;
 		int length = doc.Range2(0, 0).StoryLength;
 		if (length != editor.TextDocument.Range2(0, 0).StoryLength) return marks;
-		SendMessage(h, EM_SETTARGETDEVICE, hdc, (IntPtr)text.Width);
 		SendMessage(h, EM_SETZOOM, (IntPtr)Zoom, (IntPtr)1);
 		int Send(int msg, int wParam, int lParam = 0) => (int)SendMessage(h, msg, (IntPtr)wParam, (IntPtr)lParam);
-		var skipped = LineNumberGutter.ToLines(LineNumberGutter.SkippedRanges(doc), at => Send(EM_EXLINEFROMCHAR, 0, at));
-		int count = Send(EM_GETLINECOUNT, 0);
+		// (the copy laid out at a page's width: again where a page is another width than the one before)
+		int laidWidth = -1, count = 0;
+		List<(int First, int Last)> skipped = new();
+		void LayOut(int width) {
+			if (width == laidWidth) return;
+			laidWidth = width;
+			SendMessage(h, EM_SETTARGETDEVICE, hdc, (IntPtr)width);
+			skipped = LineNumberGutter.ToLines(LineNumberGutter.SkippedRanges(doc), at => Send(EM_EXLINEFROMCHAR, 0, at));
+			count = Send(EM_GETLINECOUNT, 0);
+		}
 		float dpi;
 		using (var g = hidden.CreateGraphics()) dpi = g.DpiY;
 		double twipsPerPixel = 1440.0 / (dpi * Zoom);
 		var range = new FORMATRANGE {
 			hdc = hdc, hdcTarget = hdc,
-			rc = new RECT { Left = text.Left, Top = text.Top, Right = text.Right, Bottom = text.Bottom },
 			rcPage = new RECT { Left = page.Left, Top = page.Top, Right = page.Right, Bottom = page.Bottom }
 		};
 		// the bottom of what the page holds from its start up to (not including) a character
@@ -542,8 +667,17 @@ static class PrintedLineNumbers
 			return r.rc.Bottom;
 		}
 		try {
-			int number = numbering.Start, skip = 0;
+			LineNumbering? before = null;
+			int number = 1;
 			for (int p = 0; p < pageStarts.Count; p++) {
+				var numbering = numberingOf(p);
+				if (!ReferenceEquals(numbering, before)) number = numbering.Start;    // (another section's own numbering)
+				before = numbering;
+				if (!numbering.On) continue;
+				var text = textOf(p);
+				range.rc = new RECT { Left = text.Left, Top = text.Top, Right = text.Right, Bottom = text.Bottom };
+				LayOut(text.Width);
+				int skip = 0;
 				int start = pageStarts[p], end = p + 1 < pageStarts.Count ? pageStarts[p + 1] : length;
 				if (numbering.Mode == LineNumbering.Modes.EachPage) number = numbering.Start;
 				for (int line = Send(EM_EXLINEFROMCHAR, 0, start); line < count; line++) {

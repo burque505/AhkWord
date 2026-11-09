@@ -466,22 +466,26 @@ public static class Footnotes
 		var main = package.MainDocumentPart;
 		var body = main?.Document?.Body;
 		var notes = main?.FootnotesPart?.Footnotes;
-		if (body == null || notes == null) return false;
+		var endnotes = main?.EndnotesPart?.Endnotes;    // (iteration 87: endnotes, as footnotes, as Word's RTF brings them)
+		if (body == null || notes == null && endnotes == null) return false;
 		// (the notes' size: their runs' most common w:sz, else the Footnote Text style's)
-		var runSizes = notes.Elements<W.Footnote>().Where(f => f.Id?.Value > 0).SelectMany(f => f.Descendants<W.Run>())
+		var runSizes = (notes?.Elements<W.Footnote>() ?? Enumerable.Empty<W.Footnote>()).Where(f => f.Id?.Value > 0).SelectMany(f => f.Descendants<W.Run>())
 			.Where(r => r.GetFirstChild<W.FootnoteReferenceMark>() == null && r.RunProperties?.FontSize?.Val?.Value is { } v && int.TryParse(v, out _))
 			.Select(r => int.Parse(r.RunProperties!.FontSize!.Val!.Value!)).ToList();
 		var styleSize = main!.StyleDefinitionsPart?.Styles?.Elements<W.Style>().FirstOrDefault(s => s.StyleId?.Value == "FootnoteText")?.StyleRunProperties?.FontSize?.Val?.Value;
 		LoadedSize = runSizes.Count > 0 ? runSizes.GroupBy(s => s).OrderByDescending(g => g.Count()).First().Key / 2f
 			: int.TryParse(styleSize, out int fromStyle) ? fromStyle / 2f : null;
-		var texts = notes.Elements<W.Footnote>().Where(f => f.Id?.Value > 0)
-			.ToDictionary(f => f.Id!.Value, f => TidyMarks(FromRuns(f.Descendants<W.Paragraph>().SelectMany(p =>
-				p.Descendants<W.Run>().Select(r => (string.Concat(r.Descendants().Select(RunText)), DocxStyle(r.RunProperties)))
-					.Append((ParagraphMark.ToString(), FontStyle.Regular))))));
+		string TextOf(DocumentFormat.OpenXml.OpenXmlElement f) => TidyMarks(FromRuns(f.Descendants<W.Paragraph>().SelectMany(p =>
+			p.Descendants<W.Run>().Select(r => (string.Concat(r.Descendants().Select(RunText)), DocxStyle(r.RunProperties)))
+				.Append((ParagraphMark.ToString(), FontStyle.Regular)))));
+		var texts = (notes?.Elements<W.Footnote>() ?? Enumerable.Empty<W.Footnote>()).Where(f => f.Id?.Value > 0).ToDictionary(f => f.Id!.Value, f => TextOf(f));
+		var endTexts = (endnotes?.Elements<W.Endnote>() ?? Enumerable.Empty<W.Endnote>()).Where(f => f.Id?.Value > 0).ToDictionary(f => f.Id!.Value, f => TextOf(f));
 		bool any = false;
 		int number = 0;
-		foreach (var reference in body.Descendants<W.FootnoteReference>().ToList()) {
-			if (reference.Id?.Value is not long id || !texts.TryGetValue(id, out var note)) continue;
+		// (footnotes and endnotes in the order of their references, numbered on together)
+		foreach (var reference in body.Descendants().Where(e => e is W.FootnoteReference or W.EndnoteReference).ToList()) {
+			long? refId = reference is W.FootnoteReference fr ? fr.Id?.Value : ((W.EndnoteReference)reference).Id?.Value;
+			if (refId is not long id || !(reference is W.FootnoteReference ? texts : endTexts).TryGetValue(id, out var note)) continue;
 			var run = reference.Ancestors<W.Run>().FirstOrDefault();
 			if (run == null) continue;
 			number++;

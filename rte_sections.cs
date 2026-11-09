@@ -19,7 +19,8 @@ using EllipticBit.RichEditorNET;
 using EllipticBit.RichEditorNET.TextObjectModel2;
 
 /// A section's own page setup: what its file gives it that differs from the first section's (twips; null: the document's).
-/// Top and Bottom are shown and printed; the rest is only kept, and written back when the file is saved.
+/// Top and Bottom are shown and printed; (iteration 87) orientation, paper and left and right margins are printed (and
+/// shown in Print Preview), the text edited at the first section's width.
 public sealed record SectionPage(int? Width = null, int? Height = null, int? Left = null, int? Right = null, int? Top = null, int? Bottom = null, bool? Landscape = null, int? HeaderY = null, int? FooterY = null)
 {
 	/// What this section has that first hasn't (null: nothing).
@@ -108,14 +109,25 @@ public sealed class SectionSettings
 	public SectionColumns? Columns { get; set; }
 	/// Whether the section starts on the same page as the text before it.
 	public bool Continuous { get; set; }
+	/// (iteration 87) The section's own line numbering (null: the document's; Mode None: none in this section), as Word
+	/// has a section's own w:lnNumType.
+	public LineNumbering? LineNumbers { get; set; }
 
-	public SectionSettings Copy() => new() { Bands = Bands == null ? null : Sections.CopyBands(Bands), Same = Same, Restart = Restart, Start = Start, Page = Page, Columns = Columns, Continuous = Continuous };
+	public SectionSettings Copy() => new() { Bands = Bands == null ? null : Sections.CopyBands(Bands), Same = Same, Restart = Restart, Start = Start, Page = Page, Columns = Columns, Continuous = Continuous, LineNumbers = LineNumbers?.Copy() };
+
+	/// (iteration 87) A section's line numbering as its own: null where it is the same as the document's (first).
+	public static LineNumbering? OwnLineNumbers(LineNumbering? section, LineNumbering? first) {
+		section ??= new LineNumbering();
+		first ??= new LineNumbering();
+		return !section.On && !first.On || section.SameAs(first) ? null : section;
+	}
 }
 
 /// A section as laid out: where its text starts (the first section at 0), its header and footer, its numbering, its
 /// own top and bottom margins (1/100 inch; null: the document's), its columns (null: one), whether it starts on the same
-/// page as the text before it, and where the text before it stops (a continuous break's hidden paragraph).
-public sealed record PageSection(int Start, PageBands Bands, bool Restart, int StartAt, int? Top = null, int? Bottom = null, SectionColumns? Columns = null, bool Continuous = false, int Stop = 0);
+/// page as the text before it, where the text before it stops (a continuous break's hidden paragraph), and (Docxodus
+/// trial) its own page setup and line numbering (null: the document's).
+public sealed record PageSection(int Start, PageBands Bands, bool Restart, int StartAt, int? Top = null, int? Bottom = null, SectionColumns? Columns = null, bool Continuous = false, int Stop = 0, SectionPage? Page = null, LineNumbering? LineNumbers = null);
 
 public static class Sections
 {
@@ -188,7 +200,7 @@ public static class Sections
 		foreach (var b in breaks) {
 			var bands = b.Settings.Same || b.Settings.Bands == null ? sections[^1].Bands : b.Settings.Bands;
 			static int? Hundredths(int? twips) => twips is int t ? (int)Math.Round(Math.Abs(t) / 14.4) : null;
-			sections.Add(new PageSection(b.SectionStart, bands, b.Settings.Restart, Math.Max(0, b.Settings.Start), Hundredths(b.Settings.Page?.Top), Hundredths(b.Settings.Page?.Bottom), b.Settings.Columns, b.Settings.Continuous, b.MarkStart));
+			sections.Add(new PageSection(b.SectionStart, bands, b.Settings.Restart, Math.Max(0, b.Settings.Start), Hundredths(b.Settings.Page?.Top), Hundredths(b.Settings.Page?.Bottom), b.Settings.Columns, b.Settings.Continuous, b.MarkStart, b.Settings.Page, b.Settings.LineNumbers));
 		}
 		return sections;
 	}
@@ -432,6 +444,7 @@ public static class Sections
 				Twips("margtsxn", "margt", 1440), Twips("margbsxn", "margb", 1440), landscape, Twips("headery", "headery", 720), Twips("footery", "footery", 720));
 		}
 		var firstPage = PageOf(0);
+		var firstNumbers = LineNumberFormats.FromRtf(rtf);    // (iteration 87: the document's line numbering)
 		var result = new System.Text.StringBuilder(rtf);
 		for (int k = sects.Count - 1; k >= 0; k--) {
 			var (start, length) = sects[k];
@@ -443,7 +456,8 @@ public static class Sections
 			bool continuous = Continuous(k + 1);
 			var page = PageOf(k + 1).Against(firstPage);
 			var columns = SectionColumns.FromRtf(properties);
-			var settings = new SectionSettings { Bands = bands, Same = bands == null, Restart = restart, Start = at.Success ? int.Parse(at.Groups[1].Value) : 1, Page = page, Columns = columns, Continuous = continuous };
+			var settings = new SectionSettings { Bands = bands, Same = bands == null, Restart = restart, Start = at.Success ? int.Parse(at.Groups[1].Value) : 1, Page = page, Columns = columns, Continuous = continuous,
+				LineNumbers = SectionSettings.OwnLineNumbers(LineNumberFormats.FromRtfSection(properties), firstNumbers) };
 			// (the section's own header and footer groups out of its text: they are its marker's now)
 			if (BandsOf(k + 1) != null)
 				foreach (var (groupStart, groupLength) in BandGroupsIn(rtf, starts[k + 1], starts[k + 1] + (Regex.Match(segment, @"\\pard(?![a-zA-Z])") is { Success: true } pard ? pard.Index : segment.Length)).AsEnumerable().Reverse())
@@ -480,7 +494,8 @@ public static class Sections
 	/// \footer groups, none when it is the same as the section before's; \pgnrestart \pgnstarts; the page layout, with what
 	/// it has of its own). A continuous break's hidden paragraph goes: the \sect (\sbknone) ends the paragraph before it,
 	/// with the marker at its end. The markers stay (hidden text) for AhkWord to read its own settings back.
-	public static string ExportRtf(string rtf, PageLayout layout, string title, string file, float fontSize) {
+	/// (iteration 87) Each section's line numbering too: its own, else the document's (numbering).
+	public static string ExportRtf(string rtf, PageLayout layout, string title, string file, float fontSize, LineNumbering? numbering = null) {
 		if (!rtf.Contains("[[sect:")) return rtf;
 		// the sections' groups first (their fonts go into the font table, which moves what follows)
 		var groups = new List<string>();
@@ -502,6 +517,9 @@ public static class Sections
 			if (settings.Restart) sb.Append(@"\pgnrestart\pgnstarts").Append(Math.Max(0, settings.Start));
 			if (settings is { Same: false, Bands.DifferentFirst: true }) sb.Append(@"\titlepg");
 			if (settings.Columns != null) sb.Append(settings.Columns.ToRtf());
+			// (iteration 87: its line numbering, or \linex0 for none: either way LineNumberFormats.AddToRtf leaves it)
+			string lineWords = LineNumberFormats.RtfWords(settings.LineNumbers ?? numbering ?? new LineNumbering());
+			sb.Append(lineWords == "" ? @"\linex0" : lineWords);
 			sb.Append($@"\pgwsxn{own.Width ?? layout.Width}\pghsxn{own.Height ?? layout.Height}\marglsxn{own.Left ?? layout.Left}\margrsxn{own.Right ?? layout.Right}\margtsxn{own.Top ?? layout.Top}\margbsxn{own.Bottom ?? layout.Bottom}\headery{own.HeaderY ?? layout.HeaderY}\footery{own.FooterY ?? layout.FooterY} ");
 			sb.Append(k < groups.Count ? groups[k] : "");
 			// (\sect ends the paragraph: the break paragraph's own mark would be an empty line in Word)

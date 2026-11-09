@@ -255,12 +255,7 @@ public static class PageKeeping
 {
 	const char RowStart = '￹', RowEnd = '￻', CellEnd = '\u0007';
 
-	static bool InTable(string story, int at) {
-		if (at < 0 || at >= story.Length) return false;
-		if (story[at] is RowStart or RowEnd or CellEnd) return true;
-		int open = story.LastIndexOf(RowStart, Math.Max(0, at - 1)), close = at > 0 ? story.LastIndexOf(RowEnd, at - 1) : -1;
-		return open >= 0 && open > close;
-	}
+	static bool InTable(string story, int at) => RtfTables.InTable(story, at);    // (iteration 87: nested tables reckoned with)
 
 	// The paragraph a position is in: its start and end (after its mark).
 	static (int Start, int End) ParagraphAt(string story, int at) {
@@ -302,7 +297,7 @@ public static class PageKeeping
 			int at = end;
 			while (at > start) {
 				if (at >= 2 && story[at - 2] == RowEnd) {
-					int row = story.LastIndexOf(RowStart, at - 2);
+					int row = RtfTables.RowStartOf(story, at - 2);    // (iteration 87: the outer row, not a nested one)
 					if (row < 0 || Para(row + 2).KeepWithNext != tomConstants.tomTrue) break;    // (its first cell, after the row's start and its mark)
 					if (row <= start) { at = end; break; }    // (the whole page: set aside)
 					at = row;

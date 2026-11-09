@@ -14,6 +14,7 @@ These are not included in this repository: Csharp-in-AHK downloads them from nug
 | [HtmlToOpenXml.dll](https://github.com/onizet/html2openxml) | Writing Word files (built-in converter) | MIT | [HtmlToOpenXml-MIT.txt](licenses/HtmlToOpenXml-MIT.txt) |
 | [AngleSharp](https://github.com/AngleSharp/AngleSharp) | HTML parsing for HtmlToOpenXml | MIT | [AngleSharp-MIT.txt](licenses/AngleSharp-MIT.txt) |
 | [Codeuctivity.OpenXmlPowerTools](https://github.com/Codeuctivity/OpenXmlPowerTools) | Reading Word files (built-in converter) | MIT | [OpenXmlPowerTools-MIT.txt](licenses/OpenXmlPowerTools-MIT.txt) |
+| [Docxodus](https://github.com/JSv4/Docxodus) 15.1.0 | Reading Word files (the Docxodus reader, a maintained descendant of Open-Xml-PowerTools) | MIT | [Docxodus-MIT.txt](licenses/Docxodus-MIT.txt) |
 | [Microsoft.Extensions.Logging.Abstractions](https://github.com/dotnet/runtime) | Needed by HtmlToOpenXml | MIT | [Microsoft.Extensions.Logging.Abstractions-MIT.txt](licenses/Microsoft.Extensions.Logging.Abstractions-MIT.txt) |
 | [SkiaSharp](https://github.com/mono/SkiaSharp), SkiaSharp.NativeAssets.Win32 (its native library) | Picture conversion for Word files | MIT | [SkiaSharp-MIT.txt](licenses/SkiaSharp-MIT.txt) |
 | [Scintilla5.NET](https://github.com/desjarlais/Scintilla.NET) | The editor of the Markdown and HTML views (a .NET wrapper of Scintilla) | MIT | [Scintilla.NET-MIT.txt](licenses/Scintilla.NET-MIT.txt) |
