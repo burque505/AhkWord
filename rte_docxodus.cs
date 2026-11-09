@@ -44,7 +44,9 @@ public static class DocxodusReader
 	// Each paragraph's list (its numbering instance and level; null: none), in the order the converter writes them: its
 	// own numbering or its style's (and the styles it is based on), as DocxLineSpacing.Paragraphs takes the paragraphs.
 	// (Id: the numbering instance; Definition: its abstract list, which the levels of one list can share across instances)
-	static List<(string Id, string Definition, int Level, bool Bullet)?> ListParagraphs(string path) {
+	// (Docxodus trial: also each one's suffix, what follows its number: "tab", "space" or "nothing"; allParagraphs: the
+	// merged-down cells' paragraphs too, as DocxLineSpacing.Paragraphs has them without html)
+	internal static List<(string Id, string Definition, int Level, bool Bullet, string Suffix)?> ListParagraphs(string path, bool allParagraphs = false) {
 		using var zip = System.IO.Compression.ZipFile.OpenRead(path);
 		XDocument? Load(string name) { var e = zip.GetEntry(name); if (e == null) return null; using var s = e.Open(); return XDocument.Load(s); }
 		var document = Load("word/document.xml")!;
@@ -57,12 +59,13 @@ public static class DocxodusReader
 			.GroupBy(a => (string)a.Attribute(Wn + "abstractNumId")!).ToDictionary(g => g.Key, g => g.First()) ?? new();
 		// (a level's number format: an override of the instance's own, or its definition's; Word's bullets are often
 		// letters in a symbol font, "o" in Courier New or "§" in Wingdings, which read as numbers by their text)
-		bool IsBullet(string numId, int level) {
+		XElement? LevelOf(string numId, int level) {
 			XElement? Level(XElement? holder) => holder?.Elements(Wn + "lvl").FirstOrDefault(l => (int?)l.Attribute(Wn + "ilvl") == level);
 			var over = nums.GetValueOrDefault(numId)?.Elements(Wn + "lvlOverride").FirstOrDefault(o => (int?)o.Attribute(Wn + "ilvl") == level);
-			var lvl = Level(over) ?? Level(abstracts.GetValueOrDefault(definitionOf.GetValueOrDefault(numId, numId)));
-			return (string?)lvl?.Element(Wn + "numFmt")?.Attribute(Wn + "val") == "bullet";
+			return Level(over) ?? Level(abstracts.GetValueOrDefault(definitionOf.GetValueOrDefault(numId, numId)));
 		}
+		bool IsBullet(string numId, int level) => (string?)LevelOf(numId, level)?.Element(Wn + "numFmt")?.Attribute(Wn + "val") == "bullet";
+		string SuffixOf(string numId, int level) => (string?)LevelOf(numId, level)?.Element(Wn + "suff")?.Attribute(Wn + "val") ?? "tab";
 		var byId = styles?.Descendants(Wn + "style").Where(s => (string?)s.Attribute(Wn + "type") == "paragraph" && s.Attribute(Wn + "styleId") != null)
 			.GroupBy(s => (string)s.Attribute(Wn + "styleId")!).ToDictionary(g => g.Key, g => g.First()) ?? new();
 		string? defaultStyle = (string?)styles?.Descendants(Wn + "style").FirstOrDefault(s => (string?)s.Attribute(Wn + "type") == "paragraph" && (string?)s.Attribute(Wn + "default") is "1" or "true")?.Attribute(Wn + "styleId");
@@ -76,15 +79,15 @@ public static class DocxodusReader
 			}
 			return (numId, level);
 		}
-		var list = new List<(string, string, int, bool)?>();
+		var list = new List<(string, string, int, bool, string)?>();
 		foreach (var p in document.Root!.Element(Wn + "body")!.Descendants(Wn + "p")) {
-			if (p.Ancestors(Wn + "txbxContent").Any() || DocxLineSpacing.InMergedCell(p)) continue;
+			if (p.Ancestors(Wn + "txbxContent").Any() || !allParagraphs && DocxLineSpacing.InMergedCell(p)) continue;
 			var pPr = p.Element(Wn + "pPr");
 			var own = pPr?.Element(Wn + "numPr");
 			var fromStyle = FromStyle((string?)pPr?.Element(Wn + "pStyle")?.Attribute(Wn + "val") ?? defaultStyle);
 			string? numId = (string?)own?.Element(Wn + "numId")?.Attribute(Wn + "val") ?? fromStyle.Id;
 			int level = (int?)own?.Element(Wn + "ilvl")?.Attribute(Wn + "val") ?? fromStyle.Level ?? 0;
-			list.Add(numId is null or "0" ? null : (numId, definitionOf.GetValueOrDefault(numId, numId), level, IsBullet(numId, level)));
+			list.Add(numId is null or "0" ? null : (numId, definitionOf.GetValueOrDefault(numId, numId), level, IsBullet(numId, level), SuffixOf(numId, level)));
 		}
 		return list;
 	}
@@ -104,7 +107,7 @@ public static class DocxodusReader
 
 	// ---- after converting: the PowerTools' shape
 
-	static void Normalize(XElement html, List<(string Id, string Definition, int Level, bool Bullet)?> lists) {
+	static void Normalize(XElement html, List<(string Id, string Definition, int Level, bool Bullet, string Suffix)?> lists) {
 		XNamespace x = html.Name.Namespace;
 		// (the direction marks Docxodus writes after a break)
 		foreach (var br in html.Descendants(x + "br").ToList()) {
@@ -118,7 +121,7 @@ public static class DocxodusReader
 		// list numbers: the number's text in a marker span of the PowerTools' kind, the layout around it gone
 		var blocks = html.Descendants().Where(e => e.Name.Namespace == x && Regex.IsMatch(e.Name.LocalName, "^(p|h[1-6])$")).ToList();
 		bool paired = blocks.Count == lists.Count;
-		var info = new Dictionary<XElement, (string Id, string Definition, int Level, bool Bullet)>();
+		var info = new Dictionary<XElement, (string Id, string Definition, int Level, bool Bullet, string Suffix)>();
 		for (int i = 0; i < blocks.Count; i++) {
 			// (a number followed by a tab: one box holding the number and the tab; by a space or nothing: the number's span,
 			// then the space's)
@@ -137,7 +140,7 @@ public static class DocxodusReader
 				continue;
 			}
 			markers[0].ReplaceWith(new XElement(x + "span", new XAttribute("data-pt-list-item-run", "1"), number));
-			info[blocks[i]] = item is { } l ? l : ("?", "?", LevelByIndent(blocks[i]), false);
+			info[blocks[i]] = item is { } l ? l : ("?", "?", LevelByIndent(blocks[i]), false, "tab");
 		}
 		// tabs: the tab itself, the boxes that lay out the text before it gone
 		foreach (var tab in html.Descendants(x + "span").Where(s => s.Attribute("data-docx-tab") != null).ToList()) tab.ReplaceWith(new XText("\t"));

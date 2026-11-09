@@ -152,6 +152,7 @@ public static class RtfDocx {
 
 	sealed class ParaFmt {
 		public int Style, Left, Right, First, Before, After, Sl, Ls, Ilvl, Outline = -1, Shading = -1;
+		public int Suffix;    // (Docxodus trial: AhkWord's \rtesuffix, what follows the list number: 1 a space, 2 nothing)
 		public bool SlMult, Keep, KeepNext, PageBefore, Widow, Contextual, InTable;
 		public char Align = 'l';
 		public List<TabStop> Tabs = new();
@@ -535,6 +536,7 @@ public static class RtfDocx {
 				case "itap": f.InTable = (n ?? 1) > 0; return true;
 				case "ls": f.Ls = n ?? 0; return true;
 				case "ilvl": f.Ilvl = n ?? 0; return true;
+				case "rtesuffix": f.Suffix = n ?? 0; return true;
 				case "outlinelevel": f.Outline = n ?? -1; return true;
 				case "tqr": f.TabKind = 'r'; return true;
 				case "tqc": f.TabKind = 'c'; return true;
@@ -890,6 +892,14 @@ public static class RtfDocx {
 			p.Pn = pn;
 		}
 
+		// (Docxodus trial) A list level's suffix (1 space, 2 nothing), where it has none: what follows its numbers.
+		void SuffixInto(int? abstractId, int level, int suffix) {
+			if (abstractId is not int id || abstracts.FirstOrDefault(a => a.AbstractNumberId?.Value == id) is not { } abs) return;
+			if (abs.Elements<W.Level>().FirstOrDefault(l => l.LevelIndex?.Value == level) is not { } lvl || lvl.GetFirstChild<W.LevelSuffix>() != null) return;
+			var suff = new W.LevelSuffix { Val = suffix == 1 ? W.LevelSuffixValues.Space : W.LevelSuffixValues.Nothing };
+			if (lvl.GetFirstChild<W.LevelText>() is { } text) text.InsertBeforeSelf(suff); else lvl.Append(suff);
+		}
+
 		string PnText(Grp g, int font) {
 			var sb = new StringBuilder();
 			var bytes = new List<byte>();
@@ -905,9 +915,12 @@ public static class RtfDocx {
 
 		// The numbering of a paragraph: (numId, level), or null.
 		(int Id, int Level)? Numbering(ParaFmt f, string? shown) {
-			if (f.Ls > 0 && numIds.Contains(f.Ls)) return (f.Ls, Math.Clamp(f.Ilvl, 0, 8));
+			if (f.Ls > 0 && numIds.Contains(f.Ls)) {
+				if (f.Suffix > 0) SuffixInto(nums.FirstOrDefault(n => n.NumberID?.Value == f.Ls)?.AbstractNumId?.Val?.Value, Math.Clamp(f.Ilvl, 0, 8), f.Suffix);
+				return (f.Ls, Math.Clamp(f.Ilvl, 0, 8));
+			}
 			if (f.Pn is not { } pn || pn.Kind == "cont") return null;
-			string key = pn.Key(FontName);
+			string key = pn.Key(FontName) + (f.Suffix > 0 ? "|suffix" + f.Suffix : "");
 			if (!pnAbstracts.TryGetValue(key, out int abs)) {
 				abs = abstracts.Count;
 				var a = new W.AbstractNum { AbstractNumberId = abs };
@@ -919,6 +932,7 @@ public static class RtfDocx {
 					"blt" => W.NumberFormatValues.Bullet, "ucrm" => W.NumberFormatValues.UpperRoman, "lcrm" => W.NumberFormatValues.LowerRoman,
 					"ucltr" => W.NumberFormatValues.UpperLetter, "lcltr" => W.NumberFormatValues.LowerLetter, "ord" => W.NumberFormatValues.Ordinal,
 					"card" => W.NumberFormatValues.CardinalText, "ordt" => W.NumberFormatValues.OrdinalText, _ => W.NumberFormatValues.Decimal } });
+				if (f.Suffix > 0) level.Append(new W.LevelSuffix { Val = f.Suffix == 1 ? W.LevelSuffixValues.Space : W.LevelSuffixValues.Nothing });
 				level.Append(new W.LevelText { Val = pn.Fmt == "blt" ? (pn.Before.Length > 0 ? pn.Before : "\u2022") : pn.Before + "%1" + pn.After });
 				level.Append(new W.LevelJustification { Val = W.LevelJustificationValues.Left });
 				if (pn.Font >= 0) {
@@ -936,7 +950,8 @@ public static class RtfDocx {
 			}
 			int id = nextPnNum++;
 			var num = new W.NumberingInstance(new W.AbstractNumId { Val = abs }) { NumberID = id };
-			if (number != 1) num.Append(new W.LevelOverride(new W.StartOverrideNumberingValue { Val = number }) { LevelIndex = 0 });
+			// (a start of 1 said too where an earlier list had this definition: Word numbers such lists on, one after the other)
+			if (number != 1 || nums.Any(n => n.AbstractNumId?.Val?.Value == abs)) num.Append(new W.LevelOverride(new W.StartOverrideNumberingValue { Val = number }) { LevelIndex = 0 });
 			nums.Add(num);
 			numIds.Add(id);
 			lastPn = (key, id, number + 1);
@@ -1529,6 +1544,17 @@ public static class RtfDocx {
 						new W.StyleRunProperties(new W.VerticalTextAlignment { Val = W.VerticalPositionValues.Superscript })) { Type = W.StyleValues.Character, StyleId = id });
 				}
 			}
+			// (the default character, table and list styles every Word document has: Word adds what is missing, and the
+			// document then counts as changed)
+			root.Append(new W.Style(new W.StyleName { Val = "Default Paragraph Font" }, new W.UIPriority { Val = 1 }, new W.SemiHidden(), new W.UnhideWhenUsed())
+				{ Type = W.StyleValues.Character, StyleId = "DefaultParagraphFont", Default = true });
+			root.Append(new W.Style(new W.StyleName { Val = "Normal Table" }, new W.UIPriority { Val = 99 }, new W.SemiHidden(), new W.UnhideWhenUsed(),
+				new W.StyleTableProperties(new W.TableIndentation { Width = 0, Type = W.TableWidthUnitValues.Dxa },
+					new W.TableCellMarginDefault(new W.TopMargin { Width = "0", Type = W.TableWidthUnitValues.Dxa }, new W.TableCellLeftMargin { Width = 108, Type = W.TableWidthValues.Dxa },
+						new W.BottomMargin { Width = "0", Type = W.TableWidthUnitValues.Dxa }, new W.TableCellRightMargin { Width = 108, Type = W.TableWidthValues.Dxa })))
+				{ Type = W.StyleValues.Table, StyleId = "TableNormal", Default = true });
+			root.Append(new W.Style(new W.StyleName { Val = "No List" }, new W.UIPriority { Val = 99 }, new W.SemiHidden(), new W.UnhideWhenUsed())
+				{ Type = W.StyleValues.Numbering, StyleId = "NoList", Default = true });
 			root.Append(new W.Style(new W.StyleName { Val = "Hyperlink" }, new W.UIPriority { Val = 99 }, new W.UnhideWhenUsed(),
 				new W.StyleRunProperties(new W.Color { Val = "0563C1" }, new W.Underline { Val = W.UnderlineValues.Single })) { Type = W.StyleValues.Character, StyleId = "Hyperlink" });
 			part.Styles = root;

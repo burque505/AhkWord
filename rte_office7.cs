@@ -723,6 +723,102 @@ public static class OfficeConverters {
 		selection.SetRange(Math.Min(selStart, doc.Range2(0, 0).StoryLength), Math.Min(selEnd, doc.Range2(0, 0).StoryLength));
 	}
 
+	/// (Docxodus trial) Of the paragraphs starting at starts, those numbered from their list's start (RichEdit's "new
+	/// number"), with that start; NewNumbersBack sets them again (after changes that lose them).
+	public static List<(int At, int Start)> NewNumbers(EllipticBit.RichEditorNET.RichEditBox editor, IEnumerable<int> starts) {
+		var found = new List<(int, int)>();
+		var doc = editor.TextDocument;
+		var selection = doc.Selection2;
+		int selStart = selection.Start, selEnd = selection.End;
+		foreach (int at in starts) {
+			selection.SetRange(at, at);
+			var pf = new ParaFormat2 { cbSize = Marshal.SizeOf<ParaFormat2>(), rgxTabs = new int[32] };
+			SendParaFormat(editor.Handle, 0x43D, IntPtr.Zero, ref pf);    // EM_GETPARAFORMAT
+			if ((pf.wNumberingStyle & 0x8000) != 0 && pf.wNumbering != 0) found.Add((at, pf.wNumberingStart));
+		}
+		selection.SetRange(selStart, selEnd);
+		return found;
+	}
+
+	public static void NewNumbersBack(EllipticBit.RichEditorNET.RichEditBox editor, IEnumerable<(int At, int Start)> restarts) {
+		var doc = editor.TextDocument;
+		var selection = doc.Selection2;
+		int selStart = selection.Start, selEnd = selection.End;
+		foreach (var (at, start) in restarts) {
+			selection.SetRange(at, at);
+			var pf = new ParaFormat2 { cbSize = Marshal.SizeOf<ParaFormat2>(), rgxTabs = new int[32] };
+			SendParaFormat(editor.Handle, 0x43D, IntPtr.Zero, ref pf);    // EM_GETPARAFORMAT
+			if ((pf.wNumberingStyle & 0x8000) != 0 && pf.wNumberingStart == start) continue;
+			pf.dwMask = 0x2000 | 0x8000;    // PFM_NUMBERINGSTYLE | PFM_NUMBERINGSTART
+			pf.wNumberingStyle = (ushort)(pf.wNumberingStyle | 0x8000);    // PFNS_NEWNUMBER
+			pf.wNumberingStart = (ushort)start;
+			SendParaFormat(editor.Handle, 0x447, IntPtr.Zero, ref pf);    // EM_SETPARAFORMAT
+		}
+		int length = doc.Range2(0, 0).StoryLength;
+		selection.SetRange(Math.Min(selStart, length), Math.Min(selEnd, length));
+	}
+
+	// (Docxodus trial) RichEdit's RTF doesn't keep where a list starts again from its first number (a list right after a
+	// list reads back as one list, numbered on): AhkWord's RTF keeps it in {\*\rtenewnumbers index:start,...}
+	// (paragraph indices, in order), which NewNumbersInto gives back.
+	static readonly Regex NewNumbersRx = new(@"\{\\\*\\rtenewnumbers ([0-9,:]*)\}");
+
+	// Each paragraph's start, in order, and its TOM list type.
+	static List<(int Start, int ListType)> ParagraphStarts(EllipticBit.RichEditorNET.TextObjectModel2.ITextDocument2 doc) {
+		var list = new List<(int, int)>();
+		int storyEnd = doc.Range2(0, 0).StoryLength;
+		var range = doc.Range2(0, 0);
+		range.Expand(EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomParagraph);
+		while (true) {
+			list.Add((range.Start, range.Para.ListType));
+			if (range.End >= storyEnd || range.End <= range.Start) break;
+			range.SetRange(range.End, range.End);
+			range.Expand(EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomParagraph);
+		}
+		return list;
+	}
+
+	/// The group with the paragraphs that start their list again ("": none).
+	public static string NewNumbersGroup(EllipticBit.RichEditorNET.TextObjectModel2.ITextDocument2 doc) {
+		var items = new List<string>();
+		var paragraphs = ParagraphStarts(doc);
+		for (int i = 0; i < paragraphs.Count; i++) {
+			int type = paragraphs[i].ListType;
+			if (type <= 0 || (type & 0x800000) == 0 || (type & 0xFFFF) is EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListNone or EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListBullet) continue;
+			items.Add($"{i}:{Math.Max(1, doc.Range2(paragraphs[i].Start, paragraphs[i].Start).Para.ListStart)}");
+		}
+		return items.Count == 0 ? "" : @"{\*\rtenewnumbers " + string.Join(",", items) + "}";
+	}
+
+	/// The RTF with the group (inserted before its last brace, if it hasn't one).
+	public static string WithNewNumbers(string rtf, EllipticBit.RichEditorNET.TextObjectModel2.ITextDocument2 doc) {
+		if (NewNumbersRx.IsMatch(rtf)) return rtf;
+		string group = NewNumbersGroup(doc);
+		int end = rtf.LastIndexOf('}');
+		return group == "" || end < 0 ? rtf : rtf.Insert(end, group);
+	}
+
+	/// The kept paragraphs (index, start) of an RTF (null: none).
+	public static List<(int Index, int Start)>? NewNumbersFrom(string rtf) {
+		var m = NewNumbersRx.Match(rtf);
+		if (!m.Success) return null;
+		var list = new List<(int, int)>();
+		foreach (string item in m.Groups[1].Value.Split(',', StringSplitOptions.RemoveEmptyEntries)) {
+			var parts = item.Split(':');
+			if (parts.Length == 2 && int.TryParse(parts[0], out int index) && int.TryParse(parts[1], out int start)) list.Add((index, start));
+		}
+		return list;
+	}
+
+	/// The kept paragraphs started again (where they are still list items).
+	public static void NewNumbersInto(EllipticBit.RichEditorNET.RichEditBox editor, List<(int Index, int Start)>? items) {
+		if (items == null || items.Count == 0) return;
+		var paragraphs = ParagraphStarts(editor.TextDocument);
+		NewNumbersBack(editor, items.Where(x => x.Index >= 0 && x.Index < paragraphs.Count && paragraphs[x.Index].ListType > 0
+			&& (paragraphs[x.Index].ListType & 0xFFFF) is not (EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListNone or EllipticBit.RichEditorNET.TextObjectModel2.tomConstants.tomListBullet))
+			.Select(x => (paragraphs[x.Index].Start, x.Start)).ToList());
+	}
+
 	[StructLayout(LayoutKind.Sequential)]
 	struct ParaFormat2
 	{
@@ -1036,6 +1132,7 @@ public static class OfficeConverters {
 		using var scratch = new EllipticBit.RichEditorNET.RichEditBox();
 		_ = scratch.Handle;
 		((System.Windows.Forms.RichTextBox)scratch).Rtf = rtf;
+		NewNumbersInto(scratch, NewNumbersFrom(rtf));    // (Docxodus trial: lists started again, which RichEdit's RTF loses)
 		var doc = scratch.TextDocument;
 		// (LevelsFromNumbers gives the items legal numbering's indents, noting the ones they had: the editor's own, kept
 		// here for a numbered style's items; the editor's notes, for a document being opened, stay as they were)
@@ -1565,6 +1662,7 @@ public static class OfficeConverters {
 		using var scratch = new EllipticBit.RichEditorNET.RichEditBox();
 		_ = scratch.Handle;
 		((System.Windows.Forms.RichTextBox)scratch).Rtf = rtf;
+		NewNumbersInto(scratch, NewNumbersFrom(rtf));    // (Docxodus trial: lists started again, which RichEdit's RTF loses)
 		return FitListIndents(scratch.TextDocument) ? ((System.Windows.Forms.RichTextBox)scratch).Rtf ?? rtf : rtf;
 	}
 

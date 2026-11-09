@@ -81,7 +81,28 @@ public static class LineNumberFormats
 	/// RTF with the line numbering in its sections, all of them: it is the whole document's (after HeaderFooter.AddToRtf,
 	/// which starts one with \sectd, and Sections.ExportRtf). (Docxodus trial: not those whose words have line numbering
 	/// already, \linemod or \linex: Sections.ExportRtf's, a section's own or none.)
-	public static string AddToRtf(string rtf, LineNumbering numbering) {
+	public static string AddToRtf(string rtf, LineNumbering numbering) => WithLineNumberStyle(Numbered(rtf, numbering));
+
+	// (2026-11-09) Word's "line number" character style, where any section is line-numbered: Word adds it while laying out
+	// such a document, which then counts as changed (Word asked to save one that was only opened).
+	static string WithLineNumberStyle(string rtf) {
+		if (!Regex.IsMatch(rtf, @"\\linemod[1-9]")) return rtf;
+		int sheet = rtf.IndexOf(@"{\stylesheet", StringComparison.Ordinal);
+		if (sheet < 0) return rtf;
+		int depth = 0, end = -1;
+		for (int i = sheet; i < rtf.Length; i++) {
+			if (rtf[i] == '\\') { i++; continue; }
+			if (rtf[i] == '{') depth++;
+			else if (rtf[i] == '}' && --depth == 0) { end = i; break; }
+		}
+		if (end < 0) return rtf;
+		string table = rtf[sheet..end];
+		if (table.Contains("line number;", StringComparison.OrdinalIgnoreCase)) return rtf;
+		int number = Regex.Matches(table, @"\\(?:s|cs|ds|ts)(\d+)").Select(m => int.Parse(m.Groups[1].Value)).DefaultIfEmpty(0).Max() + 1;
+		return rtf.Insert(end, $@"{{\*\cs{number}\additive\ssemihidden line number;}}");
+	}
+
+	static string Numbered(string rtf, LineNumbering numbering) {
 		if (!numbering.On) return rtf;
 		string words = RtfWords(numbering);
 		var sections = Regex.Matches(rtf, @"\\sectd(?![a-z])");
@@ -150,6 +171,15 @@ public static class LineNumberFormats
 			if (next != null) section.InsertBefore(element, next); else section.AppendChild(element);
 		}
 		package.MainDocumentPart.Document.Save();
+		// (2026-11-09) Word's "line number" character style (WithLineNumberStyle), whichever converter made the file
+		if (all.Any(s => s.Elements<W.LineNumberType>().Any()) && package.MainDocumentPart.StyleDefinitionsPart?.Styles is { } styles
+			&& !styles.Elements<W.Style>().Any(s => s.StyleId == "LineNumber")) {
+			var style = new W.Style(new W.StyleName { Val = "line number" }) { Type = W.StyleValues.Character, StyleId = "LineNumber" };
+			if (styles.Elements<W.Style>().Any(s => s.StyleId == "DefaultParagraphFont")) style.Append(new W.BasedOn { Val = "DefaultParagraphFont" });
+			style.Append(new W.UIPriority { Val = 99 }, new W.SemiHidden(), new W.UnhideWhenUsed());
+			styles.Append(style);
+			styles.Save();
+		}
 	}
 
 	/// The line numbering of a .docx (null: none): the first section that has any, for the whole document. Without
@@ -300,8 +330,13 @@ sealed class LineNumberGutter : Control
 	List<(int Start, LineNumbering Numbering)>? regimes;
 	List<(int Start, LineNumbering Numbering)> Regimes() {
 		if (regimes != null) return regimes;
-		var list = SectionNumbering?.Invoke().Select(s => (s.Start, s.Own ?? numbering)).ToList();
-		return regimes = list is { Count: > 0 } ? list : new() { (0, numbering) };
+		// (while the editor has no window, as when it is made again for a new document, the document's numbering alone,
+		// not kept: the sections can't be read then, and asking threw in the middle of a paint)
+		if (SectionNumbering == null || !editor.IsHandleCreated) return new() { (0, numbering) };
+		List<(int Start, LineNumbering Numbering)> list;
+		try { list = SectionNumbering().Select(s => (s.Start, s.Own ?? numbering)).ToList(); }
+		catch (Exception ex) when (ex is InvalidOperationException or COMException) { return new() { (0, numbering) }; }
+		return regimes = list.Count > 0 ? list : new() { (0, numbering) };
 	}
 
 	/// Whether there are numbers to show: the document's, or (Docxodus trial) a section's own.

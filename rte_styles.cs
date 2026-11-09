@@ -775,7 +775,8 @@ public static class RtfStyles
 	static readonly HashSet<string> NotText = new() {
 		"fonttbl", "colortbl", "stylesheet", "info", "pict", "object", "nonshppict", "header", "headerl", "headerr", "headerf",
 		"footer", "footerl", "footerr", "footerf", "footnote", "pntext", "pntxta", "pntxtb", "listtext", "listtable",
-		"listoverridetable", "xe", "tc", "rsidtbl", "generator", "fldinst", "themedata", "colorschememapping", "latentstyles"
+		"listoverridetable", "xe", "tc", "rsidtbl", "generator", "fldinst", "themedata", "colorschememapping", "latentstyles",
+		"nonesttables"    // (Docxodus trial: a nested table's rows for readers without nested tables; the editor has no paragraph there)
 	};
 
 	// The style sheet's numbers: Normal 0, Heading 1-6 1-6, the others from 10 on, in the sheet's order.
@@ -810,7 +811,7 @@ public static class RtfStyles
 		var numbers = Numbers(sheet);
 		// where each paragraph starts and ends in the body, and its \pard (its own formatting begins after the last one)
 		var marks = new List<(string Word, int At, int After)>();
-		Scan(rtf, (word, at, _, after) => { if (word is "par" or "cell" or "pard") marks.Add((word, at, after)); });
+		Scan(rtf, (word, at, _, after) => { if (word is "par" or "cell" or "nestcell" or "pard") marks.Add((word, at, after)); });    // (Docxodus trial: a nested table's cells too)
 		var inserts = new List<(int At, string Text)>();
 		int paragraph = 0, start = -1, lastPard = -1;
 		foreach (var (word, at, after) in marks) {
@@ -1043,7 +1044,7 @@ public static class RtfStyles
 	// The body's paragraph ends (\par and \cell outside other destinations): their positions.
 	static List<int> ParagraphEnds(string rtf) {
 		var ends = new List<int>();
-		Scan(rtf, (word, at, _, _) => { if (word is "par" or "cell") ends.Add(at); });
+		Scan(rtf, (word, at, _, _) => { if (word is "par" or "cell" or "nestcell") ends.Add(at); });
 		return ends;
 	}
 
@@ -1054,7 +1055,7 @@ public static class RtfStyles
 		Scan(rtf, (word, at, value, _) => {
 			if (word == "pard") current = 0;
 			else if (word == "s" && value is int n) current = n;
-			else if (word is "par" or "cell") styles.Add(current);
+			else if (word is "par" or "cell" or "nestcell") styles.Add(current);
 		});
 		return styles;
 	}

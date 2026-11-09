@@ -142,26 +142,7 @@ public static class ParagraphFrames
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 		bool hadMarkers = Any(story);
 		if (!hadMarkers && formats.All(f => f.Borders.Count == 0 && f.Shading == null)) return 0;
-		// the editor's paragraphs (cells' included, rows' marks left out), and the pairs
-		var starts = DocxLineSpacing.Starts(doc, int.MaxValue);
-		string EditorText(int k) {
-			int end = story.IndexOfAny(new[] { '\r', '\u0007' }, starts[k]);
-			return story[starts[k]..(end < 0 ? story.Length : end)];
-		}
-		var mine = starts.Select((_, k) => Key(EditorText(k))).ToList();
-		var partner = new int[formats.Count];
-		int next = 0;
-		for (int i = 0; i < formats.Count; i++) {
-			partner[i] = -1;
-			string theirs = Key(texts[i]);
-			for (int k = next; k < mine.Count && k < next + 12; k++) {
-				bool same = mine[k] == theirs || theirs.Length >= 6 && mine[k].Length >= 6 && (mine[k].Contains(theirs) || theirs.Contains(mine[k]));
-				if (!same) continue;
-				partner[i] = k;
-				next = k + 1;
-				break;
-			}
-		}
+		var (starts, partner) = Pair(doc, story, texts);
 		// (from the end: each change leaves the paragraphs before it where they were)
 		var frames = new ParagraphFrame?[starts.Count];
 		for (int i = 0; i < formats.Count; i++) if (partner[i] >= 0) frames[partner[i]] = From(formats[i].Borders, formats[i].Shading);
@@ -179,6 +160,31 @@ public static class ParagraphFrames
 		return count;
 	}
 
+	/// The editor's paragraphs (their starts: cells' included, rows' marks left out) and, for each of a .docx's
+	/// paragraphs (their texts), its partner among them (-1: none): by their text, in order, a few paragraphs ahead at most.
+	public static (List<int> Starts, int[] Partner) Pair(ITextDocument2 doc, string story, List<string> texts) {
+		var starts = DocxLineSpacing.Starts(doc, int.MaxValue);
+		string EditorText(int k) {
+			int end = story.IndexOfAny(new[] { '\r', '\u0007' }, starts[k]);
+			return story[starts[k]..(end < 0 ? story.Length : end)];
+		}
+		var mine = starts.Select((_, k) => Key(EditorText(k))).ToList();
+		var partner = new int[texts.Count];
+		int next = 0;
+		for (int i = 0; i < texts.Count; i++) {
+			partner[i] = -1;
+			string theirs = Key(texts[i]);
+			for (int k = next; k < mine.Count && k < next + 12; k++) {
+				bool same = mine[k] == theirs || theirs.Length >= 6 && mine[k].Length >= 6 && (mine[k].Contains(theirs) || theirs.Contains(mine[k]));
+				if (!same) continue;
+				partner[i] = k;
+				next = k + 1;
+				break;
+			}
+		}
+		return (starts, partner);
+	}
+
 	// A paragraph's text as the pairing compares it: without markers, private-use characters, row marks and page
 	// breaks; up to its first tab (a table of contents' page number, a list number's tab); spaces as one; lower case.
 	static string Key(string text) {
@@ -190,7 +196,7 @@ public static class ParagraphFrames
 
 	// The .docx's paragraphs' texts, in the order DocxLineSpacing.Paragraphs has them (w:p in the body, its tables'
 	// included, text boxes left out; deleted text left out, tabs as tabs).
-	static List<string> ParagraphTexts(string path) {
+	internal static List<string> ParagraphTexts(string path) {
 		using var zip = System.IO.Compression.ZipFile.OpenRead(path);
 		XDocument document;
 		using (var s = zip.GetEntry("word/document.xml")!.Open()) document = XDocument.Load(s);
@@ -370,5 +376,146 @@ public static class ParagraphFrames
 		}
 		var all = known.Concat(added).ToList();
 		return hex => all.IndexOf(hex) + 1;
+	}
+}
+
+/// (Docxodus trial) What follows a list number, where it isn't a tab: Word's "space" or "nothing". RichEdit always
+/// starts a numbered paragraph's first line at its indent, the number in front of it; with no room in front of the text
+/// (no hanging indent) it puts the text just after the number instead, a small gap after it. So such a paragraph has no
+/// hanging indent in the editor (its lines start where its number does), and a hidden marker at its start keeps what
+/// it is and the indents its file gave it: [[sfx:space,720,-360]] (twips: left, first line). Saved, the paragraph gets
+/// its own indents back and \rtesuffix (1 space, 2 nothing), which the direct .docx writer makes the level's w:suff.
+public static class ListSuffixes
+{
+	public static readonly Regex Mark = new(@"\[\[sfx:(space|nothing),(-?\d+),(-?\d+)\]\]");
+	public static bool Any(string story) => story.Contains("[[sfx:", StringComparison.Ordinal);
+
+	/// After a .docx is opened: its list paragraphs whose number is followed by a space or nothing get their markers
+	/// (paired up with the editor's by their text, as the frames are; AhkWord's own markers give way to the file's), and
+	/// their layout (Apply). Returns how many.
+	public static int FromDocx(EllipticBit.RichEditorNET.RichEditBox editor, string path) {
+		var doc = editor.TextDocument;
+		List<(string Id, string Definition, int Level, bool Bullet, string Suffix)?> lists;
+		List<string> texts;
+		try {
+			lists = DocxodusReader.ListParagraphs(path, allParagraphs: true);
+			texts = ParagraphFrames.ParagraphTexts(path);
+		} catch (Exception ex) when (ex is IOException or InvalidDataException or System.Xml.XmlException or NullReferenceException) { return 0; }
+		if (lists.Count != texts.Count) return 0;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		bool hadMarkers = Any(story);
+		if (!hadMarkers && !lists.Any(l => l?.Suffix is "space" or "nothing")) return 0;
+		var (starts, partner) = ParagraphFrames.Pair(doc, story, texts);
+		var suffixes = new string?[starts.Count];
+		for (int i = 0; i < lists.Count; i++) if (partner[i] >= 0 && lists[i]?.Suffix is "space" or "nothing") suffixes[partner[i]] = lists[i]!.Value.Suffix;
+		int count = 0;
+		for (int k = starts.Count - 1; k >= 0; k--) {
+			int start = starts[k];
+			if (hadMarkers) {
+				int end = story.IndexOfAny(new[] { '\r', '\u0007' }, start);
+				foreach (Match m in Mark.Matches(story[start..(end < 0 ? story.Length : end)]).Cast<Match>().Reverse()) doc.Range2(start + m.Index, start + m.Index + m.Length).Text = "";
+			}
+			if (suffixes[k] is not { } suffix) continue;
+			var para = doc.Range2(start, start).Para;
+			if ((para.ListType & 0xFFFF) == tomConstants.tomListNone) continue;    // (a number the editor keeps as text)
+			var at = doc.Range2(start, start);
+			at.Text = $"[[sfx:{suffix},{Twips(para.LeftIndent)},{Twips(para.FirstLineIndent)}]]";
+			at.Font.Hidden = tomConstants.tomTrue;
+			count++;
+		}
+		if (count > 0) Apply(doc);
+		return count;
+	}
+
+	static int Twips(float points) => (int)Math.Round(points * 20);
+
+	/// The marked list paragraphs laid out with their text after their number: no hanging indent, their lines from where
+	/// the number starts (after opening; an .rtf of AhkWord's own has the file's indents in it).
+	/// The markers back at their paragraphs' starts (an .rtf of AhkWord's own has them at the ends, where saving put
+	/// them). Before the lists' restarts are given back: moving them loses those.
+	public static void ToStarts(ITextDocument2 doc) {
+		if (Any(doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "")) Move(doc, toEnd: false);
+	}
+
+	public static void Apply(ITextDocument2 doc) {
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		if (!Any(story)) return;
+		foreach (Match m in Mark.Matches(story)) {
+			var para = doc.Range2(m.Index, m.Index).Para;
+			if ((para.ListType & 0xFFFF) == tomConstants.tomListNone) continue;
+			float numberAt = (int.Parse(m.Groups[2].Value) + int.Parse(m.Groups[3].Value)) / 20f;
+			if (Math.Abs(para.FirstLineIndent) < 0.01f && Math.Abs(para.LeftIndent - numberAt) < 0.01f) continue;
+			para.SetIndents(0, Math.Max(0, numberAt), para.RightIndent);    // (the indents only: the list's type and restart stay as they are)
+		}
+	}
+
+	/// For saving: the marked paragraphs with their file's indents while action runs (RichEdit writes a numbered
+	/// paragraph with no hanging indent as one with its number typed in), laid out again after it; not undoable, the
+	/// document's modified state as it was.
+	public static void WithFileIndents(EllipticBit.RichEditorNET.RichEditBox editor, Action action) {
+		var doc = editor.TextDocument;
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		if (!Any(story)) { action(); return; }
+		bool modified = editor.Modified;
+		doc.Undo(-9999995);    // tomSuspend
+		// (the marked paragraphs' list restarts: putting the markers back at their starts loses them)
+		var restarts = OfficeConverters.NewNumbers(editor, Mark.Matches(story).Select(m => m.Index).ToList());
+		try {
+			foreach (Match m in Mark.Matches(story)) {
+				var para = doc.Range2(m.Index, m.Index).Para;
+				if ((para.ListType & 0xFFFF) == tomConstants.tomListNone) continue;
+				para.SetIndents(int.Parse(m.Groups[3].Value) / 20f, int.Parse(m.Groups[2].Value) / 20f, para.RightIndent);
+			}
+			// (the markers at their paragraphs' ends meanwhile: the steps that make lists Word's read a list paragraph's
+			// start for a number typed in, and took one there for that)
+			Move(doc, toEnd: true);
+			action();
+		} finally {
+			Move(doc, toEnd: false);
+			Apply(doc);
+			OfficeConverters.NewNumbersBack(editor, restarts);
+			doc.Undo(-9999994);    // tomResume
+			editor.Modified = modified;
+		}
+	}
+
+	// The markers moved to their paragraphs' ends (before the paragraph mark), or back to their starts.
+	static void Move(ITextDocument2 doc, bool toEnd) {
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		foreach (Match m in Mark.Matches(story).Cast<Match>().Reverse()) {
+			int to = toEnd ? story.IndexOfAny(new[] { '\r', '\u0007' }, m.Index) : (m.Index == 0 ? 0 : story.LastIndexOfAny(new[] { '\r', '\u0007' }, m.Index - 1) + 1);
+			if (to < 0 || (toEnd ? to == m.Index + m.Length : to == m.Index)) continue;
+			doc.Range2(m.Index, m.Index + m.Length).Text = "";
+			if (toEnd) to -= m.Length;
+			var at = doc.Range2(to, to);
+			at.Text = m.Value;
+			at.Font.Hidden = tomConstants.tomTrue;
+		}
+	}
+
+	/// Word's RTF: each marked paragraph its file's indents back and \rtesuffix (1 space, 2 nothing), after its marker;
+	/// the paragraph after it, without a \pard of its own, the indents it had (and \rtesuffix0).
+	public static string ToWordRtf(string rtf) {
+		if (!rtf.Contains("[[sfx:", StringComparison.Ordinal)) return rtf;
+		var marks = Mark.Matches(rtf).Cast<Match>().ToList();
+		for (int k = marks.Count - 1; k >= 0; k--) {
+			var m = marks[k];
+			int from = m.Index + m.Length;
+			// (the indents RichEdit wrote for it: the last \li and \fi since its \pard)
+			int pard = rtf.LastIndexOf(@"\pard", m.Index, StringComparison.Ordinal);
+			string head = pard < 0 ? "" : rtf[pard..m.Index];
+			string li = Regex.Matches(head, @"\\li(-?\d+)").Cast<Match>().LastOrDefault()?.Groups[1].Value ?? "0";
+			string fi = Regex.Matches(head, @"\\fi(-?\d+)").Cast<Match>().LastOrDefault()?.Groups[1].Value ?? "0";
+			var end = Regex.Match(rtf[from..], @"\\(par|cell)(?![a-zA-Z])");
+			if (end.Success) {
+				int after = from + end.Index + end.Length;
+				var next = Regex.Match(rtf[after..Math.Min(rtf.Length, after + 200)], @"^(?:\s|\\[a-zA-Z]+-?\d* ?|\{\\\*?\\[a-zA-Z]+[^{}]*\})*");
+				if (!next.Value.Contains(@"\pard", StringComparison.Ordinal)) rtf = rtf.Insert(after, $@"\li{li}\fi{fi}\rtesuffix0 ");
+			}
+			var close = Regex.Match(rtf[from..Math.Min(rtf.Length, from + 40)], @"^(?:\}|\\v0 ?)");
+			int at = from + (close.Success ? close.Length : 0);
+			rtf = rtf.Insert(at, $@"\li{m.Groups[2].Value}\fi{m.Groups[3].Value}\rtesuffix{(m.Groups[1].Value == "space" ? 1 : 2)} ");
+		}
+		return rtf;
 	}
 }

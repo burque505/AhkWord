@@ -6108,6 +6108,8 @@ public class EditorApi
 		rtf = Sections.ImportRtf(rtf);    // (iteration 63)
 		Rtf = rtf;
 		form.StylesAfterLoad(StylesFromRtf(rtf), takeLook: false);
+		OfficeConverters.NewNumbersInto(ed, loadedNewNumbers);    // (Docxodus trial: the lists started again)
+		loadedNewNumbers = null;
 		form.Bands = bands ?? form.DefaultBands();
 		form.SetLineNumbering(numbering ?? new LineNumbering(), changesDocument: false);
 		MarksFollowText();
@@ -6740,6 +6742,7 @@ public class EditorApi
 				}
 				if (kind != "rtf") OfficeConverters.ListMarksFromText(ed);    // (Docxodus trial: list numbers in their text's font)
 				if (extension == ".docx") ParagraphFrames.FromDocx(ed, full);    // (Docxodus trial: paragraph borders and shading)
+				if (extension == ".docx") ListSuffixes.FromDocx(ed, full);    // (Docxodus trial: a space or nothing after list numbers)
 				break;
 			}
 			default: {
@@ -6773,7 +6776,11 @@ public class EditorApi
 		// (iteration 51) the notes' size the file had (Word's, LibreOffice's): the document's Footnote Text style
 		if (Footnotes.LoadedSize is float loaded && loaded >= 4 && form.Styles.Find(Footnotes.StyleName) == null && Footnotes.Any(Story())) form.SetNoteStyle(loaded);
 		Footnotes.LoadedSize = null;
+		ListSuffixes.ToStarts(ed.TextDocument);    // (Docxodus trial: the suffix markers where they belong, before the restarts)
 		OfficeConverters.RestartsFromMarkers(ed);    // (Docxodus trial: lists right after lists, numbered from their own start)
+		OfficeConverters.NewNumbersInto(ed, loadedNewNumbers);    // (and as AhkWord's .rtf kept them)
+		loadedNewNumbers = null;
+		ListSuffixes.Apply(ed.TextDocument);    // (Docxodus trial: list paragraphs with a space or nothing after their numbers, as AhkWord's .rtf keeps them)
 		}
 		ed.ClearUndo();
 		ed.Select(0, 0);
@@ -6852,7 +6859,7 @@ public class EditorApi
 		// a .md / .html file whose document came from its source text, unchanged since, gets that text as it was typed
 		// (iteration 46: the file made from the document as it is, without the page view's gaps, whatever step reads it)
 		form.UpdateReferences();    // (iteration 50: the cross-references' numbers as they are now)
-		form.WithoutGaps(() => WriteFile(full, extension, via, picturesInside));
+		form.WithoutGaps(() => ListSuffixes.WithFileIndents(ed, () => WriteFile(full, extension, via, picturesInside)));    // (Docxodus trial: list paragraphs' own indents)
 		ed.Modified = false;
 		form.ClearRecovery();
 		FileConverter = extension is ".docx" or ".odt" || picturesInside ? via : "";
@@ -7058,7 +7065,7 @@ public class EditorApi
 	// (iteration 63: its section breaks as Word's sections)
 	string WithBands(string rtf, string path) {
 		var layout = form.PageLayout();
-		rtf = HeaderFooter.AddToRtf(Footnotes.ToWordRtf(CrossRefs.ToWordRtf(ParagraphFrames.ToWordRtf(rtf)), ed.Font.Name, ed.Font.SizeInPoints, form.NoteStyle?.Size ?? 0), form.Bands, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints);
+		rtf = HeaderFooter.AddToRtf(Footnotes.ToWordRtf(CrossRefs.ToWordRtf(ListSuffixes.ToWordRtf(ParagraphFrames.ToWordRtf(rtf))), ed.Font.Name, ed.Font.SizeInPoints, form.NoteStyle?.Size ?? 0), form.Bands, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints);
 		rtf = Sections.ExportRtf(rtf, layout, Path.GetFileName(path), path, ed.Font.SizeInPoints, form.Numbering);
 		return LineNumberFormats.AddToRtf(rtf, form.Numbering);
 	}
@@ -7066,12 +7073,13 @@ public class EditorApi
 	// ---- Rich Text Format, Word and OpenDocument
 
 	// RichEdit's own RTF (without the pictures' alt texts, for changes that go through a RichEdit).
-	string RawRtf => form.WithoutGaps(() => ((RichTextBox)ed).Rtf ?? "");    // (the page view's gaps aren't the document's)
+	string RawRtf => form.WithoutGaps(() => OfficeConverters.WithNewNumbers(((RichTextBox)ed).Rtf ?? "", ed.TextDocument));    // (Docxodus trial: with the lists started again, for the steps that go through a RichEdit)    // (the page view's gaps aren't the document's)
 
 	// RTF with the document's styles: the style sheet and each paragraph's (RichEdit keeps only the headings').
 	// (and the numbered items' ListStart values: where their numbering starts again)
 	string StyledRtf(string rtf) {
 		string styled = RtfStyles.Inject(rtf, StyleEngine.Names(ed.TextDocument, form.Styles), form.Styles, StyleEngine.WidowControls(ed.TextDocument));
+		styled = form.WithoutGaps(() => OfficeConverters.WithNewNumbers(styled, ed.TextDocument));    // (Docxodus trial: the lists started again)
 		// (and the paragraphs whose numbering is off: LegalLists.OffGroup)
 		string starts = form.WithoutGaps(() => LegalLists.StartsGroup(ed.TextDocument) + LegalLists.OffGroup(ed.TextDocument)) + ListLevelsGroup();
 		int end = styled.LastIndexOf('}');
@@ -7100,8 +7108,11 @@ public class EditorApi
 	// AhkWord's own definitions (null if the file has none). An RTF without any styles (written by AhkWord before it
 	// had them, or by WordPad) gets its headings from their fonts, as before, the large ones only (bold 24, 18 and 14 pt:
 	// a bold 12 pt line is a heading's look only by chance).
+	List<(int Index, int Start)>? loadedNewNumbers;
+
 	StyleSheet? StylesFromRtf(string rtf) {
 		form.LoadedListStarts = LegalLists.StartsFrom(rtf);    // (StylesAfterLoad gives them back to the numbered items)
+		loadedNewNumbers = OfficeConverters.NewNumbersFrom(rtf);    // (Docxodus trial: the lists started again; given back last of all)
 		var (sheet, names, paragraphs, any) = RtfStyles.Read(rtf);
 		var doc = ed.TextDocument;
 		LegalLists.RestoreOff(doc, rtf);    // (the paragraphs whose numbering is off, as AhkWord's RTF kept them)

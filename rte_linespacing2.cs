@@ -292,6 +292,11 @@ public static class LineSpacing
 	}
 
 	static readonly Regex RtfUnits = new(@"\\\\|\\pard(?![a-zA-Z])(?<words>(?:\\[a-zA-Z]+-?\d* ?)*)|\\(?:par|cell)(?![a-zA-Z]) ?|" + Marker + "|" + ParaMarker);
+	// The paragraph's words of those after a \pard (RichEdit puts the characters' after them: fonts, sizes, colours).
+	static readonly Regex ParagraphWord = new(@"^\\(?:li|ri|fi|sb|sa|sl|slmult|q[lrcjd]|keep|keepn|widctlpar|nowidctlpar|t[xb]|tq(?:r|c|dec)|tl(?:dot|hyph|ul|th|eq|mdot)|intbl|itap|s|ls|ilvl|pagebb|outlinelevel|contextualspace|noline|ltrpar|rtlpar|sbauto|saauto|hyphpar|nooverflow|aspalpha|aspnum|faauto|adjustright|adjustleft|sbys|lin|rin|lisa|lisb)(?:-?\d+)?$");
+	static string ParagraphWordsOnly(string words) =>
+		string.Concat(Regex.Matches(words, @"\\[a-zA-Z]+-?\d*").Select(m => m.Value).Where(w => ParagraphWord.IsMatch(w)));
+
 	/// The line and page breaks a paragraph's marker gives (as Breaks has them; null: none).
 	public static string? BreaksIn(string paragraph) {
 		foreach (Match m in ParaMarker.Matches(paragraph))
@@ -356,7 +361,10 @@ public static class LineSpacing
 		}
 		// after a paragraph with a marker: what it changed as it was
 		string Back() {
-			if (changed.Contains("tabs")) return @"\pard" + paragraph.TrimEnd() + " ";    // (only \pard takes tab stops off; not in lists, which have no markers for them)
+			// (only \pard takes tab stops off; not in lists, which have no markers for them) (2026-11-09: with the paragraph's
+			// own words alone: RichEdit writes the characters' after them, such as a title's \f0\fs56, which then went on
+			// to every paragraph after it whose text didn't set its font and size again: contents' entries at 28 points)
+			if (changed.Contains("tabs")) return @"\pard" + ParagraphWordsOnly(paragraph) + " ";
 			var words = new StringBuilder();
 			foreach (var word in changed)
 				if (word == "nowidctlpar") words.Append(@"\widctlpar");
