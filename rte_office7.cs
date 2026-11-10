@@ -519,7 +519,7 @@ public static class OfficeConverters {
 			string punctuation = Regex.Match(attributes, @"\brte-[a-z]+(?:-[a-z]+)?-(paren|parens|plain)\b").Groups[1].Value;
 			lists.Push(new HtmlList(format, punctuation, first));
 		}
-		var paragraphs = main.Document.Body!.Descendants<W.Paragraph>().Select(p => p.ParagraphProperties?.NumberingProperties)
+		var paragraphs = main.Document!.Body!.Descendants<W.Paragraph>().Select(p => p.ParagraphProperties?.NumberingProperties)
 			.Where(n => n?.NumberingId?.Val != null).ToList();
 		if (paragraphs.Count != items.Count) return;    // not one paragraph per <li>: leave it as it is
 
@@ -640,7 +640,7 @@ public static class OfficeConverters {
 	// Word draws a list number in its paragraph mark's format, and HtmlToOpenXml gives marks none (the document
 	// default, 11 pt, next to 18-point text): each list paragraph's mark takes its first run's formatting.
 	static void MarksFromRuns(MainDocumentPart main) {
-		foreach (var paragraph in main.Document.Body!.Descendants<W.Paragraph>()) {
+		foreach (var paragraph in main.Document!.Body!.Descendants<W.Paragraph>()) {
 			var properties = paragraph.ParagraphProperties;
 			if (properties?.NumberingProperties == null) continue;
 			var run = paragraph.Descendants<W.Run>().FirstOrDefault(r => r.RunProperties != null && r.Descendants<W.Text>().Any(t => t.Text.Trim() != ""));

@@ -408,7 +408,7 @@ public static class Footnotes
 		if (notes.Count == 0) return;
 		using var package = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(path, true);
 		var main = package.MainDocumentPart!;
-		var body = main.Document.Body!;
+		var body = main.Document!.Body!;
 		var links = body.Descendants<W.Hyperlink>().Where(l => l.Anchor?.Value?.StartsWith("rte-fn-", StringComparison.Ordinal) == true).ToList();
 		if (links.Count == 0) return;
 		var part = main.FootnotesPart ?? main.AddNewPart<DocumentFormat.OpenXml.Packaging.FootnotesPart>();

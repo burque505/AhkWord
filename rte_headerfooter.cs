@@ -717,7 +717,6 @@ public static class HeaderFooter
 				if (j < tokens.Count && tokens[j].Groups[4].Value == "*") j++;
 				string word = j < tokens.Count ? tokens[j].Groups[1].Value : "";
 				if (word == "fldinst") {
-					int a = -1;
 					int k = i;
 					// the instruction's text: the group read as text, without its "\*\fldinst"
 					instruction = PlainGroup(tokens, ref k);
@@ -755,7 +754,7 @@ public static class HeaderFooter
 	public static void AddToDocx(string path, PageBands bands, PageLayout layout, string title, string file, bool parts) {
 		using var package = WordprocessingDocument.Open(path, true);
 		var main = package.MainDocumentPart!;
-		var body = main.Document.Body!;
+		var body = main.Document!.Body!;
 		// (one section: the built-in converter's; a file of several has them from Word or LibreOffice, each with its own page)
 		if (parts && !main.HeaderParts.Any() && !main.FooterParts.Any() && body.Descendants<W.SectionProperties>().Count() <= 1) {
 			var section = body.Elements<W.SectionProperties>().LastOrDefault();
@@ -886,7 +885,7 @@ public static class HeaderFooter
 				if (ReadCustomXml(custom) is { } json) exact = PageBands.FromJson(json);
 			// (iteration 63) the first section's: the first w:sectPr (the body's own is the last section's, a paragraph's
 			// those before it)
-			return OfSection(main, exact, main.Document.Body?.Descendants<W.SectionProperties>().FirstOrDefault());
+			return OfSection(main, exact, main.Document?.Body?.Descendants<W.SectionProperties>().FirstOrDefault());
 		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) {
 			return null;
 		}
@@ -907,7 +906,7 @@ public static class HeaderFooter
 	public static SectionColumns? FirstColumnsFromDocx(string path) {
 		try {
 			using var package = WordprocessingDocument.Open(path, false);
-			return ColumnsOf(package.MainDocumentPart!.Document.Body?.Descendants<W.SectionProperties>().FirstOrDefault());
+			return ColumnsOf(package.MainDocumentPart!.Document?.Body?.Descendants<W.SectionProperties>().FirstOrDefault());
 		} catch (Exception ex) when (ex is IOException or InvalidDataException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException) {
 			return null;
 		}
@@ -921,7 +920,7 @@ public static class HeaderFooter
 		try {
 			using var package = WordprocessingDocument.Open(path, false);
 			var main = package.MainDocumentPart!;
-			var sections = main.Document.Body?.Descendants<W.SectionProperties>().ToList() ?? new();
+			var sections = main.Document?.Body?.Descendants<W.SectionProperties>().ToList() ?? new();
 			if (sections.Count < 2) return result;
 			var current = OfSection(main, null, sections[0]) ?? new PageBands();
 			bool own = false;

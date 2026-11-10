@@ -36,7 +36,8 @@ sealed class RulerView : Control
 	Paragraph? paragraph;
 	readonly bool metric = RegionInfo.CurrentRegion.IsMetric;
 
-	public static readonly Color Margin = Color.FromArgb(0xC8, 0xC8, 0xC8), Ink = Color.FromArgb(0x50, 0x50, 0x50), Marker = Color.FromArgb(0xF4, 0xF4, 0xF4);
+	public static new readonly Color Margin = Color.FromArgb(0xC8, 0xC8, 0xC8);
+	public static readonly Color Ink = Color.FromArgb(0x50, 0x50, 0x50), Marker = Color.FromArgb(0xF4, 0xF4, 0xF4);
 
 	public RulerView() {
 		SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
@@ -105,7 +106,7 @@ sealed class RulerView : Control
 
 	/// What a press on the ruler took hold of: a tab stop, the first line's triangle, the hanging indent's triangle, the
 	/// left indent's box (it moves the first line with it), the right indent's triangle, or the white strip (a new tab).
-	public enum Handle { None, Tab, FirstLine, Hanging, LeftIndent, RightIndent, NewTab }
+	public new enum Handle { None, Tab, FirstLine, Hanging, LeftIndent, RightIndent, NewTab }
 
 	/// A marker dragged and let go: the tab stop at From (Handle.Tab) moved to To, or cleared (To null: dragged off the
 	/// ruler); an indent marker's new place (To, in points from the text's left edge; From where it was).
