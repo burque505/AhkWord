@@ -1,4 +1,4 @@
-; Iteration 88: AhkWord's installer (Inno Setup 6), made by make_installer.ps1, which passes
+﻿; Iteration 88: AhkWord's installer (Inno Setup 6), made by make_installer.ps1, which passes
 ;   /DIteration=NN /DSourceDir=<the staged program folder> /DOutputDir=<..\AhkWord-releases> /DRepo=<this repo>
 ; Installed for the current Windows user only (no administrator, no UAC prompt), in %LOCALAPPDATA%\Programs\AhkWord:
 ; AhkWord.exe (self-contained: .NET inside), AhkWord's own files beside it, and AutoHotkey64.exe for the hotkeys,
@@ -23,6 +23,7 @@ PrivilegesRequired=lowest
 DefaultDirName={autopf}\AhkWord
 DefaultGroupName=AhkWord
 DisableProgramGroupPage=yes
+DisableWelcomePage=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
@@ -41,6 +42,11 @@ ChangesAssociations=yes
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
+
+[Messages]
+; (the welcome page: an AutoHotkey already installed stays as it is)
+en.WelcomeLabel2=This will install [name/ver] on your computer.%n%nIf you already have AutoHotkey, it is left alone: AhkWord brings its own private copy of AutoHotkey, used only by AhkWord. Your AutoHotkey installation, its version and your scripts are not changed.%n%nIt is recommended that you close all other applications before continuing.
+es.WelcomeLabel2=Este programa instalará [name/ver] en su equipo.%n%nSi ya tiene AutoHotkey, no se modifica: AhkWord trae su propia copia privada de AutoHotkey, que solo usa AhkWord. Su instalación de AutoHotkey, su versión y sus scripts no cambian.%n%nSe recomienda cerrar todas las demás aplicaciones antes de continuar.
 
 [CustomMessages]
 en.OpenWith=Offer AhkWord in "Open with" for .rtf, .docx, .odt, .txt and .html files (doesn't change your default programs)
