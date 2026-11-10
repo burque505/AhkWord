@@ -478,7 +478,8 @@ public static class DocxLineSpacing
 		public int? Left, Right, FirstLine;    // (FirstLine: negative for a hanging indent)
 		public List<(int Position, string Alignment, string Leader)> Tabs = new();
 		public bool TabsSet, List;
-		public bool KeepNext, KeepLines, PageBreakBefore, WidowControl;    // (the line and page breaks)
+		public bool KeepNext, KeepLines, PageBreakBefore;    // (the line and page breaks)
+		public bool WidowControl = true;    // (Word's default: on unless a w:widowControl turns it off)
 		public string Style = "";
 		public XElement? Container;            // the body or the table cell the paragraph is in
 		public bool InTable;
