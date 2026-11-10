@@ -264,14 +264,21 @@ public static class PageKeeping
 		return (start, end < 0 ? story.Length : end + 1);
 	}
 
+	/// Page break before: the start of the first paragraph after start's own, before next, that has it (it ends the
+	/// page there), or null. (Also where the text laid out reaches the start of a continuous section, where the other
+	/// rules don't apply: before, a page laid out in bands went on past such a paragraph.)
+	public static int? BreakBefore(ITextDocument2 doc, string story, int start, int next) {
+		for (var (s, e) = ParagraphAt(story, start); e <= next && e < story.Length; (s, e) = ParagraphAt(story, e))
+			if (e > start && e < next && !InTable(story, e) && doc.Range2(e, e).Para.PageBreakBefore == tomConstants.tomTrue) return e;
+		return null;
+	}
+
 	/// A page laid out from start ends before next (where RichEdit ended it): where it ends with the rules. lines: the
 	/// printed lines' starts from a paragraph's start up to its end (null: not known, widow control set aside).
 	public static int Adjust(ITextDocument2 doc, string story, int start, int next, Func<int, int, IReadOnlyList<int>?> lines) {
 		if (next <= start) return next;
 		ITextPara Para(int at) => doc.Range2(at, at).Para;
-		// page break before: the first paragraph on the page (after its first) that has it ends the page
-		for (var (s, e) = ParagraphAt(story, start); e <= next && e < story.Length; (s, e) = ParagraphAt(story, e))
-			if (e > start && e < next && !InTable(story, e) && Para(e).PageBreakBefore == tomConstants.tomTrue) return e;
+		if (BreakBefore(doc, story, start, next) is int breakBefore) return breakBefore;
 		if (next >= story.Length - 1 || story[next - 1] == PageBreaks.Break) return next;
 		if (InTable(story, next) && story[next] != RowStart) return next;    // (a row longer than the page)
 		int end = next;
