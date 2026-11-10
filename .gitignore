@@ -41,3 +41,9 @@ site/
 # A copy of the program run portable from this folder: its switch and its settings folder (personal)
 portable
 data/
+
+# VS build trial: the project's build output
+vs/bin/
+vs/obj/
+.vs/
+vs/.vs/

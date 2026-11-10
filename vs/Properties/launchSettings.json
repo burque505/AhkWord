@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "AhkWord (trial folder)": {
+      "commandName": "Project",
+      "commandLineArgs": "\"C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey64.exe\"",
+      "workingDirectory": "..",
+      "nativeDebugging": false
+    }
+  }
+}

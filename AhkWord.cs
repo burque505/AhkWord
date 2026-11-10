@@ -597,18 +597,31 @@ using RibbonLib.Interop;
 
 // Runs on AutoHotkey's (STA) thread. ShowDialog runs the WinForms message loop until the window is closed;
 // AHK hotkeys and timers keep running meanwhile and can call the editor (see RteClient.ahk).
-Application.EnableVisualStyles();
-AppFolders.ProgramFolder = args.Length > 1 ? args[1] : Environment.CurrentDirectory;    // (portable mode: before the settings)
-AppFolders.HostScript = args.Length > 3 && args[3] != "" ? args[3] : null;    // (AhkWord.ahk: New Window starts it again)
-var startSettings = Settings.Load();
-AppTheme.Named(startSettings.Theme).SetColorMode();    // (before anything of WinForms is made: see SetColorMode)
-Lang.Load(AppFolders.ProgramFolder, startSettings.Language);    // (AhkWord-es: before any string is made: T, rte_strings.cs)
-using var form = new WriterForm(
-	args.Length > 0 ? args[0] : "",
-	args.Length > 1 ? args[1] : Environment.CurrentDirectory,
-	args.Length > 2 && args[2] != "" ? args[2] : null);
-form.ShowDialog();
-AHK.Return(form.FileName ?? "");
+// (VS build trial: built as AhkWord.exe the program starts on an MTA thread, which WinForms can't use (drag and drop,
+// the clipboard): it then runs on a new STA thread. Under AutoHotkey the thread is already STA.)
+if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA) {
+	var sta = new Thread(() => RunAhkWord(args));
+	sta.SetApartmentState(ApartmentState.STA);
+	sta.Start();
+	sta.Join();
+	return;
+}
+RunAhkWord(args);
+
+static void RunAhkWord(string[] args) {
+	Application.EnableVisualStyles();
+	AppFolders.ProgramFolder = args.Length > 1 ? args[1] : Environment.CurrentDirectory;    // (portable mode: before the settings)
+	AppFolders.HostScript = args.Length > 3 && args[3] != "" ? args[3] : null;    // (AhkWord.ahk: New Window starts it again)
+	var startSettings = Settings.Load();
+	AppTheme.Named(startSettings.Theme).SetColorMode();    // (before anything of WinForms is made: see SetColorMode)
+	Lang.Load(AppFolders.ProgramFolder, startSettings.Language);    // (AhkWord-es: before any string is made: T, rte_strings.cs)
+	using var form = new WriterForm(
+		args.Length > 0 ? args[0] : "",
+		args.Length > 1 ? args[1] : Environment.CurrentDirectory,
+		args.Length > 2 && args[2] != "" ? args[2] : null);
+	form.ShowDialog();
+	AHK.Return(form.FileName ?? "");
+}
 
 // The command Ids of ribbon\RteRibbon.xml.
 enum RibbonCommand : uint
@@ -700,7 +713,7 @@ static class PrettyHtml
 
 class WriterForm : Form
 {
-	public const string AppName = "AhkWord";
+	public const string AppName = "AhkWord VS build trial";
 	public const int Iteration = 87;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
