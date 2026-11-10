@@ -4,7 +4,7 @@
 ; (up to 3 in columns, more in a grid), each in Print Layout with its page fitted to its width.
 
 A_TitleMatchMode := "RegEx"
-Windows := WinGetList(" - AhkWord$")          ; front to back: the active one first
+Windows := WinGetList(" - AhkWord( [^-]*)?$")          ; front to back: the active one first
 if Windows.Length = 0
     ExitApp
 ; the monitor the front window is on, without the taskbar

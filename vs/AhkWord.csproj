@@ -1,0 +1,118 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Iteration 88: AhkWord built as AhkWord.exe by Visual Studio / dotnet build, from the SAME sources AhkWord.ahk runs
+    through Csharp-in-AHK (..\AhkWord.cs and the files it #loads). Nothing is copied by hand: before each build the
+    sources are read from the folder above, their Csharp-in-AHK lines (#:package, #load) commented out, and the result
+    written to obj\...\src with #line directives, so errors and the debugger point at the real files.
+    The packages below must match the #:package lines (AhkWord.cs, rte_office7.cs, rte_docxodus.cs, rte_pdf.cs).
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <AssemblyName>AhkWord</AssemblyName>
+    <RootNamespace>AhkWord</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- WFO1000: the WinForms designer's serialization check; AhkWord's controls are made in code, never in the designer -->
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
+    <ApplicationIcon>..\images\icon\ahkword.ico</ApplicationIcon>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AhkWordSources>$(MSBuildProjectDirectory)\..</AhkWordSources>
+  </PropertyGroup>
+
+  <!-- the usings Csharp-in-AHK gives every script -->
+  <ItemGroup>
+    <Using Include="System" />
+    <Using Include="System.Collections.Generic" />
+    <Using Include="System.IO" />
+    <Using Include="System.Linq" />
+    <Using Include="System.Net.Http" />
+    <Using Include="System.Threading" />
+    <Using Include="System.Threading.Tasks" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EllipticBit.RichEditorNET" Version="1.0.11" />
+    <PackageReference Include="WindowsRibbon" Version="2.16.2" />
+    <PackageReference Include="Scintilla5.NET" Version="7.0.0" />
+    <PackageReference Include="Docxodus" Version="15.1.0" />
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+    <PackageReference Include="DocumentFormat.OpenXml.Framework" Version="3.5.1" />
+    <PackageReference Include="HtmlToOpenXml.dll" Version="3.5.0" />
+    <PackageReference Include="AngleSharp" Version="1.5.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
+    <PackageReference Include="Codeuctivity.OpenXmlPowerTools" Version="10.0.621" />
+    <PackageReference Include="SkiaSharp" Version="4.154.0" />
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
+  </ItemGroup>
+
+  <!-- what only the exe needs (AHK.Return ...) -->
+  <ItemGroup>
+    <Compile Include="VsHost.cs" />
+    <None Include="..\AhkWord.cs;..\rte_*.cs" Link="sources\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <UsingTask TaskName="AhkWordSources" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SourceDir ParameterType="System.String" Required="true" />
+      <OutDir ParameterType="System.String" Required="true" />
+      <Files ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.Linq" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        // AhkWord.cs and every file it #loads (recursively), each written with its Csharp-in-AHK lines commented out
+        Directory.CreateDirectory(OutDir);
+        var done = new List<string>();
+        var queue = new Queue<string>();
+        queue.Enqueue(Path.GetFullPath(Path.Combine(SourceDir, "AhkWord.cs")));
+        var outputs = new List<Microsoft.Build.Framework.ITaskItem>();
+        while (queue.Count > 0) {
+          var file = queue.Dequeue();
+          if (done.Contains(file, StringComparer.OrdinalIgnoreCase)) continue;
+          done.Add(file);
+          var lines = File.ReadAllLines(file);
+          for (int i = 0; i < lines.Length; i++) {
+            var m = Regex.Match(lines[i], "^\\s*#load\\s+\"([^\"]+)\"");
+            if (m.Success) {
+              queue.Enqueue(Path.GetFullPath(Path.Combine(Path.GetDirectoryName(file), m.Groups[1].Value)));
+              lines[i] = "//" + lines[i];
+            }
+            else if (Regex.IsMatch(lines[i], "^\\s*#:")) lines[i] = "//" + lines[i];
+          }
+          var text = "#line 1 \"" + file + "\"\r\n" + string.Join("\r\n", lines) + "\r\n";
+          var target = Path.Combine(OutDir, Path.GetFileName(file));
+          if (!File.Exists(target) || File.ReadAllText(target) != text) File.WriteAllText(target, text);
+          outputs.Add(new Microsoft.Build.Utilities.TaskItem(target));
+        }
+        Files = outputs.ToArray();
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="AhkWordPrepareSources" BeforeTargets="CoreCompile;BeforeBuild">
+    <!-- (set here: IntermediateOutputPath is only known once the SDK's targets are read) -->
+    <PropertyGroup>
+      <AhkWordGenerated>$([System.IO.Path]::Combine($(MSBuildProjectDirectory), $(IntermediateOutputPath)))src\</AhkWordGenerated>
+    </PropertyGroup>
+    <AhkWordSources SourceDir="$(AhkWordSources)" OutDir="$(AhkWordGenerated)">
+      <Output TaskParameter="Files" ItemName="AhkWordGeneratedFile" />
+    </AhkWordSources>
+    <ItemGroup>
+      <Compile Include="@(AhkWordGeneratedFile)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

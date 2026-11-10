@@ -92,12 +92,12 @@ try {
 		git -C $root archive --format=zip -o $archive HEAD
 		Expand-Archive $archive $folder
 	}
-	foreach ($only in "make_version.ps1", "make_release.ps1", ".gitignore", "make_docs.py", "mkdocs.yml", "CLAUDE.local.md", "Csharp-in-AHK.ini") {
+	foreach ($only in "make_version.ps1", "make_release.ps1", "make_installer.ps1", ".gitignore", "make_docs.py", "mkdocs.yml", "CLAUDE.local.md", "Csharp-in-AHK.ini") {
 		$path = Join-Path $folder $only
 		if (Test-Path $path) { [IO.File]::Delete($path) }
 	}
 	# (the documentation's sources and its workflow: the documentation is on the web, https://burque505.github.io/AhkWord/)
-	foreach ($only in "docs", ".github") {
+	foreach ($only in "docs", ".github", "vs", "installer") {
 		$path = Join-Path $folder $only
 		if (Test-Path $path) { [IO.Directory]::Delete($path, $true) }
 	}

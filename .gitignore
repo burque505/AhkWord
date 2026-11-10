@@ -42,3 +42,9 @@ site/
 # A copy of the program run portable from this folder: its switch and its settings folder (personal)
 portable
 data/
+
+# vsAhkWord.csproj (AhkWord.exe, iteration 88): its's build output
+vs/bin/
+vs/obj/
+.vs/
+vs/.vs/

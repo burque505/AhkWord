@@ -191,7 +191,7 @@ class Rte {
                 return Hwnd + 0
             ; the AhkWord used last: the frontmost of its windows (WinGetList lists them front to back); RTE Writer's
             ; too, AhkWord's name until iteration 38
-            for Window in WinGetList(" - (AhkWord|RTE Writer)$")
+            for Window in WinGetList(" - (AhkWord|RTE Writer)( [^-]*)?$")
                 if Hwnd := WinExist("^(AhkWord|RTE Writer) automation server " WinGetPID(Window) "$")
                     return Hwnd
             if Hwnd := WinExist("^(AhkWord|RTE Writer) automation server \d+$")

@@ -597,18 +597,32 @@ using RibbonLib.Interop;
 
 // Runs on AutoHotkey's (STA) thread. ShowDialog runs the WinForms message loop until the window is closed;
 // AHK hotkeys and timers keep running meanwhile and can call the editor (see RteClient.ahk).
-Application.EnableVisualStyles();
-AppFolders.ProgramFolder = args.Length > 1 ? args[1] : Environment.CurrentDirectory;    // (portable mode: before the settings)
-AppFolders.HostScript = args.Length > 3 && args[3] != "" ? args[3] : null;    // (AhkWord.ahk: New Window starts it again)
-var startSettings = Settings.Load();
-AppTheme.Named(startSettings.Theme).SetColorMode();    // (before anything of WinForms is made: see SetColorMode)
-Lang.Load(AppFolders.ProgramFolder, startSettings.Language);    // (AhkWord-es: before any string is made: T, rte_strings.cs)
-using var form = new WriterForm(
-	args.Length > 0 ? args[0] : "",
-	args.Length > 1 ? args[1] : Environment.CurrentDirectory,
-	args.Length > 2 && args[2] != "" ? args[2] : null);
-form.ShowDialog();
-AHK.Return(form.FileName ?? "");
+// (Iteration 88: built as AhkWord.exe the program starts on an MTA thread, which WinForms can't use (drag and drop,
+// the clipboard): it then runs on a new STA thread. Under AutoHotkey the thread is already STA.)
+args = AppFolders.CompleteArgs?.Invoke(args) ?? args;
+if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA) {
+	var sta = new Thread(() => RunAhkWord(args));
+	sta.SetApartmentState(ApartmentState.STA);
+	sta.Start();
+	sta.Join();
+	return;
+}
+RunAhkWord(args);
+
+static void RunAhkWord(string[] args) {
+	Application.EnableVisualStyles();
+	AppFolders.ProgramFolder = args.Length > 1 ? args[1] : Environment.CurrentDirectory;    // (portable mode: before the settings)
+	AppFolders.HostScript = args.Length > 3 && args[3] != "" ? args[3] : null;    // (AhkWord.ahk: New Window starts it again)
+	var startSettings = Settings.Load();
+	AppTheme.Named(startSettings.Theme).SetColorMode();    // (before anything of WinForms is made: see SetColorMode)
+	Lang.Load(AppFolders.ProgramFolder, startSettings.Language);    // (AhkWord-es: before any string is made: T, rte_strings.cs)
+	using var form = new WriterForm(
+		args.Length > 0 ? args[0] : "",
+		args.Length > 1 ? args[1] : Environment.CurrentDirectory,
+		args.Length > 2 && args[2] != "" ? args[2] : null);
+	form.ShowDialog();
+	AHK.Return(form.FileName ?? "");
+}
 
 // The command Ids of ribbon\RteRibbon.xml.
 enum RibbonCommand : uint
@@ -701,7 +715,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 87;    // (the About box; make_version.ps1)
+	public const int Iteration = 88;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -804,7 +818,8 @@ class WriterForm : Form
 		base.OnHandleCreated(e);
 		string icon = Path.Combine(appDir, "images", "icon", "ahkword.ico");
 		string script = AppFolders.HostScript is { } host && File.Exists(host) ? host : Path.Combine(appDir, "AhkWord.ahk");
-		TaskbarIdentity.SetWindow(Handle, $"\"{ahkPath}\" \"{script}\"", File.Exists(icon) ? icon : null);
+		TaskbarIdentity.SetWindow(Handle, AppFolders.ProgramExe is { } exe ? $"\"{exe}\" \"{ahkPath}\" \"{appDir}\"" : $"\"{ahkPath}\" \"{script}\"",
+			File.Exists(icon) ? icon : null);
 	}
 
 	public WriterForm(string ahkPath, string appDir, string? startFile) {
@@ -2665,6 +2680,15 @@ class WriterForm : Form
 	/// What New Window runs: AutoHotkey with AhkWord's own script (the one this window was started with, else
 	/// AhkWord.ahk beside the program), and the document to open (null: a new one).
 	internal System.Diagnostics.ProcessStartInfo NewWindowStart(string? file) {
+		if (AppFolders.ProgramExe is { } exe) {    // (the installed AhkWord.exe: the exe again, with the same arguments)
+			var again = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = appDir };
+			again.ArgumentList.Add(ahkPath);
+			again.ArgumentList.Add(appDir);
+			if (file != null) again.ArgumentList.Add(Path.GetFullPath(file));
+			again.Environment["RTE_WRITER_CASCADE"] = "1";
+			again.Environment.Remove("RTE_WRITER_HWND");
+			return again;
+		}
 		if (ahkPath == "" || !File.Exists(ahkPath)) throw new InvalidOperationException("AutoHotkey was not found; start AhkWord with its AhkWord.ahk.");
 		string script = AppFolders.HostScript is { } host && File.Exists(host) ? host
 			: File.Exists(Path.Combine(appDir, "AhkWord.ahk")) ? Path.Combine(appDir, "AhkWord.ahk")
