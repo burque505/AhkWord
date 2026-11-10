@@ -105,7 +105,7 @@
   <Target Name="AhkWordPrepareSources" BeforeTargets="CoreCompile;BeforeBuild">
     <!-- (set here: IntermediateOutputPath is only known once the SDK's targets are read) -->
     <PropertyGroup>
-      <AhkWordGenerated>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)src\</AhkWordGenerated>
+      <AhkWordGenerated>$([System.IO.Path]::Combine($(MSBuildProjectDirectory), $(IntermediateOutputPath)))src\</AhkWordGenerated>
     </PropertyGroup>
     <AhkWordSources SourceDir="$(AhkWordSources)" OutDir="$(AhkWordGenerated)">
       <Output TaskParameter="Files" ItemName="AhkWordGeneratedFile" />

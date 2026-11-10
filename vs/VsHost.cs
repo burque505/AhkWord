@@ -10,11 +10,20 @@ public static class AHK
 {
 	public static object? Result { get; private set; }
 
-	public static void Return(object? value) => Result = value;
+	public static void Return(object? value)
+	{
+		Result = value;
+		// (the test runner, regress42x.ps1, reads what a test build returns from the exe's output)
+		if (VsHost.TestRun) { Console.Out.Write(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)); Console.Out.Flush(); }
+	}
 }
 
 static class VsHost
 {
+	/// Run by the test runner (regress42x.ps1, AHKWORD_TEST_RUN=1): no companion and no message box (both would be on
+	/// the user's desktop, the test's window is on a hidden one); the result and errors go to the exe's output.
+	internal static readonly bool TestRun = Environment.GetEnvironmentVariable("AHKWORD_TEST_RUN") == "1";
+
 	/// Before the program starts: it is AhkWord.exe (New Window starts it again), its arguments are completed, an error
 	/// that stops it is shown (as AhkWord.ahk does), and AhkWordCompanion.ahk is started beside it for the hotkeys and
 	/// the snippets' hotstrings that AhkWord.ahk would have run.
@@ -24,9 +33,11 @@ static class VsHost
 		AppFolders.ProgramExe = Environment.ProcessPath;
 		AppFolders.CompleteArgs = Complete;
 		AppDomain.CurrentDomain.UnhandledException += (_, e) => {
+			if (TestRun) { Console.Error.WriteLine("ERROR C# " + e.ExceptionObject); Console.Error.Flush(); return; }
 			try { MessageBox.Show("AhkWord stopped because of an error:\n\n" + e.ExceptionObject, "AhkWord", MessageBoxButtons.OK, MessageBoxIcon.Error); }
 			catch { }
 		};
+		if (TestRun) return;
 		string[] args = Complete(Environment.GetCommandLineArgs()[1..]);
 		StartCompanion(args[0], args[1]);
 	}
