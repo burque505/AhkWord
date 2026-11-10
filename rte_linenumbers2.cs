@@ -149,7 +149,7 @@ public static class LineNumberFormats
 	/// w:start is the first number less one.
 	public static void AddToDocx(string path, LineNumbering numbering, IReadOnlyList<LineNumbering?>? sections = null) {
 		using var package = WordprocessingDocument.Open(path, true);
-		var body = package.MainDocumentPart!.Document.Body!;
+		var body = package.MainDocumentPart!.Document!.Body!;
 		var all = body.Descendants<W.SectionProperties>().ToList();
 		if (all.Count == 0) {
 			if (!numbering.On) return;
@@ -187,7 +187,7 @@ public static class LineNumberFormats
 	public static LineNumbering? FromDocx(string path) {
 		try {
 			using var package = WordprocessingDocument.Open(path, false);
-			var body = package.MainDocumentPart?.Document.Body;
+			var body = package.MainDocumentPart?.Document?.Body;
 			// (iteration 87: the first section's, which AhkWord gives the whole document; another section's numbering spread
 			// over every page)
 			// (a later section's own: Sections' break markers, HeaderFooter.SectionsFromDocx)

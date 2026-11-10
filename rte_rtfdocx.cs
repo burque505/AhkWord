@@ -278,15 +278,15 @@ public static class RtfDocx {
 			sect = docSect.Clone();
 			WalkKids(root);
 			FinishStory(story);
-			var body = main.Document.Body!;
+			var body = main.Document!.Body!;
 			foreach (var block in story.Blocks) body.Append(block);
 			if (!story.Blocks.Any(b => b is W.Paragraph) || story.Blocks.LastOrDefault() is W.Table) body.Append(new W.Paragraph());
 			body.Append(SectPr(sect));
 			WriteStyles();
 			WriteNumbering();
 			WriteSettings();
-			if (footnotes != null) footnotes.Footnotes.Save();
-			if (endnotes != null) endnotes.Endnotes.Save();
+			if (footnotes != null) footnotes.Footnotes!.Save();
+			if (endnotes != null) endnotes.Endnotes!.Save();
 			main.Document.Save();
 		}
 
@@ -1122,8 +1122,8 @@ public static class RtfDocx {
 			WalkInside(g);
 			FinishStory(story);
 			var blocks = story.Blocks.Count > 0 ? story.Blocks : new List<OpenXmlElement> { new W.Paragraph() };
-			if (end) endnotes!.Endnotes.Append(new W.Endnote(blocks) { Id = note.Id });
-			else footnotes!.Footnotes.Append(new W.Footnote(blocks) { Id = note.Id });
+			if (end) endnotes!.Endnotes!.Append(new W.Endnote(blocks) { Id = note.Id });
+			else footnotes!.Footnotes!.Append(new W.Footnote(blocks) { Id = note.Id });
 			(story, lastPn) = saved;
 		}
 

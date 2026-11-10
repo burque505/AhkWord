@@ -69,7 +69,7 @@ public static class CrossRefs
 			int textAt = 0;
 			bool sub = false;
 			if (parent != null && (p.ListType & 0xFFFF) == tomConstants.tomListNone && TypedSub.Match(p.Text) is { Success: true } point
-				&& !StyleEngine.NameOf(p.Style).StartsWith("Heading", StringComparison.OrdinalIgnoreCase)) {
+				&& !(StyleEngine.NameOf(p.Style)?.StartsWith("Heading", StringComparison.OrdinalIgnoreCase) ?? false)) {
 				// a sub-point typed in front of the text, under the numbered paragraph before it: "23(e)"
 				number = Clean(point.Groups[1].Value);
 				full = Joined(new[] { parent.Full, number });
@@ -404,7 +404,7 @@ public static class CrossRefs
 			foreach (var ends in body.Descendants<W.Paragraph>().Where(p => p.ParagraphProperties?.GetFirstChild<W.SectionProperties>() != null).ToList())
 				ends.Append(Marker($"[[docsect={section++}]]"));
 			any = names.Count > 0 || notes || toc || section > 0;
-			if (any) package.MainDocumentPart!.Document.Save();
+			if (any) package.MainDocumentPart!.Document!.Save();
 		}
 		return any ? copy : path;
 	}
@@ -443,7 +443,7 @@ public static class CrossRefs
 			start.InsertAfterSelf(end);
 			from = found + 1;
 		}
-		package.MainDocumentPart!.Document.Save();
+		package.MainDocumentPart!.Document!.Save();
 	}
 
 	// ================================================================ HTML and Markdown

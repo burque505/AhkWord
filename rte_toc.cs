@@ -701,7 +701,7 @@ public static class Toc
 			paragraphs[k].Paragraph.Append(Field(W.FieldCharValues.End));
 			k++;
 		}
-		package.MainDocumentPart!.Document.Save();
+		package.MainDocumentPart!.Document!.Save();
 	}
 
 	/// A .docx's tables of contents as markers in its text (for the built-in reader, which goes through HTML): Word's

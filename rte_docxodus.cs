@@ -38,7 +38,7 @@ public static class DocxodusReader
 			br.InsertAfterSelf(new W.Text(PageBreakMark));
 			br.Remove();
 		}
-		package.MainDocumentPart!.Document.Save();
+		package.MainDocumentPart!.Document!.Save();
 	}
 
 	// Each paragraph's list (its numbering instance and level; null: none), in the order the converter writes them: its

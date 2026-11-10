@@ -204,7 +204,7 @@ sealed class PaletteForm : Form
 		return base.ProcessCmdKey(ref msg, keyData);
 	}
 
-	void Move(int by) {
+	new void Move(int by) {
 		if (shown.Count == 0) return;
 		list.SelectedIndex = Math.Clamp(list.SelectedIndex + by, 0, shown.Count - 1);
 	}

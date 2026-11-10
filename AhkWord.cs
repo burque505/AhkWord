@@ -755,7 +755,7 @@ class WriterForm : Form
 	bool updatingUi, discardOnClose, lastModified;
 
 	// Events for AHK scripts, and calls queued by Rte.Post
-	internal readonly EventHub Events = new();
+	internal new readonly EventHub Events = new();
 
 	// Iteration 3: settings, recent files, drag and drop
 	internal readonly Settings Settings = Settings.Load();
@@ -983,11 +983,11 @@ class WriterForm : Form
 		};
 		Editor.MouseUp += (s, e) => { if (painting != Painting.Off && e.Button == MouseButtons.Left && ModifierKeys != Keys.Control) PaintSelection(); };
 		outlineTimer.Tick += (s, e) => { outlineTimer.Stop(); RefreshOutline(); };
-		outlineTree.NodeMouseClick += (s, e) => { if (e.Button == MouseButtons.Left && e.Node.Tag is int start) Run(() => GoToPosition(start)); };
+		outlineTree.NodeMouseClick += (s, e) => { if (e.Button == MouseButtons.Left && e.Node?.Tag is int start) Run(() => GoToPosition(start)); };
 		outlineTree.KeyDown += (s, e) => {
 			if (e.KeyCode == Keys.Enter && outlineTree.SelectedNode?.Tag is int start) { e.SuppressKeyPress = true; Run(() => GoToPosition(start)); }
 		};
-		outlineTree.NodeMouseClick += (s, e) => { if (e.Button == MouseButtons.Right) ShowOutlineMenu(e.Node, outlineTree.PointToScreen(e.Location)); };
+		outlineTree.NodeMouseClick += (s, e) => { if (e.Button == MouseButtons.Right && e.Node != null) ShowOutlineMenu(e.Node, outlineTree.PointToScreen(e.Location)); };
 		textEventTimer.Tick += (s, e) => { textEventTimer.Stop(); Events.Raise(EditorEvent.TextChanged, Editor.TextLength); };
 		selectionEventTimer.Tick += (s, e) => {
 			selectionEventTimer.Stop();
@@ -1856,7 +1856,7 @@ class WriterForm : Form
 	bool RenderDocument(bool ask) {
 		// (the page view's gaps left out: they would become the document's own space and raised lines, in the wrong places
 		// once the text had moved)
-		if (RenderTemplate?.Invoke(WithoutGaps(() => Editor.Rtf), ask) is not string rendered) return false;
+		if (RenderTemplate?.Invoke(WithoutGaps(() => Editor.Rtf) ?? "", ask) is not string rendered) return false;
 		var doc = Editor.TextDocument;
 		WithoutGapsChanging(() => {
 			doc.BeginEditCollection();
@@ -1954,7 +1954,7 @@ class WriterForm : Form
 	}
 	/// Whether a print or export should stop: Esc (tests: PrintStopOverride, asked instead).
 	internal bool PrintStop() => PrintStopOverride?.Invoke() ?? EscPressed();
-	internal Func<bool>? PrintStopOverride;
+	internal Func<bool>? PrintStopOverride = null;    // (set by tests)
 	[DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
 	[DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
 
@@ -2103,7 +2103,7 @@ class WriterForm : Form
 	internal bool NewFromTemplate(TemplateInfo template, IDictionary<string, string>? values, bool ask) {
 		if (ask && !ConfirmDiscard()) return false;
 		api.OpenTemplate(template.Path);
-		if (RenderTemplate?.Invoke(Editor.Rtf, ask) is string rendered) Editor.Rtf = rendered;    // (iteration 62: an extension's template language)
+		if (RenderTemplate?.Invoke(Editor.Rtf ?? "", ask) is string rendered) Editor.Rtf = rendered;    // (iteration 62: an extension's template language)
 		var doc = Editor.TextDocument;
 		var given = FieldValues(T("dlg.fields.titleNew", "New from {0}", template.Name), FieldText(), values, ask);
 		int filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null);
@@ -2889,6 +2889,7 @@ class WriterForm : Form
 		BeginInvoke(() => Run(() => {
 			if (files.FirstOrDefault(IsDocument) is { } document) {
 				if (!ConfirmDiscard()) return;
+				if (StartShown) ShowStart(false);    // (dropped on the start page: the document shown, as when opened from it)
 				api.Open(document);
 				SetStatus(T("status.opened", "Opened {0}", document) + api.OpenNotice());
 				return;
@@ -4189,7 +4190,7 @@ class WriterForm : Form
 	// paragraphs join the numbering where they land; one undo step. RichEdit's own paste of the clipboard's text (as
 	// Ctrl+V's is RichEdit's own); paste: tests give one of their own, so as to leave the user's clipboard alone.
 	internal void PastePlainText() => PastePlainText(PlainPasteForTests ?? (() => Editor.Paste(DataFormats.GetFormat(DataFormats.UnicodeText))));
-	internal Action? PlainPasteForTests;
+	internal Action? PlainPasteForTests = null;    // (set by tests)
 
 	internal void PastePlainText(Action paste) {
 		var doc = Editor.TextDocument;
@@ -4414,7 +4415,7 @@ class WriterForm : Form
 		if (error.Action == Spelling.DeleteAction) {
 			menu.Items.Add(new ToolStripMenuItem(T("menu.deleteRepeated", "Delete repeated word \"{0}\"", error.Word), null, (s, e) => Run(() => api.DeleteRepeatedWord(error))) { Font = bold });
 		} else {
-			var suggestions = error.Action == Spelling.ReplaceAction && error.Replacement != "" ? new List<string> { error.Replacement } : Spelling.Suggest(error.Word);
+			var suggestions = error.Action == Spelling.ReplaceAction && error.Replacement is { Length: > 0 } replacement ? new List<string> { replacement } : Spelling?.Suggest(error.Word) ?? new List<string>();
 			foreach (var suggestion in suggestions)
 				menu.Items.Add(new ToolStripMenuItem(suggestion, null, (s, e) => Run(() => api.ReplaceRange(error.Start, error.Length, suggestion))) { Font = bold });
 			if (suggestions.Count == 0) menu.Items.Add(new ToolStripMenuItem(T("menu.noSuggestions", "(no suggestions)")) { Enabled = false });
@@ -6932,7 +6933,7 @@ public class EditorApi
 			if (global::LineSpacing.BreaksIn(paragraph.Text ?? "") is { } kept) breaks[index] = kept;
 			if ((para.ListType & 0xFFFF) != tomConstants.tomListNone) listed[index] = (para.ListType, para.ListStart, para.ListLevelIndex, para.ListTab);
 		});
-		string rtf = ((RichTextBox)hidden).Rtf;
+		string rtf = ((RichTextBox)hidden).Rtf ?? "";
 		StreamRtf(global::LineSpacing.MarkersToRtf(rtf));
 		global::LineSpacing.FromMarkers(ed);    // (any that didn't come through in one piece, split by a format)
 		var lostNumbers = new List<(int Start, int Length)>();
@@ -7761,7 +7762,8 @@ public class EditorApi
 			? $". Section{(kept.Count == 1 ? "" : "s")} {string.Join(", ", kept)}: paper, orientation or left and right margins of {(kept.Count == 1 ? "its" : "their")} own are printed, and Print Preview shows them; here {(kept.Count == 1 ? "it is" : "they are")} edited at the first section's width"
 			: "";
 		if (form.DocumentColumns != null || breaks.Any(b => b.Settings.Columns != null)) notice += ". It has columns: they are printed, and Print Preview shows them; here it is edited in one column";
-		if (form.OpenTime.TotalSeconds >= 2) notice += $" ({form.OpenTime.TotalSeconds:0.0} seconds)";
+		var openTime = form.OpenTime;
+		if (openTime.TotalSeconds >= 2) notice += $" ({openTime.TotalSeconds:0.0} seconds)";
 		return notice;
 	}
 
@@ -11200,7 +11202,7 @@ sealed class ColumnsDialog : Form
 	readonly bool metric = System.Globalization.RegionInfo.CurrentRegion.IsMetric;
 
 	int Twips(decimal shown) => (int)Math.Round(Math.Round(metric ? shown / 0.0254m : shown * 100) * 14.4m);
-	decimal Shown(int twips) => Math.Round(metric ? twips / 14.4m * 0.0254m : twips / 1440m, 2);
+	new decimal Shown(int twips) => Math.Round(metric ? twips / 14.4m * 0.0254m : twips / 1440m, 2);
 
 	/// The columns chosen (null: one).
 	public SectionColumns? Result => SectionColumns.Of((int)count.Value, Twips(gap.Value), line.Checked, equal.Checked ? null : widths.Take((int)count.Value).Select(w => Twips(w.Value)).ToArray());
@@ -12644,7 +12646,7 @@ sealed class ListLevelsDialog : Form
 		UpdatePreview();
 	}
 
-	static string Shown(float? points) => points is float v ? v.ToString("0.##", CultureInfo.CurrentCulture) : "";
+	static new string Shown(float? points) => points is float v ? v.ToString("0.##", CultureInfo.CurrentCulture) : "";
 
 	// (the first four levels, each indented as set: the number where it starts, its text where it starts, roughly to
 	// scale, a character for 6 points)
@@ -12903,7 +12905,7 @@ sealed class BandStrip : Control
 	protected override void OnCreateControl() { base.OnCreateControl(); FitHeight(); }
 	// (iteration 55) a line per line of the longest part, the band's font at the strip's size (words in theirs, in
 	// proportion)
-	float Scale => Font.SizeInPoints / (band ?? BandFont.Plain).Size;
+	new float Scale => Font.SizeInPoints / (band ?? BandFont.Plain).Size;
 	void FitHeight() => Height = LogicalToDeviceUnits(10) + (int)Math.Ceiling(Math.Max(Font.Height, BandText.Height(parts, band ?? BandFont.Plain, f => f.GetHeight(DeviceDpi), Scale)));
 
 	/// Whether it is shown (Visible is also false while the window is not).
@@ -13578,7 +13580,7 @@ sealed class FileDropTarget : IOleDropTarget
 
 	public static string[]? GetFiles(object dataObject) {
 		try {
-			return new DataObject(dataObject).GetData(DataFormats.FileDrop) as string[];
+			return new DataObject(dataObject).TryGetData<string[]>(DataFormats.FileDrop, out var files) ? files : null;
 		} catch (Exception ex) when (ex is COMException or ExternalException or InvalidCastException) {
 			return null;
 		}
