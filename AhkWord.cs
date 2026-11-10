@@ -10945,7 +10945,7 @@ sealed class DocumentPrinter : IDisposable
 				int laidOut = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
 				int height = range.rc.Bottom - area.Top;
 				int width = column.Right - column.Left;
-				next = PageBreaks.AfterBreak(doc, laidOut >= limit ? laidOut : PageKeeping.Adjust(doc, story, begin, laidOut, (a, b) => LinesIn(width, a, b)));
+				next = PageBreaks.AfterBreak(doc, laidOut >= limit ? PageKeeping.BreakBefore(doc, story, begin, laidOut) ?? laidOut : PageKeeping.Adjust(doc, story, begin, laidOut, (a, b) => LinesIn(width, a, b)));
 				if (next <= begin) { next = begin; break; }
 				if (next < laidOut) {    // (a rule ended it earlier)
 					range.rc = column;
@@ -10977,7 +10977,7 @@ sealed class DocumentPrinter : IDisposable
 					range.chrg.cpMax = limit == int.MaxValue ? -1 : limit;
 					int laidOut = (int)SendMessage(editor.Handle, EM_FORMATRANGE, IntPtr.Zero, ref range);
 					int height = range.rc.Bottom - top;
-					next = PageBreaks.AfterBreak(doc, laidOut >= limit ? laidOut : PageKeeping.Adjust(doc, story, at, laidOut, (a, b) => LinesIn(width, a, b)));
+					next = PageBreaks.AfterBreak(doc, laidOut >= limit ? PageKeeping.BreakBefore(doc, story, at, laidOut) ?? laidOut : PageKeeping.Adjust(doc, story, at, laidOut, (a, b) => LinesIn(width, a, b)));
 					if (next <= at) break;
 					if (next < laidOut) {
 						range.rc = room;
