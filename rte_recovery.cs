@@ -21,6 +21,14 @@ public static class AppFolders
 	/// The script AhkWord was started with (AhkWord.ahk; null if not known): File > New Window starts it again.
 	public static string? HostScript { get; set; }
 
+	/// (VS build trial) AhkWord.exe when the program runs as its own exe (set by vs\VsHost.cs); null under AutoHotkey.
+	/// New Window and the taskbar's pinned AhkWord then start the exe again, not AhkWord.ahk.
+	public static string? ProgramExe { get; set; }
+
+	/// (VS build trial) Fills in the program's arguments when the exe was started without them (double-clicked, or
+	/// with only a document): AutoHotkey's path and the program folder. Set by vs\VsHost.cs; null under AutoHotkey.
+	public static Func<string[], string[]>? CompleteArgs { get; set; }
+
 	public static bool Portable => File.Exists(Path.Combine(ProgramFolder, "portable")) || File.Exists(Path.Combine(ProgramFolder, "portable.txt"));
 
 	/// Iteration 39: a folder for all of AhkWord's files, as portable mode's data folder (the AHKWORD_DATA environment

@@ -599,6 +599,7 @@ using RibbonLib.Interop;
 // AHK hotkeys and timers keep running meanwhile and can call the editor (see RteClient.ahk).
 // (VS build trial: built as AhkWord.exe the program starts on an MTA thread, which WinForms can't use (drag and drop,
 // the clipboard): it then runs on a new STA thread. Under AutoHotkey the thread is already STA.)
+args = AppFolders.CompleteArgs?.Invoke(args) ?? args;
 if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA) {
 	var sta = new Thread(() => RunAhkWord(args));
 	sta.SetApartmentState(ApartmentState.STA);
@@ -817,7 +818,8 @@ class WriterForm : Form
 		base.OnHandleCreated(e);
 		string icon = Path.Combine(appDir, "images", "icon", "ahkword.ico");
 		string script = AppFolders.HostScript is { } host && File.Exists(host) ? host : Path.Combine(appDir, "AhkWord.ahk");
-		TaskbarIdentity.SetWindow(Handle, $"\"{ahkPath}\" \"{script}\"", File.Exists(icon) ? icon : null);
+		TaskbarIdentity.SetWindow(Handle, AppFolders.ProgramExe is { } exe ? $"\"{exe}\" \"{ahkPath}\" \"{appDir}\"" : $"\"{ahkPath}\" \"{script}\"",
+			File.Exists(icon) ? icon : null);
 	}
 
 	public WriterForm(string ahkPath, string appDir, string? startFile) {
@@ -2678,6 +2680,15 @@ class WriterForm : Form
 	/// What New Window runs: AutoHotkey with AhkWord's own script (the one this window was started with, else
 	/// AhkWord.ahk beside the program), and the document to open (null: a new one).
 	internal System.Diagnostics.ProcessStartInfo NewWindowStart(string? file) {
+		if (AppFolders.ProgramExe is { } exe) {    // (VS build trial: the exe again, with the same arguments)
+			var again = new System.Diagnostics.ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = appDir };
+			again.ArgumentList.Add(ahkPath);
+			again.ArgumentList.Add(appDir);
+			if (file != null) again.ArgumentList.Add(Path.GetFullPath(file));
+			again.Environment["RTE_WRITER_CASCADE"] = "1";
+			again.Environment.Remove("RTE_WRITER_HWND");
+			return again;
+		}
 		if (ahkPath == "" || !File.Exists(ahkPath)) throw new InvalidOperationException("AutoHotkey was not found; start AhkWord with its AhkWord.ahk.");
 		string script = AppFolders.HostScript is { } host && File.Exists(host) ? host
 			: File.Exists(Path.Combine(appDir, "AhkWord.ahk")) ? Path.Combine(appDir, "AhkWord.ahk")
