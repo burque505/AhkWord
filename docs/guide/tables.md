@@ -8,18 +8,31 @@
 
 The table is an ordinary table afterwards: it isn't linked to the file. A script can fill it again from the file, keeping its formats (see below).
 
-While the caret is in a table, the **Table Tools** tab appears:
+While the caret is in a table, the **Table Tools > Table Layout** tab appears:
 
 - **Insert** rows above or below and columns left or right; **delete** rows, columns or the whole table.
+- **Merge Cells** and **Split Cells**, and **Delete Cells** (see below).
 - **Properties** (also on the right-click menu): column widths, the table's alignment on the page, cell padding and row height for the whole table; borders, shading and vertical alignment for the selected cells or the whole table.
 - **Borders** (none, all, outside, inside ..., with line width and colour) and **Shading** for the selected cells.
 
 **Tab** moves to the next cell and **Shift+Tab** to the previous one; Tab in the last cell adds a row, as in Word. This works in tables from Word and other programs too.
 
-Table formatting is kept in RTF, Word, OpenDocument and HTML files. Markdown tables have no widths, borders or shading (see [Markdown and HTML views](source-views.md)). Two limits: borders are single lines (Word's double and dotted borders show as single lines of the same width and colour), and cells can't be merged or split, though tables from Word with merged cells open as they are.
+Table formatting is kept in RTF, Word, OpenDocument and HTML files. Markdown tables have no widths, borders or shading (see [Markdown and HTML views](source-views.md)). One limit: borders are single lines (Word's double and dotted borders show as single lines of the same width and colour). See also the [known limitations](../reference/limitations.md).
+
+## Merging, splitting and deleting cells
+
+To work on several cells, drag over them with the mouse: from a cell in one row to a cell in another, AhkWord selects the cells between them (shaded as a selection), not the whole rows. Within one row, select from the first cell's text to the last's.
+
+- **Merge Cells** makes the selected cells one cell. Their text is kept, each cell's as paragraphs of its own, as in Word. Cells merged across columns make one wider cell; cells merged down rows show as one tall cell.
+- **Split Cells...** asks how many columns and rows. A cell is split into columns of equal width. A cell merged down splits back into its rows (or into a number of rows that divides them); a cell of one row split into rows gets new rows, the row's other cells merged down over them, so that they stay whole. Several selected cells are merged first.
+- **Delete Cells...** asks what becomes of the cells around them: the cells after them in their rows move left, the cells below them move up (their text; empty cells come at the bottom), or their whole rows or columns go. With cells selected, **Delete Row** and **Delete Column** delete all of their rows or columns.
+- **Delete** (the key) on selected cells empties them.
+
+Columns are found by where they are, not by counting cells: deleting or inserting a column that a merged cell spans makes that cell narrower or wider instead of deleting it. Each of these is one step for **Undo**.
 
 !!! tip "From a script"
     `Rte.InsertTable(3, 4)`, `Rte.SetColumnWidths("2in, 3in")`, `Rte.SetCellBorders("outside", 1, "#C00000")`, `Rte.SetCellShading("LightYellow")`, `Rte.SetTableAlignment("center")`: see the [API reference](../automation/api.md#tables).
+    Cells: `Rte.SelectCells(3, 2, 4, 2)` (row 3, cell 2 to row 4, cell 2), then `Rte.MergeCells()`, `Rte.SplitCells(2, 1)`, `Rte.DeleteCells("up")` or `Rte.ClearCells()`.
 
 !!! tip "Data from a script"
     `Rte.InsertTableFromFile("C:\Data\clients.xlsx", 1, "Clients")` and `Rte.InsertTableFromData(csvOrJson)` make a table from data. `Rte.SetTableData(data, "", 1, 2)` fills the document's first table again, keeping its header row and formats: rows are added or deleted to fit, and JSON objects go in the columns their names head. `Rte.TableData(1, "json")` gives a table's cells back as CSV, TSV or JSON, and `Rte.CellText(2, 3)` / `Rte.SetCellText(2, 3, "text")` read and change one cell. See the [API reference](../automation/api.md#tables-from-data-and-data-from-tables).

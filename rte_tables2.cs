@@ -19,7 +19,7 @@ using System.Windows.Forms;
 using EllipticBit.RichEditorNET;
 using EllipticBit.RichEditorNET.TextObjectModel2;
 
-public static class RtfTables
+public static partial class RtfTables
 {
 	public sealed record Cell(int Start, int End);                        // the cell's text, without its U+0007
 	public sealed record Row(int Start, int End, List<Cell> Cells);       // U+FFF9 ... U+FFFB and its paragraph mark
@@ -34,9 +34,25 @@ public static class RtfTables
 	/// nested in a cell is part of that cell's text, and its rows' and cells' marks are not the outer row's.
 	public static List<Table> Find(ITextDocument2 doc) {
 		string s = Story(doc);
+		return TablesOf(s, OuterRows(s));
+	}
+
+	/// (iteration 92) The tables a part of the story holds at its own level (a cell's text: the tables nested in it), rows
+	/// of tables nested deeper inside their rows.
+	static List<Table> TablesIn(string s, int from, int to) {
+		var rows = new List<(int Start, int End)>();
+		int depth = 0, start = -1;
+		for (int i = s.IndexOfAny(Marks, from, Math.Max(0, to - from)); i >= 0; i = i + 1 < to ? s.IndexOfAny(Marks, i + 1, to - i - 1) : -1) {
+			if (s[i] == RowStart) { if (depth++ == 0) start = i; }
+			else if (depth > 0 && --depth == 0) rows.Add((start, i));
+		}
+		return TablesOf(s, rows);
+	}
+
+	static List<Table> TablesOf(string s, List<(int Start, int End)> outer) {
 		var tables = new List<Table>();
 		var rows = new List<Row>();
-		foreach (var (start, end) in OuterRows(s)) {
+		foreach (var (start, end) in outer) {
 			if (end >= s.Length) break;    // (a row without its end mark)
 			var cells = new List<Cell>();
 			int cell = start + 2;    // after U+FFF9 and its paragraph mark
@@ -74,6 +90,36 @@ public static class RtfTables
 		return new string(chars);
 	}
 
+	/// (iteration 92) A vertically merged cell's continuation, in the story: U+FFFF, the cell's only character.
+	public const char MergedMark = '\uFFFF';
+
+	/// (iteration 92) Takes out the merge marks RichEdit puts where they don't belong. Reading a row whose first cell
+	/// continues a vertical merge (\clvmrg), RichEdit puts that cell's mark (U+FFFF) into the first cell of a table nested
+	/// in the row too, its own RTF as well as Word's, and then lays that nested row out as part of a merge: a line too
+	/// tall. A mark is RichEdit's own only where it is all its cell holds, in a row that isn't its table's first (a merge
+	/// continues the row above). Returns how many it took out (from the end back, so the others stay where they are).
+	public static int DropStrayMergeMarks(ITextDocument2 doc) {
+		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
+		if (story.IndexOf(MergedMark) < 0) return 0;
+		var stray = new List<int>();
+		for (int i = story.IndexOf(MergedMark); i >= 0; i = story.IndexOf(MergedMark, i + 1))
+			if (!OwnMergeMark(story, i)) stray.Add(i);
+		for (int k = stray.Count - 1; k >= 0; k--) doc.Range2(stray[k], stray[k] + 1).Delete(tomConstants.tomCharacter, 0);
+		return stray.Count;
+	}
+
+	static bool OwnMergeMark(string story, int at) {
+		bool cellStart = at >= 1 && (story[at - 1] == CellEnd || (at >= 2 && story[at - 1] == '\r' && story[at - 2] == RowStart));
+		if (!cellStart || at + 1 >= story.Length || story[at + 1] != CellEnd) return false;
+		// its row's start (rows of tables nested in the cells before it passed over), and a row before it in its table
+		int depth = 0;
+		for (int i = at - 1; i >= 0; i--) {
+			if (story[i] == RowEnd) depth++;
+			else if (story[i] == RowStart && depth-- == 0) return i >= 2 && story[i - 1] == '\r' && story[i - 2] == RowEnd;
+		}
+		return false;
+	}
+
 	static readonly System.Runtime.CompilerServices.ConditionalWeakTable<string, List<(int Start, int End)>> outerRows = new();
 
 	/// (iteration 87) The outermost rows of a story: each row's U+FFF9 and its U+FFFB (story.Length when it has none);
@@ -107,8 +153,27 @@ public static class RtfTables
 	}
 
 	/// The table, row and cell at a position, or null outside tables.
-	public static (Table Table, int Row, int Cell)? At(RichEditBox editor, int position) {
-		foreach (var table in Find(editor.TextDocument)) {
+	public static (Table Table, int Row, int Cell)? At(RichEditBox editor, int position) => Locate(Find(editor.TextDocument), position);
+
+	/// (iteration 92) The table, row and cell at a position, in the innermost table there: in a table nested in a cell,
+	/// that table's (Nested); else as At. Null outside tables.
+	public static (Table Table, int Row, int Cell, bool Nested)? Innermost(RichEditBox editor, int position) {
+		string s = Story(editor.TextDocument);
+		var tables = TablesOf(s, OuterRows(s));
+		if (Locate(tables, position) is not { } found) return null;
+		bool nested = false;
+		while (true) {
+			var cell = found.Table.Rows[found.Row].Cells[found.Cell];
+			if (cell.End <= cell.Start || s.IndexOf(RowStart, cell.Start, cell.End - cell.Start) < 0) break;
+			if (Locate(TablesIn(s, cell.Start, cell.End), position) is not { } inner) break;
+			found = inner;
+			nested = true;
+		}
+		return (found.Table, found.Row, found.Cell, nested);
+	}
+
+	static (Table Table, int Row, int Cell)? Locate(List<Table> tables, int position) {
+		foreach (var table in tables) {
 			if (position < table.Start || position >= table.End) continue;
 			for (int r = 0; r < table.Rows.Count; r++) {
 				var row = table.Rows[r];
@@ -226,7 +291,7 @@ public static class RtfTables
 		bool emptyParagraph = (para.Text ?? "").Trim('\r') == "";
 		bool lastParagraph = para.End >= doc.Range2(0, 0).StoryLength;
 		editor.Select(position, 0);
-		((RichTextBox)editor).SelectedRtf = rtf;
+		PutRtf(editor, rtf);
 		var table = Find(doc).FirstOrDefault(t => t.Start >= position) ?? throw new InvalidOperationException("The table could not be inserted.");
 		// an empty paragraph the table was put into is not needed after it (unless it is the document's last one)
 		if (emptyParagraph && !lastParagraph) {
@@ -245,14 +310,14 @@ public static class RtfTables
 		var cell = table.Rows[row].Cells[column];
 		editor.Select(cell.Start, cell.End - cell.Start);
 		// the document's last paragraph mark would add an empty paragraph to the cell
-		((RichTextBox)editor).SelectedRtf = Regex.Replace(rtf, @"\\par\s*\}\s*$", "}");
+		PutRtf(editor, Regex.Replace(rtf, @"\\par\s*\}\s*$", "}"));
 	}
 
 	// ================================================================ rows and columns
 
 	// A row's RTF, in parts: everything before the cell definitions, the definitions (each ending with \cellxN), the cell
 	// contents (each before its \cell), and what follows (\row ...).
-	sealed class RowRtf
+	sealed partial class RowRtf
 	{
 		public string Head = "", Tail = "";
 		public List<string> Definitions = new(), Contents = new();
@@ -262,7 +327,11 @@ public static class RtfTables
 			string masked = MaskNested(rtf);    // (iteration 87: a nested table's row definitions are not this row's)
 			int trowd = masked.IndexOf(@"\trowd", StringComparison.Ordinal);
 			int rowEnd = masked.LastIndexOf(@"\row", StringComparison.Ordinal);
-			var definitions = Regex.Matches(masked[trowd..rowEnd], @"\\cellx-?\d+").Cast<Match>().ToList();
+			// (iteration 92) the definitions before the row's text only: RichEdit repeats them before \row in a row holding a
+			// nested table, and taken together they left no cell contents (Insert Row copied such a row, text and all)
+			var text = Regex.Match(masked[trowd..rowEnd], @"\\pard(?![a-z])|\\intbl(?![a-z])");
+			int definitionsEnd = trowd + (text.Success ? text.Index : rowEnd - trowd);
+			var definitions = Regex.Matches(masked[trowd..definitionsEnd], @"\\cellx-?\d+").Cast<Match>().ToList();
 			int defsStart = trowd + Math.Max(0, Regex.Match(masked[trowd..rowEnd], @"\\cl[a-z]|\\cellx").Index);
 			int defsEnd = trowd + definitions[^1].Index + definitions[^1].Length;
 			row.Head = rtf[..defsStart];
@@ -285,17 +354,95 @@ public static class RtfTables
 			return row;
 		}
 
-		public List<int> Widths() {
-			var xs = Definitions.Select(d => int.Parse(Regex.Match(d, @"\\cellx(-?\d+)$").Groups[1].Value)).ToList();
-			return xs.Select((x, i) => x - (i == 0 ? 0 : xs[i - 1])).ToList();
+		// ---- (iteration 92) the row by position: its left edge (\trleft) and its cells' right edges (\cellxN), in twips
+
+		public int Left => Regex.Match(Head, @"\\trleft(-?\d+)") is { Success: true } m ? int.Parse(m.Groups[1].Value) : 0;
+
+		public List<int> Edges() => Definitions.Select(d => int.Parse(Regex.Match(d, @"\\cellx(-?\d+)$").Groups[1].Value)).ToList();
+
+		public int Right => Edges().DefaultIfEmpty(Left).Last();
+
+		/// Cell i's left and right edges.
+		public (int Left, int Right) Bounds(int i) {
+			var edges = Edges();
+			i = Math.Clamp(i, 0, edges.Count - 1);
+			return (i == 0 ? Left : edges[i - 1], edges[i]);
 		}
 
-		public void SetWidths(List<int> widths) {
-			int x = 0;
-			for (int i = 0; i < Definitions.Count; i++) {
-				x += widths[i];
-				Definitions[i] = Regex.Replace(Definitions[i], @"\\cellx-?\d+$", @"\cellx" + x);
+		void SetEdges(List<int> edges) {
+			for (int i = 0; i < Definitions.Count; i++) Definitions[i] = Regex.Replace(Definitions[i], @"\\cellx-?\d+$", @"\cellx" + edges[i]);
+		}
+
+		void SetLeft(int x) {
+			if (x == Left) return;
+			var m = Regex.Match(Head, @"\\trleft-?\d+");
+			if (m.Success) Head = Head[..m.Index] + @"\trleft" + x + Head[(m.Index + m.Length)..];
+			else {
+				int trowd = Head.LastIndexOf(@"\trowd", StringComparison.Ordinal);
+				if (trowd >= 0) Head = Head.Insert(trowd + 6, @"\trleft" + x);
 			}
+		}
+
+		static int Snap(int x, int a, int b) => Math.Abs(x - a) <= SameEdge ? a : Math.Abs(x - b) <= SameEdge ? b : x;
+
+		/// Takes the part left..right out of the row: cells wholly in it go, a cell reaching over it is that much narrower,
+		/// the cells after it move left.
+		public void DeleteSpan(int left, int right) {
+			int width = right - left;
+			int Moved(int x) => x - Math.Clamp(x - left, 0, width);
+			var edges = Edges();
+			string lead = LeadingProperties;
+			var definitions = new List<string>();
+			var contents = new List<string>();
+			var kept = new List<int>();
+			int first = -1;
+			for (int i = 0; i < edges.Count; i++) {
+				int from = Moved(Snap(i == 0 ? Left : edges[i - 1], left, right)), to = Moved(Snap(edges[i], left, right));
+				if (to - from <= 0) continue;    // (all of it in the part taken out)
+				if (first < 0) first = i;
+				definitions.Add(Definitions[i]);
+				contents.Add(i < Contents.Count ? Contents[i] : "");
+				kept.Add(to);
+			}
+			// the first cell's paragraph properties (\pard\intbl ...), which the others carry on, if it went
+			if (first > 0 && !contents[0].TrimStart().StartsWith(@"\pard", StringComparison.Ordinal)) contents[0] = (lead == "" ? @"\pard\intbl" : lead) + " " + contents[0];
+			int newLeft = Moved(Snap(Left, left, right));
+			Definitions = definitions;
+			Contents = contents;
+			SetEdges(kept);
+			SetLeft(newLeft);
+		}
+
+		/// Puts a cell width wide at the edge at (the cells after it move right); a row with a cell reaching over at gets
+		/// that cell that much wider instead.
+		public void InsertAt(int at, int width) {
+			var edges = Edges();
+			string lead = LeadingProperties;
+			int index = -1;
+			if (Math.Abs(Left - at) <= SameEdge) index = 0;
+			else for (int i = 0; i < edges.Count; i++) if (Math.Abs(edges[i] - at) <= SameEdge) { index = i + 1; break; }
+			if (index < 0) {
+				// no edge there: the cell over it gets wider (a row starting after it moves right)
+				if (at < Left) SetLeft(Left + width);
+				SetEdges(edges.Select(x => x > at ? x + width : x).ToList());
+				return;
+			}
+			int start = index == 0 ? Left : edges[index - 1];
+			var moved = edges.Select((x, i) => i >= index ? x + width : x).ToList();
+			moved.Insert(index, start + width);
+			// the new cell's definition: its neighbour's borders and shading, not its merges
+			string like = Definitions[Math.Min(index, Definitions.Count - 1)];
+			Definitions.Insert(index, Regex.Replace(like, @"\\clvm(gf|rg)(?![a-z])", ""));
+			if (index == 0) Contents.Insert(0, (lead == "" ? @"\pard\intbl" : lead) + " ");
+			else Contents.Insert(Math.Min(index, Contents.Count), "");
+			SetEdges(moved);
+		}
+
+		/// The row's edges scaled about the table's left edge.
+		public void Rescale(int tableLeft, double scale) {
+			int Scaled(int x) => tableLeft + (int)Math.Round((x - tableLeft) * scale);
+			SetEdges(Edges().Select(Scaled).ToList());
+			SetLeft(Scaled(Left));
 		}
 
 		// The paragraph properties at the start of the first cell (\pard\intbl ...), which the other cells carry on.
@@ -305,7 +452,13 @@ public static class RtfTables
 			var sb = new StringBuilder(Head);
 			foreach (var d in Definitions) sb.Append(d);
 			foreach (var c in Contents) sb.Append(c).Append(@"\cell ");
-			return sb.Append(Tail.TrimStart()).ToString();
+			// (iteration 92) the definitions RichEdit repeats before \row (a row holding a nested table): as the row's own now
+			string tail = Tail.TrimStart();
+			var repeated = Regex.Match(tail, @"\\trowd(?![a-z]).*\\cellx-?\d+", RegexOptions.Singleline);
+			int rowWords = Head.LastIndexOf(@"\trowd", StringComparison.Ordinal);
+			if (repeated.Success && rowWords >= 0)
+				tail = tail[..repeated.Index] + Head[rowWords..].TrimEnd() + string.Concat(Definitions) + tail[(repeated.Index + repeated.Length)..];
+			return sb.Append(tail).ToString();
 		}
 
 		// The same row with empty cells.
@@ -323,12 +476,37 @@ public static class RtfTables
 
 	static void SetRtf(RichEditBox editor, int start, int end, string rtf) {
 		editor.Select(start, end - start);
-		((RichTextBox)editor).SelectedRtf = rtf;
+		PutRtf(editor, rtf);
+	}
+
+	// (iteration 92) RTF in place of the selection, and RichEdit's stray merge marks taken out of it (DropStrayMergeMarks),
+	// as one undo step: as two, undoing a table command only put the marks back. Only RTF that can make them (a merge
+	// continued in a row with a nested table) is put in as an edit collection of its own: TOM's collections don't nest
+	// (an inner one's end ends the outer one), and most callers' own collections hold several of these.
+	static void PutRtf(RichEditBox editor, string rtf) {
+		var doc = editor.TextDocument;
+		bool marks = rtf.Contains(@"\clvmrg", StringComparison.Ordinal) && rtf.Contains(@"\nestcell", StringComparison.Ordinal);
+		if (!marks) { ((RichTextBox)editor).SelectedRtf = rtf; return; }
+		doc.BeginEditCollection();
+		try {
+			((RichTextBox)editor).SelectedRtf = rtf;
+			DropStrayMergeMarks(doc);
+		}
+		finally { doc.EndEditCollection(); }
 	}
 
 	// The row and cell at the caret, or an error.
 	static (Table Table, int Row, int Cell) Current(RichEditBox editor) =>
 		At(editor, editor.SelectionStart) ?? throw new InvalidOperationException("Put the caret in a table first.");
+
+	// (iteration 92) The same for inserting rows and columns and deleting columns, which work on the outermost table's RTF
+	// rows: in a table nested in a cell they would change the table around it (Delete Column took the nested table with
+	// its column), so they say so instead.
+	static (Table Table, int Row, int Cell) CurrentOuterOnly(RichEditBox editor) {
+		if (Innermost(editor, editor.SelectionStart) is { Nested: true })
+			throw new InvalidOperationException(T("status.table.nestedOnly", "In a table inside a cell, only its rows and the whole table can be deleted for now."));
+		return Current(editor);
+	}
 
 	static void CaretTo(RichEditBox editor, int tableStart, int row, int column) {
 		var table = Find(editor.TextDocument).FirstOrDefault(t => t.Start == tableStart) ?? Find(editor.TextDocument).FirstOrDefault(t => t.Start >= tableStart);
@@ -339,7 +517,7 @@ public static class RtfTables
 
 	/// Inserts an empty row above or below the caret's row.
 	public static void InsertRow(RichEditBox editor, bool below) {
-		var (table, r, c) = Current(editor);
+		var (table, r, c) = CurrentOuterOnly(editor);
 		var row = table.Rows[r];
 		string rtf = GetRtf(editor, row.Start, row.End);
 		var parsed = RowRtf.Parse(rtf);
@@ -352,97 +530,215 @@ public static class RtfTables
 		CaretTo(editor, table.Start, below ? r + 1 : r, c);
 	}
 
-	/// Deletes the caret's row (the table, if it is the only row).
+	// (iteration 92) The row and cell at the caret in the innermost table there (a table nested in a cell: its own), or an error.
+	static (Table Table, int Row, int Cell, bool Nested) CurrentInner(RichEditBox editor) =>
+		Innermost(editor, editor.SelectionStart) ?? throw new InvalidOperationException("Put the caret in a table first.");
+
+	/// Deletes the caret's row (the table, if it is the only row). (iteration 92) In a table nested in a cell, that table's
+	/// row: before, the row of the table around it went, nested table and all.
 	public static void DeleteRow(RichEditBox editor) {
-		var (table, r, c) = Current(editor);
-		if (table.Rows.Count == 1) { DeleteTable(editor); return; }
-		var row = table.Rows[r];
-		editor.Select(row.Start, row.End - row.Start);
-		editor.SelectedText = "";
-		CaretTo(editor, table.Start, Math.Min(r, table.Rows.Count - 2), c);
+		if (HasBlock(editor)) { DeleteCells(editor, "row"); return; }    // (iteration 92: a block of cells: its rows)
+		var (table, r, c, _) = CurrentInner(editor);
+		DeleteRows(editor, table, r, r, c);
 	}
 
-	/// Inserts an empty column left or right of the caret's column; the table keeps its width.
+	// Deletes rows first..last of a table, as one range (one undo step), or the whole table if that is all of them; then
+	// the caret goes to the row that took their place (the one before, if they were the last) in column c. Positions are
+	// worked out before: a nested table can't be found again by its start, as an outer one can.
+	static void DeleteRows(RichEditBox editor, Table table, int first, int last, int c) {
+		if (first == 0 && last == table.Rows.Count - 1) { DeleteRange(editor, table.Start, table.End); return; }
+		int start = table.Rows[first].Start, end = table.Rows[last].End;
+		// the rows of the vertical merges the deleted rows are in (a row continuing a merge goes with the one above it)
+		string s = Story(editor.TextDocument);
+		bool Continues(Row row) => row.Cells.Any(cell => cell.End == cell.Start + 1 && s[cell.Start] == MergedMark);
+		int from = first, to = last;
+		while (from > 0 && Continues(table.Rows[from])) from--;
+		while (to + 1 < table.Rows.Count && Continues(table.Rows[to + 1])) to++;
+		if (from != first || to != last) {
+			DeleteMergedRows(editor, table, from, to, first, last, c);
+			return;
+		}
+		int caret = last + 1 < table.Rows.Count
+			? CellStart(table.Rows[last + 1], c) - (end - start)
+			: CellStart(table.Rows[first - 1], c);
+		DeleteRange(editor, start, end);
+		editor.Select(Math.Max(0, caret), 0);
+	}
+
+	// (iteration 92) Rows first..last out of the vertical merges of rows from..to around them. RichEdit widens any range
+	// in a merge, a selection's or TOM's, to all of the merge's rows: deleting a merge's second row took its first with
+	// it. So the merges' rows are written again without them; where a deleted row started a merge (\clvmgf) the next row
+	// that continued it (\clvmrg) starts it now. The caret goes to the row that took their place.
+	static void DeleteMergedRows(RichEditBox editor, Table table, int from, int to, int first, int last, int c) {
+		int blockStart = table.Rows[from].Start;
+		string rtf = GetRtf(editor, blockStart, table.Rows[to].End);
+		string masked = MaskNested(rtf);
+		var rows = Regex.Matches(masked, @"\\trowd(?![a-z]).*?\\row(?![a-z])", RegexOptions.Singleline).Cast<Match>().ToList();
+		if (rows.Count != to - from + 1) {    // (not as expected: the rows one by one, as RichEdit deletes them)
+			DeleteRange(editor, table.Rows[first].Start, table.Rows[last].End);
+			return;
+		}
+		var kept = rows.Select((m, k) => (Text: rtf.Substring(m.Index, m.Length), Index: k))
+			.Where(row => row.Index < first - from || row.Index > last - from).Select(row => row.Text).ToList();
+		// the merges made whole again: a continuation with no start above it starts the merge (its row's start went), a
+		// start with no continuation below it is a plain cell (RichEdit drops a row that starts a merge nothing continues)
+		for (int k = 0; k < kept.Count; k++)
+			for (int cell = 0; cell < CellCount(kept[k]); cell++) {
+				string? word = MergeAt(kept[k], cell);
+				if (word == null) continue;
+				bool above = k > 0 && MergeAt(kept[k - 1], cell) != null;
+				bool below = k + 1 < kept.Count && MergeAt(kept[k + 1], cell) == "clvmrg";
+				string? now = word == "clvmrg" && above ? "clvmrg" : below ? "clvmgf" : null;
+				if (now != word) kept[k] = SetMerge(kept[k], cell, now);
+			}
+		// (the space after a row's \row ends the control word; one more after the last row would be text after the table,
+		// and RichEdit then drops the last row)
+		string written = rtf[..rows[0].Index] + string.Join(" ", kept) + rtf[(rows[^1].Index + rows[^1].Length)..];
+		SetRtf(editor, blockStart, table.Rows[to].End, written);
+		// the table again where the block started (a nested table too: Innermost at its first row's start)
+		if (Innermost(editor, blockStart) is { } again) {
+			var rowsNow = again.Table.Rows;
+			int target = Math.Min(first, rowsNow.Count - 1);
+			if (target >= 0) editor.Select(CellStart(rowsNow[target], c), 0);
+		}
+	}
+
+	// (iteration 92) A row's RTF cell definitions: for each definition block (\trowd ... up to the row's text; RichEdit
+	// repeats it at the end of a row holding a nested table), each cell's part, ending with its \cellxN.
+	static List<List<(int Start, int End)>> DefinitionBlocks(string rowRtf) {
+		string masked = MaskNested(rowRtf);
+		var blocks = new List<List<(int, int)>>();
+		foreach (Match t in Regex.Matches(masked, @"\\trowd(?![a-z])")) {
+			var stop = Regex.Match(masked[t.Index..], @"\\pard(?![a-z])|\\row(?![a-z])|\\intbl(?![a-z])");
+			int end = t.Index + (stop.Success ? stop.Index : masked.Length - t.Index);
+			var cells = new List<(int, int)>();
+			int from = t.Index + 6;
+			foreach (Match x in Regex.Matches(masked[t.Index..end], @"\\cellx-?\d+")) {
+				int e = t.Index + x.Index + x.Length;
+				cells.Add((from, e));
+				from = e;
+			}
+			blocks.Add(cells);
+		}
+		return blocks;
+	}
+
+	static int CellCount(string rowRtf) => DefinitionBlocks(rowRtf).FirstOrDefault()?.Count ?? 0;
+
+	// "clvmgf", "clvmrg" or null: a cell's vertical merge, in the row's first definition block.
+	static string? MergeAt(string rowRtf, int cell) {
+		var block = DefinitionBlocks(rowRtf).FirstOrDefault();
+		if (block == null || cell >= block.Count) return null;
+		var m = Regex.Match(rowRtf[block[cell].Start..block[cell].End], @"\\(clvmgf|clvmrg)(?![a-z])");
+		return m.Success ? m.Groups[1].Value : null;
+	}
+
+	// The cell's merge word changed to word (null: taken out), in every definition block.
+	static string SetMerge(string rowRtf, int cell, string? word) {
+		foreach (var block in Enumerable.Reverse(DefinitionBlocks(rowRtf))) {
+			if (cell >= block.Count) continue;
+			var (start, end) = block[cell];
+			string part = Regex.Replace(rowRtf[start..end], @"\\(clvmgf|clvmrg)(?![a-z])", word == null ? "" : @"\" + word);
+			rowRtf = rowRtf[..start] + part + rowRtf[end..];
+		}
+		return rowRtf;
+	}
+
+	static int CellStart(Row row, int c) => row.Cells.Count == 0 ? row.Start : row.Cells[Math.Clamp(c, 0, row.Cells.Count - 1)].Start;
+
+	// (through a range, not the selection: RichEdit widens a selection in a vertical merge to all of the merge's rows)
+	static void DeleteRange(RichEditBox editor, int start, int end) {
+		editor.TextDocument.Range2(start, end).Text = "";
+		editor.Select(start, 0);
+	}
+
+	/// Inserts an empty column left or right of the caret's column; the table keeps its width. (iteration 92) Placed by
+	/// position, not by cell number: a row whose cell spans the place (cells merged across) gets that cell wider instead
+	/// of a cell of its own, as in Word; and the rows are written again at once (see RewriteRows).
 	public static void InsertColumn(RichEditBox editor, bool right) {
-		var (table, r, c) = Current(editor);
-		int at = right ? c + 1 : c;
-		foreach (var row in Enumerable.Reverse(table.Rows)) {
-			var parsed = RowRtf.Parse(GetRtf(editor, row.Start, row.End));
-			int index = Math.Min(at, parsed.Definitions.Count);
-			var widths = parsed.Widths();
-			int total = widths.Sum();
-			string lead = parsed.LeadingProperties;
-			parsed.Definitions.Insert(index, parsed.Definitions[Math.Max(0, Math.Min(index, parsed.Definitions.Count - 1))]);
-			widths.Insert(index, total / Math.Max(1, widths.Count));
-			parsed.SetWidths(Scale(widths, total));
-			if (index == 0) parsed.Contents.Insert(0, (lead == "" ? @"\pard\intbl" : lead) + " ");
-			else parsed.Contents.Insert(index, "");
-			SetRtf(editor, row.Start, row.End, parsed.Build());
-		}
-		CaretTo(editor, table.Start, r, at);
+		var (table, r, c) = CurrentOuterOnly(editor);
+		RewriteRows(editor, table, rows => {
+			var (left, rightEdge) = rows[r].Bounds(c);
+			int at = right ? rightEdge : left, width = Math.Max(MinimumWidth, rightEdge - left);
+			int tableLeft = rows.Min(row => row.Left), tableRight = rows.Max(row => row.Right);
+			foreach (var row in rows) row.InsertAt(at, width);
+			// the table as wide as before: every column narrower in proportion
+			double scale = (double)(tableRight - tableLeft) / Math.Max(1, tableRight - tableLeft + width);
+			foreach (var row in rows) row.Rescale(tableLeft, scale);
+		});
+		CaretTo(editor, table.Start, r, right ? c + 1 : c);
 	}
 
-	/// Deletes the caret's column (the table, if it is the only column); the other columns keep their widths.
+	/// Deletes the caret's column (the table, if it is the only column); the other columns keep their widths. (iteration
+	/// 92) By position, not by cell number: a cell spanning more than the column (cells merged across) gets narrower
+	/// instead of going, as in Word; and the rows are written again at once (see RewriteRows).
 	public static void DeleteColumn(RichEditBox editor) {
-		var (table, r, c) = Current(editor);
+		if (HasBlock(editor)) { DeleteCells(editor, "column"); return; }    // (iteration 92: a block of cells: its columns)
+		var (table, r, c) = CurrentOuterOnly(editor);
 		if (table.Rows.All(row => row.Cells.Count <= 1)) { DeleteTable(editor); return; }
-		foreach (var row in Enumerable.Reverse(table.Rows)) {
-			var parsed = RowRtf.Parse(GetRtf(editor, row.Start, row.End));
-			if (c >= parsed.Definitions.Count || parsed.Definitions.Count == 1) continue;
-			var widths = parsed.Widths();
-			string lead = parsed.LeadingProperties;
-			parsed.Definitions.RemoveAt(c);
-			widths.RemoveAt(c);
-			parsed.SetWidths(widths);
-			parsed.Contents.RemoveAt(c);
-			if (c == 0 && parsed.Contents.Count > 0 && !parsed.Contents[0].TrimStart().StartsWith(@"\pard")) parsed.Contents[0] = lead + " " + parsed.Contents[0];
-			SetRtf(editor, row.Start, row.End, parsed.Build());
-		}
+		RewriteRows(editor, table, rows => {
+			var (left, right) = rows[r].Bounds(c);
+			foreach (var row in rows) row.DeleteSpan(left, right);
+		});
 		CaretTo(editor, table.Start, r, Math.Max(0, c - 1));
+	}
+
+	// (iteration 92) A cell is at least this wide (twips) after Insert Column narrows the others.
+	const int MinimumWidth = 144;
+
+	// (iteration 92) Two cell edges this close (twips) are the same column's: rows' edges set by hand, or rounded, can
+	// differ a little.
+	const int SameEdge = 30;
+
+	/// (iteration 92) Changes every row of a table and writes them back at once: one undo step, and the rows of a vertical
+	/// merge together. Written one by one, a row in a merge took the other rows' text with it: RichEdit widens any range
+	/// in a merge to all of the merge's rows, so the "row" read and written back was several.
+	static void RewriteRows(RichEditBox editor, Table table, Action<List<RowRtf>> change) {
+		string rtf = GetRtf(editor, table.Start, table.End);
+		var matches = Regex.Matches(MaskNested(rtf), @"\\trowd(?![a-z]).*?\\row(?![a-z])", RegexOptions.Singleline).Cast<Match>().ToList();
+		if (matches.Count != table.Rows.Count)
+			throw new InvalidOperationException(T("status.table.unreadRows", "The table was left as it was: its rows couldn't be read."));
+		var rows = matches.Select(m => RowRtf.Parse(rtf.Substring(m.Index, m.Length))).ToList();
+		change(rows);
+		var sb = new StringBuilder();
+		int at = 0;
+		for (int k = 0; k < matches.Count; k++) {
+			sb.Append(rtf[at..matches[k].Index]);
+			var written = new[] { rows[k] }.Concat(rows[k].After).Where(row => row.Definitions.Count > 0).ToList();    // (a row left without cells goes)
+			sb.Append(string.Join(" ", written.Select(row => row.Build())));    // (rows added after it: Split Cells into rows)
+			at = matches[k].Index + matches[k].Length;
+		}
+		sb.Append(rtf[at..]);
+		SetRtf(editor, table.Start, table.End, sb.ToString());
 	}
 
 	/// The rows of one table that the selection covers completely, including the last cell's mark (so selecting the text
 	/// of a cell is not selecting its row), with their table; none when the selection reaches outside the table.
+	/// (iteration 92) In the innermost table where the selection starts: rows of a table nested in a cell are its own.
 	public static (Table? Table, List<int> Rows) SelectedRows(RichEditBox editor) {
 		var selection = editor.TextDocument.Selection2;    // (WinForms' SelectionLength is short across table rows)
 		int start = selection.Start, end = selection.End;
-		var table = end > start ? Find(editor.TextDocument).FirstOrDefault(t => start >= t.Start && start < t.End) : null;
+		var table = end > start ? Innermost(editor, start)?.Table : null;
 		if (table == null || end > table.End) return (null, new List<int>());
 		var rows = Enumerable.Range(0, table.Rows.Count)
-			.Where(r => start <= table.Rows[r].Cells[0].Start && end > table.Rows[r].Cells[^1].End).ToList();
+			.Where(r => table.Rows[r].Cells.Count > 0 && start <= table.Rows[r].Cells[0].Start && end > table.Rows[r].Cells[^1].End).ToList();
 		return (table, rows);
 	}
 
 	/// Deletes the rows the selection covers completely (the table, if that is all of its rows) and returns how many.
-	/// RichEdit itself only empties the cells.
+	/// RichEdit itself only empties the cells. (iteration 92) As one undo step (the rows are next to each other), and in a
+	/// table nested in a cell, its rows.
 	public static int DeleteSelectedRows(RichEditBox editor) {
 		var (table, rows) = SelectedRows(editor);
 		if (table == null || rows.Count == 0) return 0;
-		if (rows.Count == table.Rows.Count) {
-			editor.Select(table.Start, table.End - table.Start);
-			editor.SelectedText = "";
-			return rows.Count;
-		}
-		foreach (int r in Enumerable.Reverse(rows)) {
-			var row = table.Rows[r];
-			editor.Select(row.Start, row.End - row.Start);
-			editor.SelectedText = "";
-		}
-		CaretTo(editor, table.Start, Math.Min(rows[0], table.Rows.Count - rows.Count - 1), 0);
+		DeleteRows(editor, table, rows[0], rows[^1], 0);
 		return rows.Count;
 	}
 
-	/// Deletes the table the caret is in.
+	/// Deletes the table the caret is in. (iteration 92) In a table nested in a cell, that table, not the one around it.
 	public static void DeleteTable(RichEditBox editor) {
-		var (table, _, _) = Current(editor);
-		editor.Select(table.Start, table.End - table.Start);
-		editor.SelectedText = "";
-	}
-
-	static List<int> Scale(List<int> widths, int total) {
-		int sum = Math.Max(1, widths.Sum());
-		var scaled = widths.Select(w => Math.Max(200, w * total / sum)).ToList();
-		return scaled;
+		var (table, _, _, _) = CurrentInner(editor);
+		DeleteRange(editor, table.Start, table.End);
 	}
 
 	/// The column widths of each row of the document, in twips, from its RTF (in document order).

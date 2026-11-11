@@ -11,7 +11,7 @@ Los comandos de AhkWord están en una cinta de opciones, la que trae Windows (co
 | **Revisar** | Siguiente error ortográfico, Agregar al diccionario, Revisar la ortografía mientras se escribe; Idioma (English o Español, desde el próximo inicio) |
 | **Vista** | Vista del documento (Texto enriquecido, Markdown, HTML, En paralelo, Ajustar líneas del código, Números de línea del código), Diseño de impresión, Mostrar páginas, Ajustar a la ventana, Encabezado y pie de página, Esquema, Regla, Zoom (Ancho de página, Una página, Varias páginas, Acercar, Alejar, 100%) |
 | **Herramientas** | Macros, Grabar macro, Teclas rápidas de macros, Macros de eventos, Ejecutar script, Carpeta de macros, Paleta de comandos, API de automatización, Acerca de |
-| **Herramientas de tabla** | mientras el cursor está en una tabla: filas y columnas, Propiedades, Bordes, Sombreado, eliminar |
+| **Herramientas de tabla > Disposición de tabla** | mientras el cursor está en una tabla: filas y columnas, Propiedades, Bordes, Sombreado, eliminar |
 
 La **barra de herramientas de acceso rápido** tiene Guardar, Deshacer, Rehacer y la Paleta de comandos; su flecha agrega Nuevo, Abrir, Imprimir, Vista previa de impresión o Exportar como PDF.
 

@@ -231,7 +231,7 @@ public static class TabularData
 		var formatIds = styles?.CellFormats?.Elements<CellFormat>().Select(f => f.NumberFormatId?.Value ?? 0u).ToList() ?? new List<uint>();
 		var codes = styles?.NumberingFormats?.Elements<NumberingFormat>().Where(f => f.NumberFormatId != null)
 			.GroupBy(f => f.NumberFormatId!.Value).ToDictionary(g => g.Key, g => g.First().FormatCode?.Value ?? "") ?? new Dictionary<uint, string>();
-		bool date1904 = workbook.Workbook.WorkbookProperties?.Date1904?.Value == true;
+		bool date1904 = workbook.Workbook?.WorkbookProperties?.Date1904?.Value == true;
 
 		(int r1, int c1, int r2, int c2)? limits = null;
 		if ((range ?? "").Trim() != "") {

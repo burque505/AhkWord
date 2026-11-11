@@ -4,6 +4,7 @@
 #load "rte_markdown6.cs"
 #load "rte_htmllists2.cs"
 #load "rte_tables2.cs"
+#load "rte_tablecells.cs"    // (iteration 92: Merge Cells, Split Cells, Delete Cells)
 #load "rte_office7.cs"
 #load "rte_docxodus.cs"
 #load "rte_rtfdocx.cs"
@@ -632,7 +633,7 @@ enum RibbonCommand : uint
 	TableTools = 106, TabTableLayout = 107, GroupClipboard = 110, GroupFont = 111, GroupText = 112, GroupParagraph = 113,
 	GroupStyles = 114, GroupEditing = 115, GroupPages = 116, GroupTables = 117, GroupIllustrations = 118, GroupLinks = 119, GroupContents = 135,
 	GroupInsertText = 120, GroupPage = 121, GroupProofing = 122, GroupShow = 124, GroupZoom = 125, GroupDocumentView = 126,
-	GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupExtensions = 136, GroupRowsColumns = 130, GroupDelete = 131, GroupTableFormat = 132,
+	GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupExtensions = 136, GroupRowsColumns = 130, GroupDelete = 131, GroupTableFormat = 132, GroupMerge = 137,
 	AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144, PrintMenu = 145,
 	New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204, PrintPreview = 205,
 	PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210, NewFromTemplate = 212,
@@ -655,7 +656,7 @@ enum RibbonCommand : uint
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
 	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399, Theme = 401, FormatPainter = 402, Ruler = 403, Language = 405, FontName = 410, FontSize = 411, FontBold = 412, FontItalic = 413, FontUnderline = 414, FontStrike = 415, FontSub = 416, FontSuper = 417, FontGrow = 418, FontShrink = 419, FontColor = 420, FontHighlight = 421,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
-	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, TableProperties = 340, TableBorders = 341,
+	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, MergeCells = 327, SplitCells = 328, DeleteCells = 329, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
 	LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
@@ -716,7 +717,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 91;    // (the About box; make_version.ps1)
+	public const int Iteration = 92;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -982,6 +983,7 @@ class WriterForm : Form
 		// at its foot (from the footnotes, read again once the text changed, and the pages as last worked out)
 		Editor.NoteAt = position => DocumentFootnotes().FirstOrDefault(f => position >= f.Start && position <= f.End)?.Text is { } note ? Footnotes.Plain(note) : null;
 		Editor.TextChanged += (s, e) => { footnotesRead = null; leadersRead = null; framesRead = null; };
+		Editor.ClearCellBlock = () => Run(() => api.ClearCells(), M("ClearCells"));    // (iteration 92)
 		Editor.Frames = () => framesRead ??= ParagraphFrames.All(Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "");    // (iteration 87)
 		// (iteration 52) the tables of contents' leaders, which RichEdit doesn't draw
 		Editor.Leaders = () => leadersRead ??= Toc.Leaders(Editor.TextDocument.Range2(0, Editor.TextDocument.Range2(0, 0).StoryLength).Text ?? "");
@@ -1326,6 +1328,9 @@ class WriterForm : Form
 		Button(RibbonCommand.DeleteRow, () => api.DeleteRow(), Keys.None, M("DeleteRow"));    // Ctrl+Shift+Delete: ProcessCmdKey
 		Button(RibbonCommand.DeleteColumn, () => api.DeleteColumn(), Keys.None, M("DeleteColumn"));
 		Button(RibbonCommand.DeleteTable, () => api.DeleteTable(), Keys.None, M("DeleteTable"));
+		Button(RibbonCommand.DeleteCells, DeleteCellsCommand);    // (iteration 92)
+		Button(RibbonCommand.MergeCells, () => api.MergeCells(), Keys.None, M("MergeCells"));
+		Button(RibbonCommand.SplitCells, SplitCellsCommand);
 		Button(RibbonCommand.TableProperties, TablePropertiesCommand);
 		foreach (var (id, preset) in new[] { (RibbonCommand.BordersAll, "all"), (RibbonCommand.BordersOutside, "outside"), (RibbonCommand.BordersInside, "inside"), (RibbonCommand.BordersNone, "none") })
 			Button(id, () => api.SetCellBorders(preset), Keys.None, M("SetCellBorders", preset));
@@ -1879,6 +1884,7 @@ class WriterForm : Form
 			try {
 				Editor.SelectAll();
 				Editor.SelectedRtf = rendered;
+				RtfTables.DropStrayMergeMarks(doc);    // (iteration 92)
 				Editor.Select(0, 0);
 			} finally {
 				doc.EndEditCollection();
@@ -2296,6 +2302,7 @@ class WriterForm : Form
 			int start = doc.Selection2.Start;
 			Editor.SelectedRtf = rtf;
 			int end = doc.Selection2.Start;
+			if (RtfTables.DropStrayMergeMarks(doc) > 0) end = doc.Selection2.Start;    // (iteration 92)
 			string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 			string asked = story[Math.Min(start, story.Length)..Math.Min(end, story.Length)];
 			if (bands != null) asked += "\n" + string.Join("\n", BandParts(bands).SelectMany(parts => parts));    // (its header's and footer's fields too)
@@ -4243,6 +4250,7 @@ class WriterForm : Form
 			BeforeNumber();
 			added = StyleClipboard.Paste(Editor, Styles, paste);
 			var (start, end) = StyleClipboard.Pasted;
+			if (RtfTables.DropStrayMergeMarks(doc) > 0) end = doc.Selection2.Start;    // (iteration 92: a table with merged and nested cells)
 			StyleEngine.JoinPasted(doc, Styles, start, end);
 		} finally {
 			doc.EndEditCollection();
@@ -4365,6 +4373,23 @@ class WriterForm : Form
 		foreach (string call in changes.Calls()) Record(call);
 	}
 
+	// (iteration 92) Table Tools > Split Cells: how many columns and rows, the cell's own span to start with.
+	void SplitCellsCommand() {
+		var (columns, rows) = api.CellSpan();
+		using var dlg = new SplitCellsDialog(columns, rows);
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		Run(() => api.SplitCells(dlg.Columns, dlg.Rows), M("SplitCells", dlg.Columns, dlg.Rows));
+	}
+
+	// (iteration 92) Table Tools > Delete Cells: the cells after them move left or the cells below them up, or their
+	// rows or columns go, as Word asks.
+	void DeleteCellsCommand() {
+		if (!api.InTable()) throw new InvalidOperationException("Put the caret in a table first.");
+		using var dlg = new DeleteCellsDialog();
+		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		Run(() => api.DeleteCells(dlg.How), M("DeleteCells", dlg.How));
+	}
+
 	// ---------------------------------------------------------------- Iteration 5: spelling
 
 	// The Home tab's Cut, Copy and Paste (styles kept, the page view's gaps left out), for the right-click menu too.
@@ -4444,6 +4469,11 @@ class WriterForm : Form
 		else Add(T("menu.deleteRow", "&Delete row"), () => api.DeleteRow(), M("DeleteRow"), "Ctrl+Shift+Del");
 		Add(T("menu.deleteColumn", "Delete colu&mn"), () => api.DeleteColumn(), M("DeleteColumn"));
 		Add(T("menu.deleteTable", "Delete &table"), () => api.DeleteTable(), M("DeleteTable"));
+		// (iteration 92) the cells: Merge when the selection reaches over more than one
+		menu.Items.Add(new ToolStripSeparator());
+		if (api.SelectionSpansCells()) Add(T("menu.mergeCells", "Mer&ge cells"), () => api.MergeCells(), M("MergeCells"));
+		menu.Items.Add(new ToolStripMenuItem(T("menu.splitCells", "Spl&it cells..."), null, (s, e) => Run(SplitCellsCommand)));
+		menu.Items.Add(new ToolStripMenuItem(T("menu.deleteCells", "Delete c&ells..."), null, (s, e) => Run(DeleteCellsCommand)));
 		menu.Items.Add(new ToolStripSeparator());
 		menu.Items.Add(new ToolStripMenuItem(T("menu.tableProperties", "Table &properties..."), null, (s, e) => Run(TablePropertiesCommand)));
 		return menu;
@@ -7048,6 +7078,7 @@ public class EditorApi
 		ed.TextDocument.Freeze();
 		try {
 			RtfTables.LoadHtml(ed, BodyOf(LineBreaks.MarkHtml(PageBreaks.MarkHtml(global::LineSpacing.MarkHtml(StyleHtml.MarkHtml(CrossRefs.FromHtml(Footnotes.FromHtml(html))))))), HtmlLists.Load, HtmlLists.Load, TableWidth());
+			RtfTables.DropStrayMergeMarks(ed.TextDocument);    // (iteration 92)
 			CrossRefs.AfterLoad(ed.TextDocument);
 			StyleHtml.FromMarkers(ed);    // (headings and styles from their tags, not their fonts)
 			if (LineBreaks.FromMarkers(ed) + PageBreaks.FromMarkers(ed) + PageBreaks.Normalize(ed) + (building == null ? global::LineSpacing.FromMarkers(ed) : 0) > 0) ed.ClearUndo();
@@ -7208,6 +7239,7 @@ public class EditorApi
 			RestorePictures(value);       // (with the alt texts, from the RTF as it was)
 			LegalLists.LoadedIndents.Clear();
 			LegalLists.LevelsFromNumbers(ed.TextDocument);    // (RichEdit's RTF loses the levels of legal items)
+			RtfTables.DropStrayMergeMarks(ed.TextDocument);    // (iteration 92: a nested table's first row a line too tall)
 			CrossRefs.AfterLoad(ed.TextDocument);
 			ed.ClearUndo();
 			ed.Select(0, 0);
@@ -7606,6 +7638,47 @@ public class EditorApi
 
 	/// Deletes the table the caret is in.
 	public void DeleteTable() { RtfTables.DeleteTable(ed); Redraw(); }
+
+	/// (iteration 92) Merges the selected cells into one, as Word does: their text goes into it, each cell's as paragraphs
+	/// of its own. The selected cells are those from the cell where the selection starts to the one where it ends (the
+	/// rows between, and the columns between the two cells), widened to whole merged cells. Cells merged across columns
+	/// make one wider cell; cells merged down rows show as one cell (RichEdit and Word draw them so; the text is the top
+	/// cell's).
+	public void MergeCells() { RtfTables.MergeCells(ed); Redraw(); }
+
+	/// (iteration 92) Splits the caret's cell (or the selected cells, merged first) into columns and rows, as Word does:
+	/// columns of equal width; a cell merged down into a number of rows that divides the rows it spans (all of them
+	/// undoes the merge); a cell of one row into rows adds rows, the row's other cells merged down over them. Its text
+	/// stays in the first cell.
+	public void SplitCells(int columns = 2, int rows = 1) { RtfTables.SplitCells(ed, columns, rows); Redraw(); }
+
+	/// (iteration 92) Deletes the selected cells (the caret's), as Word's Delete Cells does: how = "left" (the cells
+	/// after them in their rows move left), "up" (the cells below them move up: their text; empty cells at the bottom),
+	/// "row" (their rows) or "column" (their columns).
+	public void DeleteCells(string how = "left") { RtfTables.DeleteCells(ed, how); Redraw(); }
+
+	/// (iteration 92) Selects the cells from row1, cell1 to row2, cell2 (counted from 1) of the table at the caret (the
+	/// document's first table if the caret isn't in one) as a block, as dragging over them with the mouse does: the rows
+	/// between, and the columns between the two cells.
+	/// MergeCells, SplitCells, DeleteCells and ClearCells then act on them (RichEdit itself can only select whole rows
+	/// across rows).
+	public void SelectCells(int row1, int cell1, int row2, int cell2) => RtfTables.SelectCells(ed, row1, cell1, row2, cell2);
+
+	/// (iteration 92) Empties the selected cells' text (as Delete does on a block of cells), keeping their formats.
+	public void ClearCells() { RtfTables.ClearCells(ed); Redraw(); }
+
+	// (iteration 92) The caret's cell's span (columns, rows): Split Cells' dialog starts with it.
+	internal (int Columns, int Rows) CellSpan() => RtfTables.CellSpan(ed);
+
+	// (iteration 92) Whether the selection reaches from one table cell into another (the right-click menu's Merge cells).
+	internal bool SelectionSpansCells() {
+		if (RtfTables.HasBlock(ed)) return true;
+		var selection = ed.TextDocument.Selection2;
+		if (selection.End <= selection.Start) return false;
+		var a = RtfTables.At(ed, selection.Start);
+		var b = RtfTables.At(ed, Math.Max(selection.Start, selection.End - 1));
+		return a is { } x && b is { } y && x.Table.Start == y.Table.Start && (x.Row != y.Row || x.Cell != y.Cell);
+	}
 
 	/// The number of table rows the selection covers completely (0 if it is not whole rows of one table).
 	public int SelectedRows() => RtfTables.SelectedRows(ed).Rows.Count;
@@ -9548,7 +9621,7 @@ public class EditorApi
 		ForEachParagraph((start, text) => {
 			text = text.Replace("￼", "").Trim();    // (a picture in a heading is an object character)
 			// table cells are not headings, though a header row's bold text has a heading's font (cells end in U+0007)
-			if (text == "" || text.IndexOfAny(new[] { '\u0007', '￹', '￻' }) >= 0) return;
+			if (text == "" || text.IndexOfAny(new[] { '\u0007', '\uFFF9', '\uFFFB' }) >= 0) return;
 			int level = StyleEngine.LevelAt(doc, form.Styles, start);    // (by the paragraph's style, not its font)
 			if (level is >= 1 and <= 6) headings.Add((level, start, text));
 		});
@@ -11729,6 +11802,47 @@ sealed class WriterEditBox : RichEditBox
 	/// The pointer over the text while the Format Painter is on (null: RichEdit's own).
 	public Cursor? PaintCursor;
 
+	// ---- (iteration 92) a block of table cells (rte_tablecells.cs)
+	(int From, int To)? cellBlock;
+	int blockCaret = -1, dragFrom = -1, dragTo = -1;
+
+	/// Table cells selected as a block, AhkWord's own selection: dragging from a cell in one row into another row of the
+	/// same table (RichEdit selects the whole rows then), or Rte.SelectCells. Positions of a character in the first and
+	/// in the last cell; the cells are shaded as selected, RichEdit's own selection a caret in the first; Merge, Split and
+	/// Delete Cells, Delete Row and Delete Column act on them. Null: none (RichEdit's selection is the selection). Typing,
+	/// clicking or moving the caret ends it.
+	public (int From, int To)? CellBlock {
+		get => cellBlock;
+		set { if (cellBlock == value) return; cellBlock = value; if (IsHandleCreated) Invalidate(); }
+	}
+
+	/// Delete or Backspace with a block of cells: their text emptied (set by the form).
+	public Action? ClearCellBlock;
+
+	/// The edges of the block's table's cells, in twips (RtfTables.EdgesOf), for painting it.
+	public List<List<int>>? BlockEdges { get; private set; }
+
+	/// The block of cells from one position's cell to another's, RichEdit's selection a caret in the first.
+	public void SelectBlock(int from, int to) {
+		cellBlock = null;
+		BlockEdges = RtfTables.EdgesOf(this, from);
+		TextDocument.Selection2.SetRange(from, from);
+		blockCaret = TextDocument.Selection2.Start;
+		CellBlock = (from, to);
+	}
+
+	protected override void OnKeyDown(KeyEventArgs e) {
+		if (cellBlock != null) {
+			if (e.KeyCode is Keys.Delete or Keys.Back && e.Modifiers == Keys.None && ClearCellBlock != null) {
+				e.Handled = e.SuppressKeyPress = true;
+				ClearCellBlock();
+				return;
+			}
+			if (e.KeyCode is not (Keys.ShiftKey or Keys.ControlKey or Keys.Menu)) CellBlock = null;
+		}
+		base.OnKeyDown(e);
+	}
+
 	[StructLayout(LayoutKind.Sequential)]
 	struct IconInfo { public bool Icon; public int HotX, HotY; public IntPtr Mask, Color; }
 	[DllImport("user32.dll")] static extern bool GetIconInfo(IntPtr icon, out IconInfo info);
@@ -11753,6 +11867,11 @@ sealed class WriterEditBox : RichEditBox
 	// library's (WinForms' character index, short of TOM's past hidden text such as footnotes' notes) put the caret
 	// somewhere else, and the menu then came up for what was there.
 	protected override void OnMouseDown(MouseEventArgs e) {
+		// (iteration 92) the right button on a block of cells: it stays, for the menu
+		if (e.Button == MouseButtons.Right && cellBlock is { } block && RtfTables.BlockRectangles(this, block.From, block.To) is { } cells && cells.Any(r => r.Contains(e.Location))) {
+			if (!Focused) Focus();
+			return;
+		}
 		if (e.Button != MouseButtons.Right) { base.OnMouseDown(e); return; }
 		if (!Focused) Focus();
 		var selection = TextDocument.Selection2;
@@ -11939,11 +12058,16 @@ sealed class WriterEditBox : RichEditBox
 		base.OnTextChanged(e);
 		pageBreaks = null;
 		sectionMarks = null;
+		CellBlock = null;    // (iteration 92: its positions are gone)
 		RepaintDrawings();
 	}
 
 	protected override void OnSelectionChanged(EventArgs e) {
 		base.OnSelectionChanged(e);
+		if (cellBlock != null && IsHandleCreated) {
+			var selection = TextDocument.Selection2;
+			if (selection.Start != blockCaret || selection.End != blockCaret) CellBlock = null;    // (iteration 92: the caret moved)
+		}
 		RepaintDrawings();
 	}
 
@@ -12288,6 +12412,13 @@ sealed class WriterEditBox : RichEditBox
 					SelectObject(memory, before);
 					DeleteObject(brush);
 				}, lines: false);
+			// (iteration 92) a block of table cells: shaded as RichEdit shades a selection, the text dark over it
+			if (cellBlock is { } block && RtfTables.BlockRectangles(this, block.From, block.To) is { } cells) {
+				IntPtr brush = CreateSolidBrush(0x99 | 0xC9 << 8 | 0xEF << 16), before = SelectObject(memory, brush);
+				foreach (var r in cells) PatBlt(memory, r.Left - area.Left, r.Top - area.Top, r.Width, r.Height, 0x00A000C9);    // PATAND
+				SelectObject(memory, before);
+				DeleteObject(brush);
+			}
 			using (var g = Graphics.FromHdc(memory)) {
 				g.TranslateTransform(-area.Left, -area.Top);
 				foreach (var place in frames) ParagraphFrames.Draw(g, place, ppp, 1, fill: false);
@@ -12505,6 +12636,33 @@ sealed class WriterEditBox : RichEditBox
 
 	protected override void WndProc(ref Message m) {
 		const int WM_CONTEXTMENU = 0x007B, WM_PAINT = 0x000F, WM_SETCURSOR = 0x0020, HTCLIENT = 1;
+		const int WM_LBUTTONDOWN = 0x0201, WM_MOUSEMOVE = 0x0200, WM_LBUTTONUP = 0x0202, MK_LBUTTON = 1;
+		// (iteration 92) a drag with the left button from a table cell into another row of its table: those cells as a
+		// block (RichEdit selects the whole rows). From the messages (their button state), not WinForms' mouse events,
+		// which take the button's state from the mouse as it is now.
+		if (m.Msg is WM_LBUTTONDOWN or WM_MOUSEMOVE or WM_LBUTTONUP && IsHandleCreated) {
+			long lp = m.LParam.ToInt64();
+			var point = PointToScreen(new Point((short)(lp & 0xFFFF), (short)((lp >> 16) & 0xFFFF)));
+			try {
+				if (m.Msg == WM_LBUTTONDOWN) {
+					CellBlock = null;
+					dragTo = -1;
+					int at = PositionAt(point);
+					dragFrom = RtfTables.At(this, at) != null ? at : -1;
+				}
+				else if (m.Msg == WM_MOUSEMOVE && dragFrom >= 0) {
+					if ((m.WParam.ToInt64() & MK_LBUTTON) == 0) dragFrom = dragTo = -1;
+					else { int at = PositionAt(point); dragTo = RtfTables.SpansRows(this, dragFrom, at) ? at : -1; }
+				}
+				else if (m.Msg == WM_LBUTTONUP && dragFrom >= 0) {
+					int from = dragFrom, to = dragTo;
+					dragFrom = dragTo = -1;
+					base.WndProc(ref m);
+					if (to >= 0) SelectBlock(from, to);
+					return;
+				}
+			} catch (Exception ex) when (ex is COMException or ArgumentException) { dragFrom = dragTo = -1; }
+		}
 		if (m.Msg == WM_SETCURSOR && PaintCursor != null && (m.LParam.ToInt64() & 0xFFFF) == HTCLIENT) { Cursor.Current = PaintCursor; m.Result = (IntPtr)1; return; }
 		if (m.Msg is WM_SETTEXT or EM_STREAMIN or EM_SETTEXTEX && IsHandleCreated) {
 			int numerator = 0, denominator = 0;
@@ -12520,7 +12678,7 @@ sealed class WriterEditBox : RichEditBox
 		if (m.Msg == WM_PAINT) {
 			// (held: not painted now, and the window's need of a paint kept, for the paint after: QuietGaps)
 			if (HoldPaint && IsHandleCreated) return;
-			if (((pageBreaks == null || pageBreaks.Count > 0) || SectionMarksStale || sectionMarks!.Count > 0 || PageStarts is { Count: > 1 } || Gaps is { Applied: true } || Leaders?.Invoke() is { Count: > 0 } || Frames?.Invoke() is { Count: > 0 }) && IsHandleCreated && Buffered)
+			if (((pageBreaks == null || pageBreaks.Count > 0) || SectionMarksStale || sectionMarks!.Count > 0 || PageStarts is { Count: > 1 } || Gaps is { Applied: true } || Leaders?.Invoke() is { Count: > 0 } || Frames?.Invoke() is { Count: > 0 } || cellBlock != null) && IsHandleCreated && Buffered)
 				PaintBuffered();
 			else base.WndProc(ref m);
 			Painted?.Invoke();
@@ -13079,6 +13237,58 @@ sealed class InsertTableDialog : Form
 		var buttons = fromFile ? Dialogs.Row(this, 0, Dialogs.Button(this, T("dlg.insertTable.fromFile", "From &File..."), DialogResult.Yes), ok, cancel) : Dialogs.Row(this, 0, ok, cancel);
 		table.Controls.Add(buttons);
 		table.SetColumnSpan(buttons, 2);
+		Controls.Add(table);
+		AcceptButton = ok;
+		CancelButton = cancel;
+	}
+}
+
+// (iteration 92) Table Tools > Split Cells: the number of columns and rows.
+sealed class SplitCellsDialog : Form
+{
+	readonly NumericUpDown columns, rows;
+
+	public int Columns => (int)columns.Value;
+	public int Rows => (int)rows.Value;
+
+	public SplitCellsDialog(int columnCount, int rowCount) {
+		Dialogs.Setup(this, T("dlg.splitCells.title", "Split cells"));
+		columns = new NumericUpDown { Minimum = 1, Maximum = 63, Value = Math.Clamp(columnCount, 1, 63), Width = LogicalToDeviceUnits(70) };
+		rows = new NumericUpDown { Minimum = 1, Maximum = 100, Value = Math.Clamp(rowCount, 1, 100), Width = LogicalToDeviceUnits(70) };
+		var table = new TableLayoutPanel { ColumnCount = 2, AutoSize = true };
+		table.Controls.Add(new Label { Text = T("dlg.splitCells.columns", "Number of &columns:"), AutoSize = true, Anchor = AnchorStyles.Left });
+		table.Controls.Add(columns);
+		table.Controls.Add(new Label { Text = T("dlg.splitCells.rows", "Number of &rows:"), AutoSize = true, Anchor = AnchorStyles.Left });
+		table.Controls.Add(rows);
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
+		var buttons = Dialogs.Row(this, 0, ok, cancel);
+		table.Controls.Add(buttons);
+		table.SetColumnSpan(buttons, 2);
+		Controls.Add(table);
+		AcceptButton = ok;
+		CancelButton = cancel;
+	}
+}
+
+// (iteration 92) Table Tools > Delete Cells: what becomes of the cells around them.
+sealed class DeleteCellsDialog : Form
+{
+	readonly RadioButton left = new() { Text = T("dlg.deleteCells.left", "Shift cells &left"), AutoSize = true, Checked = true },
+		up = new() { Text = T("dlg.deleteCells.up", "Shift cells &up"), AutoSize = true },
+		row = new() { Text = T("dlg.deleteCells.row", "Delete entire &row"), AutoSize = true },
+		column = new() { Text = T("dlg.deleteCells.column", "Delete entire &column"), AutoSize = true };
+
+	/// "left", "up", "row" or "column" (RtfTables.DeleteCells).
+	public string How => up.Checked ? "up" : row.Checked ? "row" : column.Checked ? "column" : "left";
+
+	public DeleteCellsDialog() {
+		Dialogs.Setup(this, T("dlg.deleteCells.title", "Delete cells"));
+		var table = new TableLayoutPanel { ColumnCount = 1, AutoSize = true };
+		foreach (var choice in new[] { left, up, row, column }) table.Controls.Add(choice);
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
+		table.Controls.Add(Dialogs.Row(this, 0, ok, cancel));
 		Controls.Add(table);
 		AcceptButton = ok;
 		CancelButton = cancel;

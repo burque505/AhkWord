@@ -42,6 +42,7 @@ var fluent = new Dictionary<string, string> {
 	["macros"] = "play", ["record"] = "record", ["hotkeys"] = "keyboard", ["runscript"] = "script", ["macrosfolder"] = "folder_open", ["eventhooks"] = "flash", ["commandpalette"] = "search", ["api"] = "plug_connected", ["extensions"] = "puzzle_piece",
 	["insertabove"] = "table_stack_above", ["insertbelow"] = "table_stack_below", ["insertleft"] = "table_stack_left", ["insertright"] = "table_stack_right",
 	["deleterow"] = "table_delete_row", ["deletecolumn"] = "table_delete_column", ["deletetable"] = "table_dismiss",
+	["deletecells"] = "table_cell_cross", ["mergecells"] = "table_cells_merge", ["splitcells"] = "table_cells_split",    // (iteration 92)
 };
 // The colour a Fluent icon's inside takes (its Filled shape, tinted, under the outline), by kind of command; icons not
 // named here (the text formatting ones) stay plain.
@@ -49,8 +50,8 @@ var families = new Dictionary<Color, string> {
 	[Color.FromArgb(0x2B, 0x7C, 0xD3)] = "new newtemplate newwindow print printpreview pagesetup export viewrich printlayout onepage multiplepages pagewidth inserttemplate link tableofcontents headerfooter pagebreak sectionbreak sidebyside startpage about crossreference footnote",
 	[Color.FromArgb(0x87, 0x64, 0xB8)] = "save saveas savestyles",
 	[Color.FromArgb(0xE8, 0xA3, 0x17)] = "open openwindow macrosfolder paste eventhooks snippets",
-	[Color.FromArgb(0xD1, 0x34, 0x38)] = "exit close exportpdf deletestyle deleterow deletecolumn deletetable record datetime",
-	[Color.FromArgb(0x3A, 0x9A, 0x3A)] = "picture thumbnail table tablesettings insertabove insertbelow insertleft insertright macros runscript extensions api fillfields",
+	[Color.FromArgb(0xD1, 0x34, 0x38)] = "exit close exportpdf deletestyle deleterow deletecolumn deletetable deletecells record datetime",
+	[Color.FromArgb(0x3A, 0x9A, 0x3A)] = "picture thumbnail table tablesettings insertabove insertbelow insertleft insertright mergecells splitcells macros runscript extensions api fillfields",
 	[Color.FromArgb(0xCA, 0x50, 0x10)] = "stylesmenu applystyles formatpainter paintbucket modifystyle newstyle updatestyle dictionary nextspelling",
 	[Color.FromArgb(0x03, 0x83, 0x87)] = "find replace commandpalette language zoomin zoomout zoom100 updatereferences hotkeys html markdown",
 };

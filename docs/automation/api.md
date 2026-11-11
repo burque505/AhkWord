@@ -774,6 +774,24 @@ Leaves the selected paragraphs' lines without numbers, and not counted (suppress
 
 ## Tables
 
+### ClearCells
+
+```autohotkey
+Rte.ClearCells()
+```
+
+(iteration 92) Empties the selected cells' text (as Delete does on a block of cells), keeping their formats.
+
+### DeleteCells
+
+```autohotkey
+Rte.DeleteCells(how = "left")
+```
+
+*how*: text
+
+(iteration 92) Deletes the selected cells (the caret's), as Word's Delete Cells does: how = "left" (the cells after them in their rows move left), "up" (the cells below them move up: their text; empty cells at the bottom), "row" (their rows) or "column" (their columns).
+
 ### DeleteColumn
 
 ```autohotkey
@@ -848,6 +866,24 @@ returns: 1/0
 
 Whether the caret is in a table.
 
+### MergeCells
+
+```autohotkey
+Rte.MergeCells()
+```
+
+(iteration 92) Merges the selected cells into one, as Word does: their text goes into it, each cell's as paragraphs of its own. The selected cells are those from the cell where the selection starts to the one where it ends (the rows between, and the columns between the two cells), widened to whole merged cells. Cells merged across columns make one wider cell; cells merged down rows show as one cell (RichEdit and Word draw them so; the text is the top cell's).
+
+### SelectCells
+
+```autohotkey
+Rte.SelectCells(row1, cell1, row2, cell2)
+```
+
+*row1*: number · *cell1*: number · *row2*: number · *cell2*: number
+
+(iteration 92) Selects the cells from row1, cell1 to row2, cell2 (counted from 1) of the table at the caret (the document's first table if the caret isn't in one) as a block, as dragging over them with the mouse does: the rows between, and the columns between the two cells. MergeCells, SplitCells, DeleteCells and ClearCells then act on them (RichEdit itself can only select whole rows across rows).
+
 ### SelectedRows
 
 ```autohotkey
@@ -857,6 +893,16 @@ Rte.SelectedRows()
 returns: number
 
 The number of table rows the selection covers completely (0 if it is not whole rows of one table).
+
+### SplitCells
+
+```autohotkey
+Rte.SplitCells(columns = 2, rows = 1)
+```
+
+*columns*: number · *rows*: number
+
+(iteration 92) Splits the caret's cell (or the selected cells, merged first) into columns and rows, as Word does: columns of equal width; a cell merged down into a number of rows that divides the rows it spans (all of them undoes the merge); a cell of one row into rows adds rows, the row's other cells merged down over them. Its text stays in the first cell.
 
 ## Tables from data, and data from tables
 

@@ -35,7 +35,7 @@
   },
   "cmdTabTableLayout": {
     "Id": 107,
-    "LabelTitle": "Layout",
+    "LabelTitle": "Table Layout",
     "Keytip": "JL"
   },
   "cmdGroupClipboard": {
@@ -1203,6 +1203,31 @@
     "LabelTitle": "Delete Table",
     "TooltipTitle": "Delete table",
     "Keytip": "T"
+  },
+  "cmdDeleteCells": {
+    "Id": 329,
+    "LabelTitle": "Delete Cells",
+    "TooltipTitle": "Delete cells",
+    "TooltipDescription": "Delete the selected cells: the cells after them move left, or the cells below them up; or their rows or columns go.",
+    "Keytip": "E"
+  },
+  "cmdMergeCells": {
+    "Id": 327,
+    "LabelTitle": "Merge Cells",
+    "TooltipTitle": "Merge cells",
+    "TooltipDescription": "Make the selected cells one cell. Their text is kept, each cell's as paragraphs of its own.",
+    "Keytip": "M"
+  },
+  "cmdSplitCells": {
+    "Id": 328,
+    "LabelTitle": "Split Cells",
+    "TooltipTitle": "Split cells",
+    "TooltipDescription": "Split the cell into columns and rows. A cell merged down splits back into its rows.",
+    "Keytip": "S"
+  },
+  "cmdGroupMerge": {
+    "Id": 137,
+    "LabelTitle": "Merge"
   },
   "cmdTableProperties": {
     "Id": 340,

@@ -1,7 +1,8 @@
 # Known limitations
 
 - **Table borders are single lines.** Double, dotted and other border styles from Word documents show and are saved as single lines of the same width and colour: RichEdit draws only single lines.
-- **Cells can't be merged.** Tables from Word with merged cells open, but AhkWord can't merge or split cells.
+- **A cell merged down shows its text at the top.** A cell that spans rows and is centred (or at the bottom) vertically in Word shows its text at the top of the merged cell in AhkWord: RichEdit doesn't align merged cells vertically. The setting is kept, so the file shows it centred in Word and LibreOffice again. Cells that aren't merged are aligned as set.
+- **A table inside a cell takes fewer commands.** In a table nested in another table's cell (one pasted into a cell, or from a Word document), Delete Row, deleting selected rows and Delete Table work on the nested table; Insert Row, Insert Column, Delete Column and the cell commands (Merge, Split and Delete Cells) don't yet, and say so in the status bar. The table around it takes them all as usual.
 - **Markdown has no table formatting or paragraph spacing.** Column widths, borders, shading, line spacing and space before and after paragraphs are kept in RTF, Word, OpenDocument and HTML files, not in Markdown.
 - **Markdown table rows are single lines,** so tables whose cells hold paragraphs are best edited in the formatted view.
 - **On-screen line numbers match the printed ones in Print Layout only.** With Print Layout off, lines wrap at the window's edge, so a line's number on screen can differ from its printed number; printing, Print Preview, PDF and `Rte.PrintedLineAt` always number the printed lines.

@@ -10,7 +10,7 @@
     <Command Name="cmdTabView" Id="104" LabelTitle="View" Keytip="W" />
     <Command Name="cmdTabTools" Id="105" LabelTitle="Tools" Keytip="L" />
     <Command Name="cmdTableTools" Id="106" LabelTitle="Table Tools" />
-    <Command Name="cmdTabTableLayout" Id="107" LabelTitle="Layout" Keytip="JL" />
+    <Command Name="cmdTabTableLayout" Id="107" LabelTitle="Table Layout" Keytip="JL" />
     <Command Name="cmdGroupClipboard" Id="110" LabelTitle="Clipboard" Keytip="ZC">
       <Command.LargeImages>
         <Image Source="icons/paste_32.bmp" MinDPI="96" />
@@ -2036,6 +2036,62 @@
         <Image Source="icons/deletetable_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdDeleteCells" Id="329" LabelTitle="Delete Cells" Keytip="E" TooltipTitle="Delete cells" TooltipDescription="Delete the selected cells: the cells after them move left, or the cells below them up; or their rows or columns go.">
+      <Command.LargeImages>
+        <Image Source="icons/deletecells_32.bmp" MinDPI="96" />
+        <Image Source="icons/deletecells_40.bmp" MinDPI="120" />
+        <Image Source="icons/deletecells_48.bmp" MinDPI="144" />
+        <Image Source="icons/deletecells_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/deletecells_16.bmp" MinDPI="96" />
+        <Image Source="icons/deletecells_20.bmp" MinDPI="120" />
+        <Image Source="icons/deletecells_24.bmp" MinDPI="144" />
+        <Image Source="icons/deletecells_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdMergeCells" Id="327" LabelTitle="Merge Cells" Keytip="M" TooltipTitle="Merge cells" TooltipDescription="Make the selected cells one cell. Their text is kept, each cell's as paragraphs of its own.">
+      <Command.LargeImages>
+        <Image Source="icons/mergecells_32.bmp" MinDPI="96" />
+        <Image Source="icons/mergecells_40.bmp" MinDPI="120" />
+        <Image Source="icons/mergecells_48.bmp" MinDPI="144" />
+        <Image Source="icons/mergecells_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/mergecells_16.bmp" MinDPI="96" />
+        <Image Source="icons/mergecells_20.bmp" MinDPI="120" />
+        <Image Source="icons/mergecells_24.bmp" MinDPI="144" />
+        <Image Source="icons/mergecells_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSplitCells" Id="328" LabelTitle="Split Cells" Keytip="S" TooltipTitle="Split cells" TooltipDescription="Split the cell into columns and rows. A cell merged down splits back into its rows.">
+      <Command.LargeImages>
+        <Image Source="icons/splitcells_32.bmp" MinDPI="96" />
+        <Image Source="icons/splitcells_40.bmp" MinDPI="120" />
+        <Image Source="icons/splitcells_48.bmp" MinDPI="144" />
+        <Image Source="icons/splitcells_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/splitcells_16.bmp" MinDPI="96" />
+        <Image Source="icons/splitcells_20.bmp" MinDPI="120" />
+        <Image Source="icons/splitcells_24.bmp" MinDPI="144" />
+        <Image Source="icons/splitcells_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupMerge" Id="137" LabelTitle="Merge">
+      <Command.LargeImages>
+        <Image Source="icons/mergecells_32.bmp" MinDPI="96" />
+        <Image Source="icons/mergecells_40.bmp" MinDPI="120" />
+        <Image Source="icons/mergecells_48.bmp" MinDPI="144" />
+        <Image Source="icons/mergecells_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/mergecells_16.bmp" MinDPI="96" />
+        <Image Source="icons/mergecells_20.bmp" MinDPI="120" />
+        <Image Source="icons/mergecells_24.bmp" MinDPI="144" />
+        <Image Source="icons/mergecells_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdTableProperties" Id="340" LabelTitle="Properties" Keytip="PR" TooltipTitle="Table properties" TooltipDescription="Column widths, borders, shading, row height, alignment and cell padding.">
       <Command.LargeImages>
         <Image Source="icons/tablesettings_32.bmp" MinDPI="96" />
@@ -2236,9 +2292,14 @@
               </DropDownButton>
               <DropDownColorPicker CommandName="cmdTableShading" ColorTemplate="StandardColors" IsNoColorButtonVisible="true" IsAutomaticColorButtonVisible="false" />
             </Group>
-            <Group CommandName="cmdGroupDelete" SizeDefinition="ThreeButtons">
+            <Group CommandName="cmdGroupMerge" SizeDefinition="TwoButtons">
+              <Button CommandName="cmdMergeCells" />
+              <Button CommandName="cmdSplitCells" />
+            </Group>
+            <Group CommandName="cmdGroupDelete" SizeDefinition="FourButtons">
               <Button CommandName="cmdDeleteRow" />
               <Button CommandName="cmdDeleteColumn" />
+              <Button CommandName="cmdDeleteCells" />
               <Button CommandName="cmdDeleteTable" />
             </Group>
           </Tab>
