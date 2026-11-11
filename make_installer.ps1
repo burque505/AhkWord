@@ -1,5 +1,7 @@
 # Iteration 88: makes AhkWord's installer, ..\AhkWord-releases\AhkWord-NN-setup.exe (Inno Setup 6, installer\AhkWord.iss),
 # and with -Publish puts it on GitHub as the pre-release "AhkWord NN (installer preview)" (tag installer-NN).
+# After iteration 90: the same files also as a portable zip, ..\AhkWord-releases\AhkWord-NN-portable.zip (a "portable" file
+# beside AhkWord.exe: settings and the rest in its data folder, nothing in the registry), published beside the installer.
 # What it installs: AhkWord.exe built by vs\AhkWord.csproj from the same sources AhkWord.ahk runs, published
 # self-contained (.NET 10 inside: nothing to download); AhkWord's own files beside it (as in AhkWord-NN.zip, without the
 # developer's); AutoHotkey64.exe beside it (AhkWordCompanion.ahk: hotkeys, snippets' hotstrings, macros).
@@ -25,6 +27,7 @@ if ($Publish) {
 	if ((git -C $root rev-parse HEAD) -ne (git -C $root rev-parse origin/main)) { throw "-Publish: push main first (HEAD isn't origin/main)." }
 } elseif ($changes -and -not $Working) { "Note: there are uncommitted changes; the installer is made from the last commit without them." }
 $name = if ($Working) { "AhkWord-$iteration-working-setup" } else { "AhkWord-$iteration-setup" }
+$portableName = if ($Working) { "AhkWord-$iteration-working-portable" } else { "AhkWord-$iteration-portable" }
 
 # the tools: Inno Setup's compiler, AutoHotkey and its license
 $iscc = @("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
@@ -150,6 +153,35 @@ try {
 	$iss = Join-Path $src "installer\AhkWord.iss"
 	& $iscc /Q "/DIteration=$iteration" "/DSourceDir=$folder" "/DOutputDir=$releases" "/DRepo=$src" "/F$name" $iss | Out-Host
 	if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed." }
+
+	# the portable zip: the same files in a folder AhkWord-NN, with the "portable" file (AppFolders.Portable)
+	"Making the portable zip ..."
+	New-Item -ItemType File -Force (Join-Path $folder "portable") | Out-Null
+	Set-Content (Join-Path $folder "README-portable.txt") -Encoding UTF8 @(
+		"AhkWord $iteration, portable",
+		"",
+		"1. Unzip this folder anywhere you can write to (your Documents, a USB stick; not Program Files).",
+		"   Tip: before unzipping, right-click the zip > Properties > Unblock, so Windows asks only once.",
+		"2. Double-click AhkWord.exe. Nothing needs installing: .NET 10 and AutoHotkey are inside.",
+		"   - Windows may say ""Windows protected your PC"": AhkWord isn't signed yet. Click ""More info"", then ""Run anyway"".",
+		"   - Smart App Control, if it is on, blocks unsigned programs and offers no way past it.",
+		"",
+		"The empty file named portable beside AhkWord.exe keeps everything AhkWord remembers (settings, recent files,",
+		"templates, snippets, recovery copies) in the data folder here. Nothing goes into the registry or %APPDATA%, and",
+		"deleting this folder removes AhkWord completely. The data folder appears the first time AhkWord saves something",
+		"(when you close it, or change a setting), not at its first start. Delete the portable file to share the settings in",
+		"%APPDATA%\AhkWord with the installed AhkWord instead.",
+		"",
+		"A newer release: unzip it beside this one and move this folder's data folder into it.",
+		"",
+		"AutoHotkey64.exe here is AhkWord's own private copy (see AutoHotkey64.exe.txt); an AutoHotkey you have installed",
+		"is not touched. README.md tells all about AhkWord; https://github.com/burque505/AhkWord is its home.")
+	$portableFolder = Join-Path $work "AhkWord-$iteration"
+	Rename-Item $folder $portableFolder
+	$portableZip = Join-Path $releases "$portableName.zip"
+	if (Test-Path $portableZip) { Remove-Item $portableZip }
+	Add-Type -AssemblyName System.IO.Compression.FileSystem
+	[IO.Compression.ZipFile]::CreateFromDirectory($portableFolder, $portableZip, [IO.Compression.CompressionLevel]::Optimal, $true)
 } finally {
 	if (Test-Path $work) { [IO.Directory]::Delete($work, $true) }
 }
@@ -157,6 +189,10 @@ $setup = Get-Item (Join-Path $releases "$name.exe")
 $hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash
 "{0} ({1:N1} MB)" -f $setup.FullName, ($setup.Length / 1MB)
 "SHA-256 $hash"
+$portable = Get-Item (Join-Path $releases "$portableName.zip")
+$portableHash = (Get-FileHash $portable.FullName -Algorithm SHA256).Hash
+"{0} ({1:N1} MB)" -f $portable.FullName, ($portable.Length / 1MB)
+"SHA-256 $portableHash"
 
 if (-not $Publish) { return }
 
@@ -174,6 +210,13 @@ Set-Content $notes -Encoding UTF8 @(
 	"in ``%LOCALAPPDATA%\Programs\AhkWord``, with a Start menu entry; Settings > Apps uninstalls it. Your settings, templates",
 	"and recovery copies stay in ``%APPDATA%\AhkWord``, shared with the zips' AhkWord, and are kept when it is uninstalled.",
 	"",
+	"**Portable instead?** Download ``$($portable.Name)``, unzip it anywhere you can write to (a USB stick, your",
+	"Documents) and run ``AhkWord.exe`` in it: nothing is installed. Its settings, recent files, templates and recovery",
+	"copies stay in a ``data`` folder beside it (the empty ``portable`` file there says so), nothing goes into the registry",
+	"or ``%APPDATA%``, and deleting the folder removes it completely. (The ``data`` folder appears the first time AhkWord",
+	"saves something, e.g. when you close it, not at its first start.) Tip: right-click the zip > Properties > **Unblock**",
+	"before unzipping. README-portable.txt inside tells more.",
+	"",
 	"**Already have AutoHotkey?** It is left alone. AhkWord brings its own private copy of AutoHotkey64.exe, kept in",
 	"AhkWord's folder and used only by AhkWord: your installed AutoHotkey, its version, its ``.ahk`` file association and",
 	"your scripts are not touched, and uninstalling AhkWord doesn't remove them. (While AhkWord runs, its own hotkeys",
@@ -185,8 +228,9 @@ Set-Content $notes -Encoding UTF8 @(
 	"  ""AhkWord NN"" pre-release instead, or wait for a signed installer.",
 	"- Some antivirus programs distrust new unsigned installers.",
 	"",
-	"To check the download: SHA-256 ``$hash``",
-	"(PowerShell: ``Get-FileHash $($setup.Name)``).",
+	"To check the downloads (PowerShell: ``Get-FileHash <file>``), SHA-256:",
+	"- ``$($setup.Name)``: ``$hash``",
+	"- ``$($portable.Name)``: ``$portableHash``",
 	"",
 	"Inside: AhkWord $iteration, .NET 10 (self-contained), AutoHotkey $ahkVersion (GPL v2, for the hotkeys, snippets and macros).")
 try {
@@ -196,10 +240,10 @@ try {
 	gh release view $tag --repo burque505/AhkWord *> $null
 	if ($LASTEXITCODE -ne 0) { $exists = $false }
 	if ($exists) {
-		gh release upload $tag $setup.FullName --clobber --repo burque505/AhkWord | Out-Host
+		gh release upload $tag $setup.FullName $portable.FullName --clobber --repo burque505/AhkWord | Out-Host
 		gh release edit $tag --title $title --notes-file $notes --prerelease --repo burque505/AhkWord | Out-Host
 	} else {
-		gh release create $tag $setup.FullName --title $title --notes-file $notes --prerelease --latest=false --repo burque505/AhkWord | Out-Host
+		gh release create $tag $setup.FullName $portable.FullName --title $title --notes-file $notes --prerelease --latest=false --repo burque505/AhkWord | Out-Host
 		# (the earlier installer previews: superseded)
 		foreach ($old in gh release list --repo burque505/AhkWord --limit 100 --json tagName --jq '.[].tagName' | Where-Object { $_ -like "installer-*" -and $_ -ne $tag }) {
 			$body = gh release view $old --repo burque505/AhkWord --json body --jq .body
