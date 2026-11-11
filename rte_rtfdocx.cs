@@ -845,6 +845,13 @@ public static class RtfDocx {
 				}
 				FlushBytes();
 			}
+			// (iteration 89) RichEdit keeps one bullet, Symbol's, at every level: below the first, Word's own for a new list's
+			// levels (o in Courier New, then Wingdings' square, then Symbol's again), so the levels look apart in Word
+			string? fontOverride = null;
+			if (nfc == 23 && index % 3 != 0 && text.ToString() == "·" && font >= 0 && FontName(font).Equals("Symbol", StringComparison.OrdinalIgnoreCase)) {
+				text.Clear();
+				if (index % 3 == 1) { text.Append('o'); fontOverride = "Courier New"; } else { text.Append(''); fontOverride = "Wingdings"; }
+			}
 			var level = new W.Level { LevelIndex = index, TemplateCode = "FFFFFFFF" };    // (as Word writes a list it read from RTF)
 			level.Append(new W.StartNumberingValue { Val = start });
 			level.Append(new W.NumberingFormat { Val = NumberFormat(nfc) });
@@ -860,7 +867,7 @@ public static class RtfDocx {
 			if (pf.Left != 0 || pf.First != 0) ppr.Append(Indent(pf.Left, pf.Right, pf.First));
 			if (ppr.HasChildren) level.Append(ppr);
 			if (font >= 0) {
-				string name = FontName(font);
+				string name = fontOverride ?? FontName(font);
 				level.Append(new W.NumberingSymbolRunProperties(new W.RunFonts { Ascii = name, HighAnsi = name, ComplexScript = name, Hint = W.FontTypeHintValues.Default }));
 			}
 			return level;
