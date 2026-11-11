@@ -37,6 +37,7 @@
 #load "rte_ruler.cs"
 #load "rte_pagesetup.cs"
 #load "rte_paraframes.cs"    // (iteration 87: paragraph borders and shading)
+#load "rte_tabledata.cs"    // (iteration 91: tables from data: CSV, Excel, JSON)
 // AhkWord: a word processor built on EllipticBit.RichEditorNET, hosted in AutoHotkey by Csharp-in-AHK.
 // Run it with AhkWord.ahk. Iteration 66 adds to iteration 65:
 //   - Print Layout: a document whose first paragraphs are hidden (Word puts floating shapes' anchors there) no longer has
@@ -715,7 +716,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 90;    // (the About box; make_version.ps1)
+	public const int Iteration = 91;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -4320,11 +4321,38 @@ class WriterForm : Form
 	}
 
 	void InsertTableDialog() {
-		using var dlg = new InsertTableDialog(Settings.TableRows, Settings.TableColumns, Settings.TableHeader);
-		if (dlg.ShowDialog(this) != DialogResult.OK) return;
+		using var dlg = new InsertTableDialog(Settings.TableRows, Settings.TableColumns, Settings.TableHeader, fromFile: true);
+		var result = dlg.ShowDialog(this);
+		if (result is not (DialogResult.OK or DialogResult.Yes)) return;
 		(Settings.TableRows, Settings.TableColumns, Settings.TableHeader) = (dlg.Rows, dlg.Columns, dlg.Header);
 		Settings.Save();
+		if (result == DialogResult.Yes) { InsertTableFromFileCommand(dlg.Header); return; }
 		Run(() => api.InsertTable(dlg.Rows, dlg.Columns, dlg.Header, true), M("InsertTable", dlg.Rows, dlg.Columns, dlg.Header, true));
+	}
+
+	// (iteration 91) Insert > Table > From File: a workbook, CSV, TSV or JSON file as a table; a workbook's sheet and
+	// range asked for.
+	void InsertTableFromFileCommand(bool header) {
+		using var open = new OpenFileDialog { Title = T("dlg.tableFromFile.title", "Insert table from file"), InitialDirectory = StartFolder,
+			Filter = T("dlg.tableFromFile.types", "Excel workbooks, CSV and JSON") + " (*.xlsx;*.xlsm;*.csv;*.tsv;*.txt;*.json)|*.xlsx;*.xlsm;*.csv;*.tsv;*.txt;*.json|"
+				+ T("file.all", "All files") + " (*.*)|*.*" };
+		if (open.ShowDialog(this) != DialogResult.OK) return;
+		string path = open.FileName, sheet = "", range = "";
+		if (Path.GetExtension(path).ToLowerInvariant() is ".xlsx" or ".xlsm" or ".xltx" or ".xltm") {
+			List<string> sheets;
+			try { sheets = TabularData.SheetNames(path); }
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException or InvalidDataException) {
+				SetStatus("⚠ " + T("status.tableFromFile.unreadable", "{0} could not be read: {1}", Path.GetFileName(path), ex.Message));
+				System.Media.SystemSounds.Beep.Play();
+				return;
+			}
+			using var choose = new TableFromFileDialog(Path.GetFileName(path), sheets, header);
+			if (choose.ShowDialog(this) != DialogResult.OK) return;
+			(sheet, range, header) = (sheets.Count > 1 ? choose.Sheet : "", choose.Range, choose.Header);
+		}
+		int rows = 0;
+		Run(() => rows = api.InsertTableFromFile(path, header, sheet, range), M("InsertTableFromFile", path, header, sheet, range));
+		if (rows > 0) SetStatus(T("status.tableFromFile.done", "A table of {0} rows from {1}", rows, Path.GetFileName(path)));
 	}
 
 	// Table Tools > Properties: the dialog, its changes made in one step (one undo step), and recorded as the calls they are.
@@ -7536,6 +7564,11 @@ public class EditorApi
 	/// above it for Page Up to go to.
 	public void InsertTable(int rows = 3, int columns = 3, bool headerRow = true, bool roomAbove = false) {
 		if (rows < 1 || columns < 1 || rows > 500 || columns > 63) throw new ArgumentException("A table has 1 to 500 rows and 1 to 63 columns.");
+		InsertTableWith(rows, columns, headerRow, roomAbove, null);
+	}
+
+	// (iteration 91) InsertTable's work, with the cells' text (data: rows of cells, the columns fitted to it) or empty.
+	void InsertTableWith(int rows, int columns, bool headerRow, bool roomAbove, List<List<string>>? data) {
 		// (gaps out first: the paragraph a gap is on would end up after the table, its space with it)
 		var doc = ed.TextDocument;
 		bool room = roomAbove && doc.Range2(0, 0).StoryLength <= 1;
@@ -7546,7 +7579,9 @@ public class EditorApi
 					doc.Range2(0, 0).Text = "\r";
 					doc.Selection2.SetRange(1, 1);
 				}
-				RtfTables.Insert(ed, rows, columns, headerRow, WidthAt(doc.Selection2.Start));
+				int width = WidthAt(doc.Selection2.Start);
+				if (data == null) RtfTables.Insert(ed, rows, columns, headerRow, width);
+				else RtfTables.Insert(ed, rows, columns, headerRow, width, (r, c) => c < data[r].Count ? data[r][c] : null, RtfTables.FittedWidths(data, width));
 			}
 			finally { doc.EndEditCollection(); }
 		});
@@ -7581,6 +7616,150 @@ public class EditorApi
 
 	// RichEdit doesn't repaint where a removed table row was (its borders stayed on screen): the whole editor is redrawn.
 	void Redraw() => ed.Invalidate();
+
+	// ---- Iteration 91: tables from data, and data from tables (rte_tabledata.cs)
+
+	/// Inserts a table at the caret made from data: CSV or TSV text, or JSON (an array of rows, each an array of values,
+	/// or an array of objects, whose names make the first row); format "csv", "tsv", "json" or "" (told from the text:
+	/// JSON if it starts with [ or {; CSV's delimiter is a tab, ";" or ",", whichever its first line has most of).
+	/// headerRow = 1 makes the first row bold. The columns are as wide as their text needs, filling the line. Returns
+	/// the number of rows (at most 10000; at most 63 columns).
+	public int InsertTableFromData(string data, string format = "", bool headerRow = true) =>
+		InsertDataTable(TabularData.Parse(data, format), headerRow);
+
+	/// Inserts a table at the caret made from a file: an Excel workbook (.xlsx, .xlsm; no Excel needed, and it may be
+	/// open in Excel), CSV or TSV (.csv, .tsv, .txt), or JSON (.json), as InsertTableFromData. In a workbook: sheet is a
+	/// sheet's name or number ("" for the first), range one such as "A1:D20" ("" for the cells in use); values come as
+	/// Excel shows them (number formats, dates, percentages; formulas' last results). Returns the number of rows.
+	public int InsertTableFromFile(string path, bool headerRow = true, string sheet = "", string range = "") =>
+		InsertDataTable(TabularData.ReadFile(FullPath(path), sheet, range), headerRow);
+
+	int InsertDataTable(List<List<string>> rows, bool headerRow) {
+		if (rows.Count == 0 || rows[0].Count == 0) throw new ArgumentException("The data has no rows.");
+		InsertTableWith(rows.Count, rows[0].Count, headerRow, true, rows);
+		return rows.Count;
+	}
+
+	/// The names of an Excel workbook's sheets, one per line.
+	public string WorkbookSheets(string path) => string.Join("\n", TabularData.SheetNames(FullPath(path)));
+
+	static string FullPath(string path) {
+		if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Give a file's path.");
+		return Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim().Trim('"')));
+	}
+
+	// A table: 0 the caret's, n the document's nth (from 1).
+	RtfTables.Table TableNumber(int table) {
+		if (table == 0) return CurrentTable();
+		var all = RtfTables.Find(ed.TextDocument);
+		if (table < 1 || table > all.Count) throw new ArgumentException($"There is no table {table}: the document has {all.Count} table{(all.Count == 1 ? "" : "s")}.");
+		return all[table - 1];
+	}
+
+	// A cell's text: its paragraphs and line breaks as \n.
+	string CellOf(RtfTables.Cell cell) {
+		string text = ed.TextDocument.Range2(cell.Start, cell.End).Text ?? "";
+		return text.Replace("\r\n", "\n").Replace('\r', '\n').Replace('\v', '\n');
+	}
+
+	// The table's cells' text, row by row.
+	List<List<string>> CellsOf(RtfTables.Table table) => table.Rows.Select(r => r.Cells.Select(CellOf).ToList()).ToList();
+
+	/// A table's cells as text: format "csv", "csv;" (semicolons, as Excel saves CSV where the decimal mark is a
+	/// comma), "tsv", "json" (an array of rows) or "objects" (an array of objects named by the first row's cells).
+	/// table: 0 for the caret's, or a number from 1 (the document's first, second ... table).
+	public string TableData(int table = 0, string format = "csv") => TabularData.Write(CellsOf(TableNumber(table)), format);
+
+	/// The text of a cell (row and column from 1) of the caret's table (table = 0) or of the document's nth table.
+	public string CellText(int row, int column, int table = 0) => CellOf(CellAt(TableNumber(table), row, column));
+
+	RtfTables.Cell CellAt(RtfTables.Table table, int row, int column) {
+		if (row < 1 || row > table.Rows.Count) throw new ArgumentException($"There is no row {row}: the table has {table.Rows.Count}.");
+		var cells = table.Rows[row - 1].Cells;
+		if (column < 1 || column > cells.Count) throw new ArgumentException($"There is no column {column} in row {row}: it has {cells.Count} cell{(cells.Count == 1 ? "" : "s")}.");
+		return cells[column - 1];
+	}
+
+	/// Replaces a cell's text (row and column from 1; `n for a line break), keeping its format.
+	public void SetCellText(int row, int column, string text, int table = 0) {
+		var cell = CellAt(TableNumber(table), row, column);
+		var doc = ed.TextDocument;
+		form.WithoutGapsChanging(() => doc.Range2(cell.Start, cell.End).Text = CellValue(text));
+		Redraw();
+	}
+
+	static string CellValue(string? text) => (text ?? "").Replace("\r\n", "\v").Replace('\n', '\v').Replace('\r', '\v');
+
+	/// Fills a table with data (as InsertTableFromData's), keeping its formats: from row fromRow on (1: all of it; 2: the
+	/// first row, a header, stays), the table gets the data's rows, its last row's format copied for rows added and the
+	/// rows left over deleted. With fromRow 2 or more: a first data row the same as the table's header row is left out,
+	/// and JSON objects go in the columns their names head (in their own order if a name heads none). A row with more
+	/// values than cells is an error. table: 0 for the caret's, or a number from 1. Returns the number of rows filled.
+	public int SetTableData(string data, string format = "", int table = 0, int fromRow = 1) {
+		var target = TableNumber(table);
+		var names = fromRow > 1 ? TabularData.JsonNames(data, format) : null;
+		var rows = TabularData.Parse(data, format, keysRow: names == null);
+		return FillTable(target, rows, fromRow, names);
+	}
+
+	/// SetTableData from a file, read as InsertTableFromFile reads it (an Excel workbook's sheet and range, CSV, TSV or
+	/// JSON).
+	public int SetTableDataFromFile(string path, int table = 0, int fromRow = 1, string sheet = "", string range = "") {
+		var target = TableNumber(table);
+		string full = FullPath(path);
+		var names = fromRow > 1 && Path.GetExtension(full).Equals(".json", StringComparison.OrdinalIgnoreCase) ? TabularData.JsonNames(TabularData.ReadText(full), "json") : null;
+		var rows = names != null ? TabularData.Parse(TabularData.ReadText(full), "json", keysRow: false) : TabularData.ReadFile(full, sheet, range);
+		return FillTable(target, rows, fromRow, names);
+	}
+
+	int FillTable(RtfTables.Table table, List<List<string>> rows, int fromRow, List<string>? names) {
+		if (fromRow < 1 || fromRow > table.Rows.Count) throw new ArgumentException($"fromRow is 1 to {table.Rows.Count} (the table's rows).");
+		int keep = fromRow - 1;
+		if (keep > 0) {
+			var header = table.Rows[0].Cells.Select(c => CellOf(c).Trim()).ToList();
+			// (JSON objects: their values in the columns their names head)
+			if (names != null && names.All(n => header.Contains(n.Trim(), StringComparer.OrdinalIgnoreCase)))
+				rows = rows.Select(r => header.Select(h => names.FindIndex(n => n.Trim().Equals(h, StringComparison.OrdinalIgnoreCase)) is int i && i >= 0 && i < r.Count ? r[i] : "").ToList()).ToList();
+			// (a first row that repeats the header: the data's own header)
+			else if (rows.Count > 0 && rows[0].Count >= header.Count && rows[0].Take(header.Count).Select(t => t.Trim()).SequenceEqual(header, StringComparer.OrdinalIgnoreCase)
+				&& rows[0].Skip(header.Count).All(t => t.Trim() == ""))
+				rows = rows.Skip(1).ToList();
+		}
+		if (keep == 0 && rows.Count == 0) throw new ArgumentException("The data has no rows (a table keeps at least one).");
+		if (keep + rows.Count > TabularData.MaxRows) throw new ArgumentException($"A table can have at most {TabularData.MaxRows} rows.");
+		for (int r = 0; r < rows.Count; r++) {    // (checked before anything changes)
+			int last = rows[r].FindLastIndex(v => v != "");
+			int cells = table.Rows[Math.Min(keep + r, table.Rows.Count - 1)].Cells.Count;
+			if (last >= cells) throw new ArgumentException($"Data row {r + 1} has {last + 1} values; table row {keep + r + 1} has {cells} cells.");
+		}
+		var doc = ed.TextDocument;
+		int start = table.Start, caret = doc.Selection2.Start;
+		form.WithoutGapsChanging(() => {
+			doc.BeginEditCollection();    // (one step to undo)
+			doc.Freeze();
+			try {
+				RtfTables.ResizeRows(ed, start, keep + rows.Count);
+				var now = RtfTables.Find(doc).First(t => t.Start == start);
+				for (int r = now.Rows.Count - 1; r >= keep; r--) {
+					var values = rows[r - keep];
+					var cells = now.Rows[r].Cells;
+					for (int c = cells.Count - 1; c >= 0; c--) {    // (from the end: the earlier cells stay where they are)
+						string value = CellValue(c < values.Count ? values[c] : "");
+						var range = doc.Range2(cells[c].Start, cells[c].End);
+						if ((range.Text ?? "") != value) range.Text = value;
+					}
+				}
+			}
+			finally {
+				doc.Unfreeze();
+				doc.EndEditCollection();
+			}
+		});
+		var filled = RtfTables.Find(doc).FirstOrDefault(t => t.Start == start);
+		if (filled != null) ed.Select(caret < filled.Start ? caret : filled.Rows[Math.Min(keep, filled.Rows.Count - 1)].Cells[0].Start, 0);
+		Redraw();
+		return rows.Count;
+	}
 
 	// ---- Page breaks
 
@@ -12882,7 +13061,7 @@ sealed class InsertTableDialog : Form
 	public int Columns => (int)columns.Value;
 	public bool Header => header.Checked;
 
-	public InsertTableDialog(int rowCount, int columnCount, bool headerRow) {
+	public InsertTableDialog(int rowCount, int columnCount, bool headerRow, bool fromFile = false) {
 		Dialogs.Setup(this, T("dlg.insertTable.title", "Insert table"));
 		rows = new NumericUpDown { Minimum = 1, Maximum = 500, Value = Math.Clamp(rowCount, 1, 500), Width = LogicalToDeviceUnits(70) };
 		columns = new NumericUpDown { Minimum = 1, Maximum = 63, Value = Math.Clamp(columnCount, 1, 63), Width = LogicalToDeviceUnits(70) };
@@ -12892,6 +13071,50 @@ sealed class InsertTableDialog : Form
 		table.Controls.Add(rows);
 		table.Controls.Add(new Label { Text = T("dlg.insertTable.columns", "&Columns:"), AutoSize = true, Anchor = AnchorStyles.Left });
 		table.Controls.Add(columns);
+		table.Controls.Add(header);
+		table.SetColumnSpan(header, 2);
+		var ok = Dialogs.Ok(this);
+		var cancel = Dialogs.Cancel(this);
+		// (iteration 91) From File: the table made from a workbook, CSV or JSON file instead (DialogResult.Yes)
+		var buttons = fromFile ? Dialogs.Row(this, 0, Dialogs.Button(this, T("dlg.insertTable.fromFile", "From &File..."), DialogResult.Yes), ok, cancel) : Dialogs.Row(this, 0, ok, cancel);
+		table.Controls.Add(buttons);
+		table.SetColumnSpan(buttons, 2);
+		Controls.Add(table);
+		AcceptButton = ok;
+		CancelButton = cancel;
+	}
+}
+
+// (iteration 91) Insert table from file, for a workbook: which sheet, a range (or the cells in use), and the header row.
+sealed class TableFromFileDialog : Form
+{
+	readonly ComboBox sheet = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+	readonly TextBox range = new();
+	readonly CheckBox header = new() { Text = T("dlg.insertTable.header", "Header row (bold)"), AutoSize = true, Margin = new Padding(3, 8, 3, 3) };
+
+	public string Sheet => sheet.SelectedItem as string ?? "";
+	public string Range => range.Text.Trim();
+	public bool Header => header.Checked;
+
+	public TableFromFileDialog(string file, List<string> sheets, bool headerRow) {
+		Dialogs.Setup(this, T("dlg.tableFromFile.title", "Insert table from file"));
+		foreach (string name in sheets) sheet.Items.Add(name);
+		if (sheet.Items.Count > 0) sheet.SelectedIndex = 0;
+		sheet.Enabled = sheets.Count > 1;
+		header.Checked = headerRow;
+		sheet.Width = range.Width = LogicalToDeviceUnits(220);
+		Dialogs.FitWidth(sheet, Font);
+		var table = new TableLayoutPanel { ColumnCount = 2, AutoSize = true };
+		var title = new Label { Text = file, AutoSize = true, Margin = new Padding(3, 3, 3, 8) };
+		table.Controls.Add(title);
+		table.SetColumnSpan(title, 2);
+		table.Controls.Add(new Label { Text = T("dlg.tableFromFile.sheet", "&Sheet:"), AutoSize = true, Anchor = AnchorStyles.Left });
+		table.Controls.Add(sheet);
+		table.Controls.Add(new Label { Text = T("dlg.tableFromFile.range", "&Range:"), AutoSize = true, Anchor = AnchorStyles.Left });
+		table.Controls.Add(range);
+		var hint = new Label { Text = T("dlg.tableFromFile.rangeHint", "Such as A1:D20; empty for all the cells in use."), AutoSize = true, ForeColor = SystemColors.GrayText };
+		table.Controls.Add(new Label { AutoSize = true });
+		table.Controls.Add(hint);
 		table.Controls.Add(header);
 		table.SetColumnSpan(header, 2);
 		var ok = Dialogs.Ok(this);

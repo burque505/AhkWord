@@ -225,6 +225,7 @@ Settings are kept in `%APPDATA%\AhkWord\settings.json`, with the recovery copies
 | `rte_linebreaks.cs` | Line breaks (Shift+Enter) in HTML |
 | `rte_htmllists2.cs` | HTML list numbering (start numbers, restarts, styles) |
 | `rte_tables2.cs` | Tables and their properties (widths, borders, shading ...) |
+| `rte_tabledata.cs` | Tables from data and back: CSV, TSV, JSON and Excel workbooks (.xlsx) read into rows, a table's cells written out |
 | `rte_legal.cs` | Legal numbering |
 | `rte_pagebreaks.cs` | Page breaks |
 | `rte_headerfooter.cs` | Headers and footers |

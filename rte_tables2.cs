@@ -167,9 +167,49 @@ public static class RtfTables
 		Enumerable.Range(0, columns).Select(c => widthTwips * (c + 1) / columns - widthTwips * c / columns).ToList();
 
 	/// Inserts a table at the caret, in a paragraph of its own (the paragraph is split at the caret if needed), and puts
-	/// the caret in its first cell. Returns the table's start.
-	public static int Insert(RichEditBox editor, int rows, int columns, bool header, int widthTwips, Func<int, int, string?>? cells = null) =>
-		InsertRtf(editor, BuildRtf(Math.Max(1, rows), EqualWidths(Math.Max(1, columns), widthTwips), header, cells));
+	/// the caret in its first cell. Returns the table's start. (iteration 91) widths: the columns' own (twips), else equal.
+	public static int Insert(RichEditBox editor, int rows, int columns, bool header, int widthTwips, Func<int, int, string?>? cells = null, IList<int>? widths = null) =>
+		InsertRtf(editor, BuildRtf(Math.Max(1, rows), widths ?? EqualWidths(Math.Max(1, columns), widthTwips), header, cells));
+
+	/// (iteration 91) Column widths that fill widthTwips in proportion to the columns' longest text (a line of each
+	/// cell), each at least a tenth of an inch and no column more than four times another's share.
+	public static List<int> FittedWidths(List<List<string>> rows, int widthTwips) {
+		int columns = rows.Count == 0 ? 1 : rows.Max(r => r.Count);
+		var weights = Enumerable.Range(0, columns).Select(c => (double)Math.Clamp(rows.Max(r => c < r.Count ? r[c].Split('\n').Max(l => l.Length) : 0), 5, 20)).ToList();
+		double sum = weights.Sum();
+		var widths = new List<int>();
+		int x = 0;
+		double at = 0;
+		foreach (double w in weights) {
+			at += w;
+			int next = (int)Math.Round(widthTwips * at / sum);
+			widths.Add(Math.Max(144, next - x));
+			x = next;
+		}
+		return widths;
+	}
+
+	/// (iteration 91) Makes the table count rows long: rows past it deleted, or empty rows like its last one added after
+	/// it (count at least 1).
+	public static void ResizeRows(RichEditBox editor, int tableStart, int count) {
+		var table = Find(editor.TextDocument).First(t => t.Start == tableStart);
+		count = Math.Max(1, count);
+		if (count == table.Rows.Count) return;
+		if (count < table.Rows.Count) {
+			editor.Select(table.Rows[count].Start, table.End - table.Rows[count].Start);
+			editor.SelectedText = "";
+			return;
+		}
+		var last = table.Rows[^1];
+		string rtf = GetRtf(editor, last.Start, last.End);
+		string empty = RowRtf.Parse(rtf).BuildEmpty();
+		int trowd = empty.IndexOf(@"\trowd", StringComparison.Ordinal);
+		string current = rtf[..(rtf.LastIndexOf(@"\row", StringComparison.Ordinal) + 4)];
+		string emptyRow = empty[trowd..(empty.LastIndexOf(@"\row", StringComparison.Ordinal) + 4)];
+		var all = new StringBuilder(current);
+		for (int i = table.Rows.Count; i < count; i++) all.Append(' ').Append(emptyRow);
+		SetRtf(editor, last.Start, last.End, all.Append(" }").ToString());
+	}
 
 	static int InsertRtf(RichEditBox editor, string rtf) {
 		var doc = editor.TextDocument;

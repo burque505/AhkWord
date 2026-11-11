@@ -680,6 +680,14 @@
   "dlg.insertTable.rows": "&Filas:",
   "dlg.insertTable.columns": "&Columnas:",
   "dlg.insertTable.header": "Fila de encabezado (negrita)",
+  "dlg.insertTable.fromFile": "Desde &archivo...",
+  "dlg.tableFromFile.title": "Insertar tabla desde archivo",
+  "dlg.tableFromFile.types": "Libros de Excel, CSV y JSON",
+  "dlg.tableFromFile.sheet": "&Hoja:",
+  "dlg.tableFromFile.range": "&Rango:",
+  "dlg.tableFromFile.rangeHint": "Por ejemplo, A1:D20; vacío para todas las celdas en uso.",
+  "status.tableFromFile.unreadable": "No se pudo leer {0}: {1}",
+  "status.tableFromFile.done": "Tabla de {0} filas desde {1}",
 
   // small dialogs: hyperlink, image, alt text, thumbnail, restart numbering
   "dlg.hyperlink.title": "Insertar hipervínculo",

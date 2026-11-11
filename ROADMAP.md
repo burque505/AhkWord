@@ -60,6 +60,7 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 - [x] **Choosing the language** in AhkWord itself: Review > Language (and the command palette, `Rte.Language`), from the next start
 - [x] **Clicking on the ruler:** a click adds a left tab stop there to the selected paragraphs; a double-click opens Tabs, Paragraph or Page Setup for what it's on (iteration 83)
 - [x] **Dragging on the ruler:** move the indent markers and tab stops; drag a tab stop off to remove it (iteration 84)
+- [x] **Tables from data:** Insert Table > From File (Excel .xlsx, CSV, TSV, JSON; no Excel needed), and for scripts `InsertTableFromData`, `SetTableData` (fill a table again, keeping its formats), `TableData`, `CellText` and `SetCellText` (iteration 91)
 - [x] **AhkWord's own Page Setup:** margins, orientation and paper, the header's and footer's distances and the different first page in one dialog of AhkWord's, with a picture of the page; the paper saved with the document (RTF, Word); "Make these the default" for new documents (iteration 82)
 
 ## Later, perhaps

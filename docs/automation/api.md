@@ -858,6 +858,88 @@ returns: number
 
 The number of table rows the selection covers completely (0 if it is not whole rows of one table).
 
+## Tables from data, and data from tables
+
+### CellText
+
+```autohotkey
+Rte.CellText(row, column, table = 0)
+```
+
+*row*: number · *column*: number · *table*: number · returns: text
+
+The text of a cell (row and column from 1) of the caret's table (table = 0) or of the document's nth table.
+
+### InsertTableFromData
+
+```autohotkey
+Rte.InsertTableFromData(data, format = "", headerRow = 1)
+```
+
+*data*: text · *format*: text · *headerRow*: 1/0 · returns: number
+
+Inserts a table at the caret made from data: CSV or TSV text, or JSON (an array of rows, each an array of values, or an array of objects, whose names make the first row); format "csv", "tsv", "json" or "" (told from the text: JSON if it starts with [ or {; CSV's delimiter is a tab, ";" or ",", whichever its first line has most of). headerRow = 1 makes the first row bold. The columns are as wide as their text needs, filling the line. Returns the number of rows (at most 10000; at most 63 columns).
+
+### InsertTableFromFile
+
+```autohotkey
+Rte.InsertTableFromFile(path, headerRow = 1, sheet = "", range = "")
+```
+
+*path*: text · *headerRow*: 1/0 · *sheet*: text · *range*: text · returns: number
+
+Inserts a table at the caret made from a file: an Excel workbook (.xlsx, .xlsm; no Excel needed, and it may be open in Excel), CSV or TSV (.csv, .tsv, .txt), or JSON (.json), as InsertTableFromData. In a workbook: sheet is a sheet's name or number ("" for the first), range one such as "A1:D20" ("" for the cells in use); values come as Excel shows them (number formats, dates, percentages; formulas' last results). Returns the number of rows.
+
+### SetCellText
+
+```autohotkey
+Rte.SetCellText(row, column, text, table = 0)
+```
+
+*row*: number · *column*: number · *text*: text · *table*: number
+
+Replaces a cell's text (row and column from 1; `n for a line break), keeping its format.
+
+### SetTableData
+
+```autohotkey
+Rte.SetTableData(data, format = "", table = 0, fromRow = 1)
+```
+
+*data*: text · *format*: text · *table*: number · *fromRow*: number · returns: number
+
+Fills a table with data (as InsertTableFromData's), keeping its formats: from row fromRow on (1: all of it; 2: the first row, a header, stays), the table gets the data's rows, its last row's format copied for rows added and the rows left over deleted. With fromRow 2 or more: a first data row the same as the table's header row is left out, and JSON objects go in the columns their names head (in their own order if a name heads none). A row with more values than cells is an error. table: 0 for the caret's, or a number from 1. Returns the number of rows filled.
+
+### SetTableDataFromFile
+
+```autohotkey
+Rte.SetTableDataFromFile(path, table = 0, fromRow = 1, sheet = "", range = "")
+```
+
+*path*: text · *table*: number · *fromRow*: number · *sheet*: text · *range*: text · returns: number
+
+SetTableData from a file, read as InsertTableFromFile reads it (an Excel workbook's sheet and range, CSV, TSV or JSON).
+
+### TableData
+
+```autohotkey
+Rte.TableData(table = 0, format = "csv")
+```
+
+*table*: number · *format*: text · returns: text
+
+A table's cells as text: format "csv", "csv;" (semicolons, as Excel saves CSV where the decimal mark is a comma), "tsv", "json" (an array of rows) or "objects" (an array of objects named by the first row's cells). table: 0 for the caret's, or a number from 1 (the document's first, second ... table).
+
+### WorkbookSheets
+
+```autohotkey
+Rte.WorkbookSheets(path)
+```
+
+*path*: text · returns: text
+
+The names of an Excel workbook's sheets, one per line.
+
 ## Pictures' alt text
 
 ### ColumnsAt
