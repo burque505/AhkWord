@@ -207,7 +207,10 @@ public static class TabularData
 		return book.WorkbookPart?.Workbook?.Sheets?.Elements<Sheet>().Select(s => s.Name?.Value ?? "").ToList() ?? new List<string>();
 	}
 
-	static List<List<string>> ReadXlsx(string path, string sheetName, string range) {
+	static List<List<string>> ReadXlsx(string path, string sheetName, string range) => ReadXlsxAt(path, sheetName, range).Rows;
+
+	// (iteration 93) The rows and the sheet's row and column where they start (null: an empty sheet, no range).
+	static (List<List<string>> Rows, int? Top, int? Left) ReadXlsxAt(string path, string sheetName, string range) {
 		using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 		SpreadsheetDocument book;
 		try { book = SpreadsheetDocument.Open(stream, false); }
@@ -257,7 +260,7 @@ public static class TabularData
 				if (cells.Count > MaxRows * MaxColumns) throw new ArgumentException("The sheet has too many cells for a table: give a range.");
 			}
 		}
-		if (cells.Count == 0 && limits == null) return new List<List<string>>();
+		if (cells.Count == 0 && limits == null) return (new List<List<string>>(), null, null);
 		int top = limits?.r1 ?? cells.Keys.Min(k => k.Row), bottom = limits?.r2 ?? cells.Keys.Max(k => k.Row);
 		int left = limits?.c1 ?? cells.Keys.Min(k => k.Column), right = limits?.c2 ?? cells.Keys.Max(k => k.Column);
 		if (bottom - top + 1 > MaxRows) throw new ArgumentException($"The sheet's cells take {bottom - top + 1} rows; a table can have at most {MaxRows}: give a range.");
@@ -265,7 +268,120 @@ public static class TabularData
 		var rows = new List<List<string>>();
 		for (int r = top; r <= bottom; r++)
 			rows.Add(Enumerable.Range(left, right - left + 1).Select(c => cells.TryGetValue((r, c), out var t) ? t : "").ToList());
-		return rows;
+		return (rows, top, left);
+	}
+
+	// ================================================================ (iteration 93) writing back to a file
+
+	/// Writes rows to a file, the way ReadFile reads them back: .xlsx/.xlsm into a sheet of the workbook (it must exist;
+	/// see WriteXlsx); .json as an array of objects if the file was one (named by the first row), else an array of rows;
+	/// .tsv tab-separated; other text CSV (format "csv;" for semicolons; "" keeps the file's own delimiter), in UTF-8
+	/// with a byte order mark (Excel reads accents right then). A file that exists is written over through a copy, so a
+	/// failure leaves it as it was. Returns the number of cells changed (a workbook) or of rows written (text).
+	public static int WriteFile(string path, List<List<string>> rows, string sheet = "", string range = "", string format = "") {
+		string ext = Path.GetExtension(path).ToLowerInvariant();
+		if (ext is ".xls" or ".ods" or ".xlsb") throw new ArgumentException($"{Path.GetFileName(path)}: this kind of workbook can't be written; save it as .xlsx or CSV.");
+		if (ext is ".xlsx" or ".xlsm") return WriteXlsx(path, rows, sheet, range);
+		if ((sheet ?? "") != "" || (range ?? "") != "") throw new ArgumentException("A sheet or range is for Excel workbooks (.xlsx) only.");
+		string kind = (format ?? "").Trim().ToLowerInvariant();
+		string? old = File.Exists(path) ? ReadText(path) : null;
+		if (kind == "") {
+			if (ext == ".json") kind = old != null && Regex.IsMatch(old, @"^\s*\[\s*\{") ? "objects" : "json";
+			else if (ext == ".tsv") kind = "tsv";
+			else if (old != null && old.Trim() != "") kind = GuessDelimiter(old) switch { '\t' => "tsv", ';' => "csv;", _ => "csv" };
+			else kind = "csv";
+		}
+		string text = Write(rows, kind);
+		if (kind != "json" && kind != "objects") text += "\r\n";
+		string temp = path + ".ahkword-tmp";
+		File.WriteAllText(temp, text, new UTF8Encoding(true));
+		if (File.Exists(path)) File.Replace(temp, path, null); else File.Move(temp, path);
+		return rows.Count;
+	}
+
+	/// Writes rows into a workbook's sheet (by name or number, "" the first), from the top left of range ("A1:D20"; "" the
+	/// cells in use, as ReadFile reads them, or A1 in an empty sheet). Only cells whose value changed are written (a cell
+	/// showing the same text, a formula's among them, is left alone, its format too); a changed one is a number if its
+	/// text is one in this computer's culture (its number format kept), else text. Cells of the old area (the range, or
+	/// the cells in use) that the rows no longer reach are emptied. Excel recalculates the formulas when it opens the
+	/// workbook. The workbook must not be open in Excel. Returns the number of cells changed.
+	static int WriteXlsx(string path, List<List<string>> rows, string sheetName, string range) {
+		if (!File.Exists(path)) throw new FileNotFoundException("There is no workbook " + path + ": save one in Excel first.", path);
+		string temp = path + ".ahkword-tmp" + Path.GetExtension(path);
+		int changed = 0;
+		try {
+			var (oldRows, oldTop, oldLeft) = ReadXlsxAt(path, sheetName, range);    // (the area as ReadFile sees it; also checks the sheet and range)
+			oldRows = Tidy(oldRows);
+			File.Copy(path, temp, true);
+			using (var book = SpreadsheetDocument.Open(temp, true)) {
+				var workbook = book.WorkbookPart!;
+				var sheets = workbook.Workbook!.Sheets!.Elements<Sheet>().ToList();
+				sheetName = (sheetName ?? "").Trim();
+				var sheet = sheetName == "" ? sheets.FirstOrDefault(s => s.State == null || s.State.Value == SheetStateValues.Visible) ?? sheets[0]
+					: sheets.FirstOrDefault(s => string.Equals(s.Name?.Value, sheetName, StringComparison.OrdinalIgnoreCase)) ?? sheets[int.Parse(sheetName) - 1];
+				var part = (WorksheetPart)workbook.GetPartById(sheet.Id!.Value!);
+				var data = part.Worksheet!.GetFirstChild<SheetData>() ?? part.Worksheet.AppendChild(new SheetData());
+				int top = oldTop ?? 1, left = oldLeft ?? 1;    // (the range's top left, else the first cell in use, else A1)
+				int height = Math.Max(rows.Count, oldRows.Count), width = Math.Max(rows.DefaultIfEmpty(new List<string>()).Max(r => r.Count), oldRows.DefaultIfEmpty(new List<string>()).Max(r => r.Count));
+				for (int r = 0; r < height; r++)
+					for (int c = 0; c < width; c++) {
+						string value = r < rows.Count && c < rows[r].Count ? rows[r][c] : "";
+						string was = r < oldRows.Count && c < oldRows[r].Count ? oldRows[r][c] : "";
+						if (value == was) continue;
+						SetCell(data, top + r, left + c, value);
+						changed++;
+					}
+				if (changed > 0) {
+					var calc = workbook.Workbook.CalculationProperties ??= new CalculationProperties();
+					calc.FullCalculationOnLoad = true;
+					workbook.Workbook.Save();
+					part.Worksheet.Save();
+				}
+			}
+			if (changed > 0) File.Replace(temp, path, null);
+		}
+		catch (IOException ex) when (ex is not FileNotFoundException) {
+			throw new IOException($"{Path.GetFileName(path)} could not be written (is it open in Excel? close it there first): {ex.Message}", ex);
+		}
+		finally { if (File.Exists(temp)) File.Delete(temp); }
+		return changed;
+	}
+
+	public static string ColumnLetters(int column) {
+		string s = "";
+		for (; column > 0; column = (column - 1) / 26) s = (char)('A' + (column - 1) % 26) + s;
+		return s;
+	}
+
+	// A cell set to a value ("" empties it), its row and the cell made where needed, in order; its style kept.
+	static void SetCell(SheetData data, int r, int c, string value) {
+		string reference = ColumnLetters(c) + r;
+		var row = data.Elements<Row>().FirstOrDefault(x => x.RowIndex?.Value == (uint)r);
+		if (row == null) {
+			if (value == "") return;
+			row = new Row { RowIndex = (uint)r };
+			var after = data.Elements<Row>().LastOrDefault(x => x.RowIndex?.Value < (uint)r);
+			if (after == null) data.PrependChild(row); else after.InsertAfterSelf(row);
+		}
+		var cell = row.Elements<Cell>().FirstOrDefault(x => string.Equals(x.CellReference?.Value, reference, StringComparison.OrdinalIgnoreCase));
+		if (cell == null) {
+			if (value == "") return;
+			cell = new Cell { CellReference = reference };
+			var before = row.Elements<Cell>().FirstOrDefault(x => x.CellReference?.Value is string rf && ColumnNumber(Regex.Match(rf, "^[A-Za-z]+").Value) > c);
+			if (before == null) row.AppendChild(cell); else before.InsertBeforeSelf(cell);
+		}
+		cell.CellFormula?.Remove();
+		cell.CellValue?.Remove();
+		cell.InlineString?.Remove();
+		cell.DataType = null;
+		if (value == "") return;
+		string trimmed = value.Trim();
+		if (double.TryParse(trimmed, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out double number) && !trimmed.Contains(' ')) {
+			cell.CellValue = new CellValue(number.ToString("R", CultureInfo.InvariantCulture));
+			return;
+		}
+		cell.DataType = CellValues.InlineString;
+		cell.InlineString = new InlineString(new Text(value) { Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve });
 	}
 
 	// A shared string's text: its runs' text, without phonetic hints (rPh).

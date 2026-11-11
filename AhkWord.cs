@@ -717,7 +717,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 92;    // (the About box; make_version.ps1)
+	public const int Iteration = 93;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1115,7 +1115,9 @@ class WriterForm : Form
 		undoButton = Button(RibbonCommand.Undo, OnText(() => { skipLegalCheck = true; Editor.Undo(); }, sourceBox.Undo), Keys.Control | Keys.Z, M("Undo"));
 		redoButton = Button(RibbonCommand.Redo, OnText(() => { skipLegalCheck = true; Editor.Redo(); }, sourceBox.Redo), Keys.Control | Keys.Y, M("Redo"));
 		// (copy and paste keep the paragraphs' styles: StyleClipboard)
-		Action cut = OnText(() => StyleClipboard.Copy(Editor, Styles, () => WithoutGapsChanging(Editor.Cut)), sourceBox.Cut), copy = OnText(() => StyleClipboard.Copy(Editor, Styles, () => WithoutGaps(Editor.Copy)), sourceBox.Copy),
+		// (iteration 93: a block of cells is copied as a table of its own; cut, its cells emptied)
+		Action cut = OnText(() => { if (CopyCellBlock()) { api.ClearCells(); return; } StyleClipboard.Copy(Editor, Styles, () => WithoutGapsChanging(Editor.Cut)); }, sourceBox.Cut),
+			copy = OnText(() => { if (!CopyCellBlock()) StyleClipboard.Copy(Editor, Styles, () => WithoutGaps(Editor.Copy)); }, sourceBox.Copy),
 			paste = OnText(PasteText, () => sourceBox.Paste(DataFormats.GetFormat(DataFormats.UnicodeText)));
 		(cutAction, copyAction, pasteAction) = (cut, copy, paste);    // (the right-click menu's too)
 		cutButton =Button(RibbonCommand.Cut, cut, Keys.Control | Keys.X, M("Cut"));
@@ -4423,6 +4425,17 @@ class WriterForm : Form
 		return true;
 	}
 
+	// (iteration 93) A block of table cells put on the clipboard as a table of its own (RTF) and as tab-separated text
+	// (Excel takes it as cells); false: no block (the selection is copied as it is).
+	bool CopyCellBlock() {
+		if (RtfTables.BlockData(Editor) is not { } data) return false;
+		var obj = new DataObject();
+		obj.SetData(DataFormats.Rtf, data.Rtf);
+		obj.SetData(DataFormats.UnicodeText, data.Text);
+		Clipboard.SetDataObject(obj, true);
+		return true;
+	}
+
 	// The right-click menu for text (position: the character clicked).
 	internal ContextMenuStrip TextMenu(int position) {
 		var tom = Editor.TextDocument.Selection2;    // (WinForms' SelectionLength is short across table rows)
@@ -4437,7 +4450,7 @@ class WriterForm : Form
 			AddSpellingItems(menu, error);
 			menu.Items.Add(new ToolStripSeparator());
 		}
-		bool selection = tom.End > tom.Start;
+		bool selection = tom.End > tom.Start || RtfTables.HasBlock(Editor);
 		menu.Items.Add(new ToolStripMenuItem(T("menu.cut", "Cu&t"), null, (s, e) => Run(cutAction, M("Cut"))) { Enabled = selection, ShortcutKeyDisplayString = "Ctrl+X" });
 		menu.Items.Add(new ToolStripMenuItem(T("menu.copy", "&Copy"), null, (s, e) => Run(copyAction, M("Copy"))) { Enabled = selection, ShortcutKeyDisplayString = "Ctrl+C" });
 		menu.Items.Add(new ToolStripMenuItem(T("menu.paste", "&Paste"), null, (s, e) => Run(pasteAction, M("Paste"))) { ShortcutKeyDisplayString = "Ctrl+V" });
@@ -7732,7 +7745,7 @@ public class EditorApi
 	// A cell's text: its paragraphs and line breaks as \n.
 	string CellOf(RtfTables.Cell cell) {
 		string text = ed.TextDocument.Range2(cell.Start, cell.End).Text ?? "";
-		return text.Replace("\r\n", "\n").Replace('\r', '\n').Replace('\v', '\n');
+		return text.Replace(RtfTables.MergedMark.ToString(), "").Replace("\r\n", "\n").Replace('\r', '\n').Replace('\v', '\n');    // (iteration 93: not a merged cell's mark)
 	}
 
 	// The table's cells' text, row by row.
@@ -7742,6 +7755,16 @@ public class EditorApi
 	/// comma), "tsv", "json" (an array of rows) or "objects" (an array of objects named by the first row's cells).
 	/// table: 0 for the caret's, or a number from 1 (the document's first, second ... table).
 	public string TableData(int table = 0, string format = "csv") => TabularData.Write(CellsOf(TableNumber(table)), format);
+
+	/// (iteration 93) Writes a table's cells back to a file, the way InsertTableFromFile and SetTableDataFromFile read
+	/// it: an Excel workbook (.xlsx, .xlsm; it must exist and be closed in Excel) gets the cells into sheet (a name or
+	/// number, "" for the first) from range's top left ("" for where its cells in use start), only the cells whose value
+	/// changed, the cells left over emptied, formulas recalculated when Excel opens it; .json an array of objects if the
+	/// file holds one (named by the first row), else an array of rows; other files CSV or TSV (format "csv", "csv;",
+	/// "tsv", or "" for the file's own delimiter), UTF-8. table: 0 for the caret's, or a number from 1. Returns the number
+	/// of cells changed (a workbook) or of rows written.
+	public int SaveTableData(string path, int table = 0, string sheet = "", string range = "", string format = "") =>
+		TabularData.WriteFile(FullPath(path), CellsOf(TableNumber(table)), sheet, range, format);
 
 	/// The text of a cell (row and column from 1) of the caret's table (table = 0) or of the document's nth table.
 	public string CellText(int row, int column, int table = 0) => CellOf(CellAt(TableNumber(table), row, column));
@@ -8080,6 +8103,10 @@ public class EditorApi
 
 	/// The number of tables in the document.
 	public int TableCount => RtfTables.Find(ed.TextDocument).Count;
+
+	/// (iteration 93) The caret's table's number in the document (from 1, as TableData's table counts them), or 0 outside
+	/// tables.
+	public int TableNumberAtCaret() => RtfTables.At(ed, ed.SelectionStart) is { } at ? RtfTables.Find(ed.TextDocument).FindIndex(t => t.Start == at.Table.Start) + 1 : 0;
 
 	// ---- Iteration 18: table properties (rte_tables2.cs)
 
@@ -11831,7 +11858,35 @@ sealed class WriterEditBox : RichEditBox
 		CellBlock = (from, to);
 	}
 
+	// (iteration 93) Shift+Up/Down from a table cell into another row: a block of cells grows or shrinks by a cell, as in
+	// Word (RichEdit selects the whole rows); Shift+Left/Right too while there is a block. False: RichEdit's own.
+	bool ExtendCellBlock(Keys key) {
+		int from, to;
+		if (cellBlock is { } block) (from, to) = block;
+		else {
+			if (key is Keys.Left or Keys.Right) return false;
+			var selection = TextDocument.Selection2;
+			from = selection.Start;
+			to = Math.Max(selection.Start, selection.End - 1);
+			if (!RtfTables.SameCell(this, from, to) && !(RtfTables.At(this, from) is { } a && RtfTables.At(this, to) is { } b && a.Table.Start == b.Table.Start && a.Row == b.Row)) return false;
+		}
+		int? next;
+		try { next = RtfTables.NextCell(this, to, key, cellBlock != null ? BlockEdges : RtfTables.EdgesOf(this, from)); }
+		catch (Exception ex) when (ex is COMException or ArgumentException) { return false; }
+		if (next is not int at) return cellBlock != null;    // (at the table's edge: the block stays)
+		if (RtfTables.SameCell(this, from, at)) {
+			CellBlock = null;
+			TextDocument.Selection2.SetRange(from, from);
+		}
+		else SelectBlock(from, at);
+		return true;
+	}
+
 	protected override void OnKeyDown(KeyEventArgs e) {
+		if (e.Shift && !e.Control && !e.Alt && e.KeyCode is Keys.Up or Keys.Down or Keys.Left or Keys.Right && ExtendCellBlock(e.KeyCode)) {
+			e.Handled = e.SuppressKeyPress = true;
+			return;
+		}
 		if (cellBlock != null) {
 			if (e.KeyCode is Keys.Delete or Keys.Back && e.Modifiers == Keys.None && ClearCellBlock != null) {
 				e.Handled = e.SuppressKeyPress = true;

@@ -21,12 +21,13 @@ Table formatting is kept in RTF, Word, OpenDocument and HTML files. Markdown tab
 
 ## Merging, splitting and deleting cells
 
-To work on several cells, drag over them with the mouse: from a cell in one row to a cell in another, AhkWord selects the cells between them (shaded as a selection), not the whole rows. Within one row, select from the first cell's text to the last's.
+To work on several cells, drag over them with the mouse: from a cell in one row to a cell in another, AhkWord selects the cells between them (shaded as a selection), not the whole rows. Within one row, select from the first cell's text to the last's. From the keyboard, **Shift+Up** and **Shift+Down** in a cell select the cells above or below it as a block, and then **Shift+Left** and **Shift+Right** add or take away a column.
 
 - **Merge Cells** makes the selected cells one cell. Their text is kept, each cell's as paragraphs of its own, as in Word. Cells merged across columns make one wider cell; cells merged down rows show as one tall cell.
 - **Split Cells...** asks how many columns and rows. A cell is split into columns of equal width. A cell merged down splits back into its rows (or into a number of rows that divides them); a cell of one row split into rows gets new rows, the row's other cells merged down over them, so that they stay whole. Several selected cells are merged first.
 - **Delete Cells...** asks what becomes of the cells around them: the cells after them in their rows move left, the cells below them move up (their text; empty cells come at the bottom), or their whole rows or columns go. With cells selected, **Delete Row** and **Delete Column** delete all of their rows or columns.
 - **Delete** (the key) on selected cells empties them.
+- **Copy** (Ctrl+C) on selected cells copies them as a table of their own (paste it into AhkWord or Word), and as tab-separated text (Excel puts it in cells). **Cut** copies them and empties them.
 
 Columns are found by where they are, not by counting cells: deleting or inserting a column that a merged cell spans makes that cell narrower or wider instead of deleting it. Each of these is one step for **Undo**.
 
@@ -36,3 +37,6 @@ Columns are found by where they are, not by counting cells: deleting or insertin
 
 !!! tip "Data from a script"
     `Rte.InsertTableFromFile("C:\Data\clients.xlsx", 1, "Clients")` and `Rte.InsertTableFromData(csvOrJson)` make a table from data. `Rte.SetTableData(data, "", 1, 2)` fills the document's first table again, keeping its header row and formats: rows are added or deleted to fit, and JSON objects go in the columns their names head. `Rte.TableData(1, "json")` gives a table's cells back as CSV, TSV or JSON, and `Rte.CellText(2, 3)` / `Rte.SetCellText(2, 3, "text")` read and change one cell. See the [API reference](../automation/api.md#tables-from-data-and-data-from-tables).
+
+!!! tip "Back to the file the data came from"
+    `Rte.SaveTableData("C:\Data\clients.xlsx", 1, "Clients")` writes the document's first table back to the workbook: only the cells whose value changed (formulas and formats of the others are left alone), the cells the table no longer reaches emptied; the workbook must be closed in Excel. A .csv, .tsv or .json file is written whole, as it was (its delimiter; JSON objects stay objects). The macros **Table to source file** and **Table from source file** (Tools > Macros) do it for the table at the caret: they ask for the file the first time and remember it for that table of that document (hold Shift to choose another).

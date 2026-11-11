@@ -936,6 +936,16 @@ Rte.InsertTableFromFile(path, headerRow = 1, sheet = "", range = "")
 
 Inserts a table at the caret made from a file: an Excel workbook (.xlsx, .xlsm; no Excel needed, and it may be open in Excel), CSV or TSV (.csv, .tsv, .txt), or JSON (.json), as InsertTableFromData. In a workbook: sheet is a sheet's name or number ("" for the first), range one such as "A1:D20" ("" for the cells in use); values come as Excel shows them (number formats, dates, percentages; formulas' last results). Returns the number of rows.
 
+### SaveTableData
+
+```autohotkey
+Rte.SaveTableData(path, table = 0, sheet = "", range = "", format = "")
+```
+
+*path*: text · *table*: number · *sheet*: text · *range*: text · *format*: text · returns: number
+
+(iteration 93) Writes a table's cells back to a file, the way InsertTableFromFile and SetTableDataFromFile read it: an Excel workbook (.xlsx, .xlsm; it must exist and be closed in Excel) gets the cells into sheet (a name or number, "" for the first) from range's top left ("" for where its cells in use start), only the cells whose value changed, the cells left over emptied, formulas recalculated when Excel opens it; .json an array of objects if the file holds one (named by the first row), else an array of rows; other files CSV or TSV (format "csv", "csv;", "tsv", or "" for the file's own delimiter), UTF-8. table: 0 for the caret's, or a number from 1. Returns the number of cells changed (a workbook) or of rows written.
+
 ### SetCellText
 
 ```autohotkey
@@ -1111,6 +1121,16 @@ value := Rte.TableCount
 number · read-only
 
 The number of tables in the document.
+
+### TableNumberAtCaret
+
+```autohotkey
+Rte.TableNumberAtCaret()
+```
+
+returns: number
+
+(iteration 93) The caret's table's number in the document (from 1, as TableData's table counts them), or 0 outside tables.
 
 ## Table properties
 

@@ -10,6 +10,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using EllipticBit.RichEditorNET;
@@ -456,4 +457,69 @@ public static partial class RtfTables
 
 	/// Whether a block of cells is selected (AhkWord's own selection, see WriterEditBox.CellBlock).
 	public static bool HasBlock(RichEditBox editor) => BlockCells(editor) != null;
+
+	// ================================================================ (iteration 93) copying a block, Shift+arrows
+
+	/// The block of cells as a table of its own (RTF: the block's rows, only its cells, their formats kept) and as text
+	/// (a tab between cells, a line per row, as Word and Excel copy cells), for Copy and Cut. Null: no block.
+	public static (string Rtf, string Text)? BlockData(RichEditBox editor) {
+		if (BlockCells(editor) is not { } cells) return null;
+		var (table, r0, c0, r1, c1) = cells;
+		var writer = editor as WriterEditBox;
+		var saved = writer?.CellBlock;
+		var selection = editor.TextDocument.Selection2;
+		int start = selection.Start, end = selection.End;
+		var texts = CellTexts(editor, table);
+		string rtf;
+		try { rtf = GetRtf(editor, table.Start, table.End); }    // (reading a table's RTF selects it)
+		finally {
+			editor.TextDocument.Selection2.SetRange(start, end);
+			if (writer != null) writer.CellBlock = saved;
+		}
+		var matches = Regex.Matches(MaskNested(rtf), @"\\trowd(?![a-z]).*?\\row(?![a-z])", RegexOptions.Singleline).Cast<Match>().ToList();
+		if (matches.Count != table.Rows.Count) return null;
+		var rows = matches.Select(m => RowRtf.Parse(rtf.Substring(m.Index, m.Length))).ToList();
+		foreach (var each in rows) each.SpellOutProperties();
+		var block = BlockOf(rows, r0, c0, r1, c1);
+		var lines = new List<string>();
+		for (int k = block.First; k <= block.Last; k++)
+			lines.Add(string.Join("\t", rows[k].CellsIn(block.Left, block.Right).Select(i =>
+				rows[k].MergeOf(i) == "clvmrg" ? "" : texts(k, i).Replace(MergedMark.ToString(), "").Replace("\r\n", " ").Replace('\r', ' ').Replace('\v', ' ').Replace('\n', ' ').Replace('\t', ' ').Trim())));
+		var sb = new StringBuilder(rtf[..matches[0].Index]);    // (the document's header: font and colour tables)
+		for (int k = block.First; k <= block.Last; k++) {
+			var row = rows[k];
+			if (row.Right > block.Right + SameEdge) row.DeleteSpan(block.Right, row.Right);
+			if (row.Left < block.Left - SameEdge) row.DeleteSpan(row.Left, block.Left);
+			if (k > block.First) sb.Append(rtf[(matches[k - 1].Index + matches[k - 1].Length)..matches[k].Index]);
+			sb.Append(row.Build());
+		}
+		sb.Append(rtf[(matches[^1].Index + matches[^1].Length)..]);
+		return (sb.ToString(), string.Join("\r\n", lines) + "\r\n");
+	}
+
+	/// Shift+arrow from a cell: the position of a character in the next cell that way (Up and Down: the cell under the
+	/// one at position's left edge in the row above or below; Left and Right: in the same row), null at the table's edge
+	/// or in a table nested in a cell. edges: the table's edges in twips (EdgesOf), or null (cells by number).
+	public static int? NextCell(RichEditBox editor, int position, Keys key, List<List<int>>? edges) {
+		if (Innermost(editor, position) is not { Nested: false } || At(editor, position) is not { } at) return null;
+		var table = at.Table;
+		int row = at.Row, cell = at.Cell;
+		if (key is Keys.Left or Keys.Right) {
+			int c = cell + (key == Keys.Right ? 1 : -1);
+			return c < 0 || c >= table.Rows[row].Cells.Count ? null : table.Rows[row].Cells[c].Start;
+		}
+		int r = row + (key == Keys.Down ? 1 : -1);
+		if (r < 0 || r >= table.Rows.Count || table.Rows[r].Cells.Count == 0) return null;
+		int target = Math.Min(cell, table.Rows[r].Cells.Count - 1);
+		if (edges != null && edges.Count == table.Rows.Count && edges[row].Count == table.Rows[row].Cells.Count + 1 && edges[r].Count == table.Rows[r].Cells.Count + 1) {
+			int x = edges[row][cell] + SameEdge;    // (the cell's left edge)
+			target = 0;
+			for (int i = 0; i < table.Rows[r].Cells.Count; i++) if (edges[r][i] <= x) target = i;
+		}
+		return table.Rows[r].Cells[target].Start;
+	}
+
+	/// Whether two positions are in the same cell of a table.
+	public static bool SameCell(RichEditBox editor, int a, int b) =>
+		At(editor, a) is { } x && At(editor, b) is { } y && x.Table.Start == y.Table.Start && x.Row == y.Row && x.Cell == y.Cell;
 }
