@@ -717,7 +717,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 94;    // (the About box; make_version.ps1)
+	public const int Iteration = 95;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1832,6 +1832,17 @@ class WriterForm : Form
 	/// own {{fields}} left in it are filled in afterwards). An error it throws shows in the status bar.
 	public Func<string, bool, string?>? RenderTemplate { get; set; }
 
+	/// (iteration 95) While RenderTemplate runs: the folder of the template being filled (a template's for New and
+	/// Insert, the document's for Fill In Fields; null for an unsaved document), for files the template names by a
+	/// relative path (AhkWord Pro's table_data).
+	public string? TemplateFolder { get; private set; }
+
+	string? RenderWith(string? path, string rtf, bool ask) {
+		TemplateFolder = string.IsNullOrEmpty(path) ? null : Path.GetDirectoryName(Path.GetFullPath(path));
+		try { return RenderTemplate?.Invoke(rtf, ask); }
+		finally { TemplateFolder = null; }
+	}
+
 	/// The same for a header's or footer's part (plain text): filled in with the values the template's text had, or null
 	/// when it isn't in that language (iteration 62).
 	public Func<string, string?>? RenderTemplateText { get; set; }
@@ -1886,7 +1897,7 @@ class WriterForm : Form
 	bool RenderDocument(bool ask) {
 		// (the page view's gaps left out: they would become the document's own space and raised lines, in the wrong places
 		// once the text had moved)
-		if (RenderTemplate?.Invoke(WithoutGaps(() => Editor.Rtf) ?? "", ask) is not string rendered) return false;
+		if (RenderWith(FileName, WithoutGaps(() => Editor.Rtf) ?? "", ask) is not string rendered) return false;
 		var doc = Editor.TextDocument;
 		WithoutGapsChanging(() => {
 			doc.BeginEditCollection();
@@ -2134,7 +2145,7 @@ class WriterForm : Form
 	internal bool NewFromTemplate(TemplateInfo template, IDictionary<string, string>? values, bool ask) {
 		if (ask && !ConfirmDiscard()) return false;
 		api.OpenTemplate(template.Path);
-		if (RenderTemplate?.Invoke(Editor.Rtf ?? "", ask) is string rendered) Editor.Rtf = rendered;    // (iteration 62: an extension's template language)
+		if (RenderWith(template.Path, Editor.Rtf ?? "", ask) is string rendered) Editor.Rtf = rendered;    // (iteration 62: an extension's template language)
 		var doc = Editor.TextDocument;
 		var given = FieldValues(T("dlg.fields.titleNew", "New from {0}", template.Name), FieldText(), values, ask);
 		int filled = Templates.Fill(doc, name => given.TryGetValue(name, out var value) ? value : null);
@@ -2299,7 +2310,7 @@ class WriterForm : Form
 			throw new InvalidOperationException($"Only RTF templates can be inserted; open {Path.GetFileName(template.Path)} and save it as Rich Text Format.");
 		string file = File.ReadAllText(template.Path, Encoding.Latin1);
 		string rtf = HeaderFooter.StripFromRtf(file);    // (the header and footer stay the document's)
-		if (RenderTemplate?.Invoke(rtf, ask) is string rendered) rtf = rendered;    // (iteration 62)
+		if (RenderWith(template.Path, rtf, ask) is string rendered) rtf = rendered;    // (iteration 62)
 		if (inline) rtf = Snippets.WithoutFinalParagraph(rtf);
 		// (iteration 63) as a new section: its own header and footer, the template's (the section before's if it has none)
 		var bands = asSection ? HeaderFooter.FromRtf(file) : null;
@@ -6210,6 +6221,7 @@ public class EditorApi
 
 	/// Starts a new, empty document (unsaved changes are discarded).
 	public void New() {
+		form.ShowStart(false);    // (iteration 95: from a script too, the document is shown, not left under the start page)
 		form.Styles = form.DefaultStyles();
 		form.Levels = form.DefaultLevels();
 		form.UseNormalFont();
@@ -6797,6 +6809,7 @@ public class EditorApi
 	/// LastConverter); via names the converter(s) to use, e.g. "openxml" (Save then uses them too).
 	public void Open(string path, string via = "") {
 		string full = Path.GetFullPath(path);
+		form.ShowStart(false);    // (iteration 95: as New)
 		// (iteration 68: not painted until its sheets are in, so it shows once, where it stays)
 		using (form.HoldOpening(Path.GetFileName(full))) {
 			Load(full, via);
