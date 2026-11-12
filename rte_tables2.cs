@@ -1276,6 +1276,7 @@ public static partial class RtfTables
 
 	/// The cells (row, column) of a table that the selection touches, or the caret's cell.
 	public static List<(int Row, int Cell)> SelectedCells(RichEditBox editor, Table table) {
+		if (BlockCellList(editor, table) is { } block) return block;    // (iteration 94: a block of cells, AhkWord's own selection)
 		var selection = editor.TextDocument.Selection2;
 		int start = selection.Start, end = selection.End;
 		var cells = new List<(int, int)>();
@@ -1310,17 +1311,19 @@ public static partial class RtfTables
 			switch (kind) {
 				case "none": foreach (Side s in Enum.GetValues<Side>()) Set(r, c, s, none); break;
 				case "all": foreach (Side s in Enum.GetValues<Side>()) Set(r, c, s, border); break;
+				// (iteration 94) Outside is the frame only, Inside the lines inside only: the other lines go (they were only
+				// added: after All Borders, neither showed any change)
 				case "outside":
-					if (atTop) Set(r, c, Side.Top, border);
-					if (atBottom) Set(r, c, Side.Bottom, border);
-					if (atLeft) Set(r, c, Side.Left, border);
-					if (atRight) Set(r, c, Side.Right, border);
+					Set(r, c, Side.Top, atTop ? border : none);
+					Set(r, c, Side.Bottom, atBottom ? border : none);
+					Set(r, c, Side.Left, atLeft ? border : none);
+					Set(r, c, Side.Right, atRight ? border : none);
 					break;
 				case "inside":
-					if (!atTop) Set(r, c, Side.Top, border);
-					if (!atBottom) Set(r, c, Side.Bottom, border);
-					if (!atLeft) Set(r, c, Side.Left, border);
-					if (!atRight) Set(r, c, Side.Right, border);
+					Set(r, c, Side.Top, atTop ? none : border);
+					Set(r, c, Side.Bottom, atBottom ? none : border);
+					Set(r, c, Side.Left, atLeft ? none : border);
+					Set(r, c, Side.Right, atRight ? none : border);
 					break;
 				case "top": if (atTop) Set(r, c, Side.Top, border); break;
 				case "bottom": if (atBottom) Set(r, c, Side.Bottom, border); break;

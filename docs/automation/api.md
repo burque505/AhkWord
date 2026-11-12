@@ -894,6 +894,16 @@ returns: number
 
 The number of table rows the selection covers completely (0 if it is not whole rows of one table).
 
+### SelectTable
+
+```autohotkey
+Rte.SelectTable(part = "table")
+```
+
+*part*: text
+
+(iteration 94) Selects part of the table at the caret, as Word's Table Layout &gt; Select does: part = "table", "row", "column" (the cells under the caret's, by position) or "cell". Borders, shading and the other formats then act on all of them (a block of cells, as SelectCells makes).
+
 ### SplitCells
 
 ```autohotkey
@@ -905,16 +915,6 @@ Rte.SplitCells(columns = 2, rows = 1)
 (iteration 92) Splits the caret's cell (or the selected cells, merged first) into columns and rows, as Word does: columns of equal width; a cell merged down into a number of rows that divides the rows it spans (all of them undoes the merge); a cell of one row into rows adds rows, the row's other cells merged down over them. Its text stays in the first cell.
 
 ## Tables from data, and data from tables
-
-### CellText
-
-```autohotkey
-Rte.CellText(row, column, table = 0)
-```
-
-*row*: number · *column*: number · *table*: number · returns: text
-
-The text of a cell (row and column from 1) of the caret's table (table = 0) or of the document's nth table.
 
 ### InsertTableFromData
 
@@ -929,12 +929,12 @@ Inserts a table at the caret made from data: CSV or TSV text, or JSON (an array 
 ### InsertTableFromFile
 
 ```autohotkey
-Rte.InsertTableFromFile(path, headerRow = 1, sheet = "", range = "")
+Rte.InsertTableFromFile(path, headerRow = 1, sheet = "", range = "", link = 1)
 ```
 
-*path*: text · *headerRow*: 1/0 · *sheet*: text · *range*: text · returns: number
+*path*: text · *headerRow*: 1/0 · *sheet*: text · *range*: text · *link*: 1/0 · returns: number
 
-Inserts a table at the caret made from a file: an Excel workbook (.xlsx, .xlsm; no Excel needed, and it may be open in Excel), CSV or TSV (.csv, .tsv, .txt), or JSON (.json), as InsertTableFromData. In a workbook: sheet is a sheet's name or number ("" for the first), range one such as "A1:D20" ("" for the cells in use); values come as Excel shows them (number formats, dates, percentages; formulas' last results). Returns the number of rows.
+Inserts a table at the caret made from a file: an Excel workbook (.xlsx, .xlsm; no Excel needed, and it may be open in Excel), CSV or TSV (.csv, .tsv, .txt), or JSON (.json), as InsertTableFromData. In a workbook: sheet is a sheet's name or number ("" for the first), range one such as "A1:D20" ("" for the cells in use); values come as Excel shows them (number formats, dates, percentages; formulas' last results). Returns the number of rows. (iteration 94) link = 1 (the default): the table is linked to the file (LinkTable), for UpdateTable and SaveTableToSource.
 
 ### SaveTableData
 
@@ -945,6 +945,68 @@ Rte.SaveTableData(path, table = 0, sheet = "", range = "", format = "")
 *path*: text · *table*: number · *sheet*: text · *range*: text · *format*: text · returns: number
 
 (iteration 93) Writes a table's cells back to a file, the way InsertTableFromFile and SetTableDataFromFile read it: an Excel workbook (.xlsx, .xlsm; it must exist and be closed in Excel) gets the cells into sheet (a name or number, "" for the first) from range's top left ("" for where its cells in use start), only the cells whose value changed, the cells left over emptied, formulas recalculated when Excel opens it; .json an array of objects if the file holds one (named by the first row), else an array of rows; other files CSV or TSV (format "csv", "csv;", "tsv", or "" for the file's own delimiter), UTF-8. table: 0 for the caret's, or a number from 1. Returns the number of cells changed (a workbook) or of rows written.
+
+### TableData
+
+```autohotkey
+Rte.TableData(table = 0, format = "csv")
+```
+
+*table*: number · *format*: text · returns: text
+
+A table's cells as text: format "csv", "csv;" (semicolons, as Excel saves CSV where the decimal mark is a comma), "tsv", "json" (an array of rows) or "objects" (an array of objects named by the first row's cells). table: 0 for the caret's, or a number from 1 (the document's first, second ... table).
+
+### WorkbookSheets
+
+```autohotkey
+Rte.WorkbookSheets(path)
+```
+
+*path*: text · returns: text
+
+The names of an Excel workbook's sheets, one per line.
+
+## Tables linked to their files
+
+### CellText
+
+```autohotkey
+Rte.CellText(row, column, table = 0)
+```
+
+*row*: number · *column*: number · *table*: number · returns: text
+
+The text of a cell (row and column from 1) of the caret's table (table = 0) or of the document's nth table.
+
+### LinkTable
+
+```autohotkey
+Rte.LinkTable(path, table = 0, sheet = "", range = "")
+```
+
+*path*: text · *table*: number · *sheet*: text · *range*: text
+
+Links a table (0: the caret's, or a number from 1) to a file its data come from, as InsertTableFromFile does: an Excel workbook (sheet: a name or number, "" for the first; range such as "A1:D20", "" for the cells in use), CSV, TSV or JSON. The link is a hidden marker in the table's first cell: it goes wherever the table goes and is saved with the document (RTF, Word, HTML, Markdown). The path is kept relative to the document's folder when the file is in it or below it.
+
+### SaveTableCheck
+
+```autohotkey
+Rte.SaveTableCheck(table = 0)
+```
+
+*table*: number · returns: text
+
+(iteration 94) What SaveTableToSource would do that it doesn't do without force = 1, as a warning: "" if nothing (the table fits in the link's range, and writes over nothing beyond the data it was read from).
+
+### SaveTableToSource
+
+```autohotkey
+Rte.SaveTableToSource(table = 0, force = 0)
+```
+
+*table*: number · *force*: 1/0 · returns: number
+
+Writes a linked table back to its file, as SaveTableData does (a workbook: only the cells that changed). Returns the number of cells changed (a workbook) or of rows written. (iteration 94) A workbook's table that has grown past the link's range, or would write over cells of the sheet that aren't empty beyond the area it was read from (rows below the data), is not written unless force = 1 (SaveTableCheck says what it would do); written past the range, the link's range grows to take the table in, so that UpdateTable reads all of it.
 
 ### SetCellText
 
@@ -976,25 +1038,45 @@ Rte.SetTableDataFromFile(path, table = 0, fromRow = 1, sheet = "", range = "")
 
 SetTableData from a file, read as InsertTableFromFile reads it (an Excel workbook's sheet and range, CSV, TSV or JSON).
 
-### TableData
+### TableSource
 
 ```autohotkey
-Rte.TableData(table = 0, format = "csv")
+Rte.TableSource(table = 0)
 ```
 
-*table*: number · *format*: text · returns: text
+*table*: number · returns: text
 
-A table's cells as text: format "csv", "csv;" (semicolons, as Excel saves CSV where the decimal mark is a comma), "tsv", "json" (an array of rows) or "objects" (an array of objects named by the first row's cells). table: 0 for the caret's, or a number from 1 (the document's first, second ... table).
+A table's link as "path|sheet|range" (the path as kept: maybe relative to the document's folder), or "" if it has none.
 
-### WorkbookSheets
+### UnlinkTable
 
 ```autohotkey
-Rte.WorkbookSheets(path)
+Rte.UnlinkTable(table = 0)
 ```
 
-*path*: text · returns: text
+*table*: number
 
-The names of an Excel workbook's sheets, one per line.
+Takes away a table's link to its file (the table stays as it is).
+
+### UpdateTable
+
+```autohotkey
+Rte.UpdateTable(table = 0)
+```
+
+*table*: number · returns: number
+
+Fills a linked table again from its file (all its rows, the file's first row too), keeping its formats: rows are added or deleted to fit. Returns the number of rows.
+
+### UpdateTables
+
+```autohotkey
+Rte.UpdateTables()
+```
+
+returns: number
+
+Fills every linked table of the document again from its file; returns how many. A file that can't be read leaves its table as it was; the errors come at the end, one per line.
 
 ## Pictures' alt text
 

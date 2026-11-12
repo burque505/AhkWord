@@ -62,6 +62,8 @@ The [known limitations](docs/reference/limitations.md) are listed in the documen
 - [x] **Dragging on the ruler:** move the indent markers and tab stops; drag a tab stop off to remove it (iteration 84)
 - [x] **Tables from data:** Insert Table > From File (Excel .xlsx, CSV, TSV, JSON; no Excel needed), and for scripts `InsertTableFromData`, `SetTableData` (fill a table again, keeping its formats), `TableData`, `CellText` and `SetCellText` (iteration 91)
 - [x] **Merge, split and delete cells:** Merge Cells, Split Cells and Delete Cells as in Word, cells selected by dragging across rows; Insert and Delete Column by position (cells merged across reckoned with); rows of nested tables deleted on their own (iteration 92)
+- [x] **Cell blocks:** copy a block of cells, select one with Shift+arrow keys; `SaveTableData` writes a table back to a CSV, TSV, JSON or Excel file (only the changed cells of a workbook) (iteration 93)
+- [x] **Tables linked to their files:** a table inserted from a file remembers it (kept in RTF, Word, HTML and Markdown); Table Layout > Data: Update Table, Save to File (it asks before writing past the linked range or over rows below the data), Link to File, Unlink; Table Layout > Select; Top, Bottom, Left and Right borders; formats on a cell block reach every cell of it (iteration 94)
 - [x] **AhkWord's own Page Setup:** margins, orientation and paper, the header's and footer's distances and the different first page in one dialog of AhkWord's, with a picture of the page; the paper saved with the document (RTF, Word); "Make these the default" for new documents (iteration 82)
 
 ## Later, perhaps

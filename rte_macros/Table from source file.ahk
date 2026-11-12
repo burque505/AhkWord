@@ -1,21 +1,17 @@
 #Requires AutoHotkey v2.0
 #Include "..\RteClient2.ahk"
-; Refreshes the table at the caret from its file (an Excel workbook, CSV, TSV or JSON), keeping the table's formats:
-; rows are added or deleted to fit. Uses the file "Table to source file" remembered for this table (table-links.ini),
-; or asks for one and remembers it; hold Shift while starting it to choose again.
+; Fills the table at the caret again from the file it is linked to (an Excel workbook, CSV, TSV or JSON), keeping
+; the table's formats, as Table Layout > Update Table does: rows are added or deleted to fit. For a table not linked
+; yet, this asks for the file (and the sheet and range of a workbook) and links the table to it first
+; (Rte.LinkTable). Hold Shift while starting it to link the table to another file. Rte.UpdateTables() updates every
+; linked table of the document at once.
 Title := "Table from source file"
-TableNo := Rte.TableNumberAtCaret()
-if !TableNo {
+if !Rte.TableNumberAtCaret() {
     MsgBox("Put the caret in a table first.", Title, "Icon!")
     ExitApp
 }
-Doc := Rte.FileName
-Links := (Rte.Portable ? A_ScriptDir "\..\data" : A_AppData "\AhkWord") "\table-links.ini"
-Key := "table " TableNo
-Link := Doc != "" && !GetKeyState("Shift") ? IniRead(Links, Doc, Key, "") : ""
-Parts := StrSplit(Link, "|")
-if Link = "" {
-    Path := FileSelect("1", , Title ": fill table " TableNo " from", "Data (*.xlsx; *.xlsm; *.csv; *.tsv; *.txt; *.json)")
+if Rte.TableSource() = "" || GetKeyState("Shift") {
+    Path := FileSelect("1", , Title ": fill the table from", "Data (*.xlsx; *.xlsm; *.csv; *.tsv; *.txt; *.json)")
     if Path = ""
         ExitApp
     Sheet := "", Range := ""
@@ -30,15 +26,12 @@ if Link = "" {
             ExitApp
         Range := Trim(Answer.Value)
     }
-    Parts := [Path, Sheet, Range]
-    if Doc != ""
-        DirCreate(RegExReplace(Links, "\\[^\\]+$")), IniWrite(Path "|" Sheet "|" Range, Links, Doc, Key)
+    Rte.LinkTable(Path, 0, Sheet, Range)
 }
-Path := Parts[1], Sheet := Parts.Length > 1 ? Parts[2] : "", Range := Parts.Length > 2 ? Parts[3] : ""
 try
-    Count := Rte.SetTableDataFromFile(Path, TableNo, 1, Sheet, Range)
+    Count := Rte.UpdateTable()
 catch as e {
     MsgBox("The table was not filled:`n" e.Message, Title, "Icon!")
     ExitApp
 }
-MsgBox("Table " TableNo " ← " Path "`n`n" Count " row" (Count = 1 ? "" : "s") " filled.", Title, "Iconi T5")
+MsgBox("The table ← " StrSplit(Rte.TableSource(), "|")[1] "`n`n" Count " row" (Count = 1 ? "" : "s") " filled.", Title, "Iconi T5")

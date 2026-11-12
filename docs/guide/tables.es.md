@@ -13,7 +13,8 @@ Mientras el cursor está en una tabla, aparece la pestaña **Herramientas de tab
 - **Insertar** filas arriba o debajo y columnas a la izquierda o a la derecha; **eliminar** filas, columnas o toda la tabla.
 - **Combinar celdas** y **Dividir celdas**, y **Eliminar celdas** (vea abajo).
 - **Propiedades** (también en el menú del botón derecho): los anchos de columna, la alineación de la tabla en la página, el margen de celda y el alto de fila para toda la tabla; los bordes, el sombreado y la alineación vertical para las celdas seleccionadas o para toda la tabla.
-- **Bordes** (sin borde, todos, externos, internos ..., con grosor de línea y color) y **Sombreado** para las celdas seleccionadas.
+- **Bordes** (sin borde, todos, externos, internos ..., con grosor de línea y color) y **Sombreado** para las celdas seleccionadas. **Bordes externos** da a las celdas seleccionadas solo un marco, y **Bordes internos** solo las líneas entre ellas; **Todos los bordes** da ambos. **Borde superior**, **Borde inferior**, **Borde izquierdo** y **Borde derecho** agregan una línea a lo largo de un lado de las celdas seleccionadas y dejan sus demás líneas como están (como hace el cuadro Propiedades).
+- **Seleccionar**: la celda, la columna, la fila o toda la tabla, para darles formato a la vez.
 
 **Tab** pasa a la celda siguiente y **Mayús+Tab** a la anterior; Tab en la última celda agrega una fila, como en Word. Esto funciona también en tablas de Word y de otros programas.
 
@@ -38,5 +39,13 @@ Las columnas se encuentran por su posición, no contando celdas: eliminar o inse
 !!! tip "Datos desde un script"
     `Rte.InsertTableFromFile("C:\Datos\clientes.xlsx", 1, "Clientes")` y `Rte.InsertTableFromData(csvOJson)` crean una tabla a partir de datos. `Rte.SetTableData(datos, "", 1, 2)` vuelve a llenar la primera tabla del documento conservando su fila de encabezado y su formato: se agregan o eliminan filas según haga falta, y los objetos JSON van en las columnas que encabezan sus nombres. `Rte.TableData(1, "json")` devuelve las celdas de una tabla como CSV, TSV o JSON, y `Rte.CellText(2, 3)` / `Rte.SetCellText(2, 3, "texto")` leen y cambian una celda. Vea la [referencia de la API](../automation/api.md#tables-from-data-and-data-from-tables) (en inglés).
 
-!!! tip "De vuelta al archivo de origen"
-    `Rte.SaveTableData("C:\Datos\clientes.xlsx", 1, "Clientes")` escribe la primera tabla del documento de vuelta en el libro: solo las celdas cuyo valor cambió (las fórmulas y formatos de las demás no se tocan), y se vacían las celdas que la tabla ya no alcanza; el libro debe estar cerrado en Excel. Un archivo .csv, .tsv o .json se escribe entero, como era (su delimitador; los objetos JSON siguen siendo objetos). Las macros **Table to source file** y **Table from source file** (Herramientas > Macros) lo hacen con la tabla donde está el cursor: la primera vez piden el archivo y lo recuerdan para esa tabla de ese documento (mantenga Mayús para elegir otro).
+## Tablas vinculadas a sus archivos { #tables-linked-to-their-files }
+
+Una tabla insertada con **Insertar > Tabla > Desde archivo** queda vinculada a su archivo (un libro de Excel o un archivo CSV, TSV o JSON), y **Vincular a archivo** en la pestaña **Disposición de tabla** vincula cualquier tabla a uno. El vínculo se guarda en el documento, en la propia tabla (oculto): va adonde va la tabla cuando usted la mueve o la copia, y se guarda con el documento (RTF, Word, HTML, Markdown). Cuando el archivo está en la carpeta del documento o debajo de ella, el vínculo lo nombra desde allí, de modo que los dos pueden moverse juntos.
+
+- **Actualizar tabla** vuelve a llenar la tabla desde su archivo: la tabla conserva su formato (bordes, sombreado, anchos, una fila de encabezado en negrita), y se agregan o eliminan filas según haga falta.
+- **Guardar en archivo** escribe la tabla de vuelta en su archivo. Un libro recibe solo las celdas cuyo valor cambió: las fórmulas, los formatos y el resto de la hoja no se tocan, se vacían las celdas que la tabla ya no alcanza, y Excel recalcula al abrir el libro (ciérrelo antes en Excel). Si la tabla ha crecido más allá del rango del vínculo, o sobrescribiría filas de la hoja que no están vacías debajo de los datos, AhkWord pregunta antes; si se escribe más allá del rango, el rango del vínculo crece hasta abarcar toda la tabla. Un archivo CSV, TSV o JSON se escribe entero, como era (su delimitador; los objetos JSON siguen siendo objetos).
+- **Desvincular** quita el vínculo; la tabla queda como está.
+
+!!! tip "Desde un script"
+    `Rte.UpdateTables()` actualiza todas las tablas vinculadas del documento; `Rte.UpdateTable()`, `Rte.SaveTableToSource()` (con `Rte.SaveTableCheck()` para preguntar antes, como hace Guardar en archivo), `Rte.LinkTable("C:\Datos\clientes.xlsx", 0, "Clientes", "A1:D20")`, `Rte.UnlinkTable()` y `Rte.TableSource()` trabajan con la tabla donde está el cursor (o con la enésima del documento, como segundo argumento). `Rte.SaveTableData(ruta)` escribe una tabla en cualquier archivo, vinculada o no. Las macros **Table to source file** y **Table from source file** (Herramientas > Macros) son ejemplos.

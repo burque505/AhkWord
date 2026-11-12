@@ -633,7 +633,7 @@ enum RibbonCommand : uint
 	TableTools = 106, TabTableLayout = 107, GroupClipboard = 110, GroupFont = 111, GroupText = 112, GroupParagraph = 113,
 	GroupStyles = 114, GroupEditing = 115, GroupPages = 116, GroupTables = 117, GroupIllustrations = 118, GroupLinks = 119, GroupContents = 135,
 	GroupInsertText = 120, GroupPage = 121, GroupProofing = 122, GroupShow = 124, GroupZoom = 125, GroupDocumentView = 126,
-	GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupExtensions = 136, GroupRowsColumns = 130, GroupDelete = 131, GroupTableFormat = 132, GroupMerge = 137,
+	GroupMacros = 127, GroupScripts = 128, GroupAutomation = 129, GroupExtensions = 136, GroupRowsColumns = 130, GroupDelete = 131, GroupTableFormat = 132, GroupMerge = 137, GroupTableData = 138,
 	AppMenu = 140, Qat = 141, Recent = 142, Help = 143, ExportMenu = 144, PrintMenu = 145,
 	New = 200, Open = 201, Save = 202, SaveAs = 203, Print = 204, PrintPreview = 205,
 	PageSetup = 206, ExportPdf = 207, ExportWord = 208, ExportOdt = 209, Exit = 210, NewFromTemplate = 212,
@@ -656,7 +656,7 @@ enum RibbonCommand : uint
 	ZoomOut = 306, Zoom100 = 307, ViewRich = 330, ViewMarkdown = 331, ViewHtml = 332, SideBySide = 333,
 	SourceWordWrap = 334, SourceLineNumbers = 335, Macros = 310, RecordMacro = 311, MacroHotkeys = 312, RunScript = 313, EventHooks = 317, CommandPalette = 318, Extensions = 395, SectionBreak = 396, Columns = 398, ContinuousBreak = 399, Theme = 401, FormatPainter = 402, Ruler = 403, Language = 405, FontName = 410, FontSize = 411, FontBold = 412, FontItalic = 413, FontUnderline = 414, FontStrike = 415, FontSub = 416, FontSuper = 417, FontGrow = 418, FontShrink = 419, FontColor = 420, FontHighlight = 421,
 	MacrosFolder = 314, AutomationApi = 315, About = 316, InsertAbove = 320, InsertBelow = 321, InsertLeft = 322,
-	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, MergeCells = 327, SplitCells = 328, DeleteCells = 329, TableProperties = 340, TableBorders = 341,
+	InsertRight = 323, DeleteRow = 324, DeleteColumn = 325, DeleteTable = 326, MergeCells = 327, SplitCells = 328, DeleteCells = 329, UpdateTable = 422, SaveTableToSource = 423, LinkTable = 424, UnlinkTable = 425, TableSelect = 426, SelectCell = 427, SelectColumn = 428, SelectRow = 429, SelectTable = 430, BordersTop = 431, BordersBottom = 432, BordersLeft = 433, BordersRight = 434, TableProperties = 340, TableBorders = 341,
 	BordersAll = 342, BordersOutside = 343, BordersInside = 344, BordersNone = 345, TableShading = 346, LineNumbers = 350,
 	LineNumbersNone = 351, LineNumbersContinuous = 352, LineNumbersEachPage = 353, SuppressLineNumbers = 354, LineNumberOptions = 355,
 }
@@ -717,7 +717,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 93;    // (the About box; make_version.ps1)
+	public const int Iteration = 94;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1333,8 +1333,15 @@ class WriterForm : Form
 		Button(RibbonCommand.DeleteCells, DeleteCellsCommand);    // (iteration 92)
 		Button(RibbonCommand.MergeCells, () => api.MergeCells(), Keys.None, M("MergeCells"));
 		Button(RibbonCommand.SplitCells, SplitCellsCommand);
+		Button(RibbonCommand.UpdateTable, UpdateTableCommand);    // (iteration 94)
+		foreach (var (id, part) in new[] { (RibbonCommand.SelectCell, "cell"), (RibbonCommand.SelectColumn, "column"), (RibbonCommand.SelectRow, "row"), (RibbonCommand.SelectTable, "table") })
+			Button(id, () => api.SelectTable(part), Keys.None, M("SelectTable", part));
+		Button(RibbonCommand.SaveTableToSource, SaveTableToSourceCommand);
+		Button(RibbonCommand.LinkTable, LinkTableCommand);
+		Button(RibbonCommand.UnlinkTable, () => { api.UnlinkTable(); SetStatus(T("status.table.unlinked", "The table is no longer linked to a file")); }, Keys.None, M("UnlinkTable"));
 		Button(RibbonCommand.TableProperties, TablePropertiesCommand);
-		foreach (var (id, preset) in new[] { (RibbonCommand.BordersAll, "all"), (RibbonCommand.BordersOutside, "outside"), (RibbonCommand.BordersInside, "inside"), (RibbonCommand.BordersNone, "none") })
+		foreach (var (id, preset) in new[] { (RibbonCommand.BordersAll, "all"), (RibbonCommand.BordersOutside, "outside"), (RibbonCommand.BordersInside, "inside"), (RibbonCommand.BordersNone, "none"),
+			(RibbonCommand.BordersTop, "top"), (RibbonCommand.BordersBottom, "bottom"), (RibbonCommand.BordersLeft, "left"), (RibbonCommand.BordersRight, "right") })
 			Button(id, () => api.SetCellBorders(preset), Keys.None, M("SetCellBorders", preset));
 		shadingPicker = new RibbonDropDownColorPicker(ribbon, (uint)RibbonCommand.TableShading);
 		shadingPicker.ExecuteEvent += (s, e) => {
@@ -4363,6 +4370,58 @@ class WriterForm : Form
 		int rows = 0;
 		Run(() => rows = api.InsertTableFromFile(path, header, sheet, range), M("InsertTableFromFile", path, header, sheet, range));
 		if (rows > 0) SetStatus(T("status.tableFromFile.done", "A table of {0} rows from {1}", rows, Path.GetFileName(path)));
+	}
+
+	// (iteration 94) Table Layout > Data: a table linked to its file (EditorApi.LinkTable, rte_tabledata.cs TableSources).
+	void UpdateTableCommand() {
+		int rows = 0;
+		string source = "";
+		Run(() => { source = api.TableSource(); rows = api.UpdateTable(); }, M("UpdateTable"));
+		if (rows > 0) SetStatus(T("status.table.updated", "Table updated from {0}: {1} rows", Path.GetFileName(source.Split('|')[0]), rows));
+	}
+
+	void SaveTableToSourceCommand() {
+		int count = -1;
+		string source = "";
+		string? warning = null;
+		Run(() => warning = api.SaveTableCheck());    // (iteration 94: past the link's range, or over rows below the data)
+		if (warning == null) return;
+		if (warning != "") {
+			var answer = MessageBox.Show(this, warning + "\n\n" + T("msg.saveTable.ask", "Write the table to the file anyway?"), "AhkWord",
+				MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+			if (answer != DialogResult.Yes) { SetStatus(T("status.table.notSaved", "The table was not written to its file")); return; }
+		}
+		bool force = warning != "";
+		Run(() => { source = api.TableSource(); count = api.SaveTableToSource(0, force); }, M("SaveTableToSource"));
+		if (count < 0) return;
+		string file = source.Split('|')[0];
+		SetStatus(Path.GetExtension(file).ToLowerInvariant() is ".xlsx" or ".xlsm"
+			? T("status.table.savedCells", "{0} cells changed in {1}", count, Path.GetFileName(file))
+			: T("status.table.savedRows", "{0} rows written to {1}", count, Path.GetFileName(file)));
+	}
+
+	void LinkTableCommand() {
+		if (!api.InTable()) { SetStatus("⚠ " + T("status.table.caretFirst", "Put the caret in a table first.")); return; }
+		using var open = new OpenFileDialog { Title = T("dlg.linkTable.title", "Link the table to a file"), InitialDirectory = FileName is { Length: > 0 } f ? Path.GetDirectoryName(f) : StartFolder,
+			Filter = T("dlg.tableFromFile.types", "Excel workbooks, CSV and JSON") + " (*.xlsx;*.xlsm;*.csv;*.tsv;*.txt;*.json)|*.xlsx;*.xlsm;*.csv;*.tsv;*.txt;*.json|"
+				+ T("file.all", "All files") + " (*.*)|*.*" };
+		if (open.ShowDialog(this) != DialogResult.OK) return;
+		string path = open.FileName, sheet = "", range = "";
+		if (Path.GetExtension(path).ToLowerInvariant() is ".xlsx" or ".xlsm" or ".xltx" or ".xltm") {
+			List<string> sheets;
+			try { sheets = TabularData.SheetNames(path); }
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or DocumentFormat.OpenXml.Packaging.OpenXmlPackageException or InvalidDataException) {
+				SetStatus("⚠ " + T("status.tableFromFile.unreadable", "{0} could not be read: {1}", Path.GetFileName(path), ex.Message));
+				System.Media.SystemSounds.Beep.Play();
+				return;
+			}
+			using var choose = new TableFromFileDialog(Path.GetFileName(path), sheets, true);
+			if (choose.ShowDialog(this) != DialogResult.OK) return;
+			(sheet, range) = (sheets.Count > 1 ? choose.Sheet : "", choose.Range);
+		}
+		bool done = false;
+		Run(() => { api.LinkTable(path, 0, sheet, range); done = true; }, M("LinkTable", path, 0, sheet, range));
+		if (done) SetStatus(T("status.table.linked", "Table linked to {0}", Path.GetFileName(path)));
 	}
 
 	// Table Tools > Properties: the dialog, its changes made in one step (one undo step), and recorded as the calls they are.
@@ -7613,7 +7672,7 @@ public class EditorApi
 	}
 
 	// (iteration 91) InsertTable's work, with the cells' text (data: rows of cells, the columns fitted to it) or empty.
-	void InsertTableWith(int rows, int columns, bool headerRow, bool roomAbove, List<List<string>>? data) {
+	void InsertTableWith(int rows, int columns, bool headerRow, bool roomAbove, List<List<string>>? data, Action? then = null) {
 		// (gaps out first: the paragraph a gap is on would end up after the table, its space with it)
 		var doc = ed.TextDocument;
 		bool room = roomAbove && doc.Range2(0, 0).StoryLength <= 1;
@@ -7627,6 +7686,7 @@ public class EditorApi
 				int width = WidthAt(doc.Selection2.Start);
 				if (data == null) RtfTables.Insert(ed, rows, columns, headerRow, width);
 				else RtfTables.Insert(ed, rows, columns, headerRow, width, (r, c) => c < data[r].Count ? data[r][c] : null, RtfTables.FittedWidths(data, width));
+				then?.Invoke();    // (iteration 94: in the same step to undo)
 			}
 			finally { doc.EndEditCollection(); }
 		});
@@ -7677,6 +7737,11 @@ public class EditorApi
 	/// across rows).
 	public void SelectCells(int row1, int cell1, int row2, int cell2) => RtfTables.SelectCells(ed, row1, cell1, row2, cell2);
 
+	/// (iteration 94) Selects part of the table at the caret, as Word's Table Layout > Select does: part = "table",
+	/// "row", "column" (the cells under the caret's, by position) or "cell". Borders, shading and the other formats then
+	/// act on all of them (a block of cells, as SelectCells makes).
+	public void SelectTable(string part = "table") => RtfTables.SelectTablePart(ed, part);
+
 	/// (iteration 92) Empties the selected cells' text (as Delete does on a block of cells), keeping their formats.
 	public void ClearCells() { RtfTables.ClearCells(ed); Redraw(); }
 
@@ -7717,12 +7782,18 @@ public class EditorApi
 	/// open in Excel), CSV or TSV (.csv, .tsv, .txt), or JSON (.json), as InsertTableFromData. In a workbook: sheet is a
 	/// sheet's name or number ("" for the first), range one such as "A1:D20" ("" for the cells in use); values come as
 	/// Excel shows them (number formats, dates, percentages; formulas' last results). Returns the number of rows.
-	public int InsertTableFromFile(string path, bool headerRow = true, string sheet = "", string range = "") =>
-		InsertDataTable(TabularData.ReadFile(FullPath(path), sheet, range), headerRow);
+	/// (iteration 94) link = 1 (the default): the table is linked to the file (LinkTable), for UpdateTable and
+	/// SaveTableToSource.
+	public int InsertTableFromFile(string path, bool headerRow = true, string sheet = "", string range = "", bool link = true) {
+		string full = FullPath(path);
+		var source = link ? new TableSources.Source(TableSources.Relative(full, DocumentFolder), (sheet ?? "").Trim(), (range ?? "").Trim()) : null;
+		return InsertDataTable(TabularData.ReadFile(full, sheet, range), headerRow,
+			source == null ? null : () => { if (RtfTables.At(ed, ed.TextDocument.Selection2.Start) is { } at) PutSource(at.Table, source); });
+	}
 
-	int InsertDataTable(List<List<string>> rows, bool headerRow) {
+	int InsertDataTable(List<List<string>> rows, bool headerRow, Action? then = null) {
 		if (rows.Count == 0 || rows[0].Count == 0) throw new ArgumentException("The data has no rows.");
-		InsertTableWith(rows.Count, rows[0].Count, headerRow, true, rows);
+		InsertTableWith(rows.Count, rows[0].Count, headerRow, true, rows, then);
 		return rows.Count;
 	}
 
@@ -7744,7 +7815,7 @@ public class EditorApi
 
 	// A cell's text: its paragraphs and line breaks as \n.
 	string CellOf(RtfTables.Cell cell) {
-		string text = ed.TextDocument.Range2(cell.Start, cell.End).Text ?? "";
+		string text = TableSources.Marker.Replace(ed.TextDocument.Range2(cell.Start, cell.End).Text ?? "", "");    // (iteration 94: not a link's marker)
 		return text.Replace(RtfTables.MergedMark.ToString(), "").Replace("\r\n", "\n").Replace('\r', '\n').Replace('\v', '\n');    // (iteration 93: not a merged cell's mark)
 	}
 
@@ -7766,6 +7837,123 @@ public class EditorApi
 	public int SaveTableData(string path, int table = 0, string sheet = "", string range = "", string format = "") =>
 		TabularData.WriteFile(FullPath(path), CellsOf(TableNumber(table)), sheet, range, format);
 
+	// ---- Iteration 94: tables linked to their files (TableSources, rte_tabledata.cs)
+
+	string? DocumentFolder => form.FileName is { Length: > 0 } file ? Path.GetDirectoryName(Path.GetFullPath(file)) : null;
+
+	// A table's link: its marker's place in the first cell, and what it says (null: none).
+	(int Start, int End, TableSources.Source? Source) SourceOf(RtfTables.Table table) {
+		if (table.Rows.Count == 0 || table.Rows[0].Cells.Count == 0) return (-1, -1, null);
+		var cell = table.Rows[0].Cells[0];
+		var m = TableSources.Marker.Match(ed.TextDocument.Range2(cell.Start, cell.End).Text ?? "");
+		return m.Success ? (cell.Start + m.Index, cell.Start + m.Index + m.Length, TableSources.Source.Decode(m.Value)) : (-1, -1, null);
+	}
+
+	// The table's marker replaced (source null: taken out), inside the caller's step to undo.
+	void PutSource(RtfTables.Table table, TableSources.Source? source) {
+		var (start, end, _) = SourceOf(table);
+		var doc = ed.TextDocument;
+		if (start >= 0) doc.Range2(start, end).Text = "";
+		if (source != null && table.Rows.Count > 0 && table.Rows[0].Cells.Count > 0) CrossRefs.Hidden(doc, table.Rows[0].Cells[0].Start, source.Encode());
+	}
+
+	void SetSource(RtfTables.Table table, TableSources.Source? source) {
+		var doc = ed.TextDocument;
+		int caret = doc.Selection2.Start, end = doc.Selection2.End;
+		form.WithoutGapsChanging(() => {
+			doc.BeginEditCollection();
+			try { PutSource(table, source); }
+			finally { doc.EndEditCollection(); }
+		});
+		doc.Selection2.SetRange(caret, end);
+	}
+
+	/// Links a table (0: the caret's, or a number from 1) to a file its data come from, as InsertTableFromFile does: an
+	/// Excel workbook (sheet: a name or number, "" for the first; range such as "A1:D20", "" for the cells in use), CSV,
+	/// TSV or JSON. The link is a hidden marker in the table's first cell: it goes wherever the table goes and is saved
+	/// with the document (RTF, Word, HTML, Markdown). The path is kept relative to the document's folder when the file
+	/// is in it or below it.
+	public void LinkTable(string path, int table = 0, string sheet = "", string range = "") =>
+		SetSource(TableNumber(table), new TableSources.Source(TableSources.Relative(FullPath(path), DocumentFolder), (sheet ?? "").Trim(), (range ?? "").Trim()));
+
+	/// Takes away a table's link to its file (the table stays as it is).
+	public void UnlinkTable(int table = 0) => SetSource(TableNumber(table), null);
+
+	/// A table's link as "path|sheet|range" (the path as kept: maybe relative to the document's folder), or "" if it
+	/// has none.
+	public string TableSource(int table = 0) => SourceOf(TableNumber(table)).Source?.ToString() ?? "";
+
+	// A linked table's file, read.
+	List<List<string>> ReadSource(TableSources.Source source) => TabularData.ReadFile(TableSources.Resolve(source.Path, DocumentFolder), source.Sheet, source.Range);
+
+	TableSources.Source LinkOf(RtfTables.Table table) =>
+		SourceOf(table).Source ?? throw new InvalidOperationException(T("status.table.notLinked", "This table isn't linked to a file: insert it from a file, or link it (Table Layout > Link to File)."));
+
+	/// Fills a linked table again from its file (all its rows, the file's first row too), keeping its formats: rows
+	/// are added or deleted to fit. Returns the number of rows.
+	public int UpdateTable(int table = 0) {
+		var target = TableNumber(table);
+		return FillTable(target, ReadSource(LinkOf(target)), 1, null);
+	}
+
+	/// Fills every linked table of the document again from its file; returns how many. A file that can't be read
+	/// leaves its table as it was; the errors come at the end, one per line.
+	public int UpdateTables() {
+		var doc = ed.TextDocument;
+		var linked = RtfTables.Find(doc).Select(t => (t.Start, SourceOf(t).Source)).Where(x => x.Source != null).ToList();
+		int done = 0;
+		var errors = new List<string>();
+		foreach (var (start, source) in Enumerable.Reverse(linked)) {    // (from the end: the earlier tables stay where they are)
+			try {
+				var table = RtfTables.Find(doc).First(t => t.Start == start);
+				FillTable(table, ReadSource(source!), 1, null);
+				done++;
+			}
+			catch (Exception ex) when (ex is IOException or ArgumentException or InvalidOperationException or UnauthorizedAccessException) { errors.Add(Path.GetFileName(source!.Path) + ": " + ex.Message); }
+		}
+		if (errors.Count > 0) throw new InvalidOperationException(T("status.table.updateFailed", "{0} of {1} linked tables updated; not:", done, linked.Count) + "\n" + string.Join("\n", errors));
+		return done;
+	}
+
+	/// Writes a linked table back to its file, as SaveTableData does (a workbook: only the cells that changed).
+	/// Returns the number of cells changed (a workbook) or of rows written. (iteration 94) A workbook's table that has
+	/// grown past the link's range, or would write over cells of the sheet that aren't empty beyond the area it was
+	/// read from (rows below the data), is not written unless force = 1 (SaveTableCheck says what it would do); written
+	/// past the range, the link's range grows to take the table in, so that UpdateTable reads all of it.
+	public int SaveTableToSource(int table = 0, bool force = false) {
+		var target = TableNumber(table);
+		var source = LinkOf(target);
+		string path = TableSources.Resolve(source.Path, DocumentFolder);
+		var cells = CellsOf(target);
+		var reach = TabularData.WriteReach(path, cells, source.Sheet, source.Range);
+		if (!force && ReachWarning(source, reach) is { Length: > 0 } warning)
+			throw new InvalidOperationException(warning + " " + T("status.table.notWritten", "The table was not written (SaveTableToSource with force = 1 writes it anyway)."));
+		int count = TabularData.WriteFile(path, cells, source.Sheet, source.Range);
+		if (reach.Past) SetSource(target, source with { Range = reach.Area });
+		return count;
+	}
+
+	/// (iteration 94) What SaveTableToSource would do that it doesn't do without force = 1, as a warning: "" if
+	/// nothing (the table fits in the link's range, and writes over nothing beyond the data it was read from).
+	public string SaveTableCheck(int table = 0) {
+		var target = TableNumber(table);
+		var source = LinkOf(target);
+		return ReachWarning(source, TabularData.WriteReach(TableSources.Resolve(source.Path, DocumentFolder), CellsOf(target), source.Sheet, source.Range));
+	}
+
+	string ReachWarning(TableSources.Source source, (string Area, bool Past, List<int> Filled) reach) {
+		var parts = new List<string>();
+		if (reach.Past)
+			parts.Add(T("msg.saveTable.past", "The table goes past the linked range {0}: it would take {1} (the link's range then becomes {1}).", source.Range.ToUpperInvariant(), reach.Area));
+		if (reach.Filled.Count > 0) {
+			string rows = string.Join(", ", reach.Filled.Take(8)) + (reach.Filled.Count > 8 ? ", …" : "");
+			parts.Add(reach.Filled.Count == 1
+				? T("msg.saveTable.filledOne", "Row {0} of the sheet is not empty where the table would write: its cells would be written over.", rows)
+				: T("msg.saveTable.filled", "Rows {0} of the sheet are not empty where the table would write: their cells would be written over.", rows));
+		}
+		return string.Join(" ", parts);
+	}
+
 	/// The text of a cell (row and column from 1) of the caret's table (table = 0) or of the document's nth table.
 	public string CellText(int row, int column, int table = 0) => CellOf(CellAt(TableNumber(table), row, column));
 
@@ -7778,9 +7966,19 @@ public class EditorApi
 
 	/// Replaces a cell's text (row and column from 1; `n for a line break), keeping its format.
 	public void SetCellText(int row, int column, string text, int table = 0) {
-		var cell = CellAt(TableNumber(table), row, column);
+		var target = TableNumber(table);
+		var cell = CellAt(target, row, column);
 		var doc = ed.TextDocument;
-		form.WithoutGapsChanging(() => doc.Range2(cell.Start, cell.End).Text = CellValue(text));
+		var source = row == 1 && column == 1 ? SourceOf(target).Source : null;    // (iteration 94: a linked table's marker stays)
+		int start = target.Start;
+		form.WithoutGapsChanging(() => {
+			doc.BeginEditCollection();
+			try {
+				doc.Range2(cell.Start, cell.End).Text = CellValue(text);
+				if (source != null) PutSource(RtfTables.Find(doc).First(t => t.Start == start), source);
+			}
+			finally { doc.EndEditCollection(); }
+		});
 		Redraw();
 	}
 
@@ -7830,6 +8028,7 @@ public class EditorApi
 		}
 		var doc = ed.TextDocument;
 		int start = table.Start, caret = doc.Selection2.Start;
+		var source = SourceOf(table).Source;    // (iteration 94: a linked table's marker, in its first cell, stays)
 		form.WithoutGapsChanging(() => {
 			doc.BeginEditCollection();    // (one step to undo)
 			doc.Freeze();
@@ -7845,6 +8044,7 @@ public class EditorApi
 						if ((range.Text ?? "") != value) range.Text = value;
 					}
 				}
+				if (source != null) PutSource(RtfTables.Find(doc).First(t => t.Start == start), source);
 			}
 			finally {
 				doc.Unfreeze();
@@ -8116,19 +8316,35 @@ public class EditorApi
 	void FormatTable(Action<RtfTables.Table, List<RtfTables.RowFormat>> change) {
 		var table = CurrentTable();
 		var doc = ed.TextDocument;
+		// (iteration 94) the selected cells taken before the table's RTF is read (reading it moves the selection, which
+		// ends a block of cells), and the block put back after, for the next format
+		var writer = ed as WriterEditBox;
+		var block = writer?.CellBlock;
+		formatCells = RtfTables.SelectedCells(ed, table);
 		doc.BeginEditCollection();
 		try {
 			RtfTables.Format(ed, table.Start, formats => change(table, formats));
 		} finally {
 			doc.EndEditCollection();
+			formatCells = null;
 		}
+		if (writer != null && block is { } b && RtfTables.At(ed, b.From) is { } x && RtfTables.At(ed, b.To) is { } y && x.Table.Start == y.Table.Start)
+			writer.SelectBlock(b.From, b.To);
 		Redraw();
 	}
+
+	// The cells a format is for while FormatTable runs (null: the selection's, as it is now).
+	List<(int Row, int Cell)>? formatCells;
 
 	/// The formats of the caret's table's rows, and the cells (row, column) the selection is in.
 	internal (List<RtfTables.RowFormat> Rows, List<(int Row, int Cell)> Selected) TableFormats() {
 		var table = CurrentTable();
-		return (RtfTables.Formats(ed, table), RtfTables.SelectedCells(ed, table));
+		var selected = RtfTables.SelectedCells(ed, table);    // (iteration 94: before the RTF is read, which ends a block)
+		var writer = ed as WriterEditBox;
+		var block = writer?.CellBlock;
+		var formats = RtfTables.Formats(ed, table);
+		if (writer != null && block is { } b && writer.CellBlock == null) writer.SelectBlock(b.From, b.To);
+		return (formats, selected);
 	}
 
 	/// The width the text has on the page, in twips (new tables are as wide).
@@ -8136,7 +8352,7 @@ public class EditorApi
 
 	// The cells a change is for: those the selection is in, or all of the table.
 	List<(int Row, int Cell)> CellsFor(RtfTables.Table table, List<RtfTables.RowFormat> rows, bool wholeTable) =>
-		wholeTable ? rows.SelectMany((row, r) => row.Cells.Select((cell, c) => (r, c))).ToList() : RtfTables.SelectedCells(ed, table);
+		wholeTable ? rows.SelectMany((row, r) => row.Cells.Select((cell, c) => (r, c))).ToList() : formatCells ?? RtfTables.SelectedCells(ed, table);
 
 	/// Puts the caret's table at the "left", "center" or "right" of the page.
 	public void SetTableAlignment(string alignment) {

@@ -38,11 +38,13 @@ var fluent = new Dictionary<string, string> {
 	["zoomin"] = "zoom_in", ["zoomout"] = "zoom_out", ["zoom100"] = "zoom_fit", ["html"] = "code", ["markdown"] = "markdown",
 	["viewrich"] = "document_text", ["sidebyside"] = "layout_column_two",
 	["tablesettings"] = "table_settings", ["linespacing"] = "text_line_spacing", ["pagewidth"] = "document_width", ["printlayout"] = "document_one_page", ["onepage"] = "page_fit", ["multiplepages"] = "document_multiple", ["close"] = "document_dismiss", ["newtemplate"] = "document_add", ["startpage"] = "home", ["newwindow"] = "window_new", ["stylesmenu"] = "text_edit_style", ["modifystyle"] = "edit", ["newstyle"] = "add", ["updatestyle"] = "arrow_sync", ["deletestyle"] = "delete", ["savestyles"] = "save", ["clearformatting"] = "text_clear_formatting", ["paragraphsettings"] = "text_paragraph", ["applystyles"] = "paint_brush_arrow_down", ["openwindow"] = "folder_open", ["inserttemplate"] = "document_text", ["fillfields"] = "textbox", ["borderall"] = "border_all", ["borderoutside"] = "border_outside",
-	["borderinside"] = "border_inside", ["bordernone"] = "border_none", ["paintbucket"] = "paint_bucket",
+	["borderinside"] = "border_inside", ["bordernone"] = "border_none", ["bordertop"] = "border_top", ["borderbottom"] = "border_bottom", ["borderleft"] = "border_left", ["borderright"] = "border_right", ["paintbucket"] = "paint_bucket",
 	["macros"] = "play", ["record"] = "record", ["hotkeys"] = "keyboard", ["runscript"] = "script", ["macrosfolder"] = "folder_open", ["eventhooks"] = "flash", ["commandpalette"] = "search", ["api"] = "plug_connected", ["extensions"] = "puzzle_piece",
 	["insertabove"] = "table_stack_above", ["insertbelow"] = "table_stack_below", ["insertleft"] = "table_stack_left", ["insertright"] = "table_stack_right",
 	["deleterow"] = "table_delete_row", ["deletecolumn"] = "table_delete_column", ["deletetable"] = "table_dismiss",
 	["deletecells"] = "table_cell_cross", ["mergecells"] = "table_cells_merge", ["splitcells"] = "table_cells_split",    // (iteration 92)
+	["updatetable"] = "arrow_sync", ["savetable"] = "save", ["linktable"] = "link", ["unlinktable"] = "link_dismiss",    // (iteration 94)
+	["tableselect"] = "table_select_range", ["selectcell"] = "table_cursor", ["selectcolumn"] = "table_column_top_bottom", ["selectrow"] = "table_bottom_row",
 };
 // The colour a Fluent icon's inside takes (its Filled shape, tinted, under the outline), by kind of command; icons not
 // named here (the text formatting ones) stay plain.
@@ -50,8 +52,8 @@ var families = new Dictionary<Color, string> {
 	[Color.FromArgb(0x2B, 0x7C, 0xD3)] = "new newtemplate newwindow print printpreview pagesetup export viewrich printlayout onepage multiplepages pagewidth inserttemplate link tableofcontents headerfooter pagebreak sectionbreak sidebyside startpage about crossreference footnote",
 	[Color.FromArgb(0x87, 0x64, 0xB8)] = "save saveas savestyles",
 	[Color.FromArgb(0xE8, 0xA3, 0x17)] = "open openwindow macrosfolder paste eventhooks snippets",
-	[Color.FromArgb(0xD1, 0x34, 0x38)] = "exit close exportpdf deletestyle deleterow deletecolumn deletetable deletecells record datetime",
-	[Color.FromArgb(0x3A, 0x9A, 0x3A)] = "picture thumbnail table tablesettings insertabove insertbelow insertleft insertright mergecells splitcells macros runscript extensions api fillfields",
+	[Color.FromArgb(0xD1, 0x34, 0x38)] = "exit close exportpdf deletestyle deleterow deletecolumn deletetable deletecells unlinktable record datetime",
+	[Color.FromArgb(0x3A, 0x9A, 0x3A)] = "picture thumbnail table tablesettings insertabove insertbelow insertleft insertright mergecells splitcells updatetable savetable linktable tableselect selectcell selectcolumn selectrow macros runscript extensions api fillfields",
 	[Color.FromArgb(0xCA, 0x50, 0x10)] = "stylesmenu applystyles formatpainter paintbucket modifystyle newstyle updatestyle dictionary nextspelling",
 	[Color.FromArgb(0x03, 0x83, 0x87)] = "find replace commandpalette language zoomin zoomout zoom100 updatereferences hotkeys html markdown",
 };

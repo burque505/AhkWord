@@ -347,6 +347,29 @@ public static class TabularData
 		return changed;
 	}
 
+	/// (iteration 94) What writing rows into a workbook's sheet (as WriteFile does) would reach beyond the area it reads
+	/// there (the range, or the cells in use). Area: the range the rows and that area take together ("A1:D25"); Past:
+	/// a range was given and the rows go past it; Filled: the sheet's rows (their numbers) that hold something in the
+	/// cells the rows would take beyond that area, so written over. A text file (written whole), a workbook that isn't
+	/// there, or rows inside the area: ("", false, none).
+	public static (string Area, bool Past, List<int> Filled) WriteReach(string path, List<List<string>> rows, string sheet = "", string range = "") {
+		var none = ("", false, new List<int>());
+		if (Path.GetExtension(path).ToLowerInvariant() is not (".xlsx" or ".xlsm") || !File.Exists(path)) return none;
+		var (old, oldTop, oldLeft) = ReadXlsxAt(path, sheet, range);
+		int top = oldTop ?? 1, left = oldLeft ?? 1;
+		int oldHeight = old.Count, oldWidth = old.Count == 0 ? 0 : old.Max(r => r.Count);
+		int height = rows.Count, width = rows.Count == 0 ? 0 : rows.Max(r => r.Count);
+		if (height <= oldHeight && width <= oldWidth) return none;
+		int allHeight = Math.Max(height, oldHeight), allWidth = Math.Max(width, oldWidth);
+		string area = ColumnLetters(left) + top + ":" + ColumnLetters(left + allWidth - 1) + (top + allHeight - 1);
+		var (now, _, _) = ReadXlsxAt(path, sheet, area);
+		var filled = new SortedSet<int>();
+		for (int r = 0; r < height && r < now.Count; r++)
+			for (int c = 0; c < rows[r].Count && c < now[r].Count; c++)
+				if ((r >= oldHeight || c >= oldWidth) && now[r][c] != "") filled.Add(top + r);
+		return (area, (range ?? "").Trim() != "", filled.ToList());
+	}
+
 	public static string ColumnLetters(int column) {
 		string s = "";
 		for (; column > 0; column = (column - 1) / 26) s = (char)('A' + (column - 1) % 26) + s;
@@ -561,5 +584,53 @@ public static class TabularData
 	static char? NextLetter(List<string> tokens, int i) {
 		for (int k = i + 1; k < tokens.Count; k++) if (char.IsLetter(tokens[k][0]) && !tokens[k].StartsWith('\\')) return char.ToLowerInvariant(tokens[k][0]);
 		return null;
+	}
+}
+
+/// (iteration 94) A table linked to the file its data come from: a hidden marker (as cross-references and the table of
+/// contents have them, rte_crossrefs.cs) at the start of the table's first cell,
+///   [[tablesrc:path|sheet|range]]
+/// so that the link goes wherever the table goes (moved, copied, saved as RTF or Word). Update Table fills the table
+/// again from the file (its formats kept), Save to File writes it back (TabularData.WriteFile). The path is kept
+/// relative to the document's folder when the file is in it or below it (the two can be moved together). In the
+/// marker, "%", "|" and "]" are written %25, %7C and %5D.
+public static class TableSources
+{
+	public static readonly Regex Marker = new(@"\[\[tablesrc:([^\]\r]*)\]\]");
+	/// The marker, for CrossRefs.AnyMark (hidden, and left out of plain text).
+	public const string Marks = @"\[\[tablesrc:[^\]\r]*\]\]";
+
+	public sealed record Source(string Path, string Sheet = "", string Range = "")
+	{
+		public string Encode() => "[[tablesrc:" + Escape(Path) + "|" + Escape(Sheet) + "|" + Escape(Range) + "]]";
+
+		public static Source? Decode(string marker) {
+			var m = Marker.Match(marker);
+			if (!m.Success) return null;
+			var parts = m.Groups[1].Value.Split('|');
+			string Part(int i) => i < parts.Length ? Unescape(parts[i]).Trim() : "";
+			return Part(0) == "" ? null : new Source(Part(0), Part(1), Part(2));
+		}
+
+		/// As the API gives it: path|sheet|range.
+		public override string ToString() => Path + "|" + Sheet + "|" + Range;
+	}
+
+	static string Escape(string s) => (s ?? "").Replace("%", "%25").Replace("|", "%7C").Replace("]", "%5D").Replace("\r", "").Replace("\n", "");
+	static string Unescape(string s) => s.Replace("%5D", "]").Replace("%7C", "|").Replace("%25", "%");
+
+	/// A full path as the marker keeps it: relative to the document's folder when the file is in it or below it.
+	public static string Relative(string full, string? folder) {
+		if (string.IsNullOrEmpty(folder)) return full;
+		string root = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(folder)) + System.IO.Path.DirectorySeparatorChar;
+		return full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? full[root.Length..] : full;
+	}
+
+	/// The marker's path as a full path (a relative one from the document's folder; an unsaved document has none).
+	public static string Resolve(string path, string? folder) {
+		path = Environment.ExpandEnvironmentVariables(path);
+		if (System.IO.Path.IsPathFullyQualified(path)) return path;
+		if (string.IsNullOrEmpty(folder)) throw new InvalidOperationException($"The table's file \"{path}\" is given from the document's folder: save the document first.");
+		return System.IO.Path.GetFullPath(System.IO.Path.Combine(folder, path));
 	}
 }

@@ -1,22 +1,17 @@
 #Requires AutoHotkey v2.0
 #Include "..\RteClient2.ahk"
-; Writes the table at the caret back to the file it came from (an Excel workbook, CSV, TSV or JSON) after you edit it
-; in AhkWord. The first time, it asks for the file, and the sheet and range for a workbook, and remembers them for
-; this table of this document (in table-links.ini); hold Shift while starting it to choose again.
-; A workbook gets only the cells whose value changed; it must be closed in Excel. See also "Table from source file".
+; Writes the table at the caret back to the file it is linked to (an Excel workbook, CSV, TSV or JSON), as
+; Table Layout > Save to File does. A table inserted from a file is linked already; for another table this asks for
+; the file (and the sheet and range of a workbook) and links the table to it first (Rte.LinkTable): the link is kept
+; in the document, with the table. A workbook gets only the cells whose value changed; it must be closed in Excel.
+; Hold Shift while starting it to link the table to another file. See also "Table from source file".
 Title := "Table to source file"
-TableNo := Rte.TableNumberAtCaret()
-if !TableNo {
+if !Rte.TableNumberAtCaret() {
     MsgBox("Put the caret in a table first.", Title, "Icon!")
     ExitApp
 }
-Doc := Rte.FileName
-Links := (Rte.Portable ? A_ScriptDir "\..\data" : A_AppData "\AhkWord") "\table-links.ini"
-Key := "table " TableNo
-Link := Doc != "" && !GetKeyState("Shift") ? IniRead(Links, Doc, Key, "") : ""
-Parts := StrSplit(Link, "|")
-if Link = "" {
-    Path := FileSelect("S16", , Title ": write table " TableNo " to", "Data (*.xlsx; *.xlsm; *.csv; *.tsv; *.txt; *.json)")
+if Rte.TableSource() = "" || GetKeyState("Shift") {
+    Path := FileSelect("S16", , Title ": write the table to", "Data (*.xlsx; *.xlsm; *.csv; *.tsv; *.txt; *.json)")
     if Path = ""
         ExitApp
     if !RegExMatch(Path, "i)\.(xlsx|xlsm|csv|tsv|txt|json)$")
@@ -37,17 +32,24 @@ if Link = "" {
             ExitApp
         Range := Trim(Answer.Value)
     }
-    Parts := [Path, Sheet, Range]
-    if Doc != ""
-        DirCreate(RegExReplace(Links, "\\[^\\]+$")), IniWrite(Path "|" Sheet "|" Range, Links, Doc, Key)
+    Rte.LinkTable(Path, 0, Sheet, Range)
 }
-Path := Parts[1], Sheet := Parts.Length > 1 ? Parts[2] : "", Range := Parts.Length > 2 ? Parts[3] : ""
 try
-    Count := Rte.SaveTableData(Path, TableNo, Sheet, Range)
+    Warning := Rte.SaveTableCheck()
 catch as e {
     MsgBox("The table was not written:`n" e.Message, Title, "Icon!")
     ExitApp
 }
-Done := RegExMatch(Path, "i)\.xls[xm]$") ? (Count = 0 ? "No cells had changed." : Count " cell" (Count = 1 ? "" : "s") " changed.")
+; past the link's range, or over a sheet's rows below the data: ask first
+if Warning != "" && MsgBox(Warning "`n`nWrite the table to the file anyway?", Title, "YesNo Icon! Default2") != "Yes"
+    ExitApp
+try
+    Count := Rte.SaveTableToSource(0, Warning != "")
+catch as e {
+    MsgBox("The table was not written:`n" e.Message, Title, "Icon!")
+    ExitApp
+}
+Link := StrSplit(Rte.TableSource(), "|")    ; (after: a range the table went past has grown)
+Done := RegExMatch(Link[1], "i)\.xls[xm]$") ? (Count = 0 ? "No cells had changed." : Count " cell" (Count = 1 ? "" : "s") " changed.")
     : Count " row" (Count = 1 ? "" : "s") " written."
-MsgBox("Table " TableNo " → " Path (Sheet != "" ? " (" Sheet (Range != "" ? ", " Range : "") ")" : "") "`n`n" Done, Title, "Iconi T5")
+MsgBox("The table → " Link[1] (Link[2] != "" ? " (" Link[2] (Link[3] != "" ? ", " Link[3] : "") ")" : "") "`n`n" Done, Title, "Iconi T5")

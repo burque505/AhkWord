@@ -347,6 +347,44 @@ public static partial class RtfTables
 		else editor.TextDocument.Selection2.SetRange(Math.Min(from, to), Math.Max(from, to));
 	}
 
+	/// (iteration 94) Selects part of the table at the caret as a block of cells, as Word's Table Layout > Select does:
+	/// part = "table", "row" (the caret's), "column" (the caret's: the cells under it, by position) or "cell". Borders,
+	/// Shading and the other formats then act on all of them.
+	public static void SelectTablePart(RichEditBox editor, string part) {
+		int caret = editor.TextDocument.Selection2.Start;
+		if (Innermost(editor, caret) is not { Nested: false } || At(editor, caret) is not { } at)
+			throw new InvalidOperationException(T("status.table.caretFirst", "Put the caret in a table first."));
+		var table = at.Table;
+		int from, to;
+		switch ((part ?? "").Trim().ToLowerInvariant()) {
+			case "table":
+				from = table.Rows[0].Cells[0].Start;
+				to = table.Rows[^1].Cells[^1].Start;
+				break;
+			case "row":
+				from = table.Rows[at.Row].Cells[0].Start;
+				to = table.Rows[at.Row].Cells[^1].Start;
+				break;
+			case "column": {
+				var edges = EdgesOf(editor, caret);
+				editor.TextDocument.Selection2.SetRange(caret, caret);
+				from = to = table.Rows[at.Row].Cells[at.Cell].Start;
+				while (NextCell(editor, from, Keys.Up, edges) is int up) from = up;
+				while (NextCell(editor, to, Keys.Down, edges) is int down) to = down;
+				break;
+			}
+			case "cell":
+				var cell = table.Rows[at.Row].Cells[at.Cell];
+				if (editor is WriterEditBox w) w.CellBlock = null;
+				editor.TextDocument.Selection2.SetRange(cell.Start, Math.Max(cell.Start, cell.End));
+				return;
+			default: throw new ArgumentException("Select \"table\", \"row\", \"column\" or \"cell\".");
+		}
+		if (from == to || SameCell(editor, from, to)) { editor.TextDocument.Selection2.SetRange(from, from); return; }
+		if (editor is WriterEditBox writer) writer.SelectBlock(from, to);
+		else editor.TextDocument.Selection2.SetRange(Math.Min(from, to), Math.Max(from, to) + 1);
+	}
+
 	/// Empties the selected cells' text (a block's: Delete and Backspace), their paragraph formats kept; one undo step.
 	public static void ClearCells(RichEditBox editor) {
 		var (table, r0, c0, r1, c1) = SelectionCells(editor);
@@ -458,6 +496,47 @@ public static partial class RtfTables
 	/// Whether a block of cells is selected (AhkWord's own selection, see WriterEditBox.CellBlock).
 	public static bool HasBlock(RichEditBox editor) => BlockCells(editor) != null;
 
+	/// (iteration 94) The cells (row, cell from 0) of the block of cells in a table, for the formatting commands
+	/// (borders, shading, alignment, row height, Properties): the rows between its two cells, and the cells of each
+	/// between the two cells' outer edges (by position: merged cells reckoned with), widened to whole merged cells as
+	/// Merge Cells takes them. Null: no block in that table.
+	public static List<(int Row, int Cell)>? BlockCellList(RichEditBox editor, Table table) {
+		if (BlockCells(editor) is not { } b || b.Table.Start != table.Start) return null;
+		var edges = (editor as WriterEditBox)?.BlockEdges;
+		var list = new List<(int, int)>();
+		if (edges == null || edges.Count != table.Rows.Count || Enumerable.Range(0, table.Rows.Count).Any(k => edges[k].Count != table.Rows[k].Cells.Count + 1)) {
+			// (no edges: by number)
+			for (int r = b.Row; r <= b.EndRow; r++)
+				for (int c = Math.Min(b.Cell, b.EndCell); c <= Math.Max(b.Cell, b.EndCell) && c < table.Rows[r].Cells.Count; c++) list.Add((r, c));
+			return list;
+		}
+		(int Left, int Right) Bounds(int r, int c) => (edges[r][c], edges[r][c + 1]);
+		var (a1, b1) = Bounds(b.Row, b.Cell);
+		var (a2, b2) = Bounds(b.EndRow, b.EndCell);
+		int first = b.Row, last = b.EndRow, left = Math.Min(a1, a2), right = Math.Max(b1, b2);
+		string s = Story(editor.TextDocument);
+		bool Continues(int r, int c) => table.Rows[r].Cells[c] is var cell && cell.End == cell.Start + 1 && s[cell.Start] == MergedMark;
+		for (bool changed = true; changed;) {
+			changed = false;
+			for (int r = first; r <= last; r++)
+				for (int c = 0; c < table.Rows[r].Cells.Count; c++) {
+					var (x, y) = Bounds(r, c);
+					if (x >= right - SameEdge || y <= left + SameEdge) continue;
+					if (x < left - SameEdge) { left = x; changed = true; }
+					if (y > right + SameEdge) { right = y; changed = true; }
+				}
+			bool In(int r, int c) { var (x, y) = Bounds(r, c); return x >= left - SameEdge && y <= right + SameEdge; }
+			if (first > 0 && Enumerable.Range(0, table.Rows[first].Cells.Count).Any(c => In(first, c) && Continues(first, c))) { first--; changed = true; }
+			if (last + 1 < table.Rows.Count && Enumerable.Range(0, table.Rows[last + 1].Cells.Count).Any(c => In(last + 1, c) && Continues(last + 1, c))) { last++; changed = true; }
+		}
+		for (int r = first; r <= last; r++)
+			for (int c = 0; c < table.Rows[r].Cells.Count; c++) {
+				var (x, y) = Bounds(r, c);
+				if (x >= left - SameEdge && y <= right + SameEdge) list.Add((r, c));
+			}
+		return list;
+	}
+
 	// ================================================================ (iteration 93) copying a block, Shift+arrows
 
 	/// The block of cells as a table of its own (RTF: the block's rows, only its cells, their formats kept) and as text
@@ -484,7 +563,7 @@ public static partial class RtfTables
 		var lines = new List<string>();
 		for (int k = block.First; k <= block.Last; k++)
 			lines.Add(string.Join("\t", rows[k].CellsIn(block.Left, block.Right).Select(i =>
-				rows[k].MergeOf(i) == "clvmrg" ? "" : texts(k, i).Replace(MergedMark.ToString(), "").Replace("\r\n", " ").Replace('\r', ' ').Replace('\v', ' ').Replace('\n', ' ').Replace('\t', ' ').Trim())));
+				rows[k].MergeOf(i) == "clvmrg" ? "" : TableSources.Marker.Replace(texts(k, i), "").Replace(MergedMark.ToString(), "").Replace("\r\n", " ").Replace('\r', ' ').Replace('\v', ' ').Replace('\n', ' ').Replace('\t', ' ').Trim())));
 		var sb = new StringBuilder(rtf[..matches[0].Index]);    // (the document's header: font and colour tables)
 		for (int k = block.First; k <= block.Last; k++) {
 			var row = rows[k];

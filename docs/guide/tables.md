@@ -13,7 +13,8 @@ While the caret is in a table, the **Table Tools > Table Layout** tab appears:
 - **Insert** rows above or below and columns left or right; **delete** rows, columns or the whole table.
 - **Merge Cells** and **Split Cells**, and **Delete Cells** (see below).
 - **Properties** (also on the right-click menu): column widths, the table's alignment on the page, cell padding and row height for the whole table; borders, shading and vertical alignment for the selected cells or the whole table.
-- **Borders** (none, all, outside, inside ..., with line width and colour) and **Shading** for the selected cells.
+- **Borders** (none, all, outside, inside ..., with line width and colour) and **Shading** for the selected cells. **Outside Borders** gives the selected cells a frame only and **Inside Borders** the lines between them only; **All Borders** gives both. **Top Border**, **Bottom Border**, **Left Border** and **Right Border** add a line along one edge of the selected cells and leave their other lines as they are (as the Properties dialog does).
+- **Select**: the cell, the column, the row or the whole table, to format them all at once.
 
 **Tab** moves to the next cell and **Shift+Tab** to the previous one; Tab in the last cell adds a row, as in Word. This works in tables from Word and other programs too.
 
@@ -38,5 +39,13 @@ Columns are found by where they are, not by counting cells: deleting or insertin
 !!! tip "Data from a script"
     `Rte.InsertTableFromFile("C:\Data\clients.xlsx", 1, "Clients")` and `Rte.InsertTableFromData(csvOrJson)` make a table from data. `Rte.SetTableData(data, "", 1, 2)` fills the document's first table again, keeping its header row and formats: rows are added or deleted to fit, and JSON objects go in the columns their names head. `Rte.TableData(1, "json")` gives a table's cells back as CSV, TSV or JSON, and `Rte.CellText(2, 3)` / `Rte.SetCellText(2, 3, "text")` read and change one cell. See the [API reference](../automation/api.md#tables-from-data-and-data-from-tables).
 
-!!! tip "Back to the file the data came from"
-    `Rte.SaveTableData("C:\Data\clients.xlsx", 1, "Clients")` writes the document's first table back to the workbook: only the cells whose value changed (formulas and formats of the others are left alone), the cells the table no longer reaches emptied; the workbook must be closed in Excel. A .csv, .tsv or .json file is written whole, as it was (its delimiter; JSON objects stay objects). The macros **Table to source file** and **Table from source file** (Tools > Macros) do it for the table at the caret: they ask for the file the first time and remember it for that table of that document (hold Shift to choose another).
+## Tables linked to their files
+
+A table inserted with **Insert > Table > From File** stays linked to its file (an Excel workbook, CSV, TSV or JSON), and **Link to File** on the **Table Layout** tab links any table to one. The link is kept in the document, in the table itself (hidden): it goes where the table goes when you move or copy it, and it is saved with the document (RTF, Word, HTML, Markdown). When the file is in the document's folder or below it, the link names it from there, so the two can be moved together.
+
+- **Update Table** fills the table again from its file: the table keeps its formats (borders, shading, widths, a bold header row), and rows are added or deleted to fit.
+- **Save to File** writes the table back to its file. A workbook gets only the cells whose value changed: formulas, formats and the rest of the sheet are left alone, cells the table no longer reaches are emptied, and Excel recalculates when it opens the workbook (close it in Excel first). If the table has grown past the link's range, or would write over rows of the sheet that aren't empty below the data, AhkWord asks first; written past the range, the link's range grows to take the whole table in. A CSV, TSV or JSON file is written whole, as it was (its delimiter; JSON objects stay objects).
+- **Unlink** takes the link away; the table stays as it is.
+
+!!! tip "From a script"
+    `Rte.UpdateTables()` updates every linked table of the document; `Rte.UpdateTable()`, `Rte.SaveTableToSource()` (with `Rte.SaveTableCheck()` to ask first, as Save to File does), `Rte.LinkTable("C:\Data\clients.xlsx", 0, "Clients", "A1:D20")`, `Rte.UnlinkTable()` and `Rte.TableSource()` work on the table at the caret (or the document's nth, as their second argument). `Rte.SaveTableData(path)` writes a table to any file, linked or not. The macros **Table to source file** and **Table from source file** (Tools > Macros) are examples.

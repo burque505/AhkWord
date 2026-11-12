@@ -1225,6 +1225,73 @@
     "TooltipDescription": "Split the cell into columns and rows. A cell merged down splits back into its rows.",
     "Keytip": "S"
   },
+  "cmdUpdateTable": {
+    "Id": 422,
+    "LabelTitle": "Update Table",
+    "TooltipTitle": "Update table",
+    "TooltipDescription": "Fill the table again from the file it is linked to (its formats kept; rows added or deleted to fit).",
+    "Keytip": "U"
+  },
+  "cmdSaveTableToSource": {
+    "Id": 423,
+    "LabelTitle": "Save to File",
+    "TooltipTitle": "Save table to its file",
+    "TooltipDescription": "Write the table back to the file it is linked to: an Excel workbook gets only the cells that changed (close it in Excel first); a CSV or JSON file is written whole.",
+    "Keytip": "V"
+  },
+  "cmdLinkTable": {
+    "Id": 424,
+    "LabelTitle": "Link to File",
+    "TooltipTitle": "Link table to a file",
+    "TooltipDescription": "Link the table to an Excel workbook, CSV, TSV or JSON file, for Update Table and Save to File. A table inserted from a file is linked already.",
+    "Keytip": "K"
+  },
+  "cmdUnlinkTable": {
+    "Id": 425,
+    "LabelTitle": "Unlink",
+    "TooltipTitle": "Unlink table",
+    "TooltipDescription": "Take away the table's link to its file; the table stays as it is.",
+    "Keytip": "N"
+  },
+  "cmdGroupTableData": {
+    "Id": 138,
+    "LabelTitle": "Data"
+  },
+  "cmdTableSelect": {
+    "Id": 426,
+    "LabelTitle": "Select",
+    "TooltipTitle": "Select",
+    "TooltipDescription": "Select the cell, the column, the row or the whole table, to format them all at once (borders, shading, alignment).",
+    "Keytip": "W"
+  },
+  "cmdSelectCell": {
+    "Id": 427,
+    "LabelTitle": "Select Cell",
+    "TooltipTitle": "Select cell",
+    "TooltipDescription": "Select the cell the caret is in.",
+    "Keytip": "E"
+  },
+  "cmdSelectColumn": {
+    "Id": 428,
+    "LabelTitle": "Select Column",
+    "TooltipTitle": "Select column",
+    "TooltipDescription": "Select the column the caret is in.",
+    "Keytip": "C"
+  },
+  "cmdSelectRow": {
+    "Id": 429,
+    "LabelTitle": "Select Row",
+    "TooltipTitle": "Select row",
+    "TooltipDescription": "Select the row the caret is in.",
+    "Keytip": "R"
+  },
+  "cmdSelectTable": {
+    "Id": 430,
+    "LabelTitle": "Select Table",
+    "TooltipTitle": "Select table",
+    "TooltipDescription": "Select the whole table.",
+    "Keytip": "T"
+  },
   "cmdGroupMerge": {
     "Id": 137,
     "LabelTitle": "Merge"
@@ -1257,6 +1324,34 @@
     "Id": 344,
     "LabelTitle": "Inside Borders",
     "Keytip": "I"
+  },
+  "cmdBordersTop": {
+    "Id": 431,
+    "LabelTitle": "Top Border",
+    "TooltipTitle": "Top border",
+    "TooltipDescription": "A line along the top edge of the selected cells (the other lines stay).",
+    "Keytip": "T"
+  },
+  "cmdBordersBottom": {
+    "Id": 432,
+    "LabelTitle": "Bottom Border",
+    "TooltipTitle": "Bottom border",
+    "TooltipDescription": "A line along the bottom edge of the selected cells (the other lines stay).",
+    "Keytip": "B"
+  },
+  "cmdBordersLeft": {
+    "Id": 433,
+    "LabelTitle": "Left Border",
+    "TooltipTitle": "Left border",
+    "TooltipDescription": "A line along the left edge of the selected cells (the other lines stay).",
+    "Keytip": "L"
+  },
+  "cmdBordersRight": {
+    "Id": 434,
+    "LabelTitle": "Right Border",
+    "TooltipTitle": "Right border",
+    "TooltipDescription": "A line along the right edge of the selected cells (the other lines stay).",
+    "Keytip": "R"
   },
   "cmdBordersNone": {
     "Id": 345,

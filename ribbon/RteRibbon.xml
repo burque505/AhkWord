@@ -2078,6 +2078,146 @@
         <Image Source="icons/splitcells_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
+    <Command Name="cmdUpdateTable" Id="422" LabelTitle="Update Table" Keytip="U" TooltipTitle="Update table" TooltipDescription="Fill the table again from the file it is linked to (its formats kept; rows added or deleted to fit).">
+      <Command.LargeImages>
+        <Image Source="icons/updatetable_32.bmp" MinDPI="96" />
+        <Image Source="icons/updatetable_40.bmp" MinDPI="120" />
+        <Image Source="icons/updatetable_48.bmp" MinDPI="144" />
+        <Image Source="icons/updatetable_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/updatetable_16.bmp" MinDPI="96" />
+        <Image Source="icons/updatetable_20.bmp" MinDPI="120" />
+        <Image Source="icons/updatetable_24.bmp" MinDPI="144" />
+        <Image Source="icons/updatetable_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSaveTableToSource" Id="423" LabelTitle="Save to File" Keytip="V" TooltipTitle="Save table to its file" TooltipDescription="Write the table back to the file it is linked to: an Excel workbook gets only the cells that changed (close it in Excel first); a CSV or JSON file is written whole.">
+      <Command.LargeImages>
+        <Image Source="icons/savetable_32.bmp" MinDPI="96" />
+        <Image Source="icons/savetable_40.bmp" MinDPI="120" />
+        <Image Source="icons/savetable_48.bmp" MinDPI="144" />
+        <Image Source="icons/savetable_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/savetable_16.bmp" MinDPI="96" />
+        <Image Source="icons/savetable_20.bmp" MinDPI="120" />
+        <Image Source="icons/savetable_24.bmp" MinDPI="144" />
+        <Image Source="icons/savetable_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdLinkTable" Id="424" LabelTitle="Link to File" Keytip="K" TooltipTitle="Link table to a file" TooltipDescription="Link the table to an Excel workbook, CSV, TSV or JSON file, for Update Table and Save to File. A table inserted from a file is linked already.">
+      <Command.LargeImages>
+        <Image Source="icons/linktable_32.bmp" MinDPI="96" />
+        <Image Source="icons/linktable_40.bmp" MinDPI="120" />
+        <Image Source="icons/linktable_48.bmp" MinDPI="144" />
+        <Image Source="icons/linktable_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/linktable_16.bmp" MinDPI="96" />
+        <Image Source="icons/linktable_20.bmp" MinDPI="120" />
+        <Image Source="icons/linktable_24.bmp" MinDPI="144" />
+        <Image Source="icons/linktable_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdUnlinkTable" Id="425" LabelTitle="Unlink" Keytip="N" TooltipTitle="Unlink table" TooltipDescription="Take away the table's link to its file; the table stays as it is.">
+      <Command.LargeImages>
+        <Image Source="icons/unlinktable_32.bmp" MinDPI="96" />
+        <Image Source="icons/unlinktable_40.bmp" MinDPI="120" />
+        <Image Source="icons/unlinktable_48.bmp" MinDPI="144" />
+        <Image Source="icons/unlinktable_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/unlinktable_16.bmp" MinDPI="96" />
+        <Image Source="icons/unlinktable_20.bmp" MinDPI="120" />
+        <Image Source="icons/unlinktable_24.bmp" MinDPI="144" />
+        <Image Source="icons/unlinktable_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdGroupTableData" Id="138" LabelTitle="Data">
+      <Command.LargeImages>
+        <Image Source="icons/updatetable_32.bmp" MinDPI="96" />
+        <Image Source="icons/updatetable_40.bmp" MinDPI="120" />
+        <Image Source="icons/updatetable_48.bmp" MinDPI="144" />
+        <Image Source="icons/updatetable_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/updatetable_16.bmp" MinDPI="96" />
+        <Image Source="icons/updatetable_20.bmp" MinDPI="120" />
+        <Image Source="icons/updatetable_24.bmp" MinDPI="144" />
+        <Image Source="icons/updatetable_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdTableSelect" Id="426" LabelTitle="Select" Keytip="W" TooltipTitle="Select" TooltipDescription="Select the cell, the column, the row or the whole table, to format them all at once (borders, shading, alignment).">
+      <Command.LargeImages>
+        <Image Source="icons/tableselect_32.bmp" MinDPI="96" />
+        <Image Source="icons/tableselect_40.bmp" MinDPI="120" />
+        <Image Source="icons/tableselect_48.bmp" MinDPI="144" />
+        <Image Source="icons/tableselect_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/tableselect_16.bmp" MinDPI="96" />
+        <Image Source="icons/tableselect_20.bmp" MinDPI="120" />
+        <Image Source="icons/tableselect_24.bmp" MinDPI="144" />
+        <Image Source="icons/tableselect_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSelectCell" Id="427" LabelTitle="Select Cell" Keytip="E" TooltipTitle="Select cell" TooltipDescription="Select the cell the caret is in.">
+      <Command.LargeImages>
+        <Image Source="icons/selectcell_32.bmp" MinDPI="96" />
+        <Image Source="icons/selectcell_40.bmp" MinDPI="120" />
+        <Image Source="icons/selectcell_48.bmp" MinDPI="144" />
+        <Image Source="icons/selectcell_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/selectcell_16.bmp" MinDPI="96" />
+        <Image Source="icons/selectcell_20.bmp" MinDPI="120" />
+        <Image Source="icons/selectcell_24.bmp" MinDPI="144" />
+        <Image Source="icons/selectcell_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSelectColumn" Id="428" LabelTitle="Select Column" Keytip="C" TooltipTitle="Select column" TooltipDescription="Select the column the caret is in.">
+      <Command.LargeImages>
+        <Image Source="icons/selectcolumn_32.bmp" MinDPI="96" />
+        <Image Source="icons/selectcolumn_40.bmp" MinDPI="120" />
+        <Image Source="icons/selectcolumn_48.bmp" MinDPI="144" />
+        <Image Source="icons/selectcolumn_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/selectcolumn_16.bmp" MinDPI="96" />
+        <Image Source="icons/selectcolumn_20.bmp" MinDPI="120" />
+        <Image Source="icons/selectcolumn_24.bmp" MinDPI="144" />
+        <Image Source="icons/selectcolumn_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSelectRow" Id="429" LabelTitle="Select Row" Keytip="R" TooltipTitle="Select row" TooltipDescription="Select the row the caret is in.">
+      <Command.LargeImages>
+        <Image Source="icons/selectrow_32.bmp" MinDPI="96" />
+        <Image Source="icons/selectrow_40.bmp" MinDPI="120" />
+        <Image Source="icons/selectrow_48.bmp" MinDPI="144" />
+        <Image Source="icons/selectrow_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/selectrow_16.bmp" MinDPI="96" />
+        <Image Source="icons/selectrow_20.bmp" MinDPI="120" />
+        <Image Source="icons/selectrow_24.bmp" MinDPI="144" />
+        <Image Source="icons/selectrow_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdSelectTable" Id="430" LabelTitle="Select Table" Keytip="T" TooltipTitle="Select table" TooltipDescription="Select the whole table.">
+      <Command.LargeImages>
+        <Image Source="icons/tableselect_32.bmp" MinDPI="96" />
+        <Image Source="icons/tableselect_40.bmp" MinDPI="120" />
+        <Image Source="icons/tableselect_48.bmp" MinDPI="144" />
+        <Image Source="icons/tableselect_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/tableselect_16.bmp" MinDPI="96" />
+        <Image Source="icons/tableselect_20.bmp" MinDPI="120" />
+        <Image Source="icons/tableselect_24.bmp" MinDPI="144" />
+        <Image Source="icons/tableselect_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
     <Command Name="cmdGroupMerge" Id="137" LabelTitle="Merge">
       <Command.LargeImages>
         <Image Source="icons/mergecells_32.bmp" MinDPI="96" />
@@ -2160,6 +2300,62 @@
         <Image Source="icons/borderinside_20.bmp" MinDPI="120" />
         <Image Source="icons/borderinside_24.bmp" MinDPI="144" />
         <Image Source="icons/borderinside_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdBordersTop" Id="431" LabelTitle="Top Border" Keytip="T" TooltipTitle="Top border" TooltipDescription="A line along the top edge of the selected cells (the other lines stay).">
+      <Command.LargeImages>
+        <Image Source="icons/bordertop_32.bmp" MinDPI="96" />
+        <Image Source="icons/bordertop_40.bmp" MinDPI="120" />
+        <Image Source="icons/bordertop_48.bmp" MinDPI="144" />
+        <Image Source="icons/bordertop_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/bordertop_16.bmp" MinDPI="96" />
+        <Image Source="icons/bordertop_20.bmp" MinDPI="120" />
+        <Image Source="icons/bordertop_24.bmp" MinDPI="144" />
+        <Image Source="icons/bordertop_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdBordersBottom" Id="432" LabelTitle="Bottom Border" Keytip="B" TooltipTitle="Bottom border" TooltipDescription="A line along the bottom edge of the selected cells (the other lines stay).">
+      <Command.LargeImages>
+        <Image Source="icons/borderbottom_32.bmp" MinDPI="96" />
+        <Image Source="icons/borderbottom_40.bmp" MinDPI="120" />
+        <Image Source="icons/borderbottom_48.bmp" MinDPI="144" />
+        <Image Source="icons/borderbottom_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/borderbottom_16.bmp" MinDPI="96" />
+        <Image Source="icons/borderbottom_20.bmp" MinDPI="120" />
+        <Image Source="icons/borderbottom_24.bmp" MinDPI="144" />
+        <Image Source="icons/borderbottom_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdBordersLeft" Id="433" LabelTitle="Left Border" Keytip="L" TooltipTitle="Left border" TooltipDescription="A line along the left edge of the selected cells (the other lines stay).">
+      <Command.LargeImages>
+        <Image Source="icons/borderleft_32.bmp" MinDPI="96" />
+        <Image Source="icons/borderleft_40.bmp" MinDPI="120" />
+        <Image Source="icons/borderleft_48.bmp" MinDPI="144" />
+        <Image Source="icons/borderleft_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/borderleft_16.bmp" MinDPI="96" />
+        <Image Source="icons/borderleft_20.bmp" MinDPI="120" />
+        <Image Source="icons/borderleft_24.bmp" MinDPI="144" />
+        <Image Source="icons/borderleft_32.bmp" MinDPI="192" />
+      </Command.SmallImages>
+    </Command>
+    <Command Name="cmdBordersRight" Id="434" LabelTitle="Right Border" Keytip="R" TooltipTitle="Right border" TooltipDescription="A line along the right edge of the selected cells (the other lines stay).">
+      <Command.LargeImages>
+        <Image Source="icons/borderright_32.bmp" MinDPI="96" />
+        <Image Source="icons/borderright_40.bmp" MinDPI="120" />
+        <Image Source="icons/borderright_48.bmp" MinDPI="144" />
+        <Image Source="icons/borderright_64.bmp" MinDPI="192" />
+      </Command.LargeImages>
+      <Command.SmallImages>
+        <Image Source="icons/borderright_16.bmp" MinDPI="96" />
+        <Image Source="icons/borderright_20.bmp" MinDPI="120" />
+        <Image Source="icons/borderright_24.bmp" MinDPI="144" />
+        <Image Source="icons/borderright_32.bmp" MinDPI="192" />
       </Command.SmallImages>
     </Command>
     <Command Name="cmdBordersNone" Id="345" LabelTitle="No Border" Keytip="N">
@@ -2281,6 +2477,14 @@
               <Button CommandName="cmdInsertRight" />
             </Group>
             <Group CommandName="cmdGroupTableFormat">
+              <DropDownButton CommandName="cmdTableSelect">
+                <MenuGroup>
+                  <Button CommandName="cmdSelectCell" />
+                  <Button CommandName="cmdSelectColumn" />
+                  <Button CommandName="cmdSelectRow" />
+                  <Button CommandName="cmdSelectTable" />
+                </MenuGroup>
+              </DropDownButton>
               <Button CommandName="cmdTableProperties" />
               <DropDownButton CommandName="cmdTableBorders">
                 <MenuGroup>
@@ -2288,6 +2492,10 @@
                   <Button CommandName="cmdBordersOutside" />
                   <Button CommandName="cmdBordersInside" />
                   <Button CommandName="cmdBordersNone" />
+                  <Button CommandName="cmdBordersTop" />
+                  <Button CommandName="cmdBordersBottom" />
+                  <Button CommandName="cmdBordersLeft" />
+                  <Button CommandName="cmdBordersRight" />
                 </MenuGroup>
               </DropDownButton>
               <DropDownColorPicker CommandName="cmdTableShading" ColorTemplate="StandardColors" IsNoColorButtonVisible="true" IsAutomaticColorButtonVisible="false" />
@@ -2301,6 +2509,12 @@
               <Button CommandName="cmdDeleteColumn" />
               <Button CommandName="cmdDeleteCells" />
               <Button CommandName="cmdDeleteTable" />
+            </Group>
+            <Group CommandName="cmdGroupTableData" SizeDefinition="FourButtons">
+              <Button CommandName="cmdUpdateTable" />
+              <Button CommandName="cmdSaveTableToSource" />
+              <Button CommandName="cmdLinkTable" />
+              <Button CommandName="cmdUnlinkTable" />
             </Group>
           </Tab>
         </TabGroup>

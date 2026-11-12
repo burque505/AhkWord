@@ -22,7 +22,7 @@ public static class CrossRefs
 	public static readonly Regex TargetMark = new(@"\[\[xref:(" + Id + @")\]\]");
 	public static readonly Regex Reference = new(@"\[\[xref=(" + Id + @")(?:\|(\w*))?\]\]([^\r\[]*?)\[\[/xref\]\]");
 	// (and the footnotes' markers, which hold their notes: rte_footnotes.cs; and the tables of contents': rte_toc.cs)
-	static readonly Regex AnyMark = new(@"\[\[xref:" + Id + @"\]\]|\[\[xref=" + Id + @"(?:\|\w*)?\]\]|\[\[/xref\]\]|\[\[fn\]\]|\[\[fn:(?:[^\]\r]|\](?!\]))*\]\]|" + Toc.Marks);
+	static readonly Regex AnyMark = new(@"\[\[xref:" + Id + @"\]\]|\[\[xref=" + Id + @"(?:\|\w*)?\]\]|\[\[/xref\]\]|\[\[fn\]\]|\[\[fn:(?:[^\]\r]|\](?!\]))*\]\]|" + Toc.Marks + "|" + TableSources.Marks);
 
 	/// What a reference shows when its target is gone (deleted with its paragraph) or no longer numbered.
 	public const string Missing = "(reference not found)";    // (no "[": Reference wouldn't match it)
@@ -54,7 +54,7 @@ public static class CrossRefs
 	static readonly Regex TypedSub = new(@"^(\((?:[a-z]{1,2}|[A-Z]{1,2}|[ivxlcdm]{1,6}|[IVXLCDM]{1,6})\)|(?:[a-z]{1,2}|[A-Z]{1,2}|[ivxlcdm]{1,6}|[IVXLCDM]{1,6})[.)])[ \t]+");
 
 	/// Whether text has any reference or target (quick: no paragraphs read).
-	public static bool Any(string story) => story.Contains("[[xref", StringComparison.Ordinal) || story.Contains("[[fn", StringComparison.Ordinal) || Toc.Any(story);
+	public static bool Any(string story) => story.Contains("[[xref", StringComparison.Ordinal) || story.Contains("[[fn", StringComparison.Ordinal) || Toc.Any(story) || story.Contains("[[tablesrc:", StringComparison.Ordinal);
 
 	/// The document's numbered paragraphs (legal items, numbered styles' paragraphs, ordinary numbered lists), in order.
 	public static List<Target> Targets(ITextDocument2 doc) {
@@ -451,7 +451,7 @@ public static class CrossRefs
 	/// HTML from the editor with anchors for the targets and links for the references.
 	public static string ToHtml(string html) {
 		if (!Any(html)) return html;
-		html = Toc.ToHtml(html);    // (iteration 52)
+		html = SourcesToHtml(Toc.ToHtml(html));    // (iteration 52; 94)
 		// (the full number's "w" also in the title: the built-in .docx converter keeps it as the link's tooltip)
 		html = Reference.Replace(html, m => m.Groups[2].Value == "w" ? $"<a href=\"#{m.Groups[1].Value}\" data-xref=\"w\" title=\"xref w\">{m.Groups[3].Value}</a>"
 			: $"<a href=\"#{m.Groups[1].Value}\" data-xref=\"r\">{m.Groups[3].Value}</a>");
@@ -460,7 +460,7 @@ public static class CrossRefs
 
 	/// HTML with markers for the anchors and links ToHtml wrote (and Word's _Ref anchors), before it is loaded.
 	public static string FromHtml(string html) {
-		html = Toc.FromHtml(html);    // (iteration 52)
+		html = SourcesFromHtml(Toc.FromHtml(html));    // (iteration 52; 94)
 		if (!html.Contains("<a", StringComparison.OrdinalIgnoreCase)) return html;
 		var names = new HashSet<string>(StringComparer.Ordinal);
 		html = Regex.Replace(html, @"<a\s+href=""#(" + Id + @")""(?:\s+data-xref=""(\w*)"")?(?:\s+title=""xref (\w*)"")?\s*>(.*?)</a>", m => {
@@ -482,7 +482,7 @@ public static class CrossRefs
 	/// Markdown from the editor with <a id> anchors for the targets and [number](#name) links for the references.
 	public static string ToMarkdown(string markdown) {
 		if (!Any(markdown.Replace("\\", ""))) return markdown;
-		markdown = Toc.ToMarkdown(markdown);    // (iteration 52)
+		markdown = SourcesToMarkdown(Toc.ToMarkdown(markdown));    // (iteration 52; 94)
 		markdown = MarkdownReference.Replace(markdown, m => {
 			string name = m.Groups[1].Value.Replace("\\", "");
 			return $"[{m.Groups[3].Value}](#{name}{(m.Groups[2].Value == "w" ? " \"xref w\"" : "")})";
@@ -493,7 +493,7 @@ public static class CrossRefs
 	/// Markdown with markers for its anchors and links to them, before it is loaded (escaped, so that Markdown keeps them
 	/// as text).
 	public static string FromMarkdown(string markdown) {
-		markdown = Toc.FromMarkdown(markdown);    // (iteration 52)
+		markdown = SourcesFromMarkdown(Toc.FromMarkdown(markdown));    // (iteration 52; 94)
 		if (!markdown.Contains("](#", StringComparison.Ordinal)) return markdown;
 		var names = new HashSet<string>(StringComparer.Ordinal);
 		markdown = Regex.Replace(markdown, @"\[([^\]\r\n]*)\]\(#(" + Id + @")(?:\s+""xref (\w*)"")?\)", m => {
@@ -506,4 +506,19 @@ public static class CrossRefs
 	}
 
 	static string Escaped(string name) => name.Replace("_", "\\_");
+
+	// ---- (iteration 94) a linked table's marker (rte_tabledata.cs, TableSources) in HTML and Markdown: a comment
+	// <!--tablesrc=...--> with its text percent-encoded ("|" would split a Markdown table's cells; "--" end the comment)
+
+	static string SourceComment(string inner) => "<!--tablesrc=" + Uri.EscapeDataString(inner).Replace("-", "%2D") + "-->";
+	static readonly Regex SourceCommentRx = new(@"<!--tablesrc=([^\s>]*?)-->");
+	// The marker as Markdown writes it: its brackets and other punctuation escaped ("\[\[tablesrc:C:\\Data\|\|\]\]").
+	static readonly Regex MarkdownSource = new(E + @"\[" + E + @"\[tablesrc:(.*?)" + E + @"\]" + E + @"\]");
+	const string Punctuation = @"[!-/:-@\[-`{-~]";
+
+	static string SourcesToHtml(string html) => TableSources.Marker.Replace(html, m => SourceComment(System.Net.WebUtility.HtmlDecode(m.Groups[1].Value)));
+	static string SourcesFromHtml(string html) => SourceCommentRx.Replace(html, m => System.Net.WebUtility.HtmlEncode("[[tablesrc:" + Uri.UnescapeDataString(m.Groups[1].Value) + "]]"));
+	static string SourcesToMarkdown(string markdown) => MarkdownSource.Replace(markdown, m => SourceComment(Regex.Replace(m.Groups[1].Value, @"\\(" + Punctuation + ")", "$1")));
+	static string SourcesFromMarkdown(string markdown) => SourceCommentRx.Replace(markdown, m =>
+		@"\[\[tablesrc:" + Regex.Replace(Uri.UnescapeDataString(m.Groups[1].Value), Punctuation, @"\$0") + @"\]\]");
 }
