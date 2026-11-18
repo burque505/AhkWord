@@ -46,7 +46,7 @@ Inserts a template's content at the caret (a part, by name, such as "Signature B
 Rte.New()
 ```
 
-Starts a new, empty document (unsaved changes are discarded).
+Starts a new, empty document (unsaved changes are discarded). The start page, if it is showing, closes.
 
 ### Portable
 
@@ -385,7 +385,7 @@ Rte.Open(path, via = "")
 
 *path*: text · *via*: text
 
-Opens an .html/.htm, .md/.markdown, .rtf, .docx/.doc, .odt or .txt file (unsaved changes are discarded). Word and OpenDocument files are converted by Word, openxml, LibreOffice or pandoc (see Converters and LastConverter); via names the converter(s) to use, e.g. "openxml" (Save then uses them too).
+Opens an .html/.htm, .md/.markdown, .rtf, .docx/.doc, .odt or .txt file (unsaved changes are discarded). The start page, if it is showing, closes. Word and OpenDocument files are converted by Word, openxml, LibreOffice or pandoc (see Converters and LastConverter); via names the converter(s) to use, e.g. "openxml" (Save then uses them too).
 
 ### PasteFormatting
 

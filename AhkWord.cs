@@ -6229,7 +6229,7 @@ public class EditorApi
 
 	// ---- Documents
 
-	/// Starts a new, empty document (unsaved changes are discarded).
+	/// Starts a new, empty document (unsaved changes are discarded). The start page, if it is showing, closes.
 	public void New() {
 		form.ShowStart(false);    // (iteration 95: from a script too, the document is shown, not left under the start page)
 		form.Styles = form.DefaultStyles();
@@ -6814,7 +6814,7 @@ public class EditorApi
 	static (int[]?, bool?, int[]?) PageSetupOf(string rtf) => Sections.PageSetupFromRtf(rtf) is { } setup ? (setup.Margins, setup.Landscape, Sections.PaperFromRtf(rtf)) : (null, null, Sections.PaperFromRtf(rtf));
 	static (int[]?, bool?, int[]?) PageSetupOfDocx(string path) => Sections.PageSetupFromDocx(path) is { } setup ? (setup.Margins, setup.Landscape, Sections.PaperFromDocx(path)) : (null, null, Sections.PaperFromDocx(path));
 
-	/// Opens an .html/.htm, .md/.markdown, .rtf, .docx/.doc, .odt or .txt file (unsaved changes are discarded).
+	/// Opens an .html/.htm, .md/.markdown, .rtf, .docx/.doc, .odt or .txt file (unsaved changes are discarded). The start page, if it is showing, closes.
 	/// Word and OpenDocument files are converted by Word, openxml, LibreOffice or pandoc (see Converters and
 	/// LastConverter); via names the converter(s) to use, e.g. "openxml" (Save then uses them too).
 	public void Open(string path, string via = "") {
