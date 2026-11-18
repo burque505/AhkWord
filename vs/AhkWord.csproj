@@ -24,6 +24,8 @@
     <!-- WFO1000: the WinForms designer's serialization check; AhkWord's controls are made in code, never in the designer -->
     <NoWarn>$(NoWarn);WFO1000</NoWarn>
     <ApplicationIcon>..\images\icon\ahkword.ico</ApplicationIcon>
+    <!-- (iteration 96) .NET's own messages only in the languages AhkWord has (lang\): not a dozen more folders of them -->
+    <SatelliteResourceLanguages>en;es</SatelliteResourceLanguages>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <AhkWordSources>$(MSBuildProjectDirectory)\..</AhkWordSources>
   </PropertyGroup>

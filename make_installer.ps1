@@ -69,6 +69,11 @@ try {
 	dotnet publish (Join-Path $src "vs\AhkWord.csproj") -c Release -r win-x64 --self-contained true -o $pubDir $pin `
 		-p:DebugType=none -p:DebugSymbols=false -p:Deterministic=true -p:ContinuousIntegrationBuild=true -nologo -v:q | Out-Host
 	if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $pubDir "AhkWord.exe"))) { throw "dotnet publish failed." }
+	# (iteration 96) what the packages bring that a 64-bit AhkWord never uses: debugging symbols (SkiaSharp's
+	# libSkiaSharp.pdb alone was 92 MB, a third of the installed size) and other processors' native libraries (Scintilla's
+	# win-arm64 and win-x86); the .NET language folders are left out by the project (SatelliteResourceLanguages)
+	Get-ChildItem $pubDir -Recurse -File -Filter *.pdb | ForEach-Object { [IO.File]::Delete($_.FullName) }
+	Get-ChildItem (Join-Path $pubDir "runtimes") -Directory -ErrorAction SilentlyContinue | Where-Object Name -ne "win-x64" | ForEach-Object { [IO.Directory]::Delete($_.FullName, $true) }
 	$included = (Get-Content (Join-Path $pubDir "AhkWord.runtimeconfig.json") -Raw | ConvertFrom-Json).runtimeOptions.includedFrameworks
 	$dotnetVersion = ($included | Where-Object name -eq "Microsoft.NETCore.App").version
 	$desktopVersion = ($included | Where-Object name -eq "Microsoft.WindowsDesktop.App").version

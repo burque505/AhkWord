@@ -717,7 +717,7 @@ static class PrettyHtml
 class WriterForm : Form
 {
 	public const string AppName = "AhkWord";
-	public const int Iteration = 95;    // (the About box; make_version.ps1)
+	public const int Iteration = 96;    // (the About box; make_version.ps1)
 	public readonly WriterEditBox Editor = new() { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 11f), BorderStyle = BorderStyle.None };
 	public string? FileName { get; private set; }
 	public bool AutoLevelStyles = true;
@@ -1036,6 +1036,8 @@ class WriterForm : Form
 			Editor.Modified = false;
 			Editor.Focus();
 			AhkWordExtensions.Started(this);    // (iteration 60: what a build with more features adds; nothing in AhkWord)
+			// (iteration 96) Docxodus compiled while nothing is being opened: the first .docx opens ~3 s sooner
+			if (!(startFile ?? "").EndsWith(".docx", StringComparison.OrdinalIgnoreCase)) DocxodusReader.WarmUp();
 			BeginInvoke(() => RunHook(HookEvent.Started));    // (iteration 56: once the window is ready)
 			if (Lang.TakeError() is string langError)    // (AhkWord-es: a language file that couldn't be read)
 				BeginInvoke(() => MessageBox.Show(this, langError, "AhkWord", MessageBoxButtons.OK, MessageBoxIcon.Warning));
@@ -2421,10 +2423,12 @@ class WriterForm : Form
 		Styles = sheet;
 		var doc = Editor.TextDocument;
 		var firsts = new Dictionary<int, int>();
+		int step = 0;    // (iteration 96: the TOM objects let go of as the loops go, TomRelease)
 		foreach (var (start, _) in StyleEngine.Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength)) {
 			var para = doc.Range2(start, start).Para;
 			if (StyleEngine.NameOf(para.Style) == null) StyleEngine.Tag(para, -1);    // (a number no style has: Normal)
 			firsts.TryAdd(para.Style, start);
+			TomRelease.Every(ref step);
 		}
 		bool own = defined is { Set: "" };    // (the built-in reader's: a .docx's own styles)
 		foreach (var (id, start) in firsts) {
@@ -2446,6 +2450,7 @@ class WriterForm : Form
 				foreach (var (start, _) in StyleEngine.Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength)) {
 					var style = StyleEngine.StyleAt(doc, sheet, start);
 					if (style != sheet.Normal) StyleEngine.ApplyCharacters(doc, sheet, style, start);
+					TomRelease.Every(ref step);
 				}
 			} finally {
 				doc.EndEditCollection();
@@ -2453,6 +2458,7 @@ class WriterForm : Form
 			}
 		}
 		if (takeLook) {
+			doc.Freeze();
 			doc.BeginEditCollection();
 			try {
 				foreach (var (start, _) in StyleEngine.Paragraphs(doc, 0, doc.Range2(0, 0).StoryLength)) {
@@ -2461,9 +2467,11 @@ class WriterForm : Form
 					// (Normal paragraphs: their characters; lists and quotes keep their indents)
 					if (style == sheet.Normal || (para.ListType & 0xFFFF) != tomConstants.tomListNone) StyleEngine.ApplyCharacters(doc, sheet, style, start);
 					else StyleEngine.Apply(doc, sheet, style, start, start);
+					TomRelease.Every(ref step);
 				}
 			} finally {
 				doc.EndEditCollection();
+				doc.Unfreeze();
 			}
 		}
 		// numbered styles: their paragraphs items of their numbering (a Word document's numbered styles become ones), and
@@ -3165,7 +3173,9 @@ class WriterForm : Form
 		Cursor.Current = Cursors.WaitCursor;
 		ShowProgress($"Opening {name}...");
 		var held = HoldGaps();
+		Editor.NoAccessibility = true;    // (iteration 96: WriterEditBox.WndProc)
 		return new OnDispose(() => {
+			Editor.NoAccessibility = false;
 			held.Dispose();
 			UseWaitCursor = false;
 			Cursor.Current = Cursors.Default;
@@ -6990,11 +7000,7 @@ public class EditorApi
 	// dissertation 8-9 s, against 2.6 s after); when a collection then came, releasing them all at once took seconds more
 	// (sampled: CTxtRange::~CTxtRange, CTxtRange::OnPostReplaceRange). Let go of at a few points while they are few,
 	// they cost 10-100 ms (a .NET collection of a small heap).
-	static void ReleaseTom() {
-		GC.Collect();
-		GC.WaitForPendingFinalizers();
-		Marshal.CleanupUnusedObjectsInCurrentContext();    // (the editor's thread's, released here)
-	}
+	static void ReleaseTom() => TomRelease.Now();    // (iteration 96: also every so many steps in long loops)
 	const int EM_SETEVENTMASK = 0x0445;
 	bool quiet;
 
@@ -12918,6 +12924,10 @@ sealed class WriterEditBox : RichEditBox
 	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendZoom(IntPtr hWnd, int msg, ref int numerator, ref int denominator);
 	[DllImport("user32.dll", EntryPoint = "SendMessageW")] static extern IntPtr SendZoom(IntPtr hWnd, int msg, IntPtr numerator, IntPtr denominator);
 
+	/// (iteration 96) UI Automation kept out for now (WndProc): set while a document opens (WriterForm.HoldOpening).
+	public bool NoAccessibility { get; set; }
+	const int WM_GETOBJECT = 0x003D;
+
 	protected override void WndProc(ref Message m) {
 		const int WM_CONTEXTMENU = 0x007B, WM_PAINT = 0x000F, WM_SETCURSOR = 0x0020, HTCLIENT = 1;
 		const int WM_LBUTTONDOWN = 0x0201, WM_MOUSEMOVE = 0x0200, WM_LBUTTONUP = 0x0202, MK_LBUTTON = 1;
@@ -12947,6 +12957,10 @@ sealed class WriterEditBox : RichEditBox
 				}
 			} catch (Exception ex) when (ex is COMException or ArgumentException) { dragFrom = dragTo = -1; }
 		}
+		// (iteration 96) while a document is put in: UI Automation (Copilot, the touch keyboard's text input, screen readers)
+		// isn't given the editor's interface, so RichEdit has no one to tell of each of the many changes: with a client
+		// listening, a long Markdown file's tables took 11 s instead of 1.3 (tested on the user's desktop)
+		if (m.Msg == WM_GETOBJECT && NoAccessibility) { m.Result = IntPtr.Zero; return; }
 		if (m.Msg == WM_SETCURSOR && PaintCursor != null && (m.LParam.ToInt64() & 0xFFFF) == HTCLIENT) { Cursor.Current = PaintCursor; m.Result = (IntPtr)1; return; }
 		if (m.Msg is WM_SETTEXT or EM_STREAMIN or EM_SETTEXTEX && IsHandleCreated) {
 			int numerator = 0, denominator = 0;

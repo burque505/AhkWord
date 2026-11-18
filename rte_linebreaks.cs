@@ -94,13 +94,16 @@ public static class LineBreaks
 	/// Turns the markers MarkHtml left in the loaded document into line breaks; returns how many there were.
 	public static int FromMarkers(RichEditBox editor) {
 		var doc = editor.TextDocument;
-		int count = 0;
-		while (true) {
-			int m = Story(doc).LastIndexOf(Marker, StringComparison.Ordinal);
-			if (m < 0) break;
-			doc.Range2(m, m + Marker.Length).Text = Break.ToString();
-			count++;
+		// (iteration 96: all of them found once, and replaced from the last, so the positions before each stay; the story
+		// was read again for each one)
+		string story = Story(doc);
+		var found = new List<int>();
+		for (int m = story.IndexOf(Marker, StringComparison.Ordinal); m >= 0; m = story.IndexOf(Marker, m + Marker.Length, StringComparison.Ordinal)) found.Add(m);
+		int step = 0;
+		for (int i = found.Count - 1; i >= 0; i--) {
+			doc.Range2(found[i], found[i] + Marker.Length).Text = Break.ToString();
+			TomRelease.Every(ref step);
 		}
-		return count;
+		return found.Count;
 	}
 }

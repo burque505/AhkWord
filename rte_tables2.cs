@@ -37,6 +37,24 @@ public static partial class RtfTables
 		return TablesOf(s, OuterRows(s));
 	}
 
+	/// (iteration 96) The first table that starts at or after start (a position outside tables), as Find has it, read
+	/// from there on only, as far as the table goes: Find reads the whole story, and a Markdown file with hundreds of
+	/// tables read it for each table and cell put in (seconds, in a long document).
+	public static Table? FirstFrom(ITextDocument2 doc, int start) {
+		int storyEnd = doc.Range2(0, 0).StoryLength;
+		for (int length = 16384; ; length *= 4) {
+			int end = Math.Min(storyEnd, start + length);
+			string s = doc.Range2(start, end).Text ?? "";
+			var tables = TablesOf(s, OuterRows(s));
+			// (whole when another table follows it, or text after it that isn't another row of it, or the story ends)
+			if (tables.Count > 0 && (tables.Count > 1 || end >= storyEnd || (tables[0].End < s.Length && s[tables[0].End] != RowStart))) {
+				var t = tables[0];
+				return new Table(t.Start + start, t.End + start, t.Rows.Select(r => new Row(r.Start + start, r.End + start, r.Cells.Select(c => new Cell(c.Start + start, c.End + start)).ToList())).ToList());
+			}
+			if (end >= storyEnd) return null;
+		}
+	}
+
 	/// (iteration 92) The tables a part of the story holds at its own level (a cell's text: the tables nested in it), rows
 	/// of tables nested deeper inside their rows.
 	static List<Table> TablesIn(string s, int from, int to) {
@@ -292,21 +310,21 @@ public static partial class RtfTables
 		bool lastParagraph = para.End >= doc.Range2(0, 0).StoryLength;
 		editor.Select(position, 0);
 		PutRtf(editor, rtf);
-		var table = Find(doc).FirstOrDefault(t => t.Start >= position) ?? throw new InvalidOperationException("The table could not be inserted.");
+		var table = FirstFrom(doc, position) ?? throw new InvalidOperationException("The table could not be inserted.");
 		// an empty paragraph the table was put into is not needed after it (unless it is the document's last one)
 		if (emptyParagraph && !lastParagraph) {
 			var after = doc.Range2(table.End, table.End);
 			after.Expand(tomConstants.tomParagraph);
 			if ((after.Text ?? "") == "\r") doc.Range2(after.Start, after.End).Text = "";
 		}
-		table = Find(doc).First(t => t.Start >= position);
+		table = FirstFrom(doc, position)!;
 		editor.Select(table.Rows[0].Cells[0].Start, 0);
 		return table.Start;
 	}
 
 	/// Puts formatted content (an RTF document) into a cell, replacing what is there.
 	public static void SetCellRtf(RichEditBox editor, int tableStart, int row, int column, string rtf) {
-		var table = Find(editor.TextDocument).First(t => t.Start == tableStart);
+		var table = FirstFrom(editor.TextDocument, tableStart) is { } from && from.Start == tableStart ? from : Find(editor.TextDocument).First(t => t.Start == tableStart);
 		var cell = table.Rows[row].Cells[column];
 		editor.Select(cell.Start, cell.End - cell.Start);
 		// the document's last paragraph mark would add an empty paragraph to the cell
@@ -884,7 +902,7 @@ public static partial class RtfTables
 				var format = (last.Alignment, last.FirstLineIndent, last.LeftIndent, last.RightIndent, last.SpaceBefore, last.SpaceAfter, last.LineSpacingRule, last.LineSpacing,
 					last.ListType, last.ListStart, last.ListLevelIndex, last.ListTab);
 				SetCellRtf(editor, tableStart, r, c, ((RichTextBox)scratch).Rtf ?? "");
-				var cell = Find(editor.TextDocument).First(t => t.Start == tableStart).Rows[r].Cells[c];
+				var cell = (FirstFrom(editor.TextDocument, tableStart) is { } from && from.Start == tableStart ? from : Find(editor.TextDocument).First(t => t.Start == tableStart)).Rows[r].Cells[c];
 				int at = cell.End;    // (its U+0007, the last paragraph's mark)
 				var para = editor.TextDocument.Range2(at, at).Para;
 				if (para.Alignment != format.Alignment) para.Alignment = format.Alignment;

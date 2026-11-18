@@ -168,7 +168,9 @@ public static class MarkdownConverter
 		var images = new List<(int Position, string Source, string Alt, int Width, int Height)>();
 		var links = new List<(int Start, int End, string Url)>();
 		var tableStops = new Dictionary<int, List<float>>();
+		int step = 0;    // (iteration 96: the TOM objects let go of as it goes, TomRelease)
 		foreach (var (block, spans, start) in paragraphs) {
+			TomRelease.Every(ref step);
 			int length = spans.Sum(s => s.ImageSource != null ? 1 : s.Text.Length);
 			var para = doc.Range2(start, start).Para;
 			var whole = doc.Range2(start, start + length);
@@ -235,12 +237,17 @@ public static class MarkdownConverter
 				links.Add((position, position + (alt != "" ? alt : source).Length, source));
 			}
 		}
-		foreach (var (start, end, url) in links.OrderByDescending(l => l.Start))
+		foreach (var (start, end, url) in links.OrderByDescending(l => l.Start)) {
 			doc.Range2(start, end).URL = "\"" + url.Replace("\"", "%22") + "\"";
+			TomRelease.Every(ref step);
+		}
 
 		// Real tables in place of the placeholders, from the last one back. Plain cells go straight into the table's RTF;
 		// cells with Markdown in them are loaded into a second editor and copied in with their formatting.
+		// (iteration 96: frozen, as a long document with hundreds of tables took seconds more laid out after each one)
 		if (tables.Count > 0) {
+			doc.Freeze();
+			try {
 			string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
 			var positions = story.Select((ch, i) => (ch, i)).Where(x => x.ch == TablePlaceholder).Select(x => x.i).ToList();
 			int width = editor.ClientSize.Width > 200 ? Math.Min(9360, (editor.ClientSize.Width - 40) * 1440 / Math.Max(96, editor.DeviceDpi)) : 9360;
@@ -254,6 +261,10 @@ public static class MarkdownConverter
 				int tableStart = RtfTables.Insert(editor, rows.Count, columns, header: true, width, (r, c) => Plain(Cell(r, c)) ? Cell(r, c) : null);
 				var formatted = rows.Select((row, r) => Enumerable.Range(0, columns).Select(c => Plain(Cell(r, c)) ? null : Cell(r, c)).ToList()).ToList();
 				RtfTables.FillCells(editor, tableStart, formatted, header: true, (scratch, cell) => Load(scratch, cell, baseFolder));
+				TomRelease.Every(ref step, 20);
+			}
+			} finally {
+				doc.Unfreeze();
 			}
 		}
 		// legal lists: their numbers, last (they add text, which would move the positions used above)
@@ -1117,7 +1128,9 @@ public static class MarkdownConverter
 			output.Add(quote > 0 && previousQuote > 0 ? string.Concat(Enumerable.Repeat(">", Math.Min(quote, previousQuote))) : "");
 		}
 
+		int step = 0;    // (iteration 96: the TOM objects let go of as it goes, TomRelease)
 		for (int p = 0; p < paragraphs.Count; p++) {
+			TomRelease.Every(ref step);
 			var para = paragraphs[p];
 			if (para.Kind == "pagebreak") {
 				// (a list after it is a list of its own, which starts at its number)
@@ -1279,7 +1292,9 @@ public static class MarkdownConverter
 		var tables = RtfTables.Find(doc);
 		var range = doc.Range2(0, 0);
 		range.Expand(tomConstants.tomParagraph);
+		int step = 0;    // (iteration 96: the TOM objects let go of as it goes, TomRelease)
 		while (true) {
+			TomRelease.Every(ref step);
 			int start = range.Start, end = range.End;
 			// a real table is one record; its paragraphs are skipped
 			if (tables.FirstOrDefault(t => start >= t.Start && start < t.End) is { } table) {
@@ -1329,8 +1344,17 @@ public static class MarkdownConverter
 			else if (text.Trim() == "\uFFFC" && AltTextAt?.Invoke(start + text.IndexOf('\uFFFC')) == RuleAlt) info.Kind = "rule";    // (iteration 55: Insert > Horizontal Line)
 			// (tabs: a simple table's row; but not the tab after a typed number, "2.<tab>Text", a paragraph: iteration 50; nor
 			// a table of contents' entry, the tab before its page: iteration 52)
-			else if (text.Contains('\t') && !(LegalLists.Prefix.Match(text) is { Success: true } typed && text.IndexOf('\t', typed.Length) < 0)
+			// (iteration 96: tabs at the paragraph's start are its indent, not empty cells: a novel's paragraphs, each begun
+			// with a tab, were written as hundreds of tables of an empty column and the text)
+			else if (text.TrimStart('\t').Contains('\t') && !(LegalLists.Prefix.Match(text) is { Success: true } typed && text.IndexOf('\t', typed.Length) < 0)
 				&& !text.Contains("[[toc=", StringComparison.Ordinal)) info.Kind = "table";
+			// (iteration 96) Markdown has no first-line indent, and a line that starts with a tab is a code block there: a
+			// paragraph's leading tabs are left out
+			if (info.Kind == "paragraph" && info.Text.StartsWith('\t')) {
+				int skip = info.Text.Length - info.Text.TrimStart('\t').Length;
+				info.Start += skip;
+				info.Text = info.Text[skip..];
+			}
 			info.Align = para.Alignment is >= 1 and <= 3 ? para.Alignment : 0;
 			if (info.Kind is "paragraph" or "rule" or "heading" && para.LeftIndent >= ListIndent && !text.Contains("[[toc=", StringComparison.Ordinal))    // (a table of contents' entry's indent is its level's)
 				info.Quote = Math.Max(1, (int)Math.Round(para.LeftIndent / QuoteIndent));

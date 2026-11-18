@@ -17,6 +17,100 @@ public static class DocxodusReader
 
 	/// The HTML of a .docx (its copy is made in folder; the file itself is never changed).
 	public static XElement Html(string docx, string folder, string title, string generalCss) {
+		AfterWarmUp();
+		return ToHtml(docx, folder, title, generalCss);
+	}
+
+	// ---- (iteration 96) warming up
+	// The first .docx of a session took about 3 s longer than the next: .NET compiling Docxodus's and the Open XML SDK's
+	// code on first use (Skee-KOMA.docx, 9,500 paragraphs: 7.6 s against 4.4 s). Once the window is shown, a tiny
+	// document goes through the same steps on a background thread, while the user is still looking at the start page.
+	// A .docx opened before it has finished waits for it (Docxodus isn't run twice at once), with a wait that doesn't
+	// pump messages, so nothing (the automation server, for one) runs in the middle of opening.
+	static readonly ManualResetEvent warmed = new(true);
+	static int warmingStarted;
+
+	public static void WarmUp() {
+		if (Interlocked.Exchange(ref warmingStarted, 1) != 0) return;
+		warmed.Reset();
+		var thread = new Thread(() => {
+			string folder = Path.Combine(Path.GetTempPath(), "AhkWord", "warmup-" + Environment.ProcessId);
+			try {
+				Directory.CreateDirectory(folder);
+				string docx = Path.Combine(folder, "warmup.docx");
+				WriteSample(docx);
+				for (int i = 0; i < 40; i++) ToHtml(docx, folder, "warmup", "");
+			}
+			catch (Exception) { }    // (only a head start: opening a .docx works the same without it)
+			finally {
+				try { Directory.Delete(folder, true); } catch (Exception) { }
+				warmed.Set();
+			}
+		}) { IsBackground = true, Priority = ThreadPriority.BelowNormal, Name = "AhkWord Docxodus warm-up" };
+		thread.Start();
+	}
+
+	[System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+
+	static void AfterWarmUp() {
+		if (warmed.WaitOne(0)) return;
+		// (Win32's own wait: .NET's waits on the window's thread let sent messages in)
+		WaitForSingleObject(warmed.SafeWaitHandle.DangerousGetHandle(), 60_000);
+	}
+
+	// A small document with what most documents have: styles, a heading, bold and italic runs, a numbered and a bulleted
+	// list, a tab, a link, a page break, a table and a footer.
+	static void WriteSample(string path) {
+		using var package = WordprocessingDocument.Create(path, DocumentFormat.OpenXml.WordprocessingDocumentType.Document);
+		var main = package.AddMainDocumentPart();
+		main.AddNewPart<StyleDefinitionsPart>().Styles = new W.Styles(
+			new W.DocDefaults(new W.RunPropertiesDefault(new W.RunPropertiesBaseStyle(new W.RunFonts { Ascii = "Calibri", HighAnsi = "Calibri" }, new W.FontSize { Val = "22" })),
+				new W.ParagraphPropertiesDefault(new W.SpacingBetweenLines { After = "160", Line = "259", LineRule = W.LineSpacingRuleValues.Auto })),
+			new W.Style(new W.StyleName { Val = "Normal" }, new W.PrimaryStyle()) { Type = W.StyleValues.Paragraph, StyleId = "Normal", Default = true },
+			new W.Style(new W.StyleName { Val = "heading 1" }, new W.BasedOn { Val = "Normal" }, new W.NextParagraphStyle { Val = "Normal" },
+				new W.StyleParagraphProperties(new W.KeepNext(), new W.SpacingBetweenLines { Before = "240" }, new W.OutlineLevel { Val = 0 }),
+				new W.StyleRunProperties(new W.Bold(), new W.FontSize { Val = "32" }, new W.Color { Val = "2F5496" })) { Type = W.StyleValues.Paragraph, StyleId = "Heading1" },
+			new W.Style(new W.StyleName { Val = "Hyperlink" }, new W.StyleRunProperties(new W.Color { Val = "0563C1" }, new W.Underline { Val = W.UnderlineValues.Single })) { Type = W.StyleValues.Character, StyleId = "Hyperlink" },
+			new W.Style(new W.StyleName { Val = "Table Grid" }, new W.StyleTableProperties(new W.TableBorders(
+				new W.TopBorder { Val = W.BorderValues.Single, Size = 4 }, new W.BottomBorder { Val = W.BorderValues.Single, Size = 4 },
+				new W.LeftBorder { Val = W.BorderValues.Single, Size = 4 }, new W.RightBorder { Val = W.BorderValues.Single, Size = 4 },
+				new W.InsideHorizontalBorder { Val = W.BorderValues.Single, Size = 4 }, new W.InsideVerticalBorder { Val = W.BorderValues.Single, Size = 4 }))) { Type = W.StyleValues.Table, StyleId = "TableGrid" });
+		W.Level Level(int level, W.NumberFormatValues format, string text) => new(new W.StartNumberingValue { Val = 1 }, new W.NumberingFormat { Val = format },
+			new W.LevelText { Val = text }, new W.LevelJustification { Val = W.LevelJustificationValues.Left },
+			new W.PreviousParagraphProperties(new W.Indentation { Left = (720 * (level + 1)).ToString(), Hanging = "360" })) { LevelIndex = level };
+		main.AddNewPart<NumberingDefinitionsPart>().Numbering = new W.Numbering(
+			new W.AbstractNum(Level(0, W.NumberFormatValues.Decimal, "%1."), Level(1, W.NumberFormatValues.LowerLetter, "%2)")) { AbstractNumberId = 1 },
+			new W.AbstractNum(Level(0, W.NumberFormatValues.Bullet, "•")) { AbstractNumberId = 2 },
+			new W.NumberingInstance(new W.AbstractNumId { Val = 1 }) { NumberID = 1 },
+			new W.NumberingInstance(new W.AbstractNumId { Val = 2 }) { NumberID = 2 });
+		var footer = main.AddNewPart<FooterPart>();
+		footer.Footer = new W.Footer(new W.Paragraph(new W.ParagraphProperties(new W.Justification { Val = W.JustificationValues.Center }),
+			new W.Run(new W.FieldChar { FieldCharType = W.FieldCharValues.Begin }), new W.Run(new W.FieldCode(" PAGE ")),
+			new W.Run(new W.FieldChar { FieldCharType = W.FieldCharValues.Separate }), new W.Run(new W.Text("1")), new W.Run(new W.FieldChar { FieldCharType = W.FieldCharValues.End })));
+		string link = main.AddHyperlinkRelationship(new Uri("https://example.com/"), true).Id;
+		W.Paragraph Para(string? style, params DocumentFormat.OpenXml.OpenXmlElement[] content) =>
+			new(style == null ? content : content.Prepend(new W.ParagraphProperties(new W.ParagraphStyleId { Val = style })));
+		W.Paragraph Item(int num, int level, string text) => new(new W.ParagraphProperties(new W.NumberingProperties(new W.NumberingLevelReference { Val = level }, new W.NumberingId { Val = num })), new W.Run(new W.Text(text)));
+		W.TableCell Cell(string text) => new(new W.TableCellProperties(new W.TableCellWidth { Width = "2400", Type = W.TableWidthUnitValues.Dxa }), new W.Paragraph(new W.Run(new W.Text(text))));
+		var body = new W.Body(
+			Para("Heading1", new W.Run(new W.Text("Heading"))),
+			Para(null, new W.Run(new W.Text("Plain, ") { Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve }),
+				new W.Run(new W.RunProperties(new W.Bold()), new W.Text("bold")), new W.Run(new W.TabChar()),
+				new W.Run(new W.RunProperties(new W.Italic(), new W.Highlight { Val = W.HighlightColorValues.Yellow }), new W.Text("italic")),
+				new W.Hyperlink(new W.Run(new W.RunProperties(new W.RunStyle { Val = "Hyperlink" }), new W.Text("link"))) { Id = link }),
+			Item(1, 0, "One"), Item(1, 1, "Sub"), Item(1, 0, "Two"), Item(2, 0, "Bullet"),
+			Para(null, new W.ParagraphProperties(new W.Justification { Val = W.JustificationValues.Both }, new W.Indentation { FirstLine = "360" }),
+				new W.Run(new W.Text("Text")), new W.Run(new W.Break { Type = W.BreakValues.Page })),
+			new W.Table(new W.TableProperties(new W.TableStyle { Val = "TableGrid" }, new W.TableWidth { Width = "0", Type = W.TableWidthUnitValues.Auto }),
+				new W.TableGrid(new W.GridColumn { Width = "2400" }, new W.GridColumn { Width = "2400" }),
+				new W.TableRow(Cell("A"), Cell("B")), new W.TableRow(Cell("C"), Cell("D"))),
+			Para(null, new W.Run(new W.Text("End"))),
+			new W.SectionProperties(new W.FooterReference { Type = W.HeaderFooterValues.Default, Id = main.GetIdOfPart(footer) },
+				new W.PageSize { Width = 12240, Height = 15840 }, new W.PageMargin { Top = 1440, Bottom = 1440, Left = 1440, Right = 1440, Header = 720, Footer = 720 }));
+		main.Document = new W.Document(body);
+	}
+
+	static XElement ToHtml(string docx, string folder, string title, string generalCss) {
 		string copy = Path.Combine(folder, "docxodus-" + Path.GetFileName(docx));
 		File.Copy(docx, copy, true);
 		MarkPageBreaks(copy);

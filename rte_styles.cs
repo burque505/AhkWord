@@ -27,6 +27,25 @@ using System.Windows.Forms;
 using EllipticBit.RichEditorNET;
 using EllipticBit.RichEditorNET.TextObjectModel2;
 
+/// (iteration 96) The TOM objects (ranges, fonts, paragraph formats) a loop over a long document's paragraphs makes, let
+/// go of as it goes. .NET releases them only when it collects, and until then RichEdit keeps every range up to date: each
+/// further TOM call got slower as they piled up (a 12,500-paragraph Markdown novel: 3 ms a paragraph after a few
+/// thousand, then a pause of seconds when a collection came), so a long file made AhkWord stop responding. Every so many
+/// steps they are released while they are few (a collection of a small heap: a few ms).
+public static class TomRelease
+{
+	public static void Now() {
+		GC.Collect();
+		GC.WaitForPendingFinalizers();
+		System.Runtime.InteropServices.Marshal.CleanupUnusedObjectsInCurrentContext();    // (the editor's thread's, released here)
+	}
+
+	/// Counts a step (in step); every count steps, Now.
+	public static void Every(ref int step, int count = 200) {
+		if (++step % count == 0) Now();
+	}
+}
+
 public sealed class ParagraphStyle
 {
 	public string Name { get; set; } = "Normal";
@@ -229,6 +248,10 @@ public static class StyleEngine
 	/// to its defaults), even given the style it has already: the paragraph's formatting is put back.
 	public static void Tag(ITextPara para, int id) {
 		if (para.Style == id) return;
+		// (iteration 96) AhkWord's own style numbers (100 and up, IdOf) aren't RichEdit's: it leaves the formatting as it
+		// is (checked on 3,563 paragraphs of a .docx: none changed), so nothing needs reading and putting back, which
+		// took half a millisecond a paragraph
+		if (id >= 100) { para.Style = id; return; }
 		int align = para.Alignment, rule = para.LineSpacingRule, keepWith = para.KeepWithNext, keepTogether = para.KeepTogether,
 			widow = para.WidowControl, breakBefore = para.PageBreakBefore, noNumber = para.NoLineNumber;
 		float first = para.FirstLineIndent, left = para.LeftIndent, right = para.RightIndent, before = para.SpaceBefore, after = para.SpaceAfter, line = para.LineSpacing;
@@ -1377,11 +1400,21 @@ public static class StyleHtml
 		var doc = editor.TextDocument;
 		// (all of them found once, and taken out from the last: the text before each stays where it was)
 		string story = doc.Range2(0, doc.Range2(0, 0).StoryLength).Text ?? "";
-		foreach (var m in Marker.Matches(story).Reverse()) {
-			doc.Range2(m.Index, m.Index + m.Length).Text = "";
-			string name = System.Net.WebUtility.HtmlDecode(m.Groups[1].Value);
-			StyleEngine.Tag(doc.Range2(m.Index, m.Index).Para, StyleEngine.IdOf(name));
-			used.Add(name);
+		var markers = Marker.Matches(story);
+		if (markers.Count == 0) return used;
+		// (iteration 96: frozen, and the TOM objects let go of as it goes: a long .docx took a minute here)
+		int step = 0;
+		doc.Freeze();
+		try {
+			foreach (var m in markers.Reverse()) {
+				doc.Range2(m.Index, m.Index + m.Length).Text = "";
+				string name = System.Net.WebUtility.HtmlDecode(m.Groups[1].Value);
+				StyleEngine.Tag(doc.Range2(m.Index, m.Index).Para, StyleEngine.IdOf(name));
+				used.Add(name);
+				TomRelease.Every(ref step);
+			}
+		} finally {
+			doc.Unfreeze();
 		}
 		return used;
 	}
